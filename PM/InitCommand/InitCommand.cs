@@ -17,42 +17,16 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
-        if (projectRoot.Exists)
-        {
-            AnsiConsole.MarkupLine("[red]A project is already initialized in this directory or a parent directory.[/]");
-            return 1;
-        }
+        if (await ValidateProjectInitialization(cancellationToken) != 0) return 1;
 
-        if (!await nextIdService.Healthy(cancellationToken))
-        {
-            AnsiConsole.MarkupLine("[red]Unable to reach the next ID service.[/]");
-            return 1;
-        }
+        var config = await GatherProjectConfiguration(cancellationToken);
 
-        var assumedName = Directory.GetCurrentDirectory().Split(Path.DirectorySeparatorChar).Last();
+        return await GenerateProjectConfigurationDisplay(config, cancellationToken);
+    }
 
-        var projectName = await AnsiConsole.AskAsync("Project name ", assumedName, cancellationToken);
-        var idWidth = await AnsiConsole.AskAsync("Project ID width ", 4, cancellationToken);
-        var idPrefix = await AnsiConsole.AskAsync("Project ID prefix ", "TASK", cancellationToken);
-
-        var tasksPrompt = new MultiSelectionPrompt<string>()
-            .Title("What [green]task states[/] should be created?")
-            .Required()
-            .UseConverter(key => $"{GlobalConfig.DefaultTaskStates[key]} ({key})")
-            .AddChoices(GlobalConfig.DefaultTaskStates.Keys);
-
-        foreach (var key in GlobalConfig.DefaultTaskStates.Keys) tasksPrompt.Select(key);
-
-        var taskStates = await AnsiConsole.PromptAsync(tasksPrompt, cancellationToken);
-
-        var config = new ProjectConfig
-        {
-            Name = projectName,
-            IdWidth = idWidth,
-            IdPrefix = idPrefix,
-            TaskStates = taskStates.ToDictionary(key => key, key => GlobalConfig.DefaultTaskStates[key]),
-        };
-
+    private async Task<int> GenerateProjectConfigurationDisplay(ProjectConfig config,
+        CancellationToken cancellationToken)
+    {
         var yamlText = YamlSerde.Serialize(config);
 
         var sb = new StringBuilder();
@@ -77,6 +51,51 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
         await projectRoot.CreateProject(config, cancellationToken);
 
         AnsiConsole.MarkupLineInterpolated($"Project initialized in [green]{projectRoot.RootPath}/[/]");
+
+        return 0;
+    }
+
+    private static async Task<ProjectConfig> GatherProjectConfiguration(CancellationToken cancellationToken)
+    {
+        var assumedName = Directory.GetCurrentDirectory().Split(Path.DirectorySeparatorChar).Last();
+
+        var projectName = await AnsiConsole.AskAsync("Project name ", assumedName, cancellationToken);
+        var idWidth = await AnsiConsole.AskAsync("Project ID width ", 4, cancellationToken);
+        var idPrefix = await AnsiConsole.AskAsync("Project ID prefix ", "TASK", cancellationToken);
+
+        var tasksPrompt = new MultiSelectionPrompt<string>()
+            .Title("What [green]task states[/] should be created?")
+            .Required()
+            .UseConverter(key => $"{GlobalConfig.DefaultTaskStates[key]} ({key})")
+            .AddChoices(GlobalConfig.DefaultTaskStates.Keys);
+
+        foreach (var key in GlobalConfig.DefaultTaskStates.Keys) tasksPrompt.Select(key);
+
+        var taskStates = await AnsiConsole.PromptAsync(tasksPrompt, cancellationToken);
+
+        var config = new ProjectConfig
+        {
+            Name = projectName,
+            IdWidth = idWidth,
+            IdPrefix = idPrefix,
+            TaskStates = taskStates.ToDictionary(key => key, key => GlobalConfig.DefaultTaskStates[key]),
+        };
+        return config;
+    }
+
+    private async Task<int> ValidateProjectInitialization(CancellationToken cancellationToken)
+    {
+        if (projectRoot.Exists)
+        {
+            AnsiConsole.MarkupLine("[red]A project is already initialized in this directory or a parent directory.[/]");
+            return 1;
+        }
+
+        if (!await nextIdService.Healthy(cancellationToken))
+        {
+            AnsiConsole.MarkupLine("[red]Unable to reach the next ID service.[/]");
+            return 1;
+        }
 
         return 0;
     }
