@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/NanoServices/">
+    <File Path="next_id.cs" />
+  </Folder>
+  <Project Path="PM/PM.csproj" />
+</Solution>
