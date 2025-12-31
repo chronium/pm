@@ -11,7 +11,8 @@ public static class FileSystem
 
     public static void WriteFileWithText(string path, string content)
     {
-        AnsiConsole.MarkupLineInterpolated($"Written [green]{path}[/]");
+        AnsiConsole.MarkupLineInterpolated(
+            $"Written [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
         if (GlobalConfig.DryRun) return;
         File.WriteAllText(path, content);
     }
@@ -24,7 +25,8 @@ public static class FileSystem
 
     public static void CreateDirectory(string path)
     {
-        AnsiConsole.MarkupLineInterpolated($"Created [green]{path}/[/]");
+        AnsiConsole.MarkupLineInterpolated(
+            $"Created [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}/[/]");
         if (GlobalConfig.DryRun) return;
         Directory.CreateDirectory(path);
     }

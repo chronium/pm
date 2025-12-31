@@ -50,7 +50,8 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
 
         await projectRoot.CreateProject(config, cancellationToken);
 
-        AnsiConsole.MarkupLineInterpolated($"Project initialized in [green]{projectRoot.RootPath}/[/]");
+        AnsiConsole.MarkupLineInterpolated(
+            $"Project initialized in [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), projectRoot.RootPath)}/[/]");
 
         return 0;
     }

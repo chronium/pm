@@ -2,6 +2,7 @@
 #:sdk Microsoft.NET.Sdk.Web
 #:package Microsoft.Data.Sqlite@10.0.1
 
+using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -44,26 +45,6 @@ using (var conn = new SqliteConnection(connString))
     cmd.ExecuteNonQuery();
 }
 
-// Helpers: URL-safe Base64 (so the key can safely sit in a route segment)
-static string ToBase64Url(ReadOnlySpan<byte> bytes)
-{
-    var s = Convert.ToBase64String(bytes);
-    s = s.TrimEnd('=').Replace('+', '-').Replace('/', '_');
-    return s;
-}
-static byte[] FromBase64Url(string s)
-{
-    s = s.Replace('-', '+').Replace('_', '/');
-    switch (s.Length % 4)
-    {
-        case 2: s += "=="; break;
-        case 3: s += "="; break;
-        case 0: break;
-        default: throw new FormatException("Invalid base64url length.");
-    }
-    return Convert.FromBase64String(s);
-}
-
 static byte[] Sha512(byte[] bytes) => SHA512.HashData(bytes);
 
 app.MapPost("/projects", () =>
@@ -72,7 +53,7 @@ app.MapPost("/projects", () =>
     Span<byte> keyBytes = stackalloc byte[64];
     RandomNumberGenerator.Fill(keyBytes);
 
-    var key = ToBase64Url(keyBytes);
+    var key = Base64Url.EncodeToString(keyBytes);
     var hash = Sha512(keyBytes.ToArray());
 
     using var conn = new SqliteConnection(connString);
@@ -90,7 +71,7 @@ app.MapPost("/projects", () =>
     {
         // Extremely unlikely (hash collision / duplicate). Retry once.
         RandomNumberGenerator.Fill(keyBytes);
-        key = ToBase64Url(keyBytes);
+        key = Base64Url.EncodeToString(keyBytes);
         hash = Sha512(keyBytes.ToArray());
 
         cmd.Parameters.Clear();
@@ -107,7 +88,7 @@ app.MapGet("/projects/{key}/nextid", (string key) =>
     byte[] keyBytes;
     try
     {
-        keyBytes = FromBase64Url(key);
+        keyBytes = Base64Url.DecodeFromChars(key);
     }
     catch
     {
@@ -146,6 +127,37 @@ app.MapGet("/projects/{key}/nextid", (string key) =>
     }
 
     tx.Commit();
+    return Results.Ok(new NextIdResponse(current));
+});
+
+app.MapGet("/projects/{key}/peekid", (string key) =>
+{
+    byte[] keyBytes;
+    try
+    {
+        keyBytes = Base64Url.DecodeFromChars(key);
+    }
+    catch
+    {
+        return Results.Unauthorized();
+    }
+
+    var hash = Sha512(keyBytes);
+
+    using var conn = new SqliteConnection(connString);
+    conn.Open();
+
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT next_id FROM projects WHERE key_hash = $h;";
+    cmd.Parameters.AddWithValue("$h", hash);
+    var obj = cmd.ExecuteScalar();
+
+    if (obj is null || obj is DBNull)
+    {
+        return Results.Unauthorized();
+    }
+
+    var current = Convert.ToInt64(obj);
     return Results.Ok(new NextIdResponse(current));
 });
 
