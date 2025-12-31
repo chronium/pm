@@ -10,11 +10,9 @@ using Spectre.Console.Rendering;
 namespace PM.InitCommand;
 
 public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, ISyntaxHighlighter highlighter)
-    : AsyncCommand<Settings>
+    : AsyncCommand<CommonSettings>
 {
-    public const string CommandName = "init";
-
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
+    public override async Task<int> ExecuteAsync(CommandContext context, CommonSettings commonSettings,
         CancellationToken cancellationToken)
     {
         if (await ValidateProjectInitialization(cancellationToken) != 0) return 1;

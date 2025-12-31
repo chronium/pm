@@ -21,4 +21,10 @@ public static class GlobalConfig
 
     public static string ApplicationName => "Project Manager";
     public static string ApplicationVersion => "1.0.0";
+
+    public static string DefaultTaskExtension => "md";
+
+    public static string InitCommandName => "init";
+    public static string TaskBranchName => "task";
+    public static string TaskAddCommandName => "add";
 }

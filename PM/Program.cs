@@ -18,7 +18,9 @@ serviceProvider.AddHttpClient<INextIdService, NextIdService>(client =>
 });
 
 serviceProvider.AddSingleton<ProjectRoot>();
-serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([new YamlLanguageDefinition()]));
+serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([
+    new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),
+]));
 
 var registrar = new ServiceCollectionRegistrar(serviceProvider);
 var app = new CommandApp(registrar);
@@ -33,7 +35,15 @@ app.Configure(config =>
     config.SetInterceptor(new DryRunInterceptor());
     config.SetInterceptor(new TimingInterceptor());
 
-    config.AddCommand<InitCommand>(InitCommand.CommandName);
+    config.AddCommand<InitCommand>(GlobalConfig.InitCommandName);
+
+    config.AddBranch(GlobalConfig.TaskBranchName,
+        task =>
+        {
+            task.SetDescription("Manage tasks within a project");
+
+            task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
+        });
 });
 
 Console.CancelKeyPress += (_, e) =>
@@ -45,7 +55,7 @@ Console.CancelKeyPress += (_, e) =>
 
 return await app.RunAsync(args, cancellationTokenSource.Token);
 
-public class Settings : CommandSettings
+public class CommonSettings : CommandSettings
 {
     [CommandOption("--dry-run")]
     [Description("Preview changes without applying them")]

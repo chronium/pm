@@ -9,16 +9,10 @@ public static class FileSystem
         return File.ReadAllText(path);
     }
 
-    public static void WriteFileWithText(string path, string content)
+    public static void WriteAllText(string path, string content)
     {
         AnsiConsole.MarkupLineInterpolated(
             $"Written [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
-        if (GlobalConfig.DryRun) return;
-        File.WriteAllText(path, content);
-    }
-
-    public static void WriteAllText(string path, string content)
-    {
         if (GlobalConfig.DryRun) return;
         File.WriteAllText(path, content);
     }
@@ -29,5 +23,18 @@ public static class FileSystem
             $"Created [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}/[/]");
         if (GlobalConfig.DryRun) return;
         Directory.CreateDirectory(path);
+    }
+
+    public static bool Exists(string path)
+    {
+        return File.Exists(path);
+    }
+
+    public static void DeleteFile(string path)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"Deleted [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
+        if (GlobalConfig.DryRun) return;
+        File.Delete(path);
     }
 }

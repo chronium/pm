@@ -14,6 +14,15 @@ public class ProjectConfig
         if (!projectRoot.Exists || projectRoot.RootPath is null)
             throw new InvalidOperationException("Project root does not exist.");
         var configPath = Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile);
-        FileSystem.WriteFileWithText(configPath, YamlSerde.Serialize(this));
+        FileSystem.WriteAllText(configPath, YamlSerde.Serialize(this));
+    }
+
+    public static ProjectConfig ReadConfig(ProjectRoot projectRoot)
+    {
+        if (!projectRoot.Exists || projectRoot.RootPath is null)
+            throw new InvalidOperationException("Project root does not exist.");
+        var configPath = Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile);
+        var configText = FileSystem.ReadAllText(configPath);
+        return YamlSerde.Deserialize<ProjectConfig>(configText);
     }
 }

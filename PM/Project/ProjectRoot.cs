@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using PM.Files;
 using PM.Tasks;
 
@@ -8,6 +9,8 @@ public interface IProjectRoot
 {
     bool Exists { get; }
     string? RootPath { get; }
+
+    ProjectConfig? Config { get; }
 
     string TasksPath { get; }
     string StatesPath { get; }
@@ -23,6 +26,9 @@ public class ProjectRoot : IProjectRoot
 
         Exists = TryFindProjectRoot(out var rootPath);
         RootPath = rootPath!;
+
+        if (Exists)
+            Config = ProjectConfig.ReadConfig(this);
     }
 
     public string TasksPath => Path.Combine(RootPath!, GlobalConfig.TasksDirName);
@@ -30,6 +36,8 @@ public class ProjectRoot : IProjectRoot
 
     public bool Exists { get; private set; }
     public string RootPath { get; private set; }
+
+    public ProjectConfig? Config { get; private set; }
 
     private static bool TryFindProjectRoot([MaybeNullWhen(false)] out string projectRoot)
     {
@@ -41,7 +49,7 @@ public class ProjectRoot : IProjectRoot
             var pmDirPath = Path.Combine(currentDir, GlobalConfig.PmDirName);
             if (Directory.Exists(pmDirPath))
             {
-                projectRoot = currentDir;
+                projectRoot = pmDirPath;
                 return true;
             }
 
@@ -60,30 +68,43 @@ public class ProjectRoot : IProjectRoot
         Exists = true;
     }
 
-    private void CreateProjectDirectories(ProjectConfig config)
+    private void CreateProjectDirectories()
     {
         if (RootPath == null) throw new InvalidOperationException("Project root path is not set.");
 
         FileSystem.CreateDirectory(TasksPath);
         FileSystem.CreateDirectory(StatesPath);
 
-        WriteStatesDirectories(config);
+        WriteStatesDirectories();
     }
 
-    private void WriteStatesDirectories(ProjectConfig config)
+    private void WriteStatesDirectories()
     {
         if (RootPath == null) throw new InvalidOperationException("Project root path is not set.");
 
-        foreach (var key in config.TaskStates.Keys)
+        foreach (var key in Config!.TaskStates.Keys)
             FileSystem.CreateDirectory(Path.Combine(StatesPath, key));
     }
 
     public async Task CreateProject(ProjectConfig config, CancellationToken cancellationToken = default)
     {
+        Config = config;
+
         CreateProjectRoot(Directory.GetCurrentDirectory());
-        CreateProjectDirectories(config);
+        CreateProjectDirectories();
 
         config.WriteConfig(this);
-        await _nextIdService.GetNextId(this, cancellationToken);
+        await _nextIdService.PeekNextId(this, cancellationToken);
+    }
+
+    public void WriteTask(TaskItem task)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("---");
+        sb.AppendLine(YamlSerde.Serialize(task));
+        sb.AppendLine("---");
+
+        var taskFilePath = Path.Combine(TasksPath, $"{task.Id}.{GlobalConfig.DefaultTaskExtension}");
+        FileSystem.WriteAllText(taskFilePath, sb.ToString());
     }
 }
