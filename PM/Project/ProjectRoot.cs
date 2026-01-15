@@ -107,4 +107,67 @@ public class ProjectRoot : IProjectRoot
         var taskFilePath = Path.Combine(TasksPath, $"{task.Id}.{GlobalConfig.DefaultTaskExtension}");
         FileSystem.WriteAllText(taskFilePath, sb.ToString());
     }
+
+    public void UpdateTaskState(TaskItem task, string state)
+    {
+        if (TryGetState(task, out var currentState))
+            FileSystem.DeleteFile(Path.Combine(StatesPath, currentState, $"{task.Id}.ref"));
+
+        var stateDir = Path.Combine(StatesPath, state);
+        var stateRelativePath = Path.GetRelativePath(stateDir, TasksPath);
+
+        FileSystem.WriteAllText(Path.Combine(StatesPath, state, $"{task.Id}.ref"),
+            $"{stateRelativePath}/{task.Id}.{GlobalConfig.DefaultTaskExtension}");
+    }
+
+    public bool TryGetState(TaskItem task, [MaybeNullWhen(false)] out string state)
+    {
+        state = null;
+        foreach (var key in Config!.TaskStates.Keys)
+        {
+            var statePath = Path.Combine(StatesPath, key, $"{task.Id}.ref");
+            if (FileSystem.FileExists(statePath))
+            {
+                state = key;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public List<TaskItem> GetTasksInState(string state)
+    {
+        var statePath = Path.Combine(StatesPath, state);
+        if (!FileSystem.DirectoryExists(statePath)) return [];
+
+        var items = new List<TaskItem>();
+
+        foreach (var refFile in FileSystem.ReadFiles(statePath, "*.ref"))
+        {
+            var item = TaskItem.Parse(FileSystem.ReadAllText(ResolveRef(refFile)));
+            if (item == null)
+                continue;
+
+            items.Add(item);
+        }
+
+        return items;
+    }
+
+    public bool TryGetById(string id, [MaybeNullWhen(false)] out TaskItem task)
+    {
+        task = null;
+        var taskPath = Path.Combine(TasksPath, $"{id}.{GlobalConfig.DefaultTaskExtension}");
+        if (!FileSystem.FileExists(taskPath)) return false;
+
+        task = TaskItem.Parse(FileSystem.ReadAllText(taskPath));
+        return task != null;
+    }
+
+    private static string ResolveRef(FileInfo refFile)
+    {
+        var refContent = FileSystem.ReadAllText(refFile.FullName);
+        return Path.Combine(refFile.Directory!.FullName, refContent);
+    }
 }

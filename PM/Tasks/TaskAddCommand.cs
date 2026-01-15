@@ -28,7 +28,7 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
     private void WriteTaskAndSetState(TaskItem taskItem)
     {
         projectRoot.WriteTask(taskItem);
-        TaskState.SetState(projectRoot, taskItem, projectRoot.Config!.TaskStates.Keys.First());
+        projectRoot.UpdateTaskState(taskItem, projectRoot.Config!.TaskStates.Keys.First());
     }
 
     private void RenderTaskPanel(TaskItem taskItem)

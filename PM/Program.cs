@@ -45,6 +45,8 @@ app.Configure(config =>
             task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
         });
 
+    config.AddCommand<MoveCommand>(GlobalConfig.MoveCommandName);
+
     config.AddCommand<ListCommand>(GlobalConfig.ListCommandName);
 });
 

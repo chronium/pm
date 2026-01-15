@@ -13,7 +13,7 @@ public class ListCommand(ProjectRoot projectRoot) : AsyncCommand<CommonSettings>
 
         foreach (var (state, name) in projectRoot.Config!.TaskStates)
         {
-            var items = TaskState.GetTasksInState(projectRoot, state);
+            var items = projectRoot.GetTasksInState(state);
 
             var tree = new Tree(Markup.FromInterpolated($"{name} ([darkOrange]{items.Count}[/])"));
 
