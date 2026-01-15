@@ -44,6 +44,8 @@ app.Configure(config =>
 
             task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
         });
+
+    config.AddCommand<ListCommand>(GlobalConfig.ListCommandName);
 });
 
 Console.CancelKeyPress += (_, e) =>

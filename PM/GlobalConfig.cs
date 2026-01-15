@@ -27,4 +27,5 @@ public static class GlobalConfig
     public static string InitCommandName => "init";
     public static string TaskBranchName => "task";
     public static string TaskAddCommandName => "add";
+    public static string ListCommandName => "list";
 }

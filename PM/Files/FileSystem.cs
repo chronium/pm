@@ -25,9 +25,14 @@ public static class FileSystem
         Directory.CreateDirectory(path);
     }
 
-    public static bool Exists(string path)
+    public static bool FileExists(string path)
     {
         return File.Exists(path);
+    }
+
+    public static bool DirectoryExists(string path)
+    {
+        return Directory.Exists(path);
     }
 
     public static void DeleteFile(string path)
@@ -36,5 +41,13 @@ public static class FileSystem
             $"Deleted [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
         if (GlobalConfig.DryRun) return;
         File.Delete(path);
+    }
+
+    public static List<FileInfo> ReadFiles(string path, string searchPattern = "*")
+    {
+        var files = Directory.EnumerateFiles(path, searchPattern, SearchOption.TopDirectoryOnly)
+            .Select(f => new FileInfo(f))
+            .ToList();
+        return files;
     }
 }

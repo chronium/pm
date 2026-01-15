@@ -24,7 +24,7 @@ public static class TaskState
         foreach (var key in projectRoot.Config!.TaskStates.Keys)
         {
             var statePath = Path.Combine(projectRoot.StatesPath, key, $"{task.Id}.ref");
-            if (FileSystem.Exists(statePath))
+            if (FileSystem.FileExists(statePath))
             {
                 state = key;
                 return true;
@@ -32,5 +32,30 @@ public static class TaskState
         }
 
         return false;
+    }
+
+    public static List<TaskItem> GetTasksInState(ProjectRoot projectRoot, string state)
+    {
+        var statePath = Path.Combine(projectRoot.StatesPath, state);
+        if (!FileSystem.DirectoryExists(statePath)) return [];
+
+        var items = new List<TaskItem>();
+
+        foreach (var refFile in FileSystem.ReadFiles(statePath, "*.ref"))
+        {
+            var item = TaskItem.Parse(FileSystem.ReadAllText(ResolveRef(refFile)));
+            if (item == null)
+                continue;
+
+            items.Add(item);
+        }
+
+        return items;
+    }
+
+    private static string ResolveRef(FileInfo refFile)
+    {
+        var refContent = FileSystem.ReadAllText(refFile.FullName);
+        return Path.Combine(refFile.Directory!.FullName, refContent);
     }
 }
