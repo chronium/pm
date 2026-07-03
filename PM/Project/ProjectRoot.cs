@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using PM.Files;
 using PM.Tasks;
 
@@ -95,13 +94,8 @@ public class ProjectRoot : IProjectRoot
 
     public void WriteTask(TaskItem task)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine(YamlSerde.Serialize(task));
-        sb.AppendLine("---");
-
         var taskFilePath = Path.Combine(TasksPath, $"{task.Id}.{GlobalConfig.DefaultTaskExtension}");
-        FileSystem.WriteAllText(taskFilePath, sb.ToString());
+        FileSystem.WriteAllText(taskFilePath, task.ToMarkdown());
     }
 
     public void UpdateTaskState(TaskItem task, string state)

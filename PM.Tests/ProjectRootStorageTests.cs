@@ -19,7 +19,59 @@ public class ProjectRootStorageTests
         Assert.StartsWith("---\n", content);
         Assert.Contains("id: PM-0001", content);
         Assert.Contains("title: Wire storage tests", content);
-        Assert.EndsWith("---\n", content);
+        Assert.EndsWith("---\n\n", content);
+    }
+
+    [Fact]
+    public void ParsingFrontmatterOnlyTaskReturnsEmptyDescription()
+    {
+        var task = TaskItem.Parse("""
+                                  ---
+                                  id: PM-0001
+                                  title: Existing task
+                                  createdAt: 2026-01-01T00:00:00.0000000Z
+                                  modifiedAt: 2026-01-01T00:00:00.0000000Z
+                                  ---
+                                  """);
+
+        Assert.NotNull(task);
+        Assert.Equal("Existing task", task.Title);
+        Assert.Equal(string.Empty, task.Description);
+    }
+
+    [Fact]
+    public void ParsingTaskWithMarkdownBodyReturnsDescription()
+    {
+        var task = TaskItem.Parse("""
+                                  ---
+                                  id: PM-0002
+                                  title: Describe task
+                                  createdAt: 2026-01-01T00:00:00.0000000Z
+                                  modifiedAt: 2026-01-01T00:00:00.0000000Z
+                                  ---
+
+                                  # Scope
+
+                                  - Preserve markdown.
+                                  """);
+
+        Assert.NotNull(task);
+        Assert.Equal("Describe task", task.Title);
+        Assert.Equal("# Scope\n\n- Preserve markdown.", task.Description);
+    }
+
+    [Fact]
+    public async Task WritingTaskWithDescriptionPreservesMarkdownBodyAfterFrontmatter()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0005", "Write description", "# Scope\n\n- Preserve markdown.");
+
+        projectRoot.WriteTask(task);
+
+        var content = File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0005.md"));
+        Assert.Contains("title: Write description", content);
+        Assert.EndsWith("---\n\n# Scope\n\n- Preserve markdown.", content);
     }
 
     [Fact]

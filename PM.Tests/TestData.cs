@@ -26,12 +26,13 @@ internal static class TestData
         };
     }
 
-    public static TaskItem Task(string id, string title)
+    public static TaskItem Task(string id, string title, string description = "")
     {
         return new TaskItem
         {
             Id = id,
             Title = title,
+            Description = description,
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         };

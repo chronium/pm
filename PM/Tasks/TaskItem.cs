@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using YamlDotNet.Serialization;
 
 namespace PM.Tasks;
 
@@ -11,12 +12,33 @@ public partial record TaskItem
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; init; } = DateTime.UtcNow;
 
+    [YamlIgnore]
+    public string Description { get; init; } = string.Empty;
+
     public static TaskItem? Parse(string markdownContent)
     {
         var match = FrontMatterPattern.Match(markdownContent);
-        return !match.Success ? null : YamlSerde.Deserialize<TaskItem>(match.Groups[1].Value);
+        if (!match.Success) return null;
+
+        var task = YamlSerde.Deserialize<TaskItem>(match.Groups["yaml"].Value);
+        return task with { Description = NormalizeBody(match.Groups["body"].Value) };
     }
 
-    [GeneratedRegex(@"^---\s*\n(.*?)\n---\s*\n", RegexOptions.Multiline | RegexOptions.Singleline)]
+    public string ToMarkdown()
+    {
+        var yaml = YamlSerde.Serialize(this);
+        return string.IsNullOrWhiteSpace(Description)
+            ? $"---\n{yaml}---\n\n"
+            : $"---\n{yaml}---\n\n{Description}";
+    }
+
+    private static string NormalizeBody(string body)
+    {
+        if (body.StartsWith("\r\n", StringComparison.Ordinal)) return body[2..];
+        if (body.StartsWith('\n')) return body[1..];
+        return body;
+    }
+
+    [GeneratedRegex(@"\A---[ \t]*\r?\n(?<yaml>.*?)\r?\n---[ \t]*(?:\r?\n|$)(?<body>.*)\z", RegexOptions.Singleline)]
     private static partial Regex FrontMatterRegex();
 }

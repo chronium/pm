@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Spectre.Rendering;
@@ -16,7 +18,10 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
     {
         if (await ValidateProjectAndServiceHealth(settings, cancellationToken) != 0) return 1;
 
-        var taskItem = await GenerateTaskItem(settings, cancellationToken);
+        var description = await ResolveDescription(settings, cancellationToken);
+        if (description == null) return 1;
+
+        var taskItem = await GenerateTaskItem(settings, description, cancellationToken);
 
         RenderTaskPanel(taskItem);
 
@@ -33,12 +38,10 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
 
     private void RenderTaskPanel(TaskItem taskItem)
     {
-        var yaml = YamlSerde.Serialize(taskItem);
+        var yaml = taskItem.ToMarkdown();
 
         var sb = new StringBuilder();
-        sb.AppendLine("---");
         highlighter.Highlight(yaml, "md", new MarkupTokenRenderer(sb));
-        sb.AppendLine("---");
 
         var taskPanel = new Panel(sb.ToString())
         {
@@ -49,7 +52,7 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
         AnsiConsole.Write(taskPanel);
     }
 
-    private async Task<TaskItem> GenerateTaskItem(Settings settings,
+    private async Task<TaskItem> GenerateTaskItem(Settings settings, string description,
         CancellationToken cancellationToken)
     {
         var config = projectRoot.Config!;
@@ -67,8 +70,79 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
         {
             Id = prefixedId,
             Title = title,
+            Description = description,
         };
         return taskItem;
+    }
+
+    private async Task<string?> ResolveDescription(Settings settings, CancellationToken cancellationToken)
+    {
+        var description = settings.Description ?? string.Empty;
+        if (!settings.Edit || settings.DryRun) return NormalizeDescription(description);
+
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"pm-task-{Guid.NewGuid():N}.md");
+        await File.WriteAllTextAsync(tempFilePath, description, cancellationToken);
+
+        try
+        {
+            var exitCode = await RunEditor(tempFilePath, cancellationToken);
+            if (exitCode != 0)
+            {
+                AnsiConsole.MarkupLine($"[red]Editor exited with code {exitCode}. Task creation aborted.[/]");
+                return null;
+            }
+
+            return NormalizeDescription(await File.ReadAllTextAsync(tempFilePath, cancellationToken));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Unable to launch editor: {ex.Message.EscapeMarkup()}[/]");
+            return null;
+        }
+        finally
+        {
+            if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
+        }
+    }
+
+    protected virtual async Task<int> RunEditor(string filePath, CancellationToken cancellationToken)
+    {
+        var editor = Environment.GetEnvironmentVariable("VISUAL");
+        if (string.IsNullOrWhiteSpace(editor)) editor = Environment.GetEnvironmentVariable("EDITOR");
+        if (string.IsNullOrWhiteSpace(editor)) editor = "vim";
+
+        var startInfo = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                UseShellExecute = false,
+                RedirectStandardInput = false,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                ArgumentList = { "/c", $"{editor} \"%PM_TASK_DESCRIPTION_FILE%\"" },
+            }
+            : new ProcessStartInfo
+            {
+                FileName = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/sh",
+                UseShellExecute = false,
+                RedirectStandardInput = false,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                ArgumentList = { "-c", $"{editor} \"$1\"", "pm-editor", filePath },
+            };
+        startInfo.Environment["PM_TASK_DESCRIPTION_FILE"] = filePath;
+
+        using var process = Process.Start(startInfo);
+
+        if (process == null) throw new InvalidOperationException("Editor process did not start.");
+
+        await process.WaitForExitAsync(cancellationToken);
+        return process.ExitCode;
+    }
+
+    private static string NormalizeDescription(string description)
+    {
+        return string.IsNullOrWhiteSpace(description) ? string.Empty : description;
     }
 
     private async Task<string> GetDryRunId(CancellationToken cancellationToken)
@@ -101,5 +175,13 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
     public class Settings : CommonSettings
     {
         [CommandArgument(0, "<title>")] public string Title { get; init; } = string.Empty;
+
+        [CommandOption("--description <text>")]
+        [Description("Markdown description body for the task")]
+        public string? Description { get; init; }
+
+        [CommandOption("--edit")]
+        [Description("Open an editor for the task description")]
+        public bool Edit { get; init; }
     }
 }
