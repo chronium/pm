@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PM;
 using PM.Project;
 using PM.Tasks;
+using PM.Web;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -60,6 +61,7 @@ app.Configure(config =>
     config.AddCommand<MoveCommand>(GlobalConfig.MoveCommandName);
 
     config.AddCommand<ListCommand>(GlobalConfig.ListCommandName);
+    config.AddCommand<WebCommand>(GlobalConfig.WebCommandName);
 });
 
 Console.CancelKeyPress += (_, e) =>

@@ -196,6 +196,11 @@ public class ProjectRoot : IProjectRoot
         return Path.Combine(TasksPath, $"{id}.{GlobalConfig.DefaultTaskExtension}");
     }
 
+    public string GetTaskFilePath(string id)
+    {
+        return GetTaskPath(id);
+    }
+
     private static string ResolveRef(FileInfo refFile)
     {
         var refContent = FileSystem.ReadAllText(refFile.FullName);

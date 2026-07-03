@@ -9,5 +9,6 @@ riderModule.iml
 
 *.cast
 *.gif
+.playwright-cli/
 
 .DS_Store

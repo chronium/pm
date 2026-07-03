@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{projectName}} Board</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+{{styles}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{projectName}} Board</h1>
+{{filters}}
+  </header>
+  <main>
+    <section id="board" aria-live="polite">
+{{board}}
+    </section>
+    <section id="task-detail" aria-live="polite"></section>
+  </main>
+</body>
+</html>

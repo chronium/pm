@@ -1,0 +1,12 @@
+<article class="task">
+  <div class="task-title">
+    <span class="id">{{taskId}}</span>
+    <a href="/task/{{taskIdUrl}}" hx-get="/task/{{taskIdUrl}}" hx-target="#task-detail" hx-swap="innerHTML">{{title}}</a>
+  </div>
+  <div class="meta">
+    <span>{{track}}</span>
+    <span>{{modifiedAt}}</span>
+  </div>
+{{preview}}
+  <div class="path">{{filePath}}</div>
+</article>

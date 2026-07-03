@@ -34,4 +34,5 @@ public static class GlobalConfig
     public static string MilestoneAddCommandName => "add";
     public static string ListCommandName => "list";
     public static string MoveCommandName => "move";
+    public static string WebCommandName => "web";
 }
