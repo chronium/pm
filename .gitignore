@@ -4,6 +4,9 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 
+/next-id-worker/node_modules/
+/next-id-worker/.wrangler/
+
 *.db*
 .dev-pm
 

@@ -1,0 +1,14 @@
+{
+  "name": "pm-next-id-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "dev": "socket npx -- wrangler dev --local",
+    "deploy": "socket npx -- wrangler deploy",
+    "migrate:local": "socket npx -- wrangler d1 migrations apply pm-next-id --local",
+    "migrate:remote": "socket npx -- wrangler d1 migrations apply pm-next-id --remote"
+  },
+  "devDependencies": {}
+}

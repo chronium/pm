@@ -1,0 +1,8 @@
+name = "pm-next-id"
+main = "src/worker.js"
+compatibility_date = "2026-07-03"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pm-next-id"
+database_id = "8a955f7f-68fb-40d9-9120-1a4a210636ee"

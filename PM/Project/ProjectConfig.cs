@@ -5,7 +5,7 @@ namespace PM.Project;
 
 public class ProjectConfig
 {
-    public const string DefaultNextIdServiceUrl = "http://localhost:8080";
+    public const string DefaultNextIdServiceUrl = "https://pm-next-id.apa-prod-monitor.workers.dev";
     private Dictionary<string, string>? _tracks;
 
     public required string Name { get; set; }
