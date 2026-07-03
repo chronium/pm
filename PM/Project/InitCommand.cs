@@ -1,13 +1,12 @@
 using System.Text;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Spectre.Rendering;
-using PM.Project;
 using PM.Tasks;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using Spectre.Console.Rendering;
 
-namespace PM.InitCommand;
+namespace PM.Project;
 
 public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, ISyntaxHighlighter highlighter)
     : AsyncCommand<CommonSettings>

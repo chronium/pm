@@ -4,7 +4,6 @@ using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using Microsoft.Extensions.DependencyInjection;
 using PM;
-using PM.InitCommand;
 using PM.Project;
 using PM.Tasks;
 using Spectre.Console;

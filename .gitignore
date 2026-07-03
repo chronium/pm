@@ -9,3 +9,5 @@ riderModule.iml
 
 *.cast
 *.gif
+
+.DS_Store
