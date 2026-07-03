@@ -35,4 +35,5 @@ public static class GlobalConfig
     public static string ListCommandName => "list";
     public static string MoveCommandName => "move";
     public static string WebCommandName => "web";
+    public static string McpCommandName => "mcp";
 }

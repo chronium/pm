@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using PM.Files;
 using PM.Project;
 using Spectre.Console;
@@ -15,8 +16,15 @@ public interface INextIdService
     Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default);
 }
 
-public class NextIdService(HttpClient httpClient) : INextIdService
+public sealed class NextIdServiceOptions
 {
+    public bool WriteFailuresToConsole { get; set; } = true;
+}
+
+public class NextIdService(HttpClient httpClient, IOptions<NextIdServiceOptions>? options = null) : INextIdService
+{
+    private readonly NextIdServiceOptions _options = options?.Value ?? new NextIdServiceOptions();
+
     public async Task<int> GetNextId(ProjectRoot projectRoot, string track,
         CancellationToken cancellationToken = default)
     {
@@ -65,7 +73,8 @@ public class NextIdService(HttpClient httpClient) : INextIdService
             }
             catch
             {
-                AnsiConsole.WriteLine("[red]Next ID project key could not be created.[/]");
+                if (_options.WriteFailuresToConsole)
+                    AnsiConsole.WriteLine("[red]Next ID project key could not be created.[/]");
                 throw;
             }
 

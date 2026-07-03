@@ -5,6 +5,7 @@ using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using Microsoft.Extensions.DependencyInjection;
 using PM;
 using PM.Application;
+using PM.Mcp;
 using PM.Project;
 using PM.Tasks;
 using PM.Web;
@@ -12,6 +13,19 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 
 var serviceProvider = new ServiceCollection();
+var cancellationTokenSource = new CancellationTokenSource();
+
+if (args is [var command, ..] && string.Equals(command, GlobalConfig.McpCommandName, StringComparison.Ordinal))
+{
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true;
+        cancellationTokenSource.Cancel();
+        Console.Error.WriteLine("Aborting...");
+    };
+
+    return await McpServerHost.RunAsync(args[1..], cancellationTokenSource.Token);
+}
 
 serviceProvider.AddHttpClient<INextIdService, NextIdService>();
 
@@ -26,8 +40,6 @@ serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([
 
 var registrar = new ServiceCollectionRegistrar(serviceProvider);
 var app = new CommandApp(registrar);
-
-var cancellationTokenSource = new CancellationTokenSource();
 
 app.Configure(config =>
 {
