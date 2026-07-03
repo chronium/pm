@@ -2,6 +2,7 @@ using CodePunk.Highlight.Core.SyntaxHighlighting;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using PM.Project;
 using PM.Tasks;
+using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Tests;
@@ -14,9 +15,98 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var command = new ListCommand(new ProjectRoot());
 
-        var exitCode = await command.ExecuteAsync(null!, new CommonSettings(), CancellationToken.None);
+        var (exitCode, _) = await ExecuteListCommand(command, new ListCommand.Settings());
 
         Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task ListEmptyStatesRendersWithoutCrashing()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
+        var command = new ListCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Queued", output);
+        Assert.Contains("Review", output);
+        Assert.Contains("Done", output);
+    }
+
+    [Fact]
+    public async Task ListSortsTasksByModifiedDescending()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
+        var older = TestData.Task("PM-0001", "Older task") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var newer = TestData.Task("PM-0002", "Newer task") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+        };
+        projectRoot.WriteTask(older);
+        projectRoot.WriteTask(newer);
+        projectRoot.UpdateTaskState(older, "todo");
+        projectRoot.UpdateTaskState(newer, "todo");
+        var command = new ListCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
+
+        Assert.Equal(0, exitCode);
+        Assert.True(output.IndexOf("Newer task", StringComparison.Ordinal) <
+                    output.IndexOf("Older task", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ListStateOnlyRendersMatchingState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
+        var todo = TestData.Task("PM-0001", "Todo task");
+        var review = TestData.Task("PM-0002", "Review task");
+        projectRoot.WriteTask(todo);
+        projectRoot.WriteTask(review);
+        projectRoot.UpdateTaskState(todo, "todo");
+        projectRoot.UpdateTaskState(review, "review");
+        var command = new ListCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Todo task", output);
+        Assert.DoesNotContain("Review task", output);
+        Assert.Contains("Queued", output);
+        Assert.DoesNotContain("Review (", output);
+    }
+
+    [Fact]
+    public async Task ListDescriptionPreviewUsesFirstNonEmptyBodyLineAndTruncates()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
+        var task = TestData.Task(
+            "PM-0001",
+            "Preview task",
+            """
+
+            - This preview is intentionally longer than terminal friendly output.
+
+            Second line should not render.
+            """);
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var command = new ListCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("This preview is intentionally longer than ter...", output);
+        Assert.DoesNotContain("- This preview", output);
+        Assert.DoesNotContain("Second line", output);
     }
 
     [Fact]
@@ -303,6 +393,31 @@ public class CommandBehaviorTests
         ]);
     }
 
+    private static async Task<(int ExitCode, string Output)> ExecuteListCommand(
+        ListCommand command,
+        ListCommand.Settings settings)
+    {
+        var originalConsole = AnsiConsole.Console;
+        using var writer = new StringWriter();
+        AnsiConsole.Console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Interactive = InteractionSupport.No,
+            Out = new FixedWidthConsoleOutput(writer),
+        });
+
+        try
+        {
+            var exitCode = await command.ExecuteAsync(null!, settings, CancellationToken.None);
+            return (exitCode, writer.ToString());
+        }
+        finally
+        {
+            AnsiConsole.Console = originalConsole;
+        }
+    }
+
     private sealed class RecordingNextIdService : INextIdService
     {
         public int GetNextIdCalls { get; private set; }
@@ -344,6 +459,18 @@ public class CommandBehaviorTests
             EditCalls++;
             EditAction?.Invoke(filePath);
             return Task.FromResult(ExitCode);
+        }
+    }
+
+    private sealed class FixedWidthConsoleOutput(TextWriter writer) : IAnsiConsoleOutput
+    {
+        public TextWriter Writer => writer;
+        public bool IsTerminal => false;
+        public int Width => 240;
+        public int Height => 80;
+
+        public void SetEncoding(System.Text.Encoding encoding)
+        {
         }
     }
 }
