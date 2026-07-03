@@ -25,12 +25,13 @@ public class MoveCommand(ProjectRoot projectRoot) : AsyncCommand<MoveCommand.Set
 
         var newStatePrompt = new SelectionPrompt<string>()
             .Title($"Select new [green]state[/]. Current state: [green]{currentState}[/].")
-            .UseConverter(key => $"{GlobalConfig.DefaultTaskStates[key]} ({key})")
-            .AddChoices(GlobalConfig.DefaultTaskStates.Keys);
+            .UseConverter(key => $"{projectRoot.Config!.TaskStates[key]} ({key})")
+            .AddChoices(projectRoot.Config!.TaskStates.Keys);
 
-        projectRoot.UpdateTaskState(task, await AnsiConsole.PromptAsync(newStatePrompt, cancellationToken));
+        var newState = await AnsiConsole.PromptAsync(newStatePrompt, cancellationToken);
+        projectRoot.UpdateTaskState(task, newState);
 
-        AnsiConsole.MarkupLine($"[green]Task {settings.TaskId} moved to state {currentState}[/]");
+        AnsiConsole.MarkupLine($"[green]Task {settings.TaskId} moved to state {newState}[/]");
 
         return 0;
     }

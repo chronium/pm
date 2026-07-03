@@ -18,12 +18,8 @@ public interface IProjectRoot
 
 public class ProjectRoot : IProjectRoot
 {
-    private readonly INextIdService _nextIdService;
-
-    public ProjectRoot(INextIdService nextIdService)
+    public ProjectRoot()
     {
-        _nextIdService = nextIdService;
-
         Exists = TryFindProjectRoot(out var rootPath);
         RootPath = rootPath!;
 
@@ -94,7 +90,7 @@ public class ProjectRoot : IProjectRoot
         CreateProjectDirectories();
 
         config.WriteConfig(this);
-        await _nextIdService.PeekNextId(this, cancellationToken);
+        await Task.CompletedTask;
     }
 
     public void WriteTask(TaskItem task)

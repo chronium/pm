@@ -3,4 +3,5 @@
     <File Path="next_id.cs" />
   </Folder>
   <Project Path="PM/PM.csproj" />
+  <Project Path="PM.Tests/PM.Tests.csproj" />
 </Solution>

@@ -11,10 +11,7 @@ using Spectre.Console.Cli;
 
 var serviceProvider = new ServiceCollection();
 
-serviceProvider.AddHttpClient<INextIdService, NextIdService>(client =>
-{
-    client.BaseAddress = new("http://localhost:8080");
-});
+serviceProvider.AddHttpClient<INextIdService, NextIdService>();
 
 serviceProvider.AddSingleton<ProjectRoot>();
 serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([

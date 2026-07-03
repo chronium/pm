@@ -9,7 +9,7 @@ public class ListCommand(ProjectRoot projectRoot) : AsyncCommand<CommonSettings>
     public override Task<int> ExecuteAsync(CommandContext context, CommonSettings settings,
         CancellationToken cancellationToken)
     {
-        ValidateProjectAndServiceHealth();
+        if (ValidateProjectAndServiceHealth() != 0) return Task.FromResult(1);
 
         foreach (var (state, name) in projectRoot.Config!.TaskStates)
         {

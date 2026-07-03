@@ -10,8 +10,9 @@ public interface INextIdService
 {
     Task<int> GetNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default);
     Task<int> PeekNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default);
+    Task<int?> PeekExistingNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default);
 
-    Task<bool> Healthy(CancellationToken cancellationToken = default);
+    Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default);
 }
 
 public class NextIdService(HttpClient httpClient) : INextIdService
@@ -20,14 +21,14 @@ public class NextIdService(HttpClient httpClient) : INextIdService
     {
         var key = await GetNextIdKey(projectRoot, cancellationToken);
 
-        return await GetNextId(key, cancellationToken);
+        return await GetNextId(projectRoot.Config!, key, cancellationToken);
     }
 
-    public async Task<bool> Healthy(CancellationToken cancellationToken)
+    public async Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken)
     {
         try
         {
-            var response = await httpClient.GetAsync("/health", cancellationToken);
+            var response = await httpClient.GetAsync(BuildUri(config, "/health"), cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -39,16 +40,23 @@ public class NextIdService(HttpClient httpClient) : INextIdService
     public async Task<int> PeekNextId(ProjectRoot projectRoot, CancellationToken cancellationToken)
     {
         var key = await GetNextIdKey(projectRoot, cancellationToken);
-        return await PeekNextId(key, cancellationToken);
+        return await PeekNextId(projectRoot.Config!, key, cancellationToken);
+    }
+
+    public async Task<int?> PeekExistingNextId(ProjectRoot projectRoot, CancellationToken cancellationToken)
+    {
+        var key = ReadNextIdKey(projectRoot);
+        return key == null ? null : await PeekNextId(projectRoot.Config!, key, cancellationToken);
     }
 
     private async Task<string> GetNextIdKey(ProjectRoot projectRoot, CancellationToken cancellationToken)
     {
-        var nextIdPath = Path.Combine(projectRoot.RootPath, GlobalConfig.NextIdFile);
-        if (!File.Exists(nextIdPath))
+        var existingKey = ReadNextIdKey(projectRoot);
+        if (existingKey == null)
             try
             {
-                var newKey = await CreateProjectKey(cancellationToken);
+                var newKey = await CreateProjectKey(projectRoot.Config!, cancellationToken);
+                var nextIdPath = Path.Combine(projectRoot.RootPath, GlobalConfig.NextIdFile);
                 FileSystem.WriteAllText(nextIdPath, newKey);
                 return newKey;
             }
@@ -58,35 +66,54 @@ public class NextIdService(HttpClient httpClient) : INextIdService
                 throw;
             }
 
+        return existingKey;
+    }
+
+    private static string? ReadNextIdKey(ProjectRoot projectRoot)
+    {
+        var nextIdPath = Path.Combine(projectRoot.RootPath, GlobalConfig.NextIdFile);
+        if (!File.Exists(nextIdPath)) return null;
+
         var key = FileSystem.ReadAllText(nextIdPath);
         return key;
     }
 
-    private async Task<string> CreateProjectKey(CancellationToken cancellationToken)
+    private async Task<string> CreateProjectKey(ProjectConfig config, CancellationToken cancellationToken)
     {
-        var projectKeyResponse = await httpClient.PostAsync("/projects", new StringContent(""), cancellationToken);
+        var projectKeyResponse = await httpClient.PostAsync(BuildUri(config, "/projects"), new StringContent(""),
+            cancellationToken);
         projectKeyResponse.EnsureSuccessStatusCode();
 
         var json = await projectKeyResponse.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize<CreateProjectKeyResponse>(json)!.Key;
     }
 
-    private async Task<int> GetNextId(string key, CancellationToken cancellationToken)
+    private async Task<int> GetNextId(ProjectConfig config, string key, CancellationToken cancellationToken)
     {
-        var nextIdResponse = await httpClient.GetAsync($"/projects/{key}/nextid", cancellationToken);
+        var nextIdResponse = await httpClient.GetAsync(BuildUri(config, $"/projects/{Uri.EscapeDataString(key)}/nextid"),
+            cancellationToken);
         nextIdResponse.EnsureSuccessStatusCode();
 
         var json = await nextIdResponse.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize<NextIdResponse>(json)!.Id;
     }
 
-    private async Task<int> PeekNextId(string key, CancellationToken cancellationToken)
+    private async Task<int> PeekNextId(ProjectConfig config, string key, CancellationToken cancellationToken)
     {
-        var peekIdResponse = await httpClient.GetAsync($"/projects/{key}/peekid", cancellationToken);
+        var peekIdResponse = await httpClient.GetAsync(BuildUri(config, $"/projects/{Uri.EscapeDataString(key)}/peekid"),
+            cancellationToken);
         peekIdResponse.EnsureSuccessStatusCode();
 
         var json = await peekIdResponse.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize<NextIdResponse>(json)!.Id;
+    }
+
+    private static Uri BuildUri(ProjectConfig config, string path)
+    {
+        var baseUri = config.NextIdServiceUrl.EndsWith('/')
+            ? new Uri(config.NextIdServiceUrl)
+            : new Uri($"{config.NextIdServiceUrl}/");
+        return new Uri(baseUri, path.TrimStart('/'));
     }
 
     private class CreateProjectKeyResponse

@@ -14,9 +14,11 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
     public override async Task<int> ExecuteAsync(CommandContext context, CommonSettings commonSettings,
         CancellationToken cancellationToken)
     {
-        if (await ValidateProjectInitialization(cancellationToken) != 0) return 1;
+        if (ValidateProjectDoesNotExist() != 0) return 1;
 
         var config = await GatherProjectConfiguration(cancellationToken);
+
+        if (await ValidateNextIdServiceHealth(config, cancellationToken) != 0) return 1;
 
         return await GenerateProjectConfigurationDisplay(config, cancellationToken);
     }
@@ -60,6 +62,8 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
         var projectName = await AnsiConsole.AskAsync("Project name ", assumedName, cancellationToken);
         var idWidth = await AnsiConsole.AskAsync("Project ID width ", 4, cancellationToken);
         var idPrefix = await AnsiConsole.AskAsync("Project ID prefix ", "TASK", cancellationToken);
+        var nextIdServiceUrl = await AnsiConsole.AskAsync("Next ID service URL ",
+            ProjectConfig.DefaultNextIdServiceUrl, cancellationToken);
 
         var tasksPrompt = new MultiSelectionPrompt<string>()
             .Title("What [green]task states[/] should be created?")
@@ -76,12 +80,13 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
             Name = projectName,
             IdWidth = idWidth,
             IdPrefix = idPrefix,
+            NextIdServiceUrl = nextIdServiceUrl,
             TaskStates = taskStates.ToDictionary(key => key, key => GlobalConfig.DefaultTaskStates[key]),
         };
         return config;
     }
 
-    private async Task<int> ValidateProjectInitialization(CancellationToken cancellationToken)
+    private int ValidateProjectDoesNotExist()
     {
         if (projectRoot.Exists)
         {
@@ -89,7 +94,12 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
             return 1;
         }
 
-        if (!await nextIdService.Healthy(cancellationToken))
+        return 0;
+    }
+
+    private async Task<int> ValidateNextIdServiceHealth(ProjectConfig config, CancellationToken cancellationToken)
+    {
+        if (!await nextIdService.Healthy(config, cancellationToken))
         {
             AnsiConsole.MarkupLine("[red]Unable to reach the next ID service.[/]");
             return 1;

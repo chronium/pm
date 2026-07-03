@@ -14,7 +14,7 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
-        if (await ValidateProjectAndServiceHealth(cancellationToken) != 0) return 1;
+        if (await ValidateProjectAndServiceHealth(settings, cancellationToken) != 0) return 1;
 
         var taskItem = await GenerateTaskItem(settings, cancellationToken);
 
@@ -52,12 +52,12 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
     private async Task<TaskItem> GenerateTaskItem(Settings settings,
         CancellationToken cancellationToken)
     {
-        var nextId = settings.DryRun
-            ? await nextIdService.PeekNextId(projectRoot, cancellationToken)
-            : await nextIdService.GetNextId(projectRoot, cancellationToken);
-
-        var idPadded = nextId.ToString().PadLeft(projectRoot.Config!.IdWidth, '0');
-        var prefixedId = $"{projectRoot.Config.IdPrefix}-{idPadded}";
+        var config = projectRoot.Config!;
+        var idPadded = settings.DryRun
+            ? await GetDryRunId(cancellationToken)
+            : (await nextIdService.GetNextId(projectRoot, cancellationToken)).ToString()
+            .PadLeft(config.IdWidth, '0');
+        var prefixedId = $"{config.IdPrefix}-{idPadded}";
 
         var title = settings.Title.Trim();
 
@@ -71,7 +71,14 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
         return taskItem;
     }
 
-    private async Task<int> ValidateProjectAndServiceHealth(CancellationToken cancellationToken)
+    private async Task<string> GetDryRunId(CancellationToken cancellationToken)
+    {
+        var nextId = await nextIdService.PeekExistingNextId(projectRoot, cancellationToken);
+        return nextId?.ToString().PadLeft(projectRoot.Config!.IdWidth, '0')
+               ?? new string('?', projectRoot.Config!.IdWidth);
+    }
+
+    private async Task<int> ValidateProjectAndServiceHealth(Settings settings, CancellationToken cancellationToken)
     {
         if (!projectRoot.Exists)
         {
@@ -79,7 +86,10 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
             return 1;
         }
 
-        if (!await nextIdService.Healthy(cancellationToken))
+        if (settings.DryRun && !File.Exists(Path.Combine(projectRoot.RootPath!, GlobalConfig.NextIdFile)))
+            return 0;
+
+        if (!await nextIdService.Healthy(projectRoot.Config!, cancellationToken))
         {
             AnsiConsole.MarkupLine("[red]Unable to reach the next ID service.[/]");
             return 1;
