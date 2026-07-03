@@ -1,37 +1,22 @@
 using System.ComponentModel;
+using PM.Application;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Project;
 
-public class TrackAddCommand(ProjectRoot projectRoot) : Command<TrackAddCommand.Settings>
+public class TrackAddCommand(ProjectConfigService configService) : Command<TrackAddCommand.Settings>
 {
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        if (!projectRoot.Exists)
+        var result = configService.AddTrack(settings.Key, settings.Name);
+        if (!result.Success)
         {
-            AnsiConsole.MarkupLine("[red]Project not found. Run [green]pm init[/] first.[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{(result.Message ?? "Track add failed.").EscapeMarkup()}[/]");
             return 1;
         }
 
-        var key = settings.Key.Trim();
-        var name = settings.Name.Trim();
-        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(name))
-        {
-            AnsiConsole.MarkupLine("[red]Track key and name are required.[/]");
-            return 1;
-        }
-
-        var config = projectRoot.Config!;
-        if (config.Tracks.ContainsKey(key))
-        {
-            AnsiConsole.MarkupLineInterpolated($"[red]Track {key.EscapeMarkup()} already exists.[/]");
-            return 1;
-        }
-
-        config.Tracks[key] = name;
-        config.WriteConfig(projectRoot);
-        AnsiConsole.MarkupLineInterpolated($"Added track [green]{key.EscapeMarkup()}[/].");
+        AnsiConsole.MarkupLineInterpolated($"Added track [green]{settings.Key.Trim().EscapeMarkup()}[/].");
         return 0;
     }
 

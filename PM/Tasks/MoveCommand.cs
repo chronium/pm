@@ -1,10 +1,11 @@
+using PM.Application;
 using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Tasks;
 
-public class MoveCommand(ProjectRoot projectRoot) : AsyncCommand<MoveCommand.Settings>
+public class MoveCommand(ProjectRoot projectRoot, TaskService taskService) : AsyncCommand<MoveCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
@@ -29,7 +30,12 @@ public class MoveCommand(ProjectRoot projectRoot) : AsyncCommand<MoveCommand.Set
             .AddChoices(projectRoot.Config!.TaskStates.Keys);
 
         var newState = await AnsiConsole.PromptAsync(newStatePrompt, cancellationToken);
-        projectRoot.UpdateTaskState(task, newState);
+        var result = taskService.MoveTask(settings.TaskId, newState);
+        if (!result.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{(result.Message ?? "Task move failed.").EscapeMarkup()}[/]");
+            return 1;
+        }
 
         AnsiConsole.MarkupLine($"[green]Task {settings.TaskId} moved to state {newState}[/]");
 

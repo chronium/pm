@@ -1,22 +1,60 @@
 using System.Text.RegularExpressions;
 using PM.Project;
+using PM.Tasks;
 
-namespace PM.Web;
+namespace PM.Application;
 
-public partial class BoardQueryService(ProjectRoot projectRoot)
+public sealed record BoardQuery(string? Track = null, string? Milestone = null, string? State = null);
+
+public sealed record BoardData(
+    string ProjectName,
+    IReadOnlyList<BoardOption> Tracks,
+    IReadOnlyList<BoardOption> Milestones,
+    IReadOnlyList<BoardOption> States,
+    IReadOnlyList<BoardMilestoneGroup> MilestoneGroups,
+    BoardQuery Query);
+
+public sealed record BoardOption(string Key, string Name);
+
+public sealed record BoardMilestoneGroup(string? Key, string Name, IReadOnlyList<BoardStateGroup> States);
+
+public sealed record BoardStateGroup(string Key, string Name, IReadOnlyList<BoardTask> Tasks);
+
+public sealed record BoardTask(
+    TaskItem Task,
+    string Track,
+    string? Milestone,
+    string State,
+    string DescriptionPreview,
+    string FilePath);
+
+public partial class BoardService(ProjectRoot projectRoot)
 {
-    private const int DescriptionPreviewLength = 96;
+    public const int CliDescriptionPreviewLength = 48;
+    public const int WebDescriptionPreviewLength = 96;
 
-    public BoardData GetBoard(BoardQuery query)
+    public AppResult<BoardData> GetBoard(BoardQuery query, int descriptionPreviewLength = WebDescriptionPreviewLength)
     {
-        var config = projectRoot.Config ?? throw new InvalidOperationException("Project root is not initialized.");
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<BoardData>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        var config = projectRoot.Config;
+        if (!string.IsNullOrWhiteSpace(query.State) && !config.TaskStates.ContainsKey(query.State))
+            return AppResult<BoardData>.Fail("invalid_state", $"State {query.State} not found.");
+
+        if (!string.IsNullOrWhiteSpace(query.Track) && !config.Tracks.ContainsKey(query.Track))
+            return AppResult<BoardData>.Fail("invalid_track", $"Track {query.Track} not found.");
+
+        if (!string.IsNullOrWhiteSpace(query.Milestone) && !config.Milestones.ContainsKey(query.Milestone))
+            return AppResult<BoardData>.Fail("invalid_milestone", $"Milestone {query.Milestone} not found.");
+
         var entries = projectRoot.GetAllTasks()
             .Select(task => new BoardTask(
                 task,
                 projectRoot.ResolveTaskTrack(task),
                 task.Milestone,
                 projectRoot.TryGetState(task, out var state) ? state : string.Empty,
-                GetDescriptionPreview(task.Description),
+                GetDescriptionPreview(task.Description, descriptionPreviewLength),
                 projectRoot.GetTaskFilePath(task.Id)))
             .Where(entry => string.IsNullOrWhiteSpace(query.Track) || entry.Track == query.Track)
             .Where(entry => string.IsNullOrWhiteSpace(query.Milestone) || entry.Milestone == query.Milestone)
@@ -57,22 +95,16 @@ public partial class BoardQueryService(ProjectRoot projectRoot)
                     .ToList()))
             .ToList();
 
-        return new BoardData(
+        return AppResult<BoardData>.Ok(new BoardData(
             config.Name,
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
             config.Milestones.Select(milestone => new BoardOption(milestone.Key, milestone.Value)).ToList(),
             stateOptions,
             groups,
-            query);
+            query));
     }
 
-    private string ResolveMilestoneTitle(string? milestone)
-    {
-        if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
-        return projectRoot.Config!.Milestones.TryGetValue(milestone, out var title) ? title : milestone;
-    }
-
-    public static string GetDescriptionPreview(string description)
+    public static string GetDescriptionPreview(string description, int previewLength)
     {
         var firstLine = description
             .ReplaceLineEndings("\n")
@@ -82,9 +114,15 @@ public partial class BoardQueryService(ProjectRoot projectRoot)
 
         if (string.IsNullOrWhiteSpace(firstLine)) return string.Empty;
 
-        return firstLine.Length <= DescriptionPreviewLength
+        return firstLine.Length <= previewLength
             ? firstLine
-            : $"{firstLine[..(DescriptionPreviewLength - 3)]}...";
+            : $"{firstLine[..(previewLength - 3)]}...";
+    }
+
+    private string ResolveMilestoneTitle(string? milestone)
+    {
+        if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
+        return projectRoot.Config!.Milestones.TryGetValue(milestone, out var title) ? title : milestone;
     }
 
     private static string StripMarkdownPrefix(string line)
@@ -95,4 +133,3 @@ public partial class BoardQueryService(ProjectRoot projectRoot)
     [GeneratedRegex(@"^(#{1,6}\s+|(?:[-*+]\s+)?\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+|>\s+)")]
     private static partial Regex MarkdownPrefixRegex();
 }
-

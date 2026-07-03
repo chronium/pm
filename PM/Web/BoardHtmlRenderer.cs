@@ -1,5 +1,7 @@
 using System.Net;
 
+using PM.Application;
+
 namespace PM.Web;
 
 public static class BoardHtmlRenderer
@@ -126,4 +128,3 @@ public static class BoardHtmlRenderer
         return Uri.EscapeDataString(value);
     }
 }
-

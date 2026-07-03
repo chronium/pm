@@ -5,13 +5,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Hosting;
+using PM.Application;
 using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Web;
 
-public class WebCommand(ProjectRoot projectRoot) : AsyncCommand<WebCommand.Settings>
+public class WebCommand(ProjectRoot projectRoot, BoardService boardService) : AsyncCommand<WebCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
@@ -29,7 +30,7 @@ public class WebCommand(ProjectRoot projectRoot) : AsyncCommand<WebCommand.Setti
         builder.WebHost.UseUrls(url);
 
         var app = builder.Build();
-        MapEndpoints(app, projectRoot);
+        MapEndpoints(app, boardService);
 
         await app.StartAsync(cancellationToken);
         AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
@@ -49,26 +50,28 @@ public class WebCommand(ProjectRoot projectRoot) : AsyncCommand<WebCommand.Setti
         return 0;
     }
 
-    public static void MapEndpoints(IEndpointRouteBuilder endpoints, ProjectRoot projectRoot)
+    public static void MapEndpoints(IEndpointRouteBuilder endpoints, BoardService boardService)
     {
         endpoints.MapGet("/favicon.ico", () => Results.NoContent());
 
         endpoints.MapGet("/", (HttpRequest request) =>
         {
-            var board = CreateBoard(projectRoot, request);
+            var board = CreateBoard(boardService, request);
             return Results.Content(BoardHtmlRenderer.RenderPage(board), "text/html; charset=utf-8");
         });
 
         endpoints.MapGet("/board", (HttpRequest request) =>
         {
-            var board = CreateBoard(projectRoot, request);
+            var board = CreateBoard(boardService, request);
             return Results.Content(BoardHtmlRenderer.RenderBoard(board), "text/html; charset=utf-8");
         });
 
         endpoints.MapGet("/task/{id}", (string id) =>
         {
-            var service = new BoardQueryService(projectRoot);
-            var task = service.GetBoard(new BoardQuery()).MilestoneGroups
+            var result = boardService.GetBoard(new BoardQuery());
+            if (!result.Success) return Results.NotFound("Task not found.");
+
+            var task = result.Payload!.MilestoneGroups
                 .SelectMany(milestone => milestone.States)
                 .SelectMany(state => state.Tasks)
                 .FirstOrDefault(task => task.Task.Id == id);
@@ -79,14 +82,17 @@ public class WebCommand(ProjectRoot projectRoot) : AsyncCommand<WebCommand.Setti
         });
     }
 
-    private static BoardData CreateBoard(ProjectRoot projectRoot, HttpRequest request)
+    private static BoardData CreateBoard(BoardService boardService, HttpRequest request)
     {
         var query = new BoardQuery(
             ReadQueryValue(request, "track"),
             ReadQueryValue(request, "milestone"),
             ReadQueryValue(request, "state"));
 
-        return new BoardQueryService(projectRoot).GetBoard(query);
+        var result = boardService.GetBoard(query);
+        if (!result.Success) throw new InvalidOperationException(result.Message);
+
+        return result.Payload!;
     }
 
     private static string? ReadQueryValue(HttpRequest request, string key)

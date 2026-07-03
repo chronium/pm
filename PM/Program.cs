@@ -4,6 +4,7 @@ using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using Microsoft.Extensions.DependencyInjection;
 using PM;
+using PM.Application;
 using PM.Project;
 using PM.Tasks;
 using PM.Web;
@@ -15,6 +16,9 @@ var serviceProvider = new ServiceCollection();
 serviceProvider.AddHttpClient<INextIdService, NextIdService>();
 
 serviceProvider.AddSingleton<ProjectRoot>();
+serviceProvider.AddSingleton<TaskService>();
+serviceProvider.AddSingleton<ProjectConfigService>();
+serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<IEditorService, EditorService>();
 serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([
     new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),

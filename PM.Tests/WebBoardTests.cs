@@ -1,3 +1,4 @@
+using PM.Application;
 using PM.Project;
 using PM.Web;
 using Spectre.Console;
@@ -12,7 +13,8 @@ public class WebBoardTests
     public async Task WebOutsideProjectReturnsOne()
     {
         using var workspace = new TempWorkingDirectory();
-        var command = new WebCommand(new ProjectRoot());
+        var projectRoot = new ProjectRoot();
+        var command = new WebCommand(projectRoot, new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings());
 
@@ -34,7 +36,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(assigned, "review");
         projectRoot.UpdateTaskState(unassigned, "todo");
 
-        var board = new BoardQueryService(projectRoot).GetBoard(new BoardQuery());
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
 
         var milestone = Assert.Single(board.MilestoneGroups, group => group.Key == "m1");
         Assert.Equal("Milestone 1", milestone.Name);
@@ -63,7 +65,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(wrongMilestone, "review");
         projectRoot.UpdateTaskState(wrongState, "todo");
 
-        var board = new BoardQueryService(projectRoot).GetBoard(new BoardQuery("BUILD", "m1", "review"));
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery("BUILD", "m1", "review")).Payload!;
         var tasks = board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks).ToList();
 
         var boardTask = Assert.Single(tasks);
@@ -79,7 +81,7 @@ public class WebBoardTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
 
-        var board = new BoardQueryService(projectRoot).GetBoard(new BoardQuery());
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
 
         Assert.Equal("PM", boardTask.Track);
@@ -94,7 +96,7 @@ public class WebBoardTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
 
-        var board = new BoardQueryService(projectRoot).GetBoard(new BoardQuery());
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var html = BoardHtmlRenderer.RenderPage(board);
 
         Assert.Contains("Render &lt;task&gt;", html);
@@ -116,7 +118,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(match, "todo");
         projectRoot.UpdateTaskState(other, "todo");
 
-        var board = new BoardQueryService(projectRoot).GetBoard(new BoardQuery(Track: "BUILD"));
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery(Track: "BUILD")).Payload!;
         var html = BoardHtmlRenderer.RenderBoard(board);
 
         Assert.Contains("Matching task", html);

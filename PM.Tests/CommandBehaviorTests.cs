@@ -1,5 +1,6 @@
 using CodePunk.Highlight.Core.SyntaxHighlighting;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
+using PM.Application;
 using PM.Project;
 using PM.Tasks;
 using Spectre.Console;
@@ -13,7 +14,8 @@ public class CommandBehaviorTests
     public async Task ListOutsideProjectReturnsOne()
     {
         using var workspace = new TempWorkingDirectory();
-        var command = new ListCommand(new ProjectRoot());
+        var projectRoot = new ProjectRoot();
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, _) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -25,7 +27,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
-        var command = new ListCommand(projectRoot);
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -52,7 +54,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(newer);
         projectRoot.UpdateTaskState(older, "todo");
         projectRoot.UpdateTaskState(newer, "todo");
-        var command = new ListCommand(projectRoot);
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -72,7 +74,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(review);
         projectRoot.UpdateTaskState(todo, "todo");
         projectRoot.UpdateTaskState(review, "review");
-        var command = new ListCommand(projectRoot);
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
 
@@ -99,7 +101,7 @@ public class CommandBehaviorTests
             """);
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new ListCommand(projectRoot);
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
 
@@ -123,7 +125,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(unassigned);
         projectRoot.UpdateTaskState(assigned, "review");
         projectRoot.UpdateTaskState(unassigned, "todo");
-        var command = new ListCommand(projectRoot);
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -153,7 +155,7 @@ public class CommandBehaviorTests
         projectRoot.UpdateTaskState(wrongTrack, "review");
         projectRoot.UpdateTaskState(wrongMilestone, "review");
         projectRoot.UpdateTaskState(wrongState, "todo");
-        var command = new ListCommand(projectRoot);
+        var command = new ListCommand(new BoardService(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command,
             new ListCommand.Settings { Track = "BUILD", Milestone = "m1", State = "review" });
@@ -174,7 +176,8 @@ public class CommandBehaviorTests
         var highlighter = new SyntaxHighlighter([
             new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),
         ]);
-        var command = new TaskAddCommand(projectRoot, nextIdService, highlighter, new RecordingEditorService());
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), highlighter,
+            new RecordingEditorService());
         GlobalConfig.DryRun = true;
 
         try
@@ -201,7 +204,8 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(projectRoot, nextIdService, CreateHighlighter(), new RecordingEditorService());
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), CreateHighlighter(),
+            new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskAddCommand.Settings
@@ -224,7 +228,8 @@ public class CommandBehaviorTests
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(projectRoot, nextIdService, CreateHighlighter(), new RecordingEditorService());
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), CreateHighlighter(),
+            new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskAddCommand.Settings
@@ -247,7 +252,8 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new TaskAddCommand(projectRoot, new RecordingNextIdService(), CreateHighlighter(),
+        var nextIdService = new RecordingNextIdService();
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), CreateHighlighter(),
             new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -261,7 +267,8 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new TaskAddCommand(projectRoot, new RecordingNextIdService(), CreateHighlighter(),
+        var nextIdService = new RecordingNextIdService();
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), CreateHighlighter(),
             new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -276,7 +283,8 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(projectRoot, nextIdService, CreateHighlighter(), new RecordingEditorService());
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), CreateHighlighter(),
+            new RecordingEditorService());
         GlobalConfig.DryRun = true;
 
         try
@@ -306,7 +314,8 @@ public class CommandBehaviorTests
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIdService = new RecordingNextIdService();
         var editor = new RecordingEditorService { ExitCode = 1 };
-        var command = new TaskAddCommand(projectRoot, nextIdService, CreateHighlighter(), editor);
+        var command = new TaskAddCommand(projectRoot, new TaskService(projectRoot, nextIdService), CreateHighlighter(),
+            editor);
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskAddCommand.Settings
@@ -326,7 +335,9 @@ public class CommandBehaviorTests
     public async Task EditOutsideProjectReturnsOne()
     {
         using var workspace = new TempWorkingDirectory();
-        var command = new TaskEditCommand(new ProjectRoot(), new RecordingEditorService(), CreateHighlighter());
+        var projectRoot = new ProjectRoot();
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()),
+            new RecordingEditorService(), CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None);
@@ -339,7 +350,8 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
-        var command = new TaskEditCommand(projectRoot, new RecordingEditorService(), CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()),
+            new RecordingEditorService(), CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-9999" }, CancellationToken.None);
@@ -359,7 +371,8 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, "changed"),
         };
-        var command = new TaskEditCommand(projectRoot, editor, CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor,
+            CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { DryRun = true, TaskId = "PM-0001" }, CancellationToken.None);
@@ -382,7 +395,8 @@ public class CommandBehaviorTests
             ExitCode = 1,
             EditAction = path => File.WriteAllText(path, "changed"),
         };
-        var command = new TaskEditCommand(projectRoot, editor, CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor,
+            CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None);
@@ -403,7 +417,8 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, "not frontmatter"),
         };
-        var command = new TaskEditCommand(projectRoot, editor, CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor,
+            CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None);
@@ -425,7 +440,8 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, TestData.Task("PM-0002", "Changed ID").ToMarkdown()),
         };
-        var command = new TaskEditCommand(projectRoot, editor, CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor,
+            CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None);
@@ -458,7 +474,8 @@ public class CommandBehaviorTests
                                                          Original body
                                                          """),
         };
-        var command = new TaskEditCommand(projectRoot, editor, CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor,
+            CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None);
@@ -484,7 +501,8 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, edited.ToMarkdown()),
         };
-        var command = new TaskEditCommand(projectRoot, editor, CreateHighlighter());
+        var command = new TaskEditCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor,
+            CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
             new TaskEditCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None);
@@ -501,7 +519,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new TrackAddCommand(projectRoot);
+        var command = new TrackAddCommand(new ProjectConfigService(projectRoot));
 
         Assert.Equal(0,
             command.Execute(null!, new TrackAddCommand.Settings { Key = "BUILD", Name = "Build" },
@@ -530,7 +548,7 @@ public class CommandBehaviorTests
                                                                                            todo: To Do
                                                                                          """);
         projectRoot = new ProjectRoot();
-        var command = new TrackAddCommand(projectRoot);
+        var command = new TrackAddCommand(new ProjectConfigService(projectRoot));
 
         var exitCode = command.Execute(null!, new TrackAddCommand.Settings { Key = "BUILD", Name = "Build" },
             CancellationToken.None);
@@ -546,7 +564,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new MilestoneAddCommand(projectRoot);
+        var command = new MilestoneAddCommand(new ProjectConfigService(projectRoot));
 
         Assert.Equal(0,
             command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m1", Title = "Milestone 1" },
