@@ -110,6 +110,62 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task ListGroupsTasksByMilestoneThenStateAndShowsTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            idPrefix: "PM",
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var assigned = TestData.Task("BUILD-0001", "Assigned build task", track: "BUILD", milestone: "m1");
+        var unassigned = TestData.Task("PM-0001", "Unassigned task");
+        projectRoot.WriteTask(assigned);
+        projectRoot.WriteTask(unassigned);
+        projectRoot.UpdateTaskState(assigned, "review");
+        projectRoot.UpdateTaskState(unassigned, "todo");
+        var command = new ListCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Milestone 1", output);
+        Assert.Contains("Unassigned", output);
+        Assert.Contains("BUILD", output);
+        Assert.True(output.IndexOf("Milestone 1", StringComparison.Ordinal) <
+                    output.IndexOf("Assigned build task", StringComparison.Ordinal));
+        Assert.True(output.IndexOf("Unassigned", StringComparison.Ordinal) <
+                    output.IndexOf("Unassigned task", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ListFiltersTrackMilestoneAndStateTogether()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+        var match = TestData.Task("BUILD-0001", "Matching task", track: "BUILD", milestone: "m1");
+        var wrongTrack = TestData.Task("PM-0001", "Wrong track", track: "PM", milestone: "m1");
+        var wrongMilestone = TestData.Task("BUILD-0002", "Wrong milestone", track: "BUILD", milestone: "m2");
+        var wrongState = TestData.Task("BUILD-0003", "Wrong state", track: "BUILD", milestone: "m1");
+        foreach (var task in new[] { match, wrongTrack, wrongMilestone, wrongState }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(match, "review");
+        projectRoot.UpdateTaskState(wrongTrack, "review");
+        projectRoot.UpdateTaskState(wrongMilestone, "review");
+        projectRoot.UpdateTaskState(wrongState, "todo");
+        var command = new ListCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteListCommand(command,
+            new ListCommand.Settings { Track = "BUILD", Milestone = "m1", State = "review" });
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Matching task", output);
+        Assert.DoesNotContain("Wrong track", output);
+        Assert.DoesNotContain("Wrong milestone", output);
+        Assert.DoesNotContain("Wrong state", output);
+    }
+
+    [Fact]
     public async Task DryRunAddWithNoNextIdFileUsesPlaceholderAndDoesNotCreateProjectKey()
     {
         using var workspace = new TempWorkingDirectory();
@@ -158,6 +214,60 @@ public class CommandBehaviorTests
         Assert.Equal(0, exitCode);
         var content = File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0001.md"));
         Assert.EndsWith("---\n\n# Context\n\nDetails here.", content);
+    }
+
+    [Fact]
+    public async Task AddWritesTrackAndOptionalMilestone()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var nextIdService = new RecordingNextIdService();
+        var command = new TaskAddCommand(projectRoot, nextIdService, CreateHighlighter(), new RecordingEditorService());
+
+        var exitCode = await command.ExecuteAsync(null!,
+            new TaskAddCommand.Settings
+            {
+                Title = "Build task",
+                Track = "BUILD",
+                Milestone = "m1",
+            },
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["BUILD"], nextIdService.GetNextIdTracks);
+        var content = File.ReadAllText(Path.Combine(projectRoot.TasksPath, "BUILD-0001.md"));
+        Assert.Contains("track: BUILD", content);
+        Assert.Contains("milestone: m1", content);
+    }
+
+    [Fact]
+    public async Task AddInvalidTrackExitsOne()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new TaskAddCommand(projectRoot, new RecordingNextIdService(), CreateHighlighter(),
+            new RecordingEditorService());
+
+        var exitCode = await command.ExecuteAsync(null!,
+            new TaskAddCommand.Settings { Title = "Bad track", Track = "NOPE" }, CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task AddInvalidMilestoneExitsOne()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new TaskAddCommand(projectRoot, new RecordingNextIdService(), CreateHighlighter(),
+            new RecordingEditorService());
+
+        var exitCode = await command.ExecuteAsync(null!,
+            new TaskAddCommand.Settings { Title = "Bad milestone", Milestone = "missing" }, CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
     }
 
     [Fact]
@@ -386,6 +496,72 @@ public class CommandBehaviorTests
         Assert.EndsWith("---\n\n# Updated\n\nBody", content);
     }
 
+    [Fact]
+    public async Task TrackAddWritesConfigAndRejectsDuplicatesAndEmptyValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new TrackAddCommand(projectRoot);
+
+        Assert.Equal(0,
+            command.Execute(null!, new TrackAddCommand.Settings { Key = "BUILD", Name = "Build" },
+                CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!, new TrackAddCommand.Settings { Key = "BUILD", Name = "Duplicate" },
+                CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!, new TrackAddCommand.Settings { Key = " ", Name = "Missing" },
+                CancellationToken.None));
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("Build", config.Tracks["BUILD"]);
+    }
+
+    [Fact]
+    public async Task TrackAddPersistsWhenConfigHasOnlyLegacyDefaultTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        File.WriteAllText(Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile), """
+                                                                                         name: Legacy
+                                                                                         idWidth: 4
+                                                                                         idPrefix: PM
+                                                                                         taskStates:
+                                                                                           todo: To Do
+                                                                                         """);
+        projectRoot = new ProjectRoot();
+        var command = new TrackAddCommand(projectRoot);
+
+        var exitCode = command.Execute(null!, new TrackAddCommand.Settings { Key = "BUILD", Name = "Build" },
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("PM", config.Tracks["PM"]);
+        Assert.Equal("Build", config.Tracks["BUILD"]);
+    }
+
+    [Fact]
+    public async Task MilestoneAddWritesConfigAndRejectsDuplicatesAndEmptyValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new MilestoneAddCommand(projectRoot);
+
+        Assert.Equal(0,
+            command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m1", Title = "Milestone 1" },
+                CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m1", Title = "Duplicate" },
+                CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m2", Title = " " },
+                CancellationToken.None));
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("Milestone 1", config.Milestones["m1"]);
+    }
+
     private static SyntaxHighlighter CreateHighlighter()
     {
         return new SyntaxHighlighter([
@@ -423,19 +599,22 @@ public class CommandBehaviorTests
         public int GetNextIdCalls { get; private set; }
         public int PeekExistingNextIdCalls { get; private set; }
         public int HealthyCalls { get; private set; }
+        public List<string> GetNextIdTracks { get; } = [];
 
-        public Task<int> GetNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default)
+        public Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
         {
             GetNextIdCalls++;
+            GetNextIdTracks.Add(track);
             return Task.FromResult(1);
         }
 
-        public Task<int> PeekNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default)
+        public Task<int> PeekNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
         }
 
-        public Task<int?> PeekExistingNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default)
+        public Task<int?> PeekExistingNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default)
         {
             PeekExistingNextIdCalls++;
             return Task.FromResult<int?>(null);

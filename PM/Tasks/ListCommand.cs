@@ -15,30 +15,91 @@ public partial class ListCommand(ProjectRoot projectRoot) : AsyncCommand<ListCom
     {
         if (ValidateProjectAndServiceHealth() != 0) return Task.FromResult(1);
 
-        if (!string.IsNullOrWhiteSpace(settings.State) &&
-            !projectRoot.Config!.TaskStates.ContainsKey(settings.State))
-        {
-            AnsiConsole.MarkupLineInterpolated($"[red]State {settings.State.EscapeMarkup()} not found.[/]");
-            return Task.FromResult(1);
-        }
+        if (!ValidateFilters(settings)) return Task.FromResult(1);
 
-        var states = projectRoot.Config!.TaskStates
-            .Where(state => string.IsNullOrWhiteSpace(settings.State) || state.Key == settings.State);
+        var entries = projectRoot.GetAllTasks()
+            .Select(task => new TaskListEntry(
+                task,
+                projectRoot.ResolveTaskTrack(task),
+                task.Milestone,
+                projectRoot.TryGetState(task, out var state) ? state : string.Empty))
+            .Where(entry => string.IsNullOrWhiteSpace(settings.Track) || entry.Track == settings.Track)
+            .Where(entry => string.IsNullOrWhiteSpace(settings.Milestone) || entry.Milestone == settings.Milestone)
+            .Where(entry => string.IsNullOrWhiteSpace(settings.State) || entry.State == settings.State)
+            .ToList();
 
-        foreach (var (state, name) in states)
+        var milestoneKeys = entries
+            .Select(entry => entry.Milestone)
+            .Where(milestone => !string.IsNullOrWhiteSpace(milestone))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(milestone => milestone, StringComparer.Ordinal)
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(settings.Milestone))
+            milestoneKeys.Add(null);
+        else if (!milestoneKeys.Contains(settings.Milestone, StringComparer.Ordinal))
+            milestoneKeys.Add(settings.Milestone);
+
+        foreach (var milestone in milestoneKeys)
         {
-            var items = projectRoot.GetTasksInState(state)
-                .OrderByDescending(item => item.ModifiedAt)
-                .ThenBy(item => item.Id, StringComparer.Ordinal)
+            var milestoneEntries = entries
+                .Where(entry => string.Equals(entry.Milestone, milestone, StringComparison.Ordinal))
                 .ToList();
 
-            AnsiConsole.Write(BuildStateTable(state, name, items));
+            var milestoneTitle = ResolveMilestoneTitle(milestone);
+            AnsiConsole.Write(new Rule(Markup.Escape(milestoneTitle)).RuleStyle("grey"));
+
+            var states = projectRoot.Config!.TaskStates
+                .Where(state => string.IsNullOrWhiteSpace(settings.State) || state.Key == settings.State);
+
+            foreach (var (state, name) in states)
+            {
+                var stateEntries = milestoneEntries
+                    .Where(entry => entry.State == state)
+                    .OrderByDescending(entry => entry.Task.ModifiedAt)
+                    .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
+                    .ToList();
+
+                AnsiConsole.Write(BuildStateTable(state, name, stateEntries));
+            }
         }
 
         return Task.FromResult(0);
     }
 
-    private static Table BuildStateTable(string state, string name, List<TaskItem> items)
+    private bool ValidateFilters(Settings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.State) &&
+            !projectRoot.Config!.TaskStates.ContainsKey(settings.State))
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]State {settings.State.EscapeMarkup()} not found.[/]");
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.Track) &&
+            !projectRoot.Config!.Tracks.ContainsKey(settings.Track))
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Track {settings.Track.EscapeMarkup()} not found.[/]");
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.Milestone) &&
+            !projectRoot.Config!.Milestones.ContainsKey(settings.Milestone))
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Milestone {settings.Milestone.EscapeMarkup()} not found.[/]");
+            return false;
+        }
+
+        return true;
+    }
+
+    private string ResolveMilestoneTitle(string? milestone)
+    {
+        if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
+        return projectRoot.Config!.Milestones.TryGetValue(milestone, out var title) ? title : milestone;
+    }
+
+    private static Table BuildStateTable(string state, string name, List<TaskListEntry> items)
     {
         var table = new Table()
             .Title($"{Markup.Escape(name)} ([darkOrange]{items.Count}[/])")
@@ -46,17 +107,19 @@ public partial class ListCommand(ProjectRoot projectRoot) : AsyncCommand<ListCom
             .BorderColor(Color.Grey)
             .AddColumn("ID")
             .AddColumn("Title")
+            .AddColumn("Track")
             .AddColumn("State")
             .AddColumn("Modified")
             .AddColumn("Description");
 
-        foreach (var item in items)
+        foreach (var entry in items)
             table.AddRow(
-                Markup.Escape(item.Id),
-                Markup.Escape(item.Title),
+                Markup.Escape(entry.Task.Id),
+                Markup.Escape(entry.Task.Title),
+                Markup.Escape(entry.Track),
                 Markup.Escape(state),
-                Markup.Escape(FormatModifiedAt(item.ModifiedAt)),
-                Markup.Escape(GetDescriptionPreview(item.Description)));
+                Markup.Escape(FormatModifiedAt(entry.Task.ModifiedAt)),
+                Markup.Escape(GetDescriptionPreview(entry.Task.Description)));
 
         return table;
     }
@@ -99,7 +162,17 @@ public partial class ListCommand(ProjectRoot projectRoot) : AsyncCommand<ListCom
         [CommandOption("--state <STATE>")]
         [Description("List tasks in one state")]
         public string? State { get; init; }
+
+        [CommandOption("--track <TRACK>")]
+        [Description("List tasks in one track")]
+        public string? Track { get; init; }
+
+        [CommandOption("--milestone <MILESTONE>")]
+        [Description("List tasks in one milestone")]
+        public string? Milestone { get; init; }
     }
+
+    private sealed record TaskListEntry(TaskItem Task, string Track, string? Milestone, string State);
 
     [GeneratedRegex(@"^(#{1,6}\s+|(?:[-*+]\s+)?\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+|>\s+)")]
     private static partial Regex MarkdownPrefixRegex();

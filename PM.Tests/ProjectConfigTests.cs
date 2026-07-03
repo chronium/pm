@@ -21,6 +21,24 @@ public class ProjectConfigTests
     }
 
     [Fact]
+    public void DeserializingOldYamlUsesIdPrefixAsDefaultTrack()
+    {
+        const string yaml = """
+                            name: Legacy
+                            idWidth: 4
+                            idPrefix: PM
+                            taskStates:
+                              todo: To Do
+                            """;
+
+        var config = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        var track = Assert.Single(config.Tracks);
+        Assert.Equal("PM", track.Key);
+        Assert.Equal("PM", track.Value);
+    }
+
+    [Fact]
     public void SerializingConfigIncludesNextIdServiceUrl()
     {
         var config = TestData.Config(nextIdServiceUrl: "https://ids.example.test");
@@ -28,5 +46,19 @@ public class ProjectConfigTests
         var yaml = YamlSerde.Serialize(config);
 
         Assert.Contains("nextIdServiceUrl: https://ids.example.test", yaml);
+    }
+
+    [Fact]
+    public void SerializingConfigIncludesTracksAndMilestones()
+    {
+        var config = TestData.Config(
+            tracks: new Dictionary<string, string> { ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" });
+
+        var yaml = YamlSerde.Serialize(config);
+        var roundTrip = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.Equal("Build", roundTrip.Tracks["BUILD"]);
+        Assert.Equal("Milestone 1", roundTrip.Milestones["m1"]);
     }
 }

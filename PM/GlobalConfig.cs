@@ -28,6 +28,10 @@ public static class GlobalConfig
     public static string TaskBranchName => "task";
     public static string TaskAddCommandName => "add";
     public static string TaskEditCommandName => "edit";
+    public static string TrackBranchName => "track";
+    public static string TrackAddCommandName => "add";
+    public static string MilestoneBranchName => "milestone";
+    public static string MilestoneAddCommandName => "add";
     public static string ListCommandName => "list";
     public static string MoveCommandName => "move";
 }

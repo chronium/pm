@@ -21,10 +21,16 @@ public class TaskAddCommand(
     {
         if (await ValidateProjectAndServiceHealth(settings, cancellationToken) != 0) return 1;
 
+        var track = await ResolveTrack(settings, cancellationToken);
+        if (track == null) return 1;
+
+        var milestone = ResolveMilestone(settings);
+        if (milestone == InvalidMilestone) return 1;
+
         var description = await ResolveDescription(settings, cancellationToken);
         if (description == null) return 1;
 
-        var taskItem = await GenerateTaskItem(settings, description, cancellationToken);
+        var taskItem = await GenerateTaskItem(settings, track, milestone, description, cancellationToken);
 
         RenderTaskPanel(taskItem);
 
@@ -55,15 +61,17 @@ public class TaskAddCommand(
         AnsiConsole.Write(taskPanel);
     }
 
-    private async Task<TaskItem> GenerateTaskItem(Settings settings, string description,
+    private const string InvalidMilestone = "\0";
+
+    private async Task<TaskItem> GenerateTaskItem(Settings settings, string track, string? milestone, string description,
         CancellationToken cancellationToken)
     {
         var config = projectRoot.Config!;
         var idPadded = settings.DryRun
-            ? await GetDryRunId(cancellationToken)
-            : (await nextIdService.GetNextId(projectRoot, cancellationToken)).ToString()
+            ? await GetDryRunId(track, cancellationToken)
+            : (await nextIdService.GetNextId(projectRoot, track, cancellationToken)).ToString()
             .PadLeft(config.IdWidth, '0');
-        var prefixedId = $"{config.IdPrefix}-{idPadded}";
+        var prefixedId = $"{track}-{idPadded}";
 
         var title = settings.Title.Trim();
 
@@ -73,9 +81,47 @@ public class TaskAddCommand(
         {
             Id = prefixedId,
             Title = title,
+            Track = track,
+            Milestone = milestone,
             Description = description,
         };
         return taskItem;
+    }
+
+    private async Task<string?> ResolveTrack(Settings settings, CancellationToken cancellationToken)
+    {
+        var config = projectRoot.Config!;
+        var track = settings.Track?.Trim();
+        if (!string.IsNullOrWhiteSpace(track))
+        {
+            if (!config.Tracks.ContainsKey(track))
+            {
+                AnsiConsole.MarkupLineInterpolated($"[red]Track {track.EscapeMarkup()} not found.[/]");
+                return null;
+            }
+
+            return track;
+        }
+
+        if (config.Tracks.Count == 1) return config.DefaultTrackKey;
+
+        var prompt = new SelectionPrompt<string>()
+            .Title("Select task track")
+            .UseConverter(key => $"{config.Tracks[key]} ({key})")
+            .AddChoices(config.Tracks.Keys);
+
+        return await AnsiConsole.PromptAsync(prompt, cancellationToken);
+    }
+
+    private string? ResolveMilestone(Settings settings)
+    {
+        var milestone = settings.Milestone?.Trim();
+        if (string.IsNullOrWhiteSpace(milestone)) return null;
+
+        if (projectRoot.Config!.Milestones.ContainsKey(milestone)) return milestone;
+
+        AnsiConsole.MarkupLineInterpolated($"[red]Milestone {milestone.EscapeMarkup()} not found.[/]");
+        return InvalidMilestone;
     }
 
     private async Task<string?> ResolveDescription(Settings settings, CancellationToken cancellationToken)
@@ -113,9 +159,9 @@ public class TaskAddCommand(
         return string.IsNullOrWhiteSpace(description) ? string.Empty : description;
     }
 
-    private async Task<string> GetDryRunId(CancellationToken cancellationToken)
+    private async Task<string> GetDryRunId(string track, CancellationToken cancellationToken)
     {
-        var nextId = await nextIdService.PeekExistingNextId(projectRoot, cancellationToken);
+        var nextId = await nextIdService.PeekExistingNextId(projectRoot, track, cancellationToken);
         return nextId?.ToString().PadLeft(projectRoot.Config!.IdWidth, '0')
                ?? new string('?', projectRoot.Config!.IdWidth);
     }
@@ -151,5 +197,13 @@ public class TaskAddCommand(
         [CommandOption("--edit")]
         [Description("Open an editor for the task description")]
         public bool Edit { get; init; }
+
+        [CommandOption("--track <TRACK>")]
+        [Description("Track for the task")]
+        public string? Track { get; init; }
+
+        [CommandOption("--milestone <MILESTONE>")]
+        [Description("Milestone for the task")]
+        public string? Milestone { get; init; }
     }
 }

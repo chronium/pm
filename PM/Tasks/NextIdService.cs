@@ -8,20 +8,21 @@ namespace PM.Tasks;
 
 public interface INextIdService
 {
-    Task<int> GetNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default);
-    Task<int> PeekNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default);
-    Task<int?> PeekExistingNextId(ProjectRoot projectRoot, CancellationToken cancellationToken = default);
+    Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default);
+    Task<int> PeekNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default);
+    Task<int?> PeekExistingNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default);
 
     Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default);
 }
 
 public class NextIdService(HttpClient httpClient) : INextIdService
 {
-    public async Task<int> GetNextId(ProjectRoot projectRoot, CancellationToken cancellationToken)
+    public async Task<int> GetNextId(ProjectRoot projectRoot, string track,
+        CancellationToken cancellationToken = default)
     {
         var key = await GetNextIdKey(projectRoot, cancellationToken);
 
-        return await GetNextId(projectRoot.Config!, key, cancellationToken);
+        return await GetNextId(projectRoot.Config!, key, track, cancellationToken);
     }
 
     public async Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken)
@@ -37,16 +38,18 @@ public class NextIdService(HttpClient httpClient) : INextIdService
         }
     }
 
-    public async Task<int> PeekNextId(ProjectRoot projectRoot, CancellationToken cancellationToken)
+    public async Task<int> PeekNextId(ProjectRoot projectRoot, string track,
+        CancellationToken cancellationToken = default)
     {
         var key = await GetNextIdKey(projectRoot, cancellationToken);
-        return await PeekNextId(projectRoot.Config!, key, cancellationToken);
+        return await PeekNextId(projectRoot.Config!, key, track, cancellationToken);
     }
 
-    public async Task<int?> PeekExistingNextId(ProjectRoot projectRoot, CancellationToken cancellationToken)
+    public async Task<int?> PeekExistingNextId(ProjectRoot projectRoot, string track,
+        CancellationToken cancellationToken = default)
     {
         var key = ReadNextIdKey(projectRoot);
-        return key == null ? null : await PeekNextId(projectRoot.Config!, key, cancellationToken);
+        return key == null ? null : await PeekNextId(projectRoot.Config!, key, track, cancellationToken);
     }
 
     private async Task<string> GetNextIdKey(ProjectRoot projectRoot, CancellationToken cancellationToken)
@@ -88,9 +91,11 @@ public class NextIdService(HttpClient httpClient) : INextIdService
         return JsonSerializer.Deserialize<CreateProjectKeyResponse>(json)!.Key;
     }
 
-    private async Task<int> GetNextId(ProjectConfig config, string key, CancellationToken cancellationToken)
+    private async Task<int> GetNextId(ProjectConfig config, string key, string track, CancellationToken cancellationToken)
     {
-        var nextIdResponse = await httpClient.GetAsync(BuildUri(config, $"/projects/{Uri.EscapeDataString(key)}/nextid"),
+        var nextIdResponse = await httpClient.GetAsync(
+            BuildUri(config,
+                $"/projects/{Uri.EscapeDataString(key)}/tracks/{Uri.EscapeDataString(track)}/nextid"),
             cancellationToken);
         nextIdResponse.EnsureSuccessStatusCode();
 
@@ -98,9 +103,11 @@ public class NextIdService(HttpClient httpClient) : INextIdService
         return JsonSerializer.Deserialize<NextIdResponse>(json)!.Id;
     }
 
-    private async Task<int> PeekNextId(ProjectConfig config, string key, CancellationToken cancellationToken)
+    private async Task<int> PeekNextId(ProjectConfig config, string key, string track, CancellationToken cancellationToken)
     {
-        var peekIdResponse = await httpClient.GetAsync(BuildUri(config, $"/projects/{Uri.EscapeDataString(key)}/peekid"),
+        var peekIdResponse = await httpClient.GetAsync(
+            BuildUri(config,
+                $"/projects/{Uri.EscapeDataString(key)}/tracks/{Uri.EscapeDataString(track)}/peekid"),
             cancellationToken);
         peekIdResponse.EnsureSuccessStatusCode();
 

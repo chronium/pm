@@ -39,7 +39,14 @@ using (var conn = new SqliteConnection(connString))
 
     CREATE TABLE IF NOT EXISTS projects (
         key_hash BLOB PRIMARY KEY,   -- SHA-512 = 64 bytes
-        next_id  INTEGER NOT NULL
+        next_id  INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS project_counters (
+        key_hash BLOB NOT NULL,
+        track    TEXT NOT NULL,
+        next_id  INTEGER NOT NULL,
+        PRIMARY KEY (key_hash, track)
     );
     """;
     cmd.ExecuteNonQuery();
@@ -60,7 +67,7 @@ app.MapPost("/projects", () =>
     conn.Open();
 
     using var cmd = conn.CreateCommand();
-    cmd.CommandText = "INSERT INTO projects(key_hash, next_id) VALUES($h, 1);";
+    cmd.CommandText = "INSERT INTO projects(key_hash, next_id) VALUES($h, NULL);";
     cmd.Parameters.AddWithValue("$h", hash);
 
     try
@@ -83,19 +90,9 @@ app.MapPost("/projects", () =>
     return Results.Ok(new ProjectKeyResponse(key));
 });
 
-app.MapGet("/projects/{key}/nextid", (string key) =>
+app.MapGet("/projects/{key}/tracks/{track}/nextid", (string key, string track) =>
 {
-    byte[] keyBytes;
-    try
-    {
-        keyBytes = Base64Url.DecodeFromChars(key);
-    }
-    catch
-    {
-        return Results.Unauthorized();
-    }
-
-    var hash = Sha512(keyBytes);
+    if (!TryGetProjectHash(key, out var hash)) return Results.Unauthorized();
 
     using var conn = new SqliteConnection(connString);
     conn.Open();
@@ -107,8 +104,17 @@ app.MapGet("/projects/{key}/nextid", (string key) =>
     using (var sel = conn.CreateCommand())
     {
         sel.Transaction = tx;
-        sel.CommandText = "SELECT next_id FROM projects WHERE key_hash = $h;";
+        sel.CommandText = """
+                          INSERT INTO project_counters(key_hash, track, next_id)
+                          SELECT key_hash, $track, COALESCE(next_id, 1)
+                          FROM projects
+                          WHERE key_hash = $h
+                          ON CONFLICT(key_hash, track) DO NOTHING;
+
+                          SELECT next_id FROM project_counters WHERE key_hash = $h AND track = $track;
+                          """;
         sel.Parameters.AddWithValue("$h", hash);
+        sel.Parameters.AddWithValue("$track", track);
         var obj = sel.ExecuteScalar();
         if (obj is null || obj is DBNull)
         {
@@ -121,8 +127,9 @@ app.MapGet("/projects/{key}/nextid", (string key) =>
     using (var upd = conn.CreateCommand())
     {
         upd.Transaction = tx;
-        upd.CommandText = "UPDATE projects SET next_id = next_id + 1 WHERE key_hash = $h;";
+        upd.CommandText = "UPDATE project_counters SET next_id = next_id + 1 WHERE key_hash = $h AND track = $track;";
         upd.Parameters.AddWithValue("$h", hash);
+        upd.Parameters.AddWithValue("$track", track);
         upd.ExecuteNonQuery();
     }
 
@@ -130,26 +137,25 @@ app.MapGet("/projects/{key}/nextid", (string key) =>
     return Results.Ok(new NextIdResponse(current));
 });
 
-app.MapGet("/projects/{key}/peekid", (string key) =>
+app.MapGet("/projects/{key}/tracks/{track}/peekid", (string key, string track) =>
 {
-    byte[] keyBytes;
-    try
-    {
-        keyBytes = Base64Url.DecodeFromChars(key);
-    }
-    catch
-    {
-        return Results.Unauthorized();
-    }
-
-    var hash = Sha512(keyBytes);
+    if (!TryGetProjectHash(key, out var hash)) return Results.Unauthorized();
 
     using var conn = new SqliteConnection(connString);
     conn.Open();
 
     using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT next_id FROM projects WHERE key_hash = $h;";
+    cmd.CommandText = """
+                      INSERT INTO project_counters(key_hash, track, next_id)
+                      SELECT key_hash, $track, COALESCE(next_id, 1)
+                      FROM projects
+                      WHERE key_hash = $h
+                      ON CONFLICT(key_hash, track) DO NOTHING;
+
+                      SELECT next_id FROM project_counters WHERE key_hash = $h AND track = $track;
+                      """;
     cmd.Parameters.AddWithValue("$h", hash);
+    cmd.Parameters.AddWithValue("$track", track);
     var obj = cmd.ExecuteScalar();
 
     if (obj is null || obj is DBNull)
@@ -164,6 +170,21 @@ app.MapGet("/projects/{key}/peekid", (string key) =>
 app.MapGet("/health", () => "ok");
 
 app.Run();
+
+static bool TryGetProjectHash(string key, out byte[] hash)
+{
+    hash = [];
+    try
+    {
+        var keyBytes = Base64Url.DecodeFromChars(key);
+        hash = Sha512(keyBytes);
+        return true;
+    }
+    catch
+    {
+        return false;
+    }
+}
 
 public record ProjectKeyResponse(string key);
 public record NextIdResponse(long id);

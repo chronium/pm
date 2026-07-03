@@ -159,6 +159,28 @@ public class ProjectRoot : IProjectRoot
         return items;
     }
 
+    public List<TaskItem> GetAllTasks()
+    {
+        if (!FileSystem.DirectoryExists(TasksPath)) return [];
+
+        var items = new List<TaskItem>();
+        foreach (var taskFile in FileSystem.ReadFiles(TasksPath, $"*.{GlobalConfig.DefaultTaskExtension}"))
+        {
+            var item = TaskItem.Parse(FileSystem.ReadAllText(taskFile.FullName));
+            if (item == null)
+                continue;
+
+            items.Add(item);
+        }
+
+        return items;
+    }
+
+    public string ResolveTaskTrack(TaskItem task)
+    {
+        return string.IsNullOrWhiteSpace(task.Track) ? Config!.DefaultTrackKey : task.Track;
+    }
+
     public bool TryGetById(string id, [MaybeNullWhen(false)] out TaskItem task)
     {
         task = null;

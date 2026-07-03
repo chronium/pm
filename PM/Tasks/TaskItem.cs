@@ -8,6 +8,11 @@ public partial record TaskItem
     private static readonly Regex FrontMatterPattern = FrontMatterRegex();
     public required string Id { get; init; }
     public required string Title { get; init; }
+    [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? Track { get; init; }
+
+    [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? Milestone { get; init; }
 
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; init; } = DateTime.UtcNow;

@@ -34,6 +34,20 @@ app.Configure(config =>
 
     config.AddCommand<InitCommand>(GlobalConfig.InitCommandName);
 
+    config.AddBranch(GlobalConfig.TrackBranchName,
+        track =>
+        {
+            track.SetDescription("Manage tracks within a project");
+            track.AddCommand<TrackAddCommand>(GlobalConfig.TrackAddCommandName);
+        });
+
+    config.AddBranch(GlobalConfig.MilestoneBranchName,
+        milestone =>
+        {
+            milestone.SetDescription("Manage milestones within a project");
+            milestone.AddCommand<MilestoneAddCommand>(GlobalConfig.MilestoneAddCommandName);
+        });
+
     config.AddBranch(GlobalConfig.TaskBranchName,
         task =>
         {

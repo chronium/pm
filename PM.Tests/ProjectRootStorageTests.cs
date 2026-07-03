@@ -19,6 +19,7 @@ public class ProjectRootStorageTests
         Assert.StartsWith("---\n", content);
         Assert.Contains("id: PM-0001", content);
         Assert.Contains("title: Wire storage tests", content);
+        Assert.Contains("track: PM", content);
         Assert.EndsWith("---\n\n", content);
     }
 
@@ -118,5 +119,36 @@ public class ProjectRootStorageTests
         var item = Assert.Single(tasks);
         Assert.Equal("PM-0004", item.Id);
         Assert.Equal("Read from state", item.Title);
+    }
+
+    [Fact]
+    public async Task TaskWithoutTrackResolvesToDefaultTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM"));
+        var task = TaskItem.Parse("""
+                                  ---
+                                  id: PM-0001
+                                  title: Legacy task
+                                  createdAt: 2026-01-01T00:00:00.0000000Z
+                                  modifiedAt: 2026-01-01T00:00:00.0000000Z
+                                  ---
+                                  """);
+
+        Assert.NotNull(task);
+        Assert.Equal("PM", projectRoot.ResolveTaskTrack(task));
+    }
+
+    [Fact]
+    public async Task GetAllTasksScansTaskMarkdownFiles()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        projectRoot.WriteTask(TestData.Task("PM-0001", "First"));
+        projectRoot.WriteTask(TestData.Task("PM-0002", "Second"));
+
+        var tasks = projectRoot.GetAllTasks();
+
+        Assert.Equal(["PM-0001", "PM-0002"], tasks.Select(task => task.Id).Order());
     }
 }

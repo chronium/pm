@@ -1,16 +1,33 @@
 using PM.Files;
+using YamlDotNet.Serialization;
 
 namespace PM.Project;
 
 public class ProjectConfig
 {
     public const string DefaultNextIdServiceUrl = "http://localhost:8080";
+    private Dictionary<string, string>? _tracks;
 
     public required string Name { get; set; }
     public required int IdWidth { get; set; }
     public required string IdPrefix { get; set; }
     public string NextIdServiceUrl { get; set; } = DefaultNextIdServiceUrl;
     public required Dictionary<string, string> TaskStates { get; set; } = new();
+    public Dictionary<string, string> Tracks
+    {
+        get
+        {
+            if (_tracks is { Count: > 0 }) return _tracks;
+            _tracks = new Dictionary<string, string> { [IdPrefix] = IdPrefix };
+            return _tracks;
+        }
+        set => _tracks = value;
+    }
+
+    public Dictionary<string, string> Milestones { get; set; } = new();
+
+    [YamlIgnore]
+    public string DefaultTrackKey => Tracks.Keys.First();
 
     public void WriteConfig(ProjectRoot projectRoot)
     {
