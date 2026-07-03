@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Text;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Spectre.Rendering;
@@ -10,7 +9,11 @@ using Spectre.Console.Rendering;
 
 namespace PM.Tasks;
 
-public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdService, ISyntaxHighlighter highlighter)
+public class TaskAddCommand(
+    ProjectRoot projectRoot,
+    INextIdService nextIdService,
+    ISyntaxHighlighter highlighter,
+    IEditorService editorService)
     : AsyncCommand<TaskAddCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
@@ -85,7 +88,7 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
 
         try
         {
-            var exitCode = await RunEditor(tempFilePath, cancellationToken);
+            var exitCode = await editorService.EditFile(tempFilePath, cancellationToken);
             if (exitCode != 0)
             {
                 AnsiConsole.MarkupLine($"[red]Editor exited with code {exitCode}. Task creation aborted.[/]");
@@ -103,41 +106,6 @@ public class TaskAddCommand(ProjectRoot projectRoot, INextIdService nextIdServic
         {
             if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
         }
-    }
-
-    protected virtual async Task<int> RunEditor(string filePath, CancellationToken cancellationToken)
-    {
-        var editor = Environment.GetEnvironmentVariable("VISUAL");
-        if (string.IsNullOrWhiteSpace(editor)) editor = Environment.GetEnvironmentVariable("EDITOR");
-        if (string.IsNullOrWhiteSpace(editor)) editor = "vim";
-
-        var startInfo = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                UseShellExecute = false,
-                RedirectStandardInput = false,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false,
-                ArgumentList = { "/c", $"{editor} \"%PM_TASK_DESCRIPTION_FILE%\"" },
-            }
-            : new ProcessStartInfo
-            {
-                FileName = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/sh",
-                UseShellExecute = false,
-                RedirectStandardInput = false,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false,
-                ArgumentList = { "-c", $"{editor} \"$1\"", "pm-editor", filePath },
-            };
-        startInfo.Environment["PM_TASK_DESCRIPTION_FILE"] = filePath;
-
-        using var process = Process.Start(startInfo);
-
-        if (process == null) throw new InvalidOperationException("Editor process did not start.");
-
-        await process.WaitForExitAsync(cancellationToken);
-        return process.ExitCode;
     }
 
     private static string NormalizeDescription(string description)

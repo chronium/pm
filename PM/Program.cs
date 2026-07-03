@@ -14,6 +14,7 @@ var serviceProvider = new ServiceCollection();
 serviceProvider.AddHttpClient<INextIdService, NextIdService>();
 
 serviceProvider.AddSingleton<ProjectRoot>();
+serviceProvider.AddSingleton<IEditorService, EditorService>();
 serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([
     new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),
 ]));
@@ -39,6 +40,7 @@ app.Configure(config =>
             task.SetDescription("Manage tasks within a project");
 
             task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
+            task.AddCommand<TaskEditCommand>(GlobalConfig.TaskEditCommandName);
         });
 
     config.AddCommand<MoveCommand>(GlobalConfig.MoveCommandName);

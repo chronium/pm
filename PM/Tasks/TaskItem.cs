@@ -20,7 +20,19 @@ public partial record TaskItem
         var match = FrontMatterPattern.Match(markdownContent);
         if (!match.Success) return null;
 
-        var task = YamlSerde.Deserialize<TaskItem>(match.Groups["yaml"].Value);
+        TaskItem? task;
+        try
+        {
+            task = YamlSerde.Deserialize<TaskItem>(match.Groups["yaml"].Value);
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (task == null || string.IsNullOrWhiteSpace(task.Id) || string.IsNullOrWhiteSpace(task.Title))
+            return null;
+
         return task with { Description = NormalizeBody(match.Groups["body"].Value) };
     }
 

@@ -94,8 +94,22 @@ public class ProjectRoot : IProjectRoot
 
     public void WriteTask(TaskItem task)
     {
-        var taskFilePath = Path.Combine(TasksPath, $"{task.Id}.{GlobalConfig.DefaultTaskExtension}");
-        FileSystem.WriteAllText(taskFilePath, task.ToMarkdown());
+        WriteTaskFile(task.Id, task.ToMarkdown());
+    }
+
+    public bool TryReadTaskFile(string id, [MaybeNullWhen(false)] out string content)
+    {
+        content = null;
+        var taskPath = GetTaskPath(id);
+        if (!FileSystem.FileExists(taskPath)) return false;
+
+        content = FileSystem.ReadAllText(taskPath);
+        return true;
+    }
+
+    public void WriteTaskFile(string id, string content)
+    {
+        FileSystem.WriteAllText(GetTaskPath(id), content);
     }
 
     public void UpdateTaskState(TaskItem task, string state)
@@ -148,11 +162,16 @@ public class ProjectRoot : IProjectRoot
     public bool TryGetById(string id, [MaybeNullWhen(false)] out TaskItem task)
     {
         task = null;
-        var taskPath = Path.Combine(TasksPath, $"{id}.{GlobalConfig.DefaultTaskExtension}");
+        var taskPath = GetTaskPath(id);
         if (!FileSystem.FileExists(taskPath)) return false;
 
         task = TaskItem.Parse(FileSystem.ReadAllText(taskPath));
         return task != null;
+    }
+
+    private string GetTaskPath(string id)
+    {
+        return Path.Combine(TasksPath, $"{id}.{GlobalConfig.DefaultTaskExtension}");
     }
 
     private static string ResolveRef(FileInfo refFile)
