@@ -112,6 +112,18 @@ public class ProjectRoot : IProjectRoot
         FileSystem.WriteAllText(GetTaskPath(id), content);
     }
 
+    public void DeleteTask(TaskItem task)
+    {
+        foreach (var key in Config!.TaskStates.Keys)
+        {
+            var refPath = Path.Combine(StatesPath, key, $"{task.Id}.ref");
+            if (FileSystem.FileExists(refPath))
+                FileSystem.DeleteFile(refPath);
+        }
+
+        FileSystem.DeleteFile(GetTaskPath(task.Id));
+    }
+
     public void UpdateTaskState(TaskItem task, string state)
     {
         if (TryGetState(task, out var currentState))

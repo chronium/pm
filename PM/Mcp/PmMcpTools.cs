@@ -153,6 +153,16 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "remove_task", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Permanently removes a task and its state reference.")]
+    public McpToolResponse<MutatedPayload> RemoveTask(string taskId)
+    {
+        var result = taskService.RemoveTask(taskId);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed task {taskId}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
     [McpServerTool(Name = "update_task_markdown", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Replaces a task markdown file after validating the task ID is unchanged.")]
@@ -174,6 +184,16 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "remove_track", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Removes an unused track.")]
+    public McpToolResponse<MutatedPayload> RemoveTrack(string key)
+    {
+        var result = configService.RemoveTrack(key);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed track {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
     [McpServerTool(Name = "add_milestone", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
     [Description("Adds a new milestone.")]
     public McpToolResponse<MutatedPayload> AddMilestone(string key, string title)
@@ -181,6 +201,16 @@ public sealed class PmMcpTools(
         var result = configService.AddMilestone(key, title);
         return result.Success
             ? McpToolResponse<MutatedPayload>.Ok($"Added milestone {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "remove_milestone", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Removes an unused milestone.")]
+    public McpToolResponse<MutatedPayload> RemoveMilestone(string key)
+    {
+        var result = configService.RemoveMilestone(key);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed milestone {key}.", new MutatedPayload(true))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 

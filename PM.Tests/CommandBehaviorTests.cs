@@ -515,6 +515,24 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskRemoveDeletesTaskAndRejectsMissingTask()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
+        var task = TestData.Task("PM-0001", "Remove me");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var command = new TaskRemoveCommand(new TaskService(projectRoot, new RecordingNextIdService()));
+
+        Assert.Equal(1,
+            command.Execute(null!, new TaskRemoveCommand.Settings { TaskId = "PM-9999" }, CancellationToken.None));
+        Assert.Equal(0,
+            command.Execute(null!, new TaskRemoveCommand.Settings { TaskId = "PM-0001" }, CancellationToken.None));
+        Assert.False(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0001.md")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+    }
+
+    [Fact]
     public async Task TrackAddWritesConfigAndRejectsDuplicatesAndEmptyValues()
     {
         using var workspace = new TempWorkingDirectory();
@@ -533,6 +551,24 @@ public class CommandBehaviorTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.Equal("Build", config.Tracks["BUILD"]);
+    }
+
+    [Fact]
+    public async Task TrackRemoveRejectsReferencedTracksAndRemovesUnusedTracks()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build", ["UI"] = "UI" }));
+        projectRoot.WriteTask(TestData.Task("BUILD-0001", "Build task", track: "BUILD"));
+        var command = new TrackRemoveCommand(new ProjectConfigService(projectRoot));
+
+        Assert.Equal(1,
+            command.Execute(null!, new TrackRemoveCommand.Settings { Key = "BUILD" }, CancellationToken.None));
+        Assert.Equal(0,
+            command.Execute(null!, new TrackRemoveCommand.Settings { Key = "UI" }, CancellationToken.None));
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.False(config.Tracks.ContainsKey("UI"));
     }
 
     [Fact]
@@ -578,6 +614,24 @@ public class CommandBehaviorTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.Equal("Milestone 1", config.Milestones["m1"]);
+    }
+
+    [Fact]
+    public async Task MilestoneRemoveRejectsReferencedMilestonesAndRemovesUnusedMilestones()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+        projectRoot.WriteTask(TestData.Task("PM-0001", "Milestone task", milestone: "m1"));
+        var command = new MilestoneRemoveCommand(new ProjectConfigService(projectRoot));
+
+        Assert.Equal(1,
+            command.Execute(null!, new MilestoneRemoveCommand.Settings { Key = "m1" }, CancellationToken.None));
+        Assert.Equal(0,
+            command.Execute(null!, new MilestoneRemoveCommand.Settings { Key = "m2" }, CancellationToken.None));
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.False(config.Milestones.ContainsKey("m2"));
     }
 
     private static SyntaxHighlighter CreateHighlighter()

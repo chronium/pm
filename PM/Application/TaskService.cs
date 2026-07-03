@@ -76,6 +76,18 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         return AppResult.Ok();
     }
 
+    public AppResult RemoveTask(string taskId)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (!projectRoot.TryGetById(taskId, out var task))
+            return AppResult.Fail("missing_task", $"Task with ID {taskId} not found.");
+
+        projectRoot.DeleteTask(task);
+        return AppResult.Ok();
+    }
+
     public AppResult<string> ReadTaskMarkdown(string taskId)
     {
         if (!projectRoot.Exists)

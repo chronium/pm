@@ -56,6 +56,7 @@ app.Configure(config =>
         {
             track.SetDescription("Manage tracks within a project");
             track.AddCommand<TrackAddCommand>(GlobalConfig.TrackAddCommandName);
+            track.AddCommand<TrackRemoveCommand>(GlobalConfig.TrackRemoveCommandName);
         });
 
     config.AddBranch(GlobalConfig.MilestoneBranchName,
@@ -63,6 +64,7 @@ app.Configure(config =>
         {
             milestone.SetDescription("Manage milestones within a project");
             milestone.AddCommand<MilestoneAddCommand>(GlobalConfig.MilestoneAddCommandName);
+            milestone.AddCommand<MilestoneRemoveCommand>(GlobalConfig.MilestoneRemoveCommandName);
         });
 
     config.AddBranch(GlobalConfig.TaskBranchName,
@@ -72,6 +74,7 @@ app.Configure(config =>
 
             task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
             task.AddCommand<TaskEditCommand>(GlobalConfig.TaskEditCommandName);
+            task.AddCommand<TaskRemoveCommand>(GlobalConfig.TaskRemoveCommandName);
         });
 
     config.AddCommand<MoveCommand>(GlobalConfig.MoveCommandName);

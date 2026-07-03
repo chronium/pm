@@ -68,6 +68,25 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task RemoveTaskDeletesMarkdownAndStateRefs()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Remove me");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var missing = service.RemoveTask("PM-9999");
+        var removed = service.RemoveTask("PM-0001");
+
+        Assert.Equal("missing_task", missing.ErrorCode);
+        Assert.True(removed.Success);
+        Assert.False(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0001.md")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+    }
+
+    [Fact]
     public async Task EditValidationRejectsInvalidMarkdownAndChangedId()
     {
         using var workspace = new TempWorkingDirectory();
@@ -101,6 +120,42 @@ public class ApplicationServiceTests
         Assert.True(service.AddMilestone("m1", "Milestone 1").Success);
         Assert.Equal("duplicate_milestone", service.AddMilestone("m1", "Duplicate").ErrorCode);
         Assert.Equal("invalid_milestone", service.AddMilestone("m2", " ").ErrorCode);
+    }
+
+    [Fact]
+    public async Task TrackAndMilestoneRemoveRejectReferencedItemsAndPersistUnusedRemovals()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build", ["UI"] = "UI" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+        var task = TestData.Task("BUILD-0001", "Build task", track: "BUILD", milestone: "m1");
+        projectRoot.WriteTask(task);
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.Equal("track_in_use", service.RemoveTrack("BUILD").ErrorCode);
+        Assert.Equal("milestone_in_use", service.RemoveMilestone("m1").ErrorCode);
+        Assert.Equal("missing_track", service.RemoveTrack("NOPE").ErrorCode);
+        Assert.Equal("missing_milestone", service.RemoveMilestone("missing").ErrorCode);
+
+        Assert.True(service.RemoveTrack("UI").Success);
+        Assert.True(service.RemoveMilestone("m2").Success);
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.False(config.Tracks.ContainsKey("UI"));
+        Assert.False(config.Milestones.ContainsKey("m2"));
+    }
+
+    [Fact]
+    public async Task RemoveTrackRejectsLastTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new ProjectConfigService(projectRoot);
+
+        var result = service.RemoveTrack("PM");
+
+        Assert.Equal("last_track", result.ErrorCode);
     }
 
     [Fact]

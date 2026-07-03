@@ -125,6 +125,26 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task RemoveTaskDeletesFilesAndReportsMissingTasks()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Remove me");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var missing = tools.RemoveTask("PM-9999");
+        var removed = tools.RemoveTask("PM-0001");
+
+        Assert.False(missing.Success);
+        Assert.Equal("missing_task", missing.ErrorCode);
+        Assert.True(removed.Success);
+        Assert.False(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0001.md")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+    }
+
+    [Fact]
     public async Task UpdateTaskMarkdownRejectsInvalidMarkdownAndChangedIds()
     {
         using var workspace = new TempWorkingDirectory();
@@ -159,6 +179,26 @@ public class McpToolTests
         Assert.True(tools.AddMilestone("m1", "Milestone 1").Success);
         Assert.Equal("duplicate_milestone", tools.AddMilestone("m1", "Duplicate").ErrorCode);
         Assert.Equal("invalid_milestone", tools.AddMilestone("m2", " ").ErrorCode);
+    }
+
+    [Fact]
+    public async Task RemoveTrackAndMilestoneRejectReferencedItemsAndRemoveUnusedItems()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build", ["UI"] = "UI" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+        projectRoot.WriteTask(TestData.Task("BUILD-0001", "Build task", track: "BUILD", milestone: "m1"));
+        var tools = CreateTools(projectRoot);
+
+        Assert.Equal("track_in_use", tools.RemoveTrack("BUILD").ErrorCode);
+        Assert.Equal("milestone_in_use", tools.RemoveMilestone("m1").ErrorCode);
+        Assert.True(tools.RemoveTrack("UI").Success);
+        Assert.True(tools.RemoveMilestone("m2").Success);
+
+        var project = tools.GetProject();
+        Assert.DoesNotContain(project.Data!.Tracks, track => track.Key == "UI");
+        Assert.DoesNotContain(project.Data.Milestones, milestone => milestone.Key == "m2");
     }
 
     [Fact]
