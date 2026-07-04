@@ -229,10 +229,7 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
 
     private static BoardTask? FindTask(BoardData board, string id)
     {
-        return board.MilestoneGroups
-            .SelectMany(milestone => milestone.States)
-            .SelectMany(state => state.Tasks)
-            .FirstOrDefault(task => task.Task.Id == id);
+        return board.Tasks.FirstOrDefault(task => task.Task.Id == id);
     }
 
     private static string? ReadQueryValue(HttpRequest request, string key)

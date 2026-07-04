@@ -68,9 +68,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(wrongState, "todo");
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery("BUILD", "m1", "review")).Payload!;
-        var tasks = board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks).ToList();
-
-        var boardTask = Assert.Single(tasks);
+        var boardTask = Assert.Single(board.Tasks);
         Assert.Equal("Matching task", boardTask.Task.Title);
     }
 
@@ -84,7 +82,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(task, "todo");
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
-        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var boardTask = Assert.Single(board.Tasks);
 
         Assert.Equal("PM", boardTask.Track);
     }
@@ -106,10 +104,73 @@ public class WebBoardTests
         Assert.Contains("hx-get=\"/board\"", html);
         Assert.Contains("hx-get=\"/task/new\"", html);
         Assert.Contains("hx-get=\"/task/PM-0001\"", html);
+        Assert.Contains("class=\"board-list\"", html);
+        Assert.Contains("class=\"task-row\"", html);
         Assert.Contains("dialog id=\"task-dialog\"", html);
         Assert.Contains("hx-target=\"#task-dialog\"", html);
         Assert.Contains("htmx:beforeSwap", html);
         Assert.DoesNotContain("task-detail", html);
+        Assert.DoesNotContain("class=\"states\"", html);
+        Assert.DoesNotContain("class=\"state\"", html);
+        Assert.DoesNotContain(projectRoot.GetTaskFilePath("PM-0001"), html);
+    }
+
+    [Fact]
+    public async Task BoardRowsContainEscapedTaskMetadataAndDialogTarget()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["BUILD"] = "Build <track>" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+        var task = TestData.Task(
+            "BUILD-0001",
+            "Render <task>",
+            "# Preview <body>\n\nDetails",
+            "BUILD",
+            "m1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "review");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var html = BoardHtmlRenderer.RenderBoard(board);
+
+        Assert.Contains("BUILD-0001", html);
+        Assert.Contains("Render &lt;task&gt;", html);
+        Assert.Contains("Review", html);
+        Assert.Contains(">BUILD<", html);
+        Assert.Contains("Milestone &lt;one&gt;", html);
+        Assert.Contains("2026-01-01 00:00", html);
+        Assert.Contains("Preview &lt;body&gt;", html);
+        Assert.Contains("hx-target=\"#task-dialog\"", html);
+        Assert.DoesNotContain(projectRoot.GetTaskFilePath("BUILD-0001"), html);
+    }
+
+    [Fact]
+    public async Task BoardTasksAreSortedByModifiedDescendingThenId()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var older = TestData.Task("PM-0001", "Older") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var sameTimeFirst = TestData.Task("PM-0002", "First by ID") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var sameTimeSecond = TestData.Task("PM-0003", "Second by ID") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+        };
+        foreach (var task in new[] { older, sameTimeSecond, sameTimeFirst })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+
+        Assert.Equal(["PM-0002", "PM-0003", "PM-0001"], board.Tasks.Select(task => task.Task.Id));
     }
 
     [Fact]
@@ -122,7 +183,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(task, "todo");
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
-        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var boardTask = Assert.Single(board.Tasks);
         var html = BoardHtmlRenderer.RenderTaskDetail(boardTask, board.States);
 
         Assert.Contains("Render &lt;task&gt;", html);
@@ -149,7 +210,7 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(task, "todo");
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
-        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var boardTask = Assert.Single(board.Tasks);
         var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
 
         Assert.Contains("Title &lt;script&gt;", html);
@@ -217,7 +278,7 @@ public class WebBoardTests
         Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "BUILD-0001.ref")));
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
-        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var boardTask = Assert.Single(board.Tasks);
         var html = BoardHtmlRenderer.RenderTaskCreated(board, boardTask);
 
         Assert.Contains("Build task", html);
@@ -269,7 +330,7 @@ public class WebBoardTests
         Assert.Contains("Updated", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
-        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var boardTask = Assert.Single(board.Tasks);
         var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
 
         Assert.Contains("Updated", html);
@@ -341,7 +402,7 @@ public class WebBoardTests
         Assert.Equal("review", state);
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery(State: "review")).Payload!;
-        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var boardTask = Assert.Single(board.Tasks);
         var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
 
         Assert.Contains("Move me", html);

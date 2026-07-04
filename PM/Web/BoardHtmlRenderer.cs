@@ -8,19 +8,21 @@ public static class BoardHtmlRenderer
 {
     public static string RenderPage(BoardData board)
     {
-        return Template("BoardPage.html")
+        return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
-            .Replace("{{styles}}", Template("styles.css"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
             .Replace("{{filters}}", RenderFilters(board), StringComparison.Ordinal)
             .Replace("{{board}}", RenderBoard(board), StringComparison.Ordinal);
     }
 
     public static string RenderBoard(BoardData board)
     {
-        var milestones = string.Join(Environment.NewLine, board.MilestoneGroups.Select(RenderMilestone));
+        var tasks = board.Tasks.Count == 0
+            ? """  <p class="empty">No tasks match the current filters.</p>"""
+            : string.Join(Environment.NewLine, board.Tasks.Select(task => RenderTaskRow(board, task)));
 
-        return Template("Board.html")
-            .Replace("{{milestones}}", milestones, StringComparison.Ordinal);
+        return Template("Board/Board.html")
+            .Replace("{{tasks}}", tasks, StringComparison.Ordinal);
     }
 
     public static string RenderTaskDetail(BoardTask task, IReadOnlyList<BoardOption> states)
@@ -28,12 +30,12 @@ public static class BoardHtmlRenderer
         var description = string.IsNullOrWhiteSpace(task.Task.Description)
             ? "No description."
             : task.Task.Description;
-        var stateOptions = states.Select(state => Template("TaskStateOption.html")
+        var stateOptions = states.Select(state => Template("Controls/TaskStateOption.html")
             .Replace("{{key}}", H(state.Key), StringComparison.Ordinal)
             .Replace("{{name}}", H(state.Name), StringComparison.Ordinal)
             .Replace("{{selected}}", state.Key == task.State ? " selected" : string.Empty, StringComparison.Ordinal));
 
-        return Template("TaskDetail.html")
+        return Template("Dialog/TaskDetail.html")
             .Replace("{{title}}", H(task.Task.Title), StringComparison.Ordinal)
             .Replace("{{taskId}}", H(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{taskIdUrl}}", Url(task.Task.Id), StringComparison.Ordinal)
@@ -49,7 +51,7 @@ public static class BoardHtmlRenderer
     {
         var selectedTrack = string.IsNullOrWhiteSpace(board.Query.Track) ? board.Tracks.FirstOrDefault()?.Key : board.Query.Track;
 
-        return Template("TaskCreateForm.html")
+        return Template("Dialog/TaskCreateForm.html")
             .Replace("{{trackOptions}}", RenderOptions(board.Tracks, selectedTrack), StringComparison.Ordinal)
             .Replace("{{milestoneOptions}}", RenderOptions(board.Milestones, board.Query.Milestone), StringComparison.Ordinal)
             .Replace("{{filterInputs}}", RenderFilterInputs(board.Query), StringComparison.Ordinal);
@@ -57,7 +59,7 @@ public static class BoardHtmlRenderer
 
     public static string RenderTaskEditForm(string taskId, string markdown, BoardQuery query)
     {
-        return Template("TaskEditForm.html")
+        return Template("Dialog/TaskEditForm.html")
             .Replace("{{taskId}}", H(taskId), StringComparison.Ordinal)
             .Replace("{{taskIdUrl}}", Url(taskId), StringComparison.Ordinal)
             .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
@@ -66,7 +68,7 @@ public static class BoardHtmlRenderer
 
     public static string RenderDialogError(string message, string title = "Unable to update task")
     {
-        return Template("DialogError.html")
+        return Template("Dialog/DialogError.html")
             .Replace("{{title}}", H(title), StringComparison.Ordinal)
             .Replace("{{message}}", H(message), StringComparison.Ordinal);
     }
@@ -92,26 +94,6 @@ public static class BoardHtmlRenderer
         return $"""<section id="board" hx-swap-oob="innerHTML">{RenderBoard(board)}</section>""";
     }
 
-    private static string RenderMilestone(BoardMilestoneGroup milestone)
-    {
-        return Template("MilestoneGroup.html")
-            .Replace("{{milestoneName}}", H(milestone.Name), StringComparison.Ordinal)
-            .Replace("{{states}}", string.Join(Environment.NewLine, milestone.States.Select(RenderState)),
-                StringComparison.Ordinal);
-    }
-
-    private static string RenderState(BoardStateGroup state)
-    {
-        var tasks = state.Tasks.Count == 0
-            ? """    <p class="empty">No tasks</p>"""
-            : string.Join(Environment.NewLine, state.Tasks.Select(RenderTaskCard));
-
-        return Template("StateGroup.html")
-            .Replace("{{stateName}}", H(state.Name), StringComparison.Ordinal)
-            .Replace("{{taskCount}}", state.Tasks.Count.ToString(), StringComparison.Ordinal)
-            .Replace("{{tasks}}", tasks, StringComparison.Ordinal);
-    }
-
     private static string RenderFilters(BoardData board)
     {
         var selects = string.Join(Environment.NewLine,
@@ -121,7 +103,7 @@ public static class BoardHtmlRenderer
             RenderSelect("state", "State", board.States, board.Query.State, "All states"),
         ]);
 
-        return Template("Filters.html")
+        return Template("Controls/Filters.html")
             .Replace("{{selects}}", selects, StringComparison.Ordinal);
     }
 
@@ -142,7 +124,7 @@ public static class BoardHtmlRenderer
         string? selected,
         string allLabel)
     {
-        return Template("Select.html")
+        return Template("Controls/Select.html")
             .Replace("{{label}}", H(label), StringComparison.Ordinal)
             .Replace("{{name}}", H(name), StringComparison.Ordinal)
             .Replace("{{allLabel}}", H(allLabel), StringComparison.Ordinal)
@@ -151,7 +133,7 @@ public static class BoardHtmlRenderer
 
     private static string RenderOptions(IReadOnlyList<BoardOption> options, string? selected)
     {
-        var optionHtml = options.Select(option => Template("SelectOption.html")
+        var optionHtml = options.Select(option => Template("Controls/SelectOption.html")
             .Replace("{{key}}", H(option.Key), StringComparison.Ordinal)
             .Replace("{{name}}", H(option.Name), StringComparison.Ordinal)
             .Replace("{{selected}}", option.Key == selected ? " selected" : string.Empty, StringComparison.Ordinal));
@@ -159,21 +141,33 @@ public static class BoardHtmlRenderer
         return string.Join(Environment.NewLine, optionHtml);
     }
 
-    private static string RenderTaskCard(BoardTask task)
+    private static string RenderTaskRow(BoardData board, BoardTask task)
     {
         var preview = string.IsNullOrWhiteSpace(task.DescriptionPreview)
             ? string.Empty
-            : Template("TaskPreview.html")
+            : Template("Board/TaskPreview.html")
                 .Replace("{{preview}}", H(task.DescriptionPreview), StringComparison.Ordinal);
 
-        return Template("TaskCard.html")
+        return Template("Board/TaskRow.html")
             .Replace("{{taskId}}", H(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{taskIdUrl}}", Url(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{title}}", H(task.Task.Title), StringComparison.Ordinal)
             .Replace("{{track}}", H(task.Track), StringComparison.Ordinal)
+            .Replace("{{state}}", H(OptionName(board.States, task.State, task.State)), StringComparison.Ordinal)
+            .Replace("{{milestone}}", H(MilestoneName(board, task.Milestone)), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(task.Task.ModifiedAt)), StringComparison.Ordinal)
-            .Replace("{{preview}}", preview, StringComparison.Ordinal)
-            .Replace("{{filePath}}", H(task.FilePath), StringComparison.Ordinal);
+            .Replace("{{preview}}", preview, StringComparison.Ordinal);
+    }
+
+    private static string MilestoneName(BoardData board, string? milestone)
+    {
+        if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
+        return OptionName(board.Milestones, milestone, milestone);
+    }
+
+    private static string OptionName(IReadOnlyList<BoardOption> options, string key, string fallback)
+    {
+        return options.FirstOrDefault(option => option.Key == key)?.Name ?? fallback;
     }
 
     private static string FormatModifiedAt(DateTime modifiedAt)

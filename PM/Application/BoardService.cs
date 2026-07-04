@@ -11,6 +11,7 @@ public sealed record BoardData(
     IReadOnlyList<BoardOption> Tracks,
     IReadOnlyList<BoardOption> Milestones,
     IReadOnlyList<BoardOption> States,
+    IReadOnlyList<BoardTask> Tasks,
     IReadOnlyList<BoardMilestoneGroup> MilestoneGroups,
     BoardQuery Query);
 
@@ -59,6 +60,8 @@ public partial class BoardService(ProjectRoot projectRoot)
             .Where(entry => string.IsNullOrWhiteSpace(query.Track) || entry.Track == query.Track)
             .Where(entry => string.IsNullOrWhiteSpace(query.Milestone) || entry.Milestone == query.Milestone)
             .Where(entry => string.IsNullOrWhiteSpace(query.State) || entry.State == query.State)
+            .OrderByDescending(entry => entry.Task.ModifiedAt)
+            .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
             .ToList();
 
         var milestoneKeys = entries
@@ -100,6 +103,7 @@ public partial class BoardService(ProjectRoot projectRoot)
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
             config.Milestones.Select(milestone => new BoardOption(milestone.Key, milestone.Value)).ToList(),
             stateOptions,
+            entries,
             groups,
             query));
     }

@@ -8,8 +8,11 @@ internal static class TemplateStore
 
     public static string Read(string fileName)
     {
+        var resourcePath = fileName
+            .Replace('/', '.')
+            .Replace('\\', '.');
         var resourceName = Assembly.GetManifestResourceNames()
-            .SingleOrDefault(name => name.EndsWith($".Templates.{fileName}", StringComparison.Ordinal));
+            .SingleOrDefault(name => name.EndsWith($".Templates.{resourcePath}", StringComparison.Ordinal));
 
         if (resourceName == null)
             throw new InvalidOperationException($"Template resource {fileName} was not found.");
@@ -20,4 +23,3 @@ internal static class TemplateStore
         return reader.ReadToEnd();
     }
 }
-

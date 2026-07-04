@@ -1,0 +1,13 @@
+<a class="task-row" role="listitem" href="/task/{{taskIdUrl}}" hx-get="/task/{{taskIdUrl}}" hx-target="#task-dialog" hx-swap="innerHTML">
+  <span class="row-main">
+    <span class="id">{{taskId}}</span>
+    <span class="row-title">{{title}}</span>
+  </span>
+  <span class="row-meta">
+    <span>{{state}}</span>
+    <span>{{track}}</span>
+    <span>{{milestone}}</span>
+    <time>{{modifiedAt}}</time>
+  </span>
+{{preview}}
+</a>
