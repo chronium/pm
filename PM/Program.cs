@@ -31,6 +31,7 @@ serviceProvider.AddHttpClient<INextIdService, NextIdService>();
 
 serviceProvider.AddSingleton<ProjectRoot>();
 serviceProvider.AddSingleton<TaskService>();
+serviceProvider.AddSingleton<ProjectCreationService>();
 serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<IEditorService, EditorService>();
@@ -56,6 +57,7 @@ app.Configure(config =>
         {
             track.SetDescription("Manage tracks within a project");
             track.AddCommand<TrackAddCommand>(GlobalConfig.TrackAddCommandName);
+            track.AddCommand<TrackRenameCommand>(GlobalConfig.TrackRenameCommandName);
             track.AddCommand<TrackRemoveCommand>(GlobalConfig.TrackRemoveCommandName);
         });
 
@@ -64,7 +66,17 @@ app.Configure(config =>
         {
             milestone.SetDescription("Manage milestones within a project");
             milestone.AddCommand<MilestoneAddCommand>(GlobalConfig.MilestoneAddCommandName);
+            milestone.AddCommand<MilestoneRenameCommand>(GlobalConfig.MilestoneRenameCommandName);
             milestone.AddCommand<MilestoneRemoveCommand>(GlobalConfig.MilestoneRemoveCommandName);
+        });
+
+    config.AddBranch(GlobalConfig.StatusBranchName,
+        status =>
+        {
+            status.SetDescription("Manage task statuses within a project");
+            status.AddCommand<StatusAddCommand>(GlobalConfig.StatusAddCommandName);
+            status.AddCommand<StatusRenameCommand>(GlobalConfig.StatusRenameCommandName);
+            status.AddCommand<StatusRemoveCommand>(GlobalConfig.StatusRemoveCommandName);
         });
 
     config.AddBranch(GlobalConfig.TaskBranchName,

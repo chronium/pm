@@ -16,7 +16,7 @@ public class WebBoardTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
         var command = new WebCommand(projectRoot, new BoardService(projectRoot),
-            new TaskService(projectRoot, new RecordingNextIdService()));
+            new TaskService(projectRoot, new RecordingNextIdService()), new ProjectConfigService(projectRoot));
 
         var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings());
 
@@ -151,6 +151,72 @@ public class WebBoardTests
         Assert.DoesNotContain("class=\"nav-item active\" href=\"/?track=BUILD\"", milestoneHtml);
         Assert.Contains("name=\"filterTrack\" value=\"\"", milestoneHtml);
         Assert.Contains("name=\"filterMilestone\" value=\"m1\"", milestoneHtml);
+    }
+
+    [Fact]
+    public async Task SettingsLinkRendersInSidebarAndSettingsPageListsProjectOptions()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
+
+        var boardHtml = BoardHtmlRenderer.RenderPage(board);
+        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board, settings);
+
+        Assert.Contains("href=\"/settings\"", boardHtml);
+        Assert.Contains("Project settings", settingsHtml);
+        Assert.Contains("class=\"nav-item settings-link active\" href=\"/settings\" aria-current=\"page\"", settingsHtml);
+        Assert.Contains("Queued", settingsHtml);
+        Assert.Contains("Build &lt;track&gt;", settingsHtml);
+        Assert.Contains("Milestone &lt;one&gt;", settingsHtml);
+    }
+
+    [Fact]
+    public async Task SettingsFormsRenderAddRenameRemoveControlsWithEscapedValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+        var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
+
+        var html = BoardHtmlRenderer.RenderSettings(settings);
+
+        Assert.Contains("hx-post=\"/settings/statuses\"", html);
+        Assert.Contains("hx-post=\"/settings/statuses/todo/rename\"", html);
+        Assert.Contains("hx-post=\"/settings/statuses/todo/remove\"", html);
+        Assert.Contains("hx-post=\"/settings/tracks/BUILD/rename\"", html);
+        Assert.Contains("value=\"Build &lt;track&gt;\"", html);
+        Assert.Contains("hx-post=\"/settings/milestones/m1/rename\"", html);
+        Assert.Contains("value=\"Milestone &lt;one&gt;\"", html);
+        Assert.Contains("hx-target=\"#settings\"", html);
+        Assert.DoesNotContain("Build <track>", html);
+    }
+
+    [Fact]
+    public async Task SettingsMutationFragmentsReflectSuccessAndBlockedDeleteErrors()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Todo task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new ProjectConfigService(projectRoot);
+
+        var rename = service.RenameStatus("todo", "Ready");
+        var refreshed = BoardHtmlRenderer.RenderSettings(service.GetSettings().Payload!);
+        var blocked = service.RemoveStatus("todo");
+        var error = BoardHtmlRenderer.RenderSettings(service.GetSettings().Payload!, blocked.Message);
+
+        Assert.True(rename.Success);
+        Assert.Contains("value=\"Ready\"", refreshed);
+        Assert.Equal("status_in_use", blocked.ErrorCode);
+        Assert.Contains("role=\"alert\"", error);
+        Assert.Contains("Status todo is referenced by one or more tasks.", error);
+        Assert.Contains("value=\"Ready\"", error);
     }
 
     [Fact]

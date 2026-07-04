@@ -9,9 +9,45 @@ namespace PM.Mcp;
 public sealed class PmMcpTools(
     ProjectRoot projectRoot,
     TaskService taskService,
+    ProjectCreationService projectCreationService,
     ProjectConfigService configService,
     BoardService boardService)
 {
+    [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Initializes a PM project in the current directory.")]
+    public async Task<McpToolResponse<ProjectPayload>> CreateProject(
+        string name,
+        int? idWidth = null,
+        string? idPrefix = null,
+        string? nextIdServiceUrl = null,
+        Dictionary<string, string>? states = null,
+        Dictionary<string, string>? tracks = null,
+        Dictionary<string, string>? milestones = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await projectCreationService.CreateProject(new ProjectCreationRequest(
+            name,
+            idWidth,
+            idPrefix,
+            nextIdServiceUrl,
+            states,
+            tracks,
+            milestones), cancellationToken);
+        if (!result.Success)
+            return McpToolResponse<ProjectPayload>.FromFailure(result);
+
+        var project = result.Payload!;
+        var payload = new ProjectPayload(
+            project.Name,
+            project.RootPath,
+            ToOptions(project.States),
+            ToOptions(project.Tracks),
+            ToOptions(project.Milestones));
+
+        return McpToolResponse<ProjectPayload>.Ok($"Project {project.Name} initialized.", payload);
+    }
+
     [McpServerTool(Name = "get_project", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Returns project name, root path, states, tracks, and milestones.")]
@@ -142,6 +178,64 @@ public sealed class PmMcpTools(
         return McpToolResponse<CreatedTaskPayload>.Ok($"Created task {task.Id}.", payload);
     }
 
+    [McpServerTool(Name = "bulk_create_tasks_for_track", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Creates 1 to 100 tasks in one track using sequential track-scoped ID allocation.")]
+    public async Task<McpToolResponse<BulkCreatedTasksPayload>> BulkCreateTasksForTrack(
+        string track,
+        IReadOnlyList<BulkTaskInputPayload> tasks,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await taskService.BulkCreateTasksForTrack(
+            track,
+            tasks.Select(task => new BulkTaskCreateInput(task.Title, task.Description)).ToList(),
+            cancellationToken);
+        if (!result.Success)
+            return McpToolResponse<BulkCreatedTasksPayload>.FromFailure(result);
+
+        var bulk = result.Payload!;
+        var payload = new BulkCreatedTasksPayload(
+            bulk.Track,
+            bulk.Tasks.Select(task => new BulkCreatedTaskPayload(
+                task.Id,
+                task.Title,
+                task.Track,
+                task.Milestone,
+                task.FilePath)).ToList(),
+            bulk.RequestedCount,
+            bulk.CreatedCount,
+            bulk.Failure == null ? null : new BulkFailurePayload(bulk.Failure.ErrorCode, bulk.Failure.Message));
+
+        var summary = bulk.Failure == null
+            ? $"Created {bulk.CreatedCount} task(s)."
+            : $"Created {bulk.CreatedCount} of {bulk.RequestedCount} task(s); stopped after {bulk.Failure.ErrorCode}.";
+        return McpToolResponse<BulkCreatedTasksPayload>.Ok(summary, payload);
+    }
+
+    [McpServerTool(Name = "bulk_assign_tasks_to_milestone", Destructive = false, Idempotent = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Assigns 1 to 100 existing tasks to a milestone.")]
+    public McpToolResponse<BulkMilestoneAssignmentPayload> BulkAssignTasksToMilestone(
+        string milestone,
+        IReadOnlyList<string> taskIds)
+    {
+        var result = taskService.BulkAssignTasksToMilestone(milestone, taskIds);
+        if (!result.Success)
+            return McpToolResponse<BulkMilestoneAssignmentPayload>.FromFailure(result);
+
+        var assignment = result.Payload!;
+        var payload = new BulkMilestoneAssignmentPayload(
+            assignment.Milestone,
+            assignment.TaskIds,
+            assignment.FilePaths,
+            assignment.RequestedCount,
+            assignment.UpdatedCount);
+
+        return McpToolResponse<BulkMilestoneAssignmentPayload>.Ok(
+            $"Assigned {assignment.RequestedCount} task(s) to {assignment.Milestone}.",
+            payload);
+    }
+
     [McpServerTool(Name = "move_task", Destructive = true, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Moves a task to the target state.")]
@@ -184,6 +278,17 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "rename_track", Destructive = false, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Renames a track display name without changing its key.")]
+    public McpToolResponse<MutatedPayload> RenameTrack(string key, string displayName)
+    {
+        var result = configService.RenameTrack(key, displayName);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Renamed track {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
     [McpServerTool(Name = "remove_track", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Removes an unused track.")]
     public McpToolResponse<MutatedPayload> RemoveTrack(string key)
@@ -191,6 +296,37 @@ public sealed class PmMcpTools(
         var result = configService.RemoveTrack(key);
         return result.Success
             ? McpToolResponse<MutatedPayload>.Ok($"Removed track {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "add_status", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Adds a new task status.")]
+    public McpToolResponse<MutatedPayload> AddStatus(string key, string displayName)
+    {
+        var result = configService.AddStatus(key, displayName);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Added status {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "rename_status", Destructive = false, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Renames a status display name without changing its key.")]
+    public McpToolResponse<MutatedPayload> RenameStatus(string key, string displayName)
+    {
+        var result = configService.RenameStatus(key, displayName);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Renamed status {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "remove_status", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Removes an unused task status.")]
+    public McpToolResponse<MutatedPayload> RemoveStatus(string key)
+    {
+        var result = configService.RemoveStatus(key);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed status {key}.", new MutatedPayload(true))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
@@ -214,7 +350,18 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
-    private static IReadOnlyList<OptionPayload> ToOptions(Dictionary<string, string> options)
+    [McpServerTool(Name = "rename_milestone", Destructive = false, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Renames a milestone title without changing its key.")]
+    public McpToolResponse<MutatedPayload> RenameMilestone(string key, string title)
+    {
+        var result = configService.RenameMilestone(key, title);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Renamed milestone {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    private static IReadOnlyList<OptionPayload> ToOptions(IReadOnlyDictionary<string, string> options)
     {
         return options.Select(option => new OptionPayload(option.Key, option.Value)).ToList();
     }

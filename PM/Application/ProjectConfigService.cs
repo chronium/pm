@@ -1,9 +1,93 @@
+using PM.Files;
 using PM.Project;
 
 namespace PM.Application;
 
+public sealed record ProjectSettingsData(
+    string ProjectName,
+    IReadOnlyList<BoardOption> Statuses,
+    IReadOnlyList<BoardOption> Tracks,
+    IReadOnlyList<BoardOption> Milestones);
+
 public sealed class ProjectConfigService(ProjectRoot projectRoot)
 {
+    public AppResult<ProjectSettingsData> GetSettings()
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<ProjectSettingsData>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        var config = projectRoot.Config;
+        return AppResult<ProjectSettingsData>.Ok(new ProjectSettingsData(
+            config.Name,
+            config.TaskStates.Select(status => new BoardOption(status.Key, status.Value)).ToList(),
+            config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
+            config.Milestones.Select(milestone => new BoardOption(milestone.Key, milestone.Value)).ToList()));
+    }
+
+    public AppResult AddStatus(string key, string name)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        name = name.Trim();
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(name))
+            return AppResult.Fail("invalid_status", "Status key and name are required.");
+
+        var config = projectRoot.Config!;
+        if (config.TaskStates.ContainsKey(key))
+            return AppResult.Fail("duplicate_status", $"Status {key} already exists.");
+
+        config.TaskStates[key] = name;
+        FileSystem.CreateDirectory(Path.Combine(projectRoot.StatesPath, key));
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
+    public AppResult RenameStatus(string key, string name)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        name = name.Trim();
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(name))
+            return AppResult.Fail("invalid_status", "Status key and name are required.");
+
+        var config = projectRoot.Config!;
+        if (!config.TaskStates.ContainsKey(key))
+            return AppResult.Fail("missing_status", $"Status {key} not found.");
+
+        config.TaskStates[key] = name;
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
+    public AppResult RemoveStatus(string key)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return AppResult.Fail("invalid_status", "Status key is required.");
+
+        var config = projectRoot.Config!;
+        if (!config.TaskStates.ContainsKey(key))
+            return AppResult.Fail("missing_status", $"Status {key} not found.");
+
+        if (config.TaskStates.Count == 1)
+            return AppResult.Fail("last_status", "Cannot remove the last status.");
+
+        var statePath = Path.Combine(projectRoot.StatesPath, key);
+        if (FileSystem.DirectoryExists(statePath) && FileSystem.ReadFiles(statePath, "*.ref").Count != 0)
+            return AppResult.Fail("status_in_use", $"Status {key} is referenced by one or more tasks.");
+
+        config.TaskStates.Remove(key);
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
     public AppResult AddTrack(string key, string name)
     {
         if (!projectRoot.Exists)
@@ -17,6 +101,25 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         var config = projectRoot.Config!;
         if (config.Tracks.ContainsKey(key))
             return AppResult.Fail("duplicate_track", $"Track {key} already exists.");
+
+        config.Tracks[key] = name;
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
+    public AppResult RenameTrack(string key, string name)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        name = name.Trim();
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(name))
+            return AppResult.Fail("invalid_track", "Track key and name are required.");
+
+        var config = projectRoot.Config!;
+        if (!config.Tracks.ContainsKey(key))
+            return AppResult.Fail("missing_track", $"Track {key} not found.");
 
         config.Tracks[key] = name;
         config.WriteConfig(projectRoot);
@@ -43,6 +146,25 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             return AppResult.Fail("track_in_use", $"Track {key} is referenced by one or more tasks.");
 
         config.Tracks.Remove(key);
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
+    public AppResult RenameMilestone(string key, string title)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        title = title.Trim();
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(title))
+            return AppResult.Fail("invalid_milestone", "Milestone key and title are required.");
+
+        var config = projectRoot.Config!;
+        if (!config.Milestones.ContainsKey(key))
+            return AppResult.Fail("missing_milestone", $"Milestone {key} not found.");
+
+        config.Milestones[key] = title;
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }

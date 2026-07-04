@@ -3,7 +3,7 @@
 body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: #eef1f4; }
 h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; }
 .app-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
-.sidebar { display: grid; align-content: start; gap: 18px; padding: 22px 16px; background: #ffffff; border-right: 1px solid var(--line); }
+.sidebar { display: grid; grid-template-rows: auto auto 1fr; align-content: start; gap: 18px; padding: 22px 16px; background: #ffffff; border-right: 1px solid var(--line); }
 .sidebar-header { display: grid; gap: 14px; }
 .filters { display: none; }
 .board-nav { display: grid; gap: 18px; }
@@ -13,6 +13,7 @@ h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; }
 .nav-item:hover { background: var(--soft); color: var(--ink); }
 .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .nav-item.active { background: var(--soft); color: var(--ink); }
+.settings-link { align-self: end; margin-top: 10px; }
 main { min-width: 0; padding: 18px 28px 32px; }
 label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 650; text-transform: uppercase; }
 select, input, textarea { min-width: 160px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); font: inherit; }
@@ -54,5 +55,18 @@ button.danger { border-color: #9f2f3f; background: #9f2f3f; }
 .remove-confirmation p { margin: 0; color: #6b2832; font-size: 13px; }
 .dialog-error { display: grid; gap: 8px; padding: 18px; }
 .dialog-error p { margin: 0; color: var(--muted); }
+.settings-page { display: grid; gap: 18px; max-width: 980px; }
+.settings-header h2 { margin: 0; font-size: 20px; line-height: 1.2; }
+.settings-section { display: grid; gap: 10px; }
+.settings-section h3 { margin: 0; color: var(--muted); font-size: 12px; font-weight: 750; text-transform: uppercase; }
+.settings-add, .settings-item { display: grid; grid-template-columns: minmax(100px, 140px) minmax(220px, 1fr) auto auto; gap: 8px; align-items: end; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); }
+.settings-add { grid-template-columns: minmax(100px, 140px) minmax(220px, 1fr) auto; border-radius: 8px; }
+.settings-list { display: grid; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.settings-list .settings-item { border-width: 0 0 1px; }
+.settings-list .settings-item:last-child { border-bottom: 0; }
+.settings-key { align-self: center; color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.settings-rename { display: contents; }
+.settings-error { padding: 10px 12px; border: 1px solid #e0b4bc; border-radius: 6px; background: #fff7f8; color: #6b2832; font-size: 13px; }
 @media (max-width: 760px) { .task-row { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .app-shell { grid-template-columns: 1fr; } .sidebar { border-right: 0; border-bottom: 1px solid var(--line); } main { padding-left: 14px; padding-right: 14px; } select { width: 100%; } label { flex: 1 1 100%; } }
+@media (max-width: 760px) { .settings-add, .settings-item { grid-template-columns: 1fr; } .settings-rename { display: grid; gap: 8px; } }
+@media (max-width: 640px) { .app-shell { grid-template-columns: 1fr; } .sidebar { border-right: 0; border-bottom: 1px solid var(--line); } main { padding-left: 14px; padding-right: 14px; } select, input { width: 100%; } label { flex: 1 1 100%; } }

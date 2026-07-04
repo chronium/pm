@@ -56,3 +56,28 @@ public sealed record TaskDetailPayload(
 public sealed record CreatedTaskPayload(string Id, string Title, string Track, string? Milestone, string FilePath);
 
 public sealed record MutatedPayload(bool Changed);
+
+public sealed record BulkTaskInputPayload(string Title, string? Description = null);
+
+public sealed record BulkCreatedTaskPayload(
+    string Id,
+    string Title,
+    string Track,
+    string? Milestone,
+    string FilePath);
+
+public sealed record BulkFailurePayload(string ErrorCode, string Message);
+
+public sealed record BulkCreatedTasksPayload(
+    string Track,
+    IReadOnlyList<BulkCreatedTaskPayload> Tasks,
+    int RequestedCount,
+    int CreatedCount,
+    BulkFailurePayload? Failure);
+
+public sealed record BulkMilestoneAssignmentPayload(
+    string Milestone,
+    IReadOnlyList<string> TaskIds,
+    IReadOnlyList<string> FilePaths,
+    int RequestedCount,
+    int UpdatedCount);

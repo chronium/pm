@@ -1,0 +1,33 @@
+using System.ComponentModel;
+using PM.Application;
+using Spectre.Console;
+using Spectre.Console.Cli;
+
+namespace PM.Project;
+
+public class StatusAddCommand(ProjectConfigService configService) : Command<StatusAddCommand.Settings>
+{
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var result = configService.AddStatus(settings.Key, settings.Name);
+        if (!result.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{(result.Message ?? "Status add failed.").EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        AnsiConsole.MarkupLineInterpolated($"Added status [green]{settings.Key.Trim().EscapeMarkup()}[/].");
+        return 0;
+    }
+
+    public class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<key>")]
+        [Description("Status key")]
+        public string Key { get; init; } = string.Empty;
+
+        [CommandArgument(1, "<name>")]
+        [Description("Status display name")]
+        public string Name { get; init; } = string.Empty;
+    }
+}

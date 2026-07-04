@@ -1,0 +1,39 @@
+<section id="settings" class="settings-page" aria-live="polite">
+  <header class="settings-header">
+    <h2>Project settings</h2>
+  </header>
+{{error}}
+  <section class="settings-section" aria-labelledby="statuses-settings-title">
+    <h3 id="statuses-settings-title">Statuses</h3>
+    <form class="settings-add" hx-post="/settings/statuses" hx-target="#settings" hx-swap="outerHTML">
+      <label>Key <input name="key" autocomplete="off" required></label>
+      <label>Name <input name="name" autocomplete="off" required></label>
+      <button type="submit">Add status</button>
+    </form>
+    <div class="settings-list">
+{{statusItems}}
+    </div>
+  </section>
+  <section class="settings-section" aria-labelledby="milestones-settings-title">
+    <h3 id="milestones-settings-title">Milestones</h3>
+    <form class="settings-add" hx-post="/settings/milestones" hx-target="#settings" hx-swap="outerHTML">
+      <label>Key <input name="key" autocomplete="off" required></label>
+      <label>Title <input name="title" autocomplete="off" required></label>
+      <button type="submit">Add milestone</button>
+    </form>
+    <div class="settings-list">
+{{milestoneItems}}
+    </div>
+  </section>
+  <section class="settings-section" aria-labelledby="tracks-settings-title">
+    <h3 id="tracks-settings-title">Tracks</h3>
+    <form class="settings-add" hx-post="/settings/tracks" hx-target="#settings" hx-swap="outerHTML">
+      <label>Key <input name="key" autocomplete="off" required></label>
+      <label>Name <input name="name" autocomplete="off" required></label>
+      <button type="submit">Add track</button>
+    </form>
+    <div class="settings-list">
+{{trackItems}}
+    </div>
+  </section>
+</section>

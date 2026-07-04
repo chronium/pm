@@ -31,10 +31,16 @@ public static class GlobalConfig
     public static string TaskRemoveCommandName => "remove";
     public static string TrackBranchName => "track";
     public static string TrackAddCommandName => "add";
+    public static string TrackRenameCommandName => "rename";
     public static string TrackRemoveCommandName => "remove";
     public static string MilestoneBranchName => "milestone";
     public static string MilestoneAddCommandName => "add";
+    public static string MilestoneRenameCommandName => "rename";
     public static string MilestoneRemoveCommandName => "remove";
+    public static string StatusBranchName => "status";
+    public static string StatusAddCommandName => "add";
+    public static string StatusRenameCommandName => "rename";
+    public static string StatusRemoveCommandName => "remove";
     public static string ListCommandName => "list";
     public static string MoveCommandName => "move";
     public static string WebCommandName => "web";

@@ -596,6 +596,56 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task StatusAddRenameRemovePersistConfigAndStateDirectories()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new ProjectConfigService(projectRoot);
+        var add = new StatusAddCommand(service);
+        var rename = new StatusRenameCommand(service);
+        var remove = new StatusRemoveCommand(service);
+
+        Assert.Equal(0,
+            add.Execute(null!, new StatusAddCommand.Settings { Key = "blocked", Name = "Blocked" },
+                CancellationToken.None));
+        Assert.Equal(0,
+            rename.Execute(null!, new StatusRenameCommand.Settings { Key = "blocked", Name = "Waiting" },
+                CancellationToken.None));
+        Assert.Equal(0,
+            remove.Execute(null!, new StatusRemoveCommand.Settings { Key = "blocked" }, CancellationToken.None));
+        Assert.Equal(1,
+            remove.Execute(null!, new StatusRemoveCommand.Settings { Key = "missing" }, CancellationToken.None));
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.False(config.TaskStates.ContainsKey("blocked"));
+        Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
+    }
+
+    [Fact]
+    public async Task TrackAndMilestoneRenameCommandsPersistDisplayNames()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.Equal(0,
+            new TrackRenameCommand(service).Execute(null!,
+                new TrackRenameCommand.Settings { Key = "BUILD", Name = "Build Work" }, CancellationToken.None));
+        Assert.Equal(0,
+            new MilestoneRenameCommand(service).Execute(null!,
+                new MilestoneRenameCommand.Settings { Key = "m1", Title = "Launch" }, CancellationToken.None));
+        Assert.Equal(1,
+            new TrackRenameCommand(service).Execute(null!,
+                new TrackRenameCommand.Settings { Key = "missing", Name = "Missing" }, CancellationToken.None));
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("Build Work", config.Tracks["BUILD"]);
+        Assert.Equal("Launch", config.Milestones["m1"]);
+    }
+
+    [Fact]
     public async Task MilestoneAddWritesConfigAndRejectsDuplicatesAndEmptyValues()
     {
         using var workspace = new TempWorkingDirectory();

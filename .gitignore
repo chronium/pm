@@ -8,7 +8,6 @@ riderModule.iml
 /next-id-worker/.wrangler/
 
 *.db*
-.dev-pm
 
 *.cast
 *.gif

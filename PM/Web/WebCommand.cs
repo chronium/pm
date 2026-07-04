@@ -12,7 +12,11 @@ using Spectre.Console.Cli;
 
 namespace PM.Web;
 
-public class WebCommand(ProjectRoot projectRoot, BoardService boardService, TaskService taskService) : AsyncCommand<WebCommand.Settings>
+public class WebCommand(
+    ProjectRoot projectRoot,
+    BoardService boardService,
+    TaskService taskService,
+    ProjectConfigService configService) : AsyncCommand<WebCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
@@ -30,7 +34,7 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
         builder.WebHost.UseUrls(url);
 
         var app = builder.Build();
-        MapEndpoints(app, boardService, taskService);
+        MapEndpoints(app, boardService, taskService, configService);
 
         await app.StartAsync(cancellationToken);
         AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
@@ -50,7 +54,11 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
         return 0;
     }
 
-    public static void MapEndpoints(IEndpointRouteBuilder endpoints, BoardService boardService, TaskService taskService)
+    public static void MapEndpoints(
+        IEndpointRouteBuilder endpoints,
+        BoardService boardService,
+        TaskService taskService,
+        ProjectConfigService configService)
     {
         endpoints.MapGet("/favicon.ico", () => Results.NoContent());
 
@@ -65,6 +73,64 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
             var board = CreateBoard(boardService, request);
             return Results.Content(BoardHtmlRenderer.RenderBoard(board), "text/html; charset=utf-8");
         });
+
+        endpoints.MapGet("/settings", () =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var settings = CreateSettings(configService);
+            return Results.Content(BoardHtmlRenderer.RenderSettingsPage(board, settings), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/settings/statuses", async (HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, configService.AddStatus(
+                form["key"].ToString(),
+                form["name"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/statuses/{key}/rename", async (string key, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, configService.RenameStatus(key, form["name"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/statuses/{key}/remove", (string key) =>
+            SettingsMutation(configService, configService.RemoveStatus(key)));
+
+        endpoints.MapPost("/settings/tracks", async (HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, configService.AddTrack(
+                form["key"].ToString(),
+                form["name"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/tracks/{key}/rename", async (string key, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, configService.RenameTrack(key, form["name"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/tracks/{key}/remove", (string key) =>
+            SettingsMutation(configService, configService.RemoveTrack(key)));
+
+        endpoints.MapPost("/settings/milestones", async (HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, configService.AddMilestone(
+                form["key"].ToString(),
+                form["title"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/milestones/{key}/rename", async (string key, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, configService.RenameMilestone(key, form["title"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/milestones/{key}/remove", (string key) =>
+            SettingsMutation(configService, configService.RemoveMilestone(key)));
 
         endpoints.MapGet("/task/{id}", (string id) =>
         {
@@ -206,6 +272,14 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
         return result.Payload!;
     }
 
+    private static BoardData CreateBoard(BoardService boardService, BoardQuery query)
+    {
+        var result = boardService.GetBoard(query);
+        if (!result.Success) throw new InvalidOperationException(result.Message);
+
+        return result.Payload!;
+    }
+
     private static BoardData CreateBoard(BoardService boardService, IFormCollection form)
     {
         var query = new BoardQuery(
@@ -225,6 +299,23 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
             ReadQueryValue(request, "track"),
             ReadQueryValue(request, "milestone"),
             ReadQueryValue(request, "state"));
+    }
+
+    private static ProjectSettingsData CreateSettings(ProjectConfigService configService)
+    {
+        var result = configService.GetSettings();
+        if (!result.Success) throw new InvalidOperationException(result.Message);
+
+        return result.Payload!;
+    }
+
+    private static IResult SettingsMutation(ProjectConfigService configService, AppResult mutation)
+    {
+        var settings = CreateSettings(configService);
+        return Results.Content(
+            BoardHtmlRenderer.RenderSettings(settings, mutation.Success ? null : mutation.Message),
+            "text/html; charset=utf-8",
+            statusCode: mutation.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
     }
 
     private static BoardTask? FindTask(BoardData board, string id)

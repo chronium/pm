@@ -1,0 +1,13 @@
+name: Test Project
+idWidth: 4
+idPrefix: PM
+nextIdServiceUrl: https://pm-next-id.apa-prod-monitor.workers.dev
+taskStates:
+  todo: To Do
+  in-progress: In Progress
+  done: Done
+tracks:
+  PM: PM
+  ISSUE: PM Tool Issues
+milestones:
+  mcp-smoke: MCP Smoke Test

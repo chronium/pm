@@ -7,6 +7,86 @@ namespace PM.Tests;
 public class ApplicationServiceTests
 {
     [Fact]
+    public async Task ProjectCreationUsesDefaultsAndHealthChecksBeforeWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = new ProjectRoot();
+        var nextIds = new RecordingNextIdService();
+        var service = new ProjectCreationService(projectRoot, nextIds);
+
+        var result = await service.CreateProject(new ProjectCreationRequest("New Project"));
+
+        Assert.True(result.Success);
+        Assert.Equal("New Project", result.Payload!.Name);
+        Assert.Equal(projectRoot.RootPath, result.Payload.RootPath);
+        Assert.Equal(1, nextIds.HealthyCalls);
+        Assert.Equal("TASK", projectRoot.Config!.IdPrefix);
+        Assert.Equal(4, projectRoot.Config.IdWidth);
+        Assert.Equal(ProjectConfig.DefaultNextIdServiceUrl, projectRoot.Config.NextIdServiceUrl);
+        Assert.Equal(GlobalConfig.DefaultTaskStates, projectRoot.Config.TaskStates);
+        Assert.Equal("TASK", projectRoot.Config.Tracks.Single().Key);
+        Assert.Empty(projectRoot.Config.Milestones);
+    }
+
+    [Fact]
+    public async Task ProjectCreationRejectsExistingProjectInCurrentDirectoryOrParent()
+    {
+        using var workspace = new TempWorkingDirectory();
+        await workspace.CreateProject();
+        var child = Path.Combine(workspace.Path, "child");
+        Directory.CreateDirectory(child);
+        Environment.CurrentDirectory = child;
+        var projectRoot = new ProjectRoot();
+        var service = new ProjectCreationService(projectRoot, new RecordingNextIdService());
+
+        var result = await service.CreateProject(new ProjectCreationRequest("Nested"));
+
+        Assert.False(result.Success);
+        Assert.Equal("project_exists", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ProjectCreationRejectsNextIdHealthFailureBeforeWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = new ProjectRoot();
+        var service = new ProjectCreationService(projectRoot, new RecordingNextIdService(healthy: false));
+
+        var result = await service.CreateProject(new ProjectCreationRequest("Offline"));
+
+        Assert.False(result.Success);
+        Assert.Equal("next_id_unavailable", result.ErrorCode);
+        Assert.False(Directory.Exists(Path.Combine(workspace.Path, GlobalConfig.PmDirName)));
+    }
+
+    [Fact]
+    public async Task ProjectCreationAcceptsCustomConfiguration()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = new ProjectRoot();
+        var service = new ProjectCreationService(projectRoot, new RecordingNextIdService());
+
+        var result = await service.CreateProject(new ProjectCreationRequest(
+            "Custom",
+            3,
+            "BUG",
+            "http://ids.local",
+            new Dictionary<string, string> { ["new"] = "New", ["closed"] = "Closed" },
+            new Dictionary<string, string> { ["BUG"] = "Bugs", ["OPS"] = "Ops" },
+            new Dictionary<string, string> { ["v1"] = "Version 1" }));
+
+        Assert.True(result.Success);
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal(3, config.IdWidth);
+        Assert.Equal("BUG", config.IdPrefix);
+        Assert.Equal("http://ids.local", config.NextIdServiceUrl);
+        Assert.Equal("Closed", config.TaskStates["closed"]);
+        Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "new")));
+        Assert.Equal("Ops", config.Tracks["OPS"]);
+        Assert.Equal("Version 1", config.Milestones["v1"]);
+    }
+
+    [Fact]
     public async Task CreateTaskValidatesTrackMilestoneAndUsesTrackScopedId()
     {
         using var workspace = new TempWorkingDirectory();
@@ -44,6 +124,118 @@ public class ApplicationServiceTests
         Assert.Equal(0, nextIds.GetNextIdCalls);
         Assert.Equal(0, nextIds.HealthyCalls);
         Assert.False(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-????.md")));
+    }
+
+    [Fact]
+    public async Task BulkCreateTasksUsesOrderedTrackScopedIds()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
+        var nextIds = new RecordingNextIdService(ids: [1, 2, 3]);
+        var service = new TaskService(projectRoot, nextIds);
+
+        var result = await service.BulkCreateTasksForTrack("BUILD",
+        [
+            new BulkTaskCreateInput("First", "Body 1"),
+            new BulkTaskCreateInput("Second"),
+            new BulkTaskCreateInput("Third"),
+        ]);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Payload!.Failure);
+        Assert.Equal(["BUILD-0001", "BUILD-0002", "BUILD-0003"], result.Payload.Tasks.Select(task => task.Id));
+        Assert.Equal(["BUILD", "BUILD", "BUILD"], nextIds.GetNextIdTracks);
+        Assert.Contains("Body 1", File.ReadAllText(Path.Combine(projectRoot.TasksPath, "BUILD-0001.md")));
+    }
+
+    [Fact]
+    public async Task BulkCreateTasksValidatesBeforeAllocatingIds()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var nextIds = new RecordingNextIdService();
+        var service = new TaskService(projectRoot, nextIds);
+
+        var empty = await service.BulkCreateTasksForTrack("PM", []);
+        var oversized = await service.BulkCreateTasksForTrack("PM",
+            Enumerable.Range(1, 101).Select(index => new BulkTaskCreateInput($"Task {index}")).ToList());
+        var invalidTitle = await service.BulkCreateTasksForTrack("PM",
+            [new BulkTaskCreateInput("Good"), new BulkTaskCreateInput(" ")]);
+        var invalidTrack = await service.BulkCreateTasksForTrack("NOPE", [new BulkTaskCreateInput("Good")]);
+
+        Assert.Equal("invalid_batch_size", empty.ErrorCode);
+        Assert.Equal("invalid_batch_size", oversized.ErrorCode);
+        Assert.Equal("invalid_title", invalidTitle.ErrorCode);
+        Assert.Equal("invalid_track", invalidTrack.ErrorCode);
+        Assert.Equal(0, nextIds.GetNextIdCalls);
+    }
+
+    [Fact]
+    public async Task BulkCreateTasksReportsMidBatchNextIdFailureWithoutRollback()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var nextIds = new RecordingNextIdService(ids: [1], failWhenIdsExhausted: true);
+        var service = new TaskService(projectRoot, nextIds);
+
+        var result = await service.BulkCreateTasksForTrack("PM",
+            [new BulkTaskCreateInput("First"), new BulkTaskCreateInput("Second")]);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, result.Payload!.CreatedCount);
+        Assert.Equal("next_id_unavailable", result.Payload.Failure!.ErrorCode);
+        Assert.True(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0001.md")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0002.md")));
+    }
+
+    [Fact]
+    public async Task BulkAssignTasksToMilestoneValidatesBeforeWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var task = TestData.Task("PM-0001", "Existing");
+        projectRoot.WriteTask(task);
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var missingMilestone = service.BulkAssignTasksToMilestone("missing", ["PM-0001"]);
+        var empty = service.BulkAssignTasksToMilestone("m1", []);
+        var missingTask = service.BulkAssignTasksToMilestone("m1", ["PM-9999"]);
+
+        Assert.Equal("missing_milestone", missingMilestone.ErrorCode);
+        Assert.Equal("invalid_batch_size", empty.ErrorCode);
+        Assert.Equal("missing_task", missingTask.ErrorCode);
+        Assert.Null(TaskItem.Parse(File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0001.md")))!.Milestone);
+    }
+
+    [Fact]
+    public async Task BulkAssignTasksToMilestoneReassignsAndPreservesStateAndDescription()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+        var first = TestData.Task("PM-0001", "First", "Body", milestone: "m1");
+        var second = TestData.Task("PM-0002", "Second", "Already", milestone: "m2");
+        projectRoot.WriteTask(first);
+        projectRoot.WriteTask(second);
+        projectRoot.UpdateTaskState(first, "review");
+        projectRoot.UpdateTaskState(second, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = service.BulkAssignTasksToMilestone("m2", ["PM-0001", "PM-0002"]);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.Payload!.RequestedCount);
+        Assert.Equal(1, result.Payload.UpdatedCount);
+        var updated = TaskItem.Parse(File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0001.md")))!;
+        var unchanged = TaskItem.Parse(File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0002.md")))!;
+        Assert.Equal("m2", updated.Milestone);
+        Assert.Equal("Body", updated.Description);
+        Assert.True(updated.ModifiedAt > first.ModifiedAt);
+        Assert.Equal(second.ModifiedAt, unchanged.ModifiedAt);
+        Assert.True(projectRoot.TryGetState(updated, out var state));
+        Assert.Equal("review", state);
     }
 
     [Fact]
@@ -123,6 +315,85 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task StatusAddCreatesConfigEntryAndStateDirectory()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new ProjectConfigService(projectRoot);
+
+        var result = service.AddStatus("blocked", "Blocked");
+
+        Assert.True(result.Success);
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("Blocked", config.TaskStates["blocked"]);
+        Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
+        Assert.Equal("duplicate_status", service.AddStatus("blocked", "Duplicate").ErrorCode);
+        Assert.Equal("invalid_status", service.AddStatus(" ", "Missing").ErrorCode);
+    }
+
+    [Fact]
+    public async Task StatusRenameWorksWhileReferencedAndKeepsStateKey()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Todo task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new ProjectConfigService(projectRoot);
+
+        var result = service.RenameStatus("todo", "Ready");
+
+        Assert.True(result.Success);
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("Ready", config.TaskStates["todo"]);
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+        Assert.Equal("missing_status", service.RenameStatus("missing", "Missing").ErrorCode);
+    }
+
+    [Fact]
+    public async Task StatusRemoveRejectsReferencedMissingAndLastStatuses()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Todo task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.Equal("status_in_use", service.RemoveStatus("todo").ErrorCode);
+        Assert.Equal("missing_status", service.RemoveStatus("missing").ErrorCode);
+        Assert.True(service.RemoveStatus("review").Success);
+
+        var singleStatusRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project" }));
+        singleStatusRoot.Config!.TaskStates = new Dictionary<string, string> { ["todo"] = "To Do" };
+        singleStatusRoot.Config.WriteConfig(singleStatusRoot);
+        var singleStatusService = new ProjectConfigService(singleStatusRoot);
+
+        Assert.Equal("last_status", singleStatusService.RemoveStatus("todo").ErrorCode);
+    }
+
+    [Fact]
+    public async Task TrackAndMilestoneRenameWorkWhileReferenced()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        projectRoot.WriteTask(TestData.Task("BUILD-0001", "Build task", track: "BUILD", milestone: "m1"));
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.True(service.RenameTrack("BUILD", "Build Work").Success);
+        Assert.True(service.RenameMilestone("m1", "Launch").Success);
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.Equal("Build Work", config.Tracks["BUILD"]);
+        Assert.Equal("Launch", config.Milestones["m1"]);
+        Assert.Equal("missing_track", service.RenameTrack("missing", "Missing").ErrorCode);
+        Assert.Equal("missing_milestone", service.RenameMilestone("missing", "Missing").ErrorCode);
+    }
+
+    [Fact]
     public async Task TrackAndMilestoneRemoveRejectReferencedItemsAndPersistUnusedRemovals()
     {
         using var workspace = new TempWorkingDirectory();
@@ -183,17 +454,30 @@ public class ApplicationServiceTests
         Assert.Equal("review", Assert.Single(board.MilestoneGroups.Single().States).Key);
     }
 
-    private sealed class RecordingNextIdService : INextIdService
+    private sealed class RecordingNextIdService(
+        bool healthy = true,
+        IReadOnlyList<int>? ids = null,
+        bool failWhenIdsExhausted = false) : INextIdService
     {
         public int GetNextIdCalls { get; private set; }
         public int HealthyCalls { get; private set; }
         public List<string> GetNextIdTracks { get; } = [];
+        private int _idIndex;
 
         public Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
         {
             GetNextIdCalls++;
             GetNextIdTracks.Add(track);
-            return Task.FromResult(1);
+            if (ids == null)
+                return Task.FromResult(1);
+
+            if (_idIndex < ids.Count)
+                return Task.FromResult(ids[_idIndex++]);
+
+            if (failWhenIdsExhausted)
+                throw new InvalidOperationException("No more IDs.");
+
+            return Task.FromResult(ids[^1] + 1);
         }
 
         public Task<int> PeekNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
@@ -210,7 +494,7 @@ public class ApplicationServiceTests
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)
         {
             HealthyCalls++;
-            return Task.FromResult(true);
+            return Task.FromResult(healthy);
         }
     }
 }

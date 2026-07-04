@@ -23,6 +23,7 @@ public static class McpServerHost
         builder.Services.Configure<NextIdServiceOptions>(options => options.WriteFailuresToConsole = false);
         builder.Services.AddSingleton<ProjectRoot>();
         builder.Services.AddSingleton<TaskService>();
+        builder.Services.AddSingleton<ProjectCreationService>();
         builder.Services.AddSingleton<ProjectConfigService>();
         builder.Services.AddSingleton<BoardService>();
 

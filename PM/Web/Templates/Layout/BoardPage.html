@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{projectName}} Board</title>
+  <title>{{pageTitle}}</title>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <style>
 {{styles}}
   </style>
   <script>
     document.addEventListener('htmx:beforeSwap', (event) => {
-      if (event.detail.target.id === 'task-dialog' && event.detail.xhr.status >= 400) {
+      if ((event.detail.target.id === 'task-dialog' || event.detail.target.id === 'settings') &&
+          event.detail.xhr.status >= 400) {
         event.detail.shouldSwap = true;
         event.detail.isError = false;
       }

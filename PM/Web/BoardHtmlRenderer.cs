@@ -10,9 +10,20 @@ public static class BoardHtmlRenderer
     {
         return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"{board.ProjectName} Board"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, false), StringComparison.Ordinal)
             .Replace("{{board}}", RenderBoard(board), StringComparison.Ordinal);
+    }
+
+    public static string RenderSettingsPage(BoardData board, ProjectSettingsData settings, string? error = null)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(settings.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"{settings.ProjectName} Settings"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, true), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderSettings(settings, error), StringComparison.Ordinal);
     }
 
     public static string RenderBoard(BoardData board)
@@ -100,6 +111,23 @@ public static class BoardHtmlRenderer
         return $"""<section id="board" hx-swap-oob="innerHTML">{RenderBoard(board)}</section>""";
     }
 
+    public static string RenderSettings(ProjectSettingsData settings, string? error = null)
+    {
+        var errorHtml = string.IsNullOrWhiteSpace(error)
+            ? string.Empty
+            : Template("Settings/Error.html")
+                .Replace("{{message}}", H(error), StringComparison.Ordinal);
+
+        return Template("Settings/Settings.html")
+            .Replace("{{error}}", errorHtml, StringComparison.Ordinal)
+            .Replace("{{statusItems}}", RenderSettingsItems("statuses", settings.Statuses, "name"),
+                StringComparison.Ordinal)
+            .Replace("{{trackItems}}", RenderSettingsItems("tracks", settings.Tracks, "name"),
+                StringComparison.Ordinal)
+            .Replace("{{milestoneItems}}", RenderSettingsItems("milestones", settings.Milestones, "title"),
+                StringComparison.Ordinal);
+    }
+
     private static string RenderFilterInputs(BoardQuery query)
     {
         return string.Join(Environment.NewLine,
@@ -110,16 +138,19 @@ public static class BoardHtmlRenderer
         ]);
     }
 
-    private static string RenderSidebar(BoardData board)
+    private static string RenderSidebar(BoardData board, bool settingsActive)
     {
         return Template("Layout/Sidebar.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{filterInputs}}", RenderFilterInputs(board.Query), StringComparison.Ordinal)
-            .Replace("{{wholeProjectActive}}", IsWholeProject(board.Query) ? " active" : string.Empty,
+            .Replace("{{wholeProjectActive}}", IsWholeProject(board.Query) && !settingsActive ? " active" : string.Empty,
                 StringComparison.Ordinal)
             .Replace("{{milestoneItems}}", RenderNavItems("milestone", board.Milestones, board.Query.Milestone),
                 StringComparison.Ordinal)
             .Replace("{{trackItems}}", RenderNavItems("track", board.Tracks, board.Query.Track),
+                StringComparison.Ordinal)
+            .Replace("{{settingsActive}}", settingsActive ? " active" : string.Empty, StringComparison.Ordinal)
+            .Replace("{{settingsAriaCurrent}}", settingsActive ? " aria-current=\"page\"" : string.Empty,
                 StringComparison.Ordinal);
     }
 
@@ -180,6 +211,20 @@ public static class BoardHtmlRenderer
             .Replace("{{milestone}}", H(MilestoneName(board, task.Milestone)), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(task.Task.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{preview}}", preview, StringComparison.Ordinal);
+    }
+
+    private static string RenderSettingsItems(
+        string collection,
+        IReadOnlyList<BoardOption> options,
+        string valueName)
+    {
+        return string.Join(Environment.NewLine, options.Select(option => Template("Settings/Item.html")
+            .Replace("{{key}}", H(option.Key), StringComparison.Ordinal)
+            .Replace("{{keyUrl}}", Url(option.Key), StringComparison.Ordinal)
+            .Replace("{{name}}", H(option.Name), StringComparison.Ordinal)
+            .Replace("{{collection}}", H(collection), StringComparison.Ordinal)
+            .Replace("{{valueName}}", H(valueName), StringComparison.Ordinal)
+            .Replace("{{valueLabel}}", valueName == "title" ? "Title" : "Name", StringComparison.Ordinal)));
     }
 
     private static string MilestoneName(BoardData board, string? milestone)

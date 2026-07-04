@@ -42,6 +42,30 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task CreateProjectInitializesAndReturnsStructuredPayload()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = new ProjectRoot();
+        var tools = CreateTools(projectRoot);
+
+        var result = await tools.CreateProject(
+            "MCP Project",
+            idWidth: 3,
+            idPrefix: "BUG",
+            nextIdServiceUrl: "http://ids.local",
+            states: new Dictionary<string, string> { ["todo"] = "Todo" },
+            tracks: new Dictionary<string, string> { ["BUG"] = "Bugs" },
+            milestones: new Dictionary<string, string> { ["v1"] = "Version 1" });
+
+        Assert.True(result.Success);
+        Assert.Equal("MCP Project", result.Data!.Name);
+        Assert.Equal(projectRoot.RootPath, result.Data.RootPath);
+        Assert.Contains(result.Data.Tracks, track => track.Key == "BUG" && track.Name == "Bugs");
+        Assert.Contains(result.Data.Milestones, milestone => milestone.Key == "v1");
+        Assert.Contains(result.Data.States, state => state.Key == "todo" && state.Name == "Todo");
+    }
+
+    [Fact]
     public async Task ListTasksFiltersByTrackMilestoneAndState()
     {
         using var workspace = new TempWorkingDirectory();
@@ -105,6 +129,49 @@ public class McpToolTests
         Assert.Equal(["BUILD"], nextIds.GetNextIdTracks);
         Assert.True(File.Exists(Path.Combine(projectRoot.TasksPath, "BUILD-0001.md")));
         Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "BUILD-0001.ref")));
+    }
+
+    [Fact]
+    public async Task BulkCreateTasksForTrackReturnsCreatedTasksAndPartialFailure()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var nextIds = new RecordingNextIdService(ids: [1], failWhenIdsExhausted: true);
+        var tools = CreateTools(projectRoot, nextIds);
+
+        var result = await tools.BulkCreateTasksForTrack("PM",
+        [
+            new BulkTaskInputPayload("First", "Body"),
+            new BulkTaskInputPayload("Second"),
+        ]);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.Data!.RequestedCount);
+        Assert.Equal(1, result.Data.CreatedCount);
+        var created = Assert.Single(result.Data.Tasks);
+        Assert.Equal("PM-0001", created.Id);
+        Assert.Equal("Body", TaskItem.Parse(File.ReadAllText(created.FilePath))!.Description);
+        Assert.Equal("next_id_unavailable", result.Data.Failure!.ErrorCode);
+    }
+
+    [Fact]
+    public async Task BulkAssignTasksToMilestoneReturnsUpdatedTaskPayload()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var task = TestData.Task("PM-0001", "Existing");
+        projectRoot.WriteTask(task);
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.BulkAssignTasksToMilestone("m1", ["PM-0001"]);
+
+        Assert.True(result.Success);
+        Assert.Equal("m1", result.Data!.Milestone);
+        Assert.Equal(["PM-0001"], result.Data.TaskIds);
+        Assert.Equal([projectRoot.GetTaskFilePath("PM-0001")], result.Data.FilePaths);
+        Assert.Equal(1, result.Data.UpdatedCount);
+        Assert.Equal("m1", TaskItem.Parse(File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")))!.Milestone);
     }
 
     [Fact]
@@ -182,6 +249,50 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task StatusToolsAddRenameRemoveAndReturnStableFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Todo task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var tools = CreateTools(projectRoot);
+
+        Assert.True(tools.AddStatus("blocked", "Blocked").Success);
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "blocked")) ||
+                    Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
+        Assert.Equal("duplicate_status", tools.AddStatus("blocked", "Duplicate").ErrorCode);
+        Assert.True(tools.RenameStatus("todo", "Ready").Success);
+        Assert.Equal("status_in_use", tools.RemoveStatus("todo").ErrorCode);
+        Assert.True(tools.RemoveStatus("blocked").Success);
+        Assert.Equal("missing_status", tools.RemoveStatus("missing").ErrorCode);
+
+        var project = tools.GetProject();
+        Assert.Contains(project.Data!.States, state => state.Key == "todo" && state.Name == "Ready");
+        Assert.DoesNotContain(project.Data.States, state => state.Key == "blocked");
+    }
+
+    [Fact]
+    public async Task RenameTrackAndMilestoneToolsWorkWhileReferenced()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        projectRoot.WriteTask(TestData.Task("BUILD-0001", "Build task", track: "BUILD", milestone: "m1"));
+        var tools = CreateTools(projectRoot);
+
+        Assert.True(tools.RenameTrack("BUILD", "Build Work").Success);
+        Assert.True(tools.RenameMilestone("m1", "Launch").Success);
+        Assert.Equal("missing_track", tools.RenameTrack("missing", "Missing").ErrorCode);
+        Assert.Equal("missing_milestone", tools.RenameMilestone("missing", "Missing").ErrorCode);
+
+        var project = tools.GetProject();
+        Assert.Contains(project.Data!.Tracks, track => track.Key == "BUILD" && track.Name == "Build Work");
+        Assert.Contains(project.Data.Milestones, milestone => milestone.Key == "m1" && milestone.Name == "Launch");
+    }
+
+    [Fact]
     public async Task RemoveTrackAndMilestoneRejectReferencedItemsAndRemoveUnusedItems()
     {
         using var workspace = new TempWorkingDirectory();
@@ -226,18 +337,32 @@ public class McpToolTests
         return new PmMcpTools(
             projectRoot,
             new TaskService(projectRoot, nextIdService),
+            new ProjectCreationService(projectRoot, nextIdService),
             new ProjectConfigService(projectRoot),
             new BoardService(projectRoot));
     }
 
-    private sealed class RecordingNextIdService : INextIdService
+    private sealed class RecordingNextIdService(
+        bool healthy = true,
+        IReadOnlyList<int>? ids = null,
+        bool failWhenIdsExhausted = false) : INextIdService
     {
         public List<string> GetNextIdTracks { get; } = [];
+        private int _idIndex;
 
         public Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
         {
             GetNextIdTracks.Add(track);
-            return Task.FromResult(1);
+            if (ids == null)
+                return Task.FromResult(1);
+
+            if (_idIndex < ids.Count)
+                return Task.FromResult(ids[_idIndex++]);
+
+            if (failWhenIdsExhausted)
+                throw new InvalidOperationException("No more IDs.");
+
+            return Task.FromResult(ids[^1] + 1);
         }
 
         public Task<int> PeekNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
@@ -253,7 +378,7 @@ public class McpToolTests
 
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(true);
+            return Task.FromResult(healthy);
         }
     }
 }
