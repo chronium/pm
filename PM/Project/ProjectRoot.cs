@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using PM.Files;
 using PM.Tasks;
+using PM.Wiki;
 
 namespace PM.Project;
 
@@ -13,6 +14,7 @@ public interface IProjectRoot
 
     string TasksPath { get; }
     string StatesPath { get; }
+    string WikiPath { get; }
 }
 
 public class ProjectRoot : IProjectRoot
@@ -28,6 +30,7 @@ public class ProjectRoot : IProjectRoot
 
     public string TasksPath => Path.Combine(RootPath!, GlobalConfig.TasksDirName);
     public string StatesPath => Path.Combine(RootPath!, GlobalConfig.StatesDirName);
+    public string WikiPath => Path.Combine(RootPath!, GlobalConfig.WikiDirName);
 
     public bool Exists { get; private set; }
     public string RootPath { get; private set; }
@@ -69,6 +72,7 @@ public class ProjectRoot : IProjectRoot
 
         FileSystem.CreateDirectory(TasksPath);
         FileSystem.CreateDirectory(StatesPath);
+        FileSystem.CreateDirectory(WikiPath);
 
         WriteStatesDirectories();
     }
@@ -211,6 +215,105 @@ public class ProjectRoot : IProjectRoot
     public string GetTaskFilePath(string id)
     {
         return GetTaskPath(id);
+    }
+
+    public bool TryResolveWikiPath(string pagePath, [MaybeNullWhen(false)] out string normalizedPath,
+        [MaybeNullWhen(false)] out string filePath)
+    {
+        normalizedPath = null;
+        filePath = null;
+
+        if (string.IsNullOrWhiteSpace(pagePath) || RootPath == null) return false;
+
+        var trimmed = pagePath.Trim();
+        if (Path.IsPathRooted(trimmed) || trimmed.Contains('\\')) return false;
+
+        var segments = trimmed.Split('/');
+        if (segments.Length == 0 || segments.Any(segment =>
+                string.IsNullOrWhiteSpace(segment) ||
+                segment is "." or ".." ||
+                segment.Contains(Path.DirectorySeparatorChar) ||
+                segment.Contains(Path.AltDirectorySeparatorChar)))
+            return false;
+
+        var last = segments[^1];
+        var extension = Path.GetExtension(last);
+        if (!string.IsNullOrEmpty(extension))
+        {
+            if (!string.Equals(extension, $".{GlobalConfig.DefaultTaskExtension}", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            last = Path.GetFileNameWithoutExtension(last);
+            if (string.IsNullOrWhiteSpace(last) || last is "." or "..") return false;
+            segments[^1] = last;
+        }
+
+        normalizedPath = string.Join('/', segments);
+        var candidate = Path.GetFullPath(Path.Combine(WikiPath,
+            Path.Combine(segments) + $".{GlobalConfig.DefaultTaskExtension}"));
+        var wikiRoot = Path.GetFullPath(WikiPath);
+        var wikiRootWithSeparator = wikiRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? wikiRoot
+            : wikiRoot + Path.DirectorySeparatorChar;
+
+        if (!candidate.StartsWith(wikiRootWithSeparator, StringComparison.Ordinal))
+            return false;
+
+        filePath = candidate;
+        return true;
+    }
+
+    public bool TryReadWikiFile(string pagePath, [MaybeNullWhen(false)] out string normalizedPath,
+        [MaybeNullWhen(false)] out string filePath, [MaybeNullWhen(false)] out string content)
+    {
+        content = null;
+        if (!TryResolveWikiPath(pagePath, out normalizedPath, out filePath)) return false;
+        if (!FileSystem.FileExists(filePath)) return false;
+
+        content = FileSystem.ReadAllText(filePath);
+        return true;
+    }
+
+    public void WriteWikiPage(WikiPage page)
+    {
+        if (!TryResolveWikiPath(page.Path, out _, out var filePath))
+            throw new ArgumentException("Invalid wiki path.", nameof(page));
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (directory != null)
+            FileSystem.CreateDirectory(directory);
+
+        FileSystem.WriteAllText(filePath, page.ToMarkdown());
+    }
+
+    public void WriteWikiFile(string pagePath, string content)
+    {
+        if (!TryResolveWikiPath(pagePath, out _, out var filePath))
+            throw new ArgumentException("Invalid wiki path.", nameof(pagePath));
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (directory != null)
+            FileSystem.CreateDirectory(directory);
+
+        FileSystem.WriteAllText(filePath, content);
+    }
+
+    public IReadOnlyList<(string Path, string FilePath, string Content)> GetWikiMarkdownFiles()
+    {
+        if (!FileSystem.DirectoryExists(WikiPath)) return [];
+
+        return Directory
+            .EnumerateFiles(WikiPath, $"*.{GlobalConfig.DefaultTaskExtension}", SearchOption.AllDirectories)
+            .Select(file =>
+            {
+                var relative = Path.GetRelativePath(WikiPath, file);
+                var pagePath = Path.ChangeExtension(relative, null)
+                    .Replace(Path.DirectorySeparatorChar, '/')
+                    .Replace(Path.AltDirectorySeparatorChar, '/');
+                return (pagePath, file, FileSystem.ReadAllText(file));
+            })
+            .OrderBy(page => page.pagePath, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static string ResolveRef(FileInfo refFile)

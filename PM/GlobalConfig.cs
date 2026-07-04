@@ -9,6 +9,7 @@ public static class GlobalConfig
 
     public static string TasksDirName = "tasks";
     public static string StatesDirName = "states";
+    public static string WikiDirName = "wiki";
 
     public static bool DryRun = false;
 

@@ -34,6 +34,7 @@ serviceProvider.AddSingleton<TaskService>();
 serviceProvider.AddSingleton<ProjectCreationService>();
 serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<BoardService>();
+serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<IEditorService, EditorService>();
 serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([
     new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),

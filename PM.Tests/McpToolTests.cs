@@ -269,6 +269,51 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task WikiToolsCreateReadListAndUpdatePages()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot);
+
+        var created = tools.CreateWikiPage("architecture/rendering", "Rendering", "# Rendering");
+        var list = tools.ListWikiPages();
+        var read = tools.GetWikiPage("architecture/rendering");
+        var updatedMarkdown = read.Data!.Markdown.Replace("title: Rendering", "title: Render Pipeline")
+            .Replace("# Rendering", "# Updated");
+        var updated = tools.UpdateWikiPageMarkdown("architecture/rendering", updatedMarkdown);
+
+        Assert.True(created.Success);
+        Assert.Equal("architecture/rendering", created.Data!.Path);
+        Assert.Equal(projectRoot.TryResolveWikiPath("architecture/rendering", out _, out var filePath) ? filePath : "",
+            created.Data.FilePath);
+        var page = Assert.Single(list.Data!.Pages);
+        Assert.Equal("architecture/rendering", page.Path);
+        Assert.Equal("Rendering", read.Data.Title);
+        Assert.Equal("# Rendering", read.Data.Body);
+        Assert.True(updated.Success);
+        Assert.Equal("Render Pipeline", updated.Data!.Title);
+        Assert.Equal("# Updated", updated.Data.Body);
+    }
+
+    [Fact]
+    public async Task WikiToolsReturnStableFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var missingTools = CreateTools(new ProjectRoot());
+
+        Assert.Equal("missing_project", missingTools.ListWikiPages().ErrorCode);
+
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot);
+
+        Assert.Equal("invalid_wiki_path", tools.CreateWikiPage("../escape", "Escape").ErrorCode);
+        Assert.Equal("missing_wiki_page", tools.GetWikiPage("missing").ErrorCode);
+        Assert.True(tools.CreateWikiPage("notes", "Notes").Success);
+        Assert.Equal("duplicate_wiki_page", tools.CreateWikiPage("notes", "Duplicate").ErrorCode);
+        Assert.Equal("invalid_wiki_markdown", tools.UpdateWikiPageMarkdown("notes", "not markdown").ErrorCode);
+    }
+
+    [Fact]
     public async Task AddTrackAndMilestoneReturnDuplicateAndInvalidErrors()
     {
         using var workspace = new TempWorkingDirectory();
@@ -376,7 +421,8 @@ public class McpToolTests
             new TaskService(projectRoot, nextIdService),
             new ProjectCreationService(projectRoot, nextIdService),
             new ProjectConfigService(projectRoot),
-            new BoardService(projectRoot));
+            new BoardService(projectRoot),
+            new WikiService(projectRoot));
     }
 
     private sealed class RecordingNextIdService(

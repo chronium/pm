@@ -11,7 +11,8 @@ public sealed class PmMcpTools(
     TaskService taskService,
     ProjectCreationService projectCreationService,
     ProjectConfigService configService,
-    BoardService boardService)
+    BoardService boardService,
+    WikiService wikiService)
 {
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -268,6 +269,59 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "list_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Lists wiki pages with path, title, modified timestamp, and file path.")]
+    public McpToolResponse<WikiPageListPayload> ListWikiPages()
+    {
+        var result = wikiService.ListPages();
+        if (!result.Success)
+            return McpToolResponse<WikiPageListPayload>.FromFailure(result);
+
+        var pages = result.Payload!
+            .Select(page => new WikiPageSummaryPayload(page.Path, page.Title, page.ModifiedAt, page.FilePath))
+            .ToList();
+
+        return McpToolResponse<WikiPageListPayload>.Ok($"Returned {pages.Count} wiki page(s).",
+            new WikiPageListPayload(pages));
+    }
+
+    [McpServerTool(Name = "get_wiki_page", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns a wiki page's metadata, file path, full markdown, and markdown body.")]
+    public McpToolResponse<WikiPagePayload> GetWikiPage(string path)
+    {
+        var result = wikiService.ReadPage(path);
+        return result.Success
+            ? McpToolResponse<WikiPagePayload>.Ok($"Wiki page {result.Payload!.Path} loaded.",
+                ToWikiPagePayload(result.Payload))
+            : McpToolResponse<WikiPagePayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "create_wiki_page", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Creates a wiki page from a slash-separated path, title, and markdown body.")]
+    public McpToolResponse<WikiPagePayload> CreateWikiPage(string path, string title, string body = "")
+    {
+        var result = wikiService.CreatePage(path, title, body);
+        return result.Success
+            ? McpToolResponse<WikiPagePayload>.Ok($"Created wiki page {result.Payload!.Path}.",
+                ToWikiPagePayload(result.Payload))
+            : McpToolResponse<WikiPagePayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "update_wiki_page_markdown", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Replaces a wiki markdown file after validating frontmatter.")]
+    public McpToolResponse<WikiPagePayload> UpdateWikiPageMarkdown(string path, string markdown)
+    {
+        var result = wikiService.UpdatePageMarkdown(path, markdown);
+        return result.Success
+            ? McpToolResponse<WikiPagePayload>.Ok($"Updated wiki page {result.Payload!.Path}.",
+                ToWikiPagePayload(result.Payload))
+            : McpToolResponse<WikiPagePayload>.FromFailure(result);
+    }
+
     [McpServerTool(Name = "add_track", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
     [Description("Adds a new track.")]
     public McpToolResponse<MutatedPayload> AddTrack(string key, string displayName)
@@ -376,6 +430,18 @@ public sealed class PmMcpTools(
             task.State,
             task.DescriptionPreview,
             task.FilePath);
+    }
+
+    private static WikiPagePayload ToWikiPagePayload(WikiPageData page)
+    {
+        return new WikiPagePayload(
+            page.Path,
+            page.Title,
+            page.CreatedAt,
+            page.ModifiedAt,
+            page.FilePath,
+            page.Markdown,
+            page.Body);
     }
 
     private static string? NormalizeFilter(string? value)

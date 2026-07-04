@@ -1,5 +1,6 @@
 using PM.Project;
 using PM.Tasks;
+using PM.Wiki;
 
 namespace PM.Tests;
 
@@ -150,5 +151,85 @@ public class ProjectRootStorageTests
         var tasks = projectRoot.GetAllTasks();
 
         Assert.Equal(["PM-0001", "PM-0002"], tasks.Select(task => task.Id).Order());
+    }
+
+    [Fact]
+    public async Task ProjectCreationCreatesWikiDirectory()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+
+        Assert.True(Directory.Exists(projectRoot.WikiPath));
+    }
+
+    [Fact]
+    public void WikiPageParsesAndSerializesFrontmatterMarkdown()
+    {
+        var page = WikiPage.Parse("architecture/rendering", """
+                                                           ---
+                                                           title: Rendering
+                                                           createdAt: 2026-01-01T00:00:00.0000000Z
+                                                           modifiedAt: 2026-01-02T00:00:00.0000000Z
+                                                           ---
+
+                                                           # Rendering
+
+                                                           Keep markdown.
+                                                           """);
+
+        Assert.NotNull(page);
+        Assert.Equal("architecture/rendering", page.Path);
+        Assert.Equal("Rendering", page.Title);
+        Assert.Equal("# Rendering\n\nKeep markdown.", page.Body);
+
+        var markdown = page.ToMarkdown();
+        Assert.StartsWith("---\n", markdown);
+        Assert.Contains("title: Rendering", markdown);
+        Assert.Contains("createdAt: 2026-01-01T00:00:00.0000000Z", markdown);
+        Assert.EndsWith("# Rendering\n\nKeep markdown.", markdown);
+    }
+
+    [Fact]
+    public void WikiPageRejectsInvalidFrontmatter()
+    {
+        Assert.Null(WikiPage.Parse("bad", "not markdown"));
+        Assert.Null(WikiPage.Parse("bad", """
+                                          ---
+                                          createdAt: 2026-01-01T00:00:00.0000000Z
+                                          modifiedAt: 2026-01-01T00:00:00.0000000Z
+                                          ---
+                                          """));
+        Assert.Null(WikiPage.Parse("bad", """
+                                          ---
+                                          title: " "
+                                          createdAt: 2026-01-01T00:00:00.0000000Z
+                                          modifiedAt: 2026-01-01T00:00:00.0000000Z
+                                          ---
+                                          """));
+        Assert.Null(WikiPage.Parse("bad", """
+                                          ---
+                                          title: Missing dates
+                                          ---
+                                          """));
+    }
+
+    [Fact]
+    public async Task WikiPathResolutionRejectsUnsafePaths()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+
+        Assert.True(projectRoot.TryResolveWikiPath("architecture/rendering", out var normalized, out var filePath));
+        Assert.Equal("architecture/rendering", normalized);
+        Assert.Equal(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md"), filePath);
+
+        Assert.True(projectRoot.TryResolveWikiPath("architecture/rendering.md", out normalized, out _));
+        Assert.Equal("architecture/rendering", normalized);
+
+        Assert.False(projectRoot.TryResolveWikiPath("../escape", out _, out _));
+        Assert.False(projectRoot.TryResolveWikiPath("architecture//rendering", out _, out _));
+        Assert.False(projectRoot.TryResolveWikiPath("/absolute", out _, out _));
+        Assert.False(projectRoot.TryResolveWikiPath("architecture\\rendering", out _, out _));
+        Assert.False(projectRoot.TryResolveWikiPath("architecture/rendering.txt", out _, out _));
     }
 }

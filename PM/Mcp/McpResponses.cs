@@ -81,3 +81,20 @@ public sealed record BulkMilestoneAssignmentPayload(
     IReadOnlyList<string> FilePaths,
     int RequestedCount,
     int UpdatedCount);
+
+public sealed record WikiPageListPayload(IReadOnlyList<WikiPageSummaryPayload> Pages);
+
+public sealed record WikiPageSummaryPayload(
+    string Path,
+    string Title,
+    DateTime ModifiedAt,
+    string FilePath);
+
+public sealed record WikiPagePayload(
+    string Path,
+    string Title,
+    DateTime CreatedAt,
+    DateTime ModifiedAt,
+    string FilePath,
+    string Markdown,
+    string Body);

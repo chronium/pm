@@ -556,6 +556,62 @@ public class ApplicationServiceTests
         Assert.Equal("review", Assert.Single(board.MilestoneGroups.Single().States).Key);
     }
 
+    [Fact]
+    public async Task WikiServiceCreatesReadsListsAndUpdatesNestedPages()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+
+        var created = service.CreatePage("architecture/rendering", "Rendering", "# Rendering");
+
+        Assert.True(created.Success);
+        Assert.Equal("architecture/rendering", created.Payload!.Path);
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+
+        var read = service.ReadPage("architecture/rendering");
+        Assert.True(read.Success);
+        Assert.Equal("# Rendering", read.Payload!.Body);
+        Assert.Contains("title: Rendering", read.Payload.Markdown);
+
+        service.CreatePage("getting-started", "Getting Started", "Start here");
+        var list = service.ListPages();
+        Assert.True(list.Success);
+        Assert.Equal(["architecture/rendering", "getting-started"], list.Payload!.Select(page => page.Path));
+
+        var oldModifiedAt = read.Payload.ModifiedAt;
+        var updatedMarkdown = read.Payload.Markdown.Replace("title: Rendering", "title: Render Pipeline")
+            .Replace("# Rendering", "# Updated");
+        var updated = service.UpdatePageMarkdown("architecture/rendering", updatedMarkdown);
+
+        Assert.True(updated.Success);
+        Assert.Equal("Render Pipeline", updated.Payload!.Title);
+        Assert.Equal("# Updated", updated.Payload.Body);
+        Assert.True(updated.Payload.ModifiedAt > oldModifiedAt);
+    }
+
+    [Fact]
+    public async Task WikiServiceReturnsStableFailuresAndDoesNotEscapeWikiRoot()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var missingProject = new WikiService(new ProjectRoot());
+        Assert.Equal("missing_project", missingProject.ListPages().ErrorCode);
+
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+
+        Assert.Equal("invalid_wiki_path", service.CreatePage("../escape", "Escape", "").ErrorCode);
+        Assert.Equal("invalid_wiki_path", service.CreatePage("notes.txt", "Notes", "").ErrorCode);
+        Assert.False(File.Exists(Path.Combine(projectRoot.RootPath, "escape.md")));
+
+        Assert.Equal("missing_wiki_page", service.ReadPage("missing").ErrorCode);
+        Assert.Equal("missing_wiki_page", service.UpdatePageMarkdown("missing", "bad").ErrorCode);
+
+        Assert.True(service.CreatePage("notes", "Notes", "").Success);
+        Assert.Equal("duplicate_wiki_page", service.CreatePage("notes", "Duplicate", "").ErrorCode);
+        Assert.Equal("invalid_wiki_markdown", service.UpdatePageMarkdown("notes", "not markdown").ErrorCode);
+    }
+
     private sealed class RecordingNextIdService(
         bool healthy = true,
         IReadOnlyList<int>? ids = null,
