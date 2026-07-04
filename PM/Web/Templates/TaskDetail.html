@@ -1,4 +1,7 @@
 <article class="detail">
+  <form method="dialog" class="dialog-close">
+    <button type="submit" aria-label="Close">x</button>
+  </form>
   <h2>{{title}}</h2>
   <div class="meta">
     <span>{{taskId}}</span>
@@ -8,4 +11,19 @@
   </div>
   <p class="path">{{filePath}}</p>
   <div class="description">{{description}}</div>
+  <form class="state-form" hx-post="/task/{{taskIdUrl}}/state" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters, closest form">
+    <label>State<select name="targetState">
+{{stateOptions}}
+    </select></label>
+    <button type="submit">Move</button>
+  </form>
+  <div class="remove-area">
+    <button type="button" class="danger" data-confirm-remove>Remove</button>
+    <div id="remove-confirmation" class="remove-confirmation" hidden>
+      <p>This permanently removes the task file and state reference.</p>
+      <form hx-post="/task/{{taskIdUrl}}/remove" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">
+        <button type="submit" class="danger">Confirm remove</button>
+      </form>
+    </div>
+  </div>
 </article>

@@ -12,7 +12,7 @@ using Spectre.Console.Cli;
 
 namespace PM.Web;
 
-public class WebCommand(ProjectRoot projectRoot, BoardService boardService) : AsyncCommand<WebCommand.Settings>
+public class WebCommand(ProjectRoot projectRoot, BoardService boardService, TaskService taskService) : AsyncCommand<WebCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
@@ -30,7 +30,7 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService) : As
         builder.WebHost.UseUrls(url);
 
         var app = builder.Build();
-        MapEndpoints(app, boardService);
+        MapEndpoints(app, boardService, taskService);
 
         await app.StartAsync(cancellationToken);
         AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
@@ -50,7 +50,7 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService) : As
         return 0;
     }
 
-    public static void MapEndpoints(IEndpointRouteBuilder endpoints, BoardService boardService)
+    public static void MapEndpoints(IEndpointRouteBuilder endpoints, BoardService boardService, TaskService taskService)
     {
         endpoints.MapGet("/favicon.ico", () => Results.NoContent());
 
@@ -71,14 +71,46 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService) : As
             var result = boardService.GetBoard(new BoardQuery());
             if (!result.Success) return Results.NotFound("Task not found.");
 
-            var task = result.Payload!.MilestoneGroups
-                .SelectMany(milestone => milestone.States)
-                .SelectMany(state => state.Tasks)
-                .FirstOrDefault(task => task.Task.Id == id);
+            var board = result.Payload!;
+            var task = FindTask(board, id);
 
             return task == null
                 ? Results.NotFound("Task not found.")
-                : Results.Content(BoardHtmlRenderer.RenderTaskDetail(task), "text/html; charset=utf-8");
+                : Results.Content(BoardHtmlRenderer.RenderTaskDetail(task, board.States), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/task/{id}/state", async (string id, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            var targetState = form["targetState"].ToString();
+            var mutation = taskService.MoveTask(id, targetState);
+            if (!mutation.Success)
+                return Results.Content(BoardHtmlRenderer.RenderDialogError(mutation.Message ?? "Task update failed."),
+                    "text/html; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+
+            var filteredBoard = CreateBoard(boardService, form);
+            var taskBoard = boardService.GetBoard(new BoardQuery());
+            if (!taskBoard.Success)
+                return Results.Content(BoardHtmlRenderer.RenderDialogError(taskBoard.Message ?? "Task not found."),
+                    "text/html; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+
+            var task = FindTask(taskBoard.Payload!, id);
+            return task == null
+                ? Results.Content(BoardHtmlRenderer.RenderDialogError("Task not found."), "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest)
+                : Results.Content(BoardHtmlRenderer.RenderTaskUpdate(filteredBoard, task), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/task/{id}/remove", async (string id, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            var mutation = taskService.RemoveTask(id);
+            if (!mutation.Success)
+                return Results.Content(BoardHtmlRenderer.RenderDialogError(mutation.Message ?? "Task removal failed."),
+                    "text/html; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+
+            var board = CreateBoard(boardService, form);
+            return Results.Content(BoardHtmlRenderer.RenderTaskRemoval(board), "text/html; charset=utf-8");
         });
     }
 
@@ -95,9 +127,36 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService) : As
         return result.Payload!;
     }
 
+    private static BoardData CreateBoard(BoardService boardService, IFormCollection form)
+    {
+        var query = new BoardQuery(
+            ReadFormValue(form, "track"),
+            ReadFormValue(form, "milestone"),
+            ReadFormValue(form, "state"));
+
+        var result = boardService.GetBoard(query);
+        if (!result.Success) throw new InvalidOperationException(result.Message);
+
+        return result.Payload!;
+    }
+
+    private static BoardTask? FindTask(BoardData board, string id)
+    {
+        return board.MilestoneGroups
+            .SelectMany(milestone => milestone.States)
+            .SelectMany(state => state.Tasks)
+            .FirstOrDefault(task => task.Task.Id == id);
+    }
+
     private static string? ReadQueryValue(HttpRequest request, string key)
     {
         var value = request.Query[key].ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string? ReadFormValue(IFormCollection form, string key)
+    {
+        var value = form[key].ToString();
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 

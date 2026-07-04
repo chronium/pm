@@ -8,6 +8,21 @@
   <style>
 {{styles}}
   </style>
+  <script>
+    document.addEventListener('htmx:afterSwap', (event) => {
+      if (event.detail.target.id === 'task-dialog' &&
+          event.detail.target.innerHTML.trim() &&
+          !event.detail.target.querySelector('[data-close-dialog]')) {
+        event.detail.target.showModal();
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (event.target.matches('[data-confirm-remove]')) {
+        document.getElementById('remove-confirmation')?.removeAttribute('hidden');
+      }
+    });
+  </script>
 </head>
 <body>
   <header>
@@ -18,7 +33,7 @@
     <section id="board" aria-live="polite">
 {{board}}
     </section>
-    <section id="task-detail" aria-live="polite"></section>
+    <dialog id="task-dialog" aria-live="polite" aria-label="Task detail" onclose="this.innerHTML = ''" oncancel="this.close()"></dialog>
   </main>
 </body>
 </html>

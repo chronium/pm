@@ -23,20 +23,49 @@ public static class BoardHtmlRenderer
             .Replace("{{milestones}}", milestones, StringComparison.Ordinal);
     }
 
-    public static string RenderTaskDetail(BoardTask task)
+    public static string RenderTaskDetail(BoardTask task, IReadOnlyList<BoardOption> states)
     {
         var description = string.IsNullOrWhiteSpace(task.Task.Description)
             ? "No description."
             : task.Task.Description;
+        var stateOptions = states.Select(state => Template("TaskStateOption.html")
+            .Replace("{{key}}", H(state.Key), StringComparison.Ordinal)
+            .Replace("{{name}}", H(state.Name), StringComparison.Ordinal)
+            .Replace("{{selected}}", state.Key == task.State ? " selected" : string.Empty, StringComparison.Ordinal));
 
         return Template("TaskDetail.html")
             .Replace("{{title}}", H(task.Task.Title), StringComparison.Ordinal)
             .Replace("{{taskId}}", H(task.Task.Id), StringComparison.Ordinal)
+            .Replace("{{taskIdUrl}}", Url(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{track}}", H(task.Track), StringComparison.Ordinal)
             .Replace("{{state}}", H(task.State), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(task.Task.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{filePath}}", H(task.FilePath), StringComparison.Ordinal)
-            .Replace("{{description}}", H(description), StringComparison.Ordinal);
+            .Replace("{{description}}", H(description), StringComparison.Ordinal)
+            .Replace("{{stateOptions}}", string.Join(Environment.NewLine, stateOptions), StringComparison.Ordinal);
+    }
+
+    public static string RenderDialogError(string message)
+    {
+        return Template("DialogError.html")
+            .Replace("{{title}}", "Unable to update task", StringComparison.Ordinal)
+            .Replace("{{message}}", H(message), StringComparison.Ordinal);
+    }
+
+    public static string RenderTaskUpdate(BoardData board, BoardTask task)
+    {
+        return RenderTaskDetail(task, board.States) + Environment.NewLine + RenderBoardOutOfBand(board);
+    }
+
+    public static string RenderTaskRemoval(BoardData board)
+    {
+        return RenderBoardOutOfBand(board) + Environment.NewLine +
+               "<div data-close-dialog></div><script>document.getElementById('task-dialog')?.close();</script>";
+    }
+
+    public static string RenderBoardOutOfBand(BoardData board)
+    {
+        return $"""<section id="board" hx-swap-oob="innerHTML">{RenderBoard(board)}</section>""";
     }
 
     private static string RenderMilestone(BoardMilestoneGroup milestone)

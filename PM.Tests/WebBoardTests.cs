@@ -1,5 +1,6 @@
 using PM.Application;
 using PM.Project;
+using PM.Tasks;
 using PM.Web;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -14,7 +15,8 @@ public class WebBoardTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
-        var command = new WebCommand(projectRoot, new BoardService(projectRoot));
+        var command = new WebCommand(projectRoot, new BoardService(projectRoot),
+            new TaskService(projectRoot, new RecordingNextIdService()));
 
         var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings());
 
@@ -103,6 +105,54 @@ public class WebBoardTests
         Assert.Contains("Heading", html);
         Assert.Contains("hx-get=\"/board\"", html);
         Assert.Contains("hx-get=\"/task/PM-0001\"", html);
+        Assert.Contains("dialog id=\"task-dialog\"", html);
+        Assert.Contains("hx-target=\"#task-dialog\"", html);
+        Assert.DoesNotContain("task-detail", html);
+    }
+
+    [Fact]
+    public async Task TaskDetailContainsStateAndRemoveControlsWithEscapedFields()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Render <task>", "Description <body>");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var html = BoardHtmlRenderer.RenderTaskDetail(boardTask, board.States);
+
+        Assert.Contains("Render &lt;task&gt;", html);
+        Assert.Contains("Description &lt;body&gt;", html);
+        Assert.Contains("PM-0001", html);
+        Assert.Contains("hx-post=\"/task/PM-0001/state\"", html);
+        Assert.Contains("name=\"targetState\"", html);
+        Assert.Contains("<option value=\"todo\" selected>", html);
+        Assert.Contains("hx-post=\"/task/PM-0001/remove\"", html);
+        Assert.Contains("data-confirm-remove", html);
+        Assert.Contains("remove-confirmation[hidden] { display: none; }", BoardHtmlRenderer.RenderPage(board));
+        Assert.Contains(projectRoot.GetTaskFilePath("PM-0001"), html);
+    }
+
+    [Fact]
+    public async Task TaskMutationHtmlEscapesTaskFields()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project <track>" }));
+        var task = TestData.Task("PM-0001", "Title <script>", "Body & notes", track: "PM");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
+
+        Assert.Contains("Title &lt;script&gt;", html);
+        Assert.Contains("Body &amp; notes", html);
+        Assert.Contains(">PM<", html);
+        Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
     }
 
     [Fact]
@@ -123,6 +173,81 @@ public class WebBoardTests
 
         Assert.Contains("Matching task", html);
         Assert.DoesNotContain("Other task", html);
+    }
+
+    [Fact]
+    public async Task MovingTaskUpdatesStateRefsAndRendersUpdatedFragments()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Move me");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var taskService = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = taskService.MoveTask("PM-0001", "review");
+
+        Assert.True(result.Success);
+        Assert.True(projectRoot.TryGetById("PM-0001", out var moved));
+        Assert.True(projectRoot.TryGetState(moved, out var state));
+        Assert.Equal("review", state);
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery(State: "review")).Payload!;
+        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
+
+        Assert.Contains("Move me", html);
+        Assert.Contains("<option value=\"review\" selected>", html);
+        Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
+    }
+
+    [Fact]
+    public async Task RemovingTaskDeletesFilesAndRendersCloseDialogFragment()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Remove me");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var taskService = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = taskService.RemoveTask("PM-0001");
+
+        Assert.True(result.Success);
+        Assert.False(File.Exists(projectRoot.GetTaskFilePath("PM-0001")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var html = BoardHtmlRenderer.RenderTaskRemoval(board);
+
+        Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
+        Assert.Contains("task-dialog", html);
+        Assert.Contains("close()", html);
+    }
+
+    [Fact]
+    public async Task InvalidStateAndMissingTaskReturnErrorsWithoutMutatingFiles()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Stay put");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var taskService = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var invalidState = taskService.MoveTask("PM-0001", "missing");
+        var missingTask = taskService.MoveTask("PM-9999", "review");
+
+        Assert.False(invalidState.Success);
+        Assert.Equal("invalid_state", invalidState.ErrorCode);
+        Assert.False(missingTask.Success);
+        Assert.Equal("missing_task", missingTask.ErrorCode);
+        Assert.True(projectRoot.TryGetById("PM-0001", out var unchanged));
+        Assert.True(projectRoot.TryGetState(unchanged, out var state));
+        Assert.Equal("todo", state);
+
+        var errorHtml = BoardHtmlRenderer.RenderDialogError(invalidState.Message!);
+        Assert.Contains("State missing not found.", errorHtml);
     }
 
     private static async Task<(int ExitCode, string Output)> ExecuteWebCommand(
@@ -159,6 +284,30 @@ public class WebBoardTests
 
         public void SetEncoding(System.Text.Encoding encoding)
         {
+        }
+    }
+
+    private sealed class RecordingNextIdService : INextIdService
+    {
+        public Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(1);
+        }
+
+        public Task<int> PeekNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(1);
+        }
+
+        public Task<int?> PeekExistingNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<int?>(1);
+        }
+
+        public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(true);
         }
     }
 }
