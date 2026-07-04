@@ -30,6 +30,11 @@ public static class GlobalConfig
     public static string TaskAddCommandName => "add";
     public static string TaskEditCommandName => "edit";
     public static string TaskRemoveCommandName => "remove";
+    public static string WikiBranchName => "wiki";
+    public static string WikiListCommandName => "list";
+    public static string WikiShowCommandName => "show";
+    public static string WikiCreateCommandName => "create";
+    public static string WikiEditCommandName => "edit";
     public static string TrackBranchName => "track";
     public static string TrackAddCommandName => "add";
     public static string TrackRenameCommandName => "rename";

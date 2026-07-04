@@ -48,6 +48,25 @@ public sealed class WikiService(ProjectRoot projectRoot)
         return AppResult<WikiPageData>.Ok(ToData(page, filePath));
     }
 
+    public AppResult<WikiPageData> CreatePageMarkdown(string path, string markdown)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<WikiPageData>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (!projectRoot.TryResolveWikiPath(path, out var normalizedPath, out var filePath))
+            return AppResult<WikiPageData>.Fail("invalid_wiki_path", "Wiki page path is invalid.");
+
+        if (File.Exists(filePath))
+            return AppResult<WikiPageData>.Fail("duplicate_wiki_page", $"Wiki page {normalizedPath} already exists.");
+
+        var page = WikiPage.Parse(normalizedPath, markdown);
+        if (page == null)
+            return AppResult<WikiPageData>.Fail("invalid_wiki_markdown", "Edited wiki markdown is invalid.");
+
+        projectRoot.WriteWikiPage(page);
+        return AppResult<WikiPageData>.Ok(ToData(page, filePath));
+    }
+
     public AppResult<WikiPageData> ReadPage(string path)
     {
         if (!projectRoot.Exists)

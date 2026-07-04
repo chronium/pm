@@ -9,6 +9,7 @@ using PM.Mcp;
 using PM.Project;
 using PM.Tasks;
 using PM.Web;
+using PM.Wiki;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -88,6 +89,17 @@ app.Configure(config =>
             task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
             task.AddCommand<TaskEditCommand>(GlobalConfig.TaskEditCommandName);
             task.AddCommand<TaskRemoveCommand>(GlobalConfig.TaskRemoveCommandName);
+        });
+
+    config.AddBranch(GlobalConfig.WikiBranchName,
+        wiki =>
+        {
+            wiki.SetDescription("Manage wiki pages within a project");
+
+            wiki.AddCommand<WikiListCommand>(GlobalConfig.WikiListCommandName);
+            wiki.AddCommand<WikiShowCommand>(GlobalConfig.WikiShowCommandName);
+            wiki.AddCommand<WikiCreateCommand>(GlobalConfig.WikiCreateCommandName);
+            wiki.AddCommand<WikiEditCommand>(GlobalConfig.WikiEditCommandName);
         });
 
     config.AddCommand<MoveCommand>(GlobalConfig.MoveCommandName);

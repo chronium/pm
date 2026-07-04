@@ -3,6 +3,7 @@ using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using PM.Application;
 using PM.Project;
 using PM.Tasks;
+using PM.Wiki;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -515,6 +516,202 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task WikiListEmptyAndPopulatedOutput()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        var command = new WikiListCommand(service);
+
+        var (emptyExitCode, emptyOutput) = await CaptureConsole(() =>
+            command.Execute(null!, new WikiListCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, emptyExitCode);
+        Assert.Contains("No wiki pages.", emptyOutput);
+
+        service.CreatePage("architecture/rendering", "Rendering", "# Rendering");
+        service.CreatePage("getting-started", "Getting Started", "Start here");
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new WikiListCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("architecture/rendering", output);
+        Assert.Contains("Rendering", output);
+        Assert.Contains("getting-started", output);
+        Assert.Contains("Getting Started", output);
+    }
+
+    [Fact]
+    public async Task WikiListOutsideProjectReturnsOne()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var command = new WikiListCommand(new WikiService(new ProjectRoot()));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new WikiListCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Project not found", output);
+    }
+
+    [Fact]
+    public async Task WikiShowRendersPageAndRejectsMissingPage()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("architecture/rendering", "Rendering", "# Rendering\n\nDetails");
+        var command = new WikiShowCommand(service, CreateHighlighter());
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new WikiShowCommand.Settings { Path = "architecture/rendering" },
+                CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Rendering", output);
+        Assert.Contains("Path: architecture/rendering", output);
+        Assert.Contains("# Rendering", output);
+        Assert.Contains("Details", output);
+
+        var (missingExitCode, missingOutput) = await CaptureConsole(() =>
+            command.Execute(null!, new WikiShowCommand.Settings { Path = "missing" }, CancellationToken.None));
+
+        Assert.Equal(1, missingExitCode);
+        Assert.Contains("not found", missingOutput);
+    }
+
+    [Fact]
+    public async Task WikiCreateWritesPageWithRequiredTitleAndOptionalBody()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        var command = new WikiCreateCommand(service, new RecordingEditorService(), CreateHighlighter());
+
+        var exitCode = await command.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings
+            {
+                Path = "architecture/rendering",
+                Title = "Rendering",
+                Body = "# Rendering",
+            },
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        var content = File.ReadAllText(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md"));
+        Assert.Contains("title: Rendering", content);
+        Assert.EndsWith("---\n\n# Rendering", content);
+    }
+
+    [Fact]
+    public async Task WikiCreateEditWritesEditedFullMarkdown()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        var edited = new WikiPage
+        {
+            Path = "notes",
+            Title = "Edited Notes",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            Body = "# Edited",
+        };
+        var editor = new RecordingEditorService
+        {
+            EditAction = path => File.WriteAllText(path, edited.ToMarkdown()),
+        };
+        var command = new WikiCreateCommand(service, editor, CreateHighlighter());
+
+        var exitCode = await command.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings { Path = "notes", Title = "Draft", Edit = true },
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(1, editor.EditCalls);
+        var page = service.ReadPage("notes");
+        Assert.True(page.Success);
+        Assert.Equal("Edited Notes", page.Payload!.Title);
+        Assert.Equal("# Edited", page.Payload.Body);
+    }
+
+    [Fact]
+    public async Task WikiCreateRejectsMissingTitleDuplicateInvalidPathAndInvalidEditedMarkdown()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        var command = new WikiCreateCommand(service, new RecordingEditorService(), CreateHighlighter());
+
+        Assert.Equal(1, await command.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings { Path = "notes" }, CancellationToken.None));
+        Assert.Equal(1, await command.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings { Path = "../escape", Title = "Escape" }, CancellationToken.None));
+
+        Assert.Equal(0, await command.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings { Path = "notes", Title = "Notes" }, CancellationToken.None));
+        Assert.Equal(1, await command.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings { Path = "notes", Title = "Duplicate" }, CancellationToken.None));
+
+        var invalidEditor = new RecordingEditorService
+        {
+            EditAction = path => File.WriteAllText(path, "not frontmatter"),
+        };
+        var editCommand = new WikiCreateCommand(service, invalidEditor, CreateHighlighter());
+
+        Assert.Equal(1, await editCommand.ExecuteAsync(null!,
+            new WikiCreateCommand.Settings { Path = "bad-edit", Title = "Bad", Edit = true },
+            CancellationToken.None));
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "bad-edit.md")));
+    }
+
+    [Fact]
+    public async Task WikiEditUpdatesFullMarkdownAndRejectsInvalidMarkdown()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("architecture/rendering", "Rendering", "# Rendering");
+        var originalContent = File.ReadAllText(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md"));
+        var edited = new WikiPage
+        {
+            Path = "architecture/rendering",
+            Title = "Render Pipeline",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            Body = "# Updated",
+        };
+        var editor = new RecordingEditorService
+        {
+            EditAction = path => File.WriteAllText(path, edited.ToMarkdown()),
+        };
+        var command = new WikiEditCommand(service, editor, CreateHighlighter());
+
+        var exitCode = await command.ExecuteAsync(null!,
+            new WikiEditCommand.Settings { Path = "architecture/rendering" }, CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+        var page = service.ReadPage("architecture/rendering");
+        Assert.True(page.Success);
+        Assert.Equal("Render Pipeline", page.Payload!.Title);
+        Assert.Equal("# Updated", page.Payload.Body);
+
+        var invalidEditor = new RecordingEditorService
+        {
+            EditAction = path => File.WriteAllText(path, "not frontmatter"),
+        };
+        var invalidCommand = new WikiEditCommand(service, invalidEditor, CreateHighlighter());
+        var beforeInvalidEdit = File.ReadAllText(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md"));
+
+        Assert.Equal(1, await invalidCommand.ExecuteAsync(null!,
+            new WikiEditCommand.Settings { Path = "architecture/rendering" }, CancellationToken.None));
+        Assert.Equal(beforeInvalidEdit, File.ReadAllText(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+        Assert.NotEqual(originalContent, beforeInvalidEdit);
+    }
+
+    [Fact]
     public async Task TaskRemoveDeletesTaskAndRejectsMissingTask()
     {
         using var workspace = new TempWorkingDirectory();
@@ -695,6 +892,16 @@ public class CommandBehaviorTests
         ListCommand command,
         ListCommand.Settings settings)
     {
+        return await CaptureConsole(() => command.ExecuteAsync(null!, settings, CancellationToken.None));
+    }
+
+    private static async Task<(int ExitCode, string Output)> CaptureConsole(Func<int> execute)
+    {
+        return await CaptureConsole(() => Task.FromResult(execute()));
+    }
+
+    private static async Task<(int ExitCode, string Output)> CaptureConsole(Func<Task<int>> execute)
+    {
         var originalConsole = AnsiConsole.Console;
         using var writer = new StringWriter();
         AnsiConsole.Console = AnsiConsole.Create(new AnsiConsoleSettings
@@ -707,7 +914,7 @@ public class CommandBehaviorTests
 
         try
         {
-            var exitCode = await command.ExecuteAsync(null!, settings, CancellationToken.None);
+            var exitCode = await execute();
             return (exitCode, writer.ToString());
         }
         finally
