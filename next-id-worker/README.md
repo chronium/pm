@@ -17,9 +17,9 @@ Unknown project keys return `401`. Unknown routes return `404`.
 
 ## Trust Model
 
-This is a personal public utility, not a public SaaS API. It has no user authentication and no admin API in this slice. The project key returned by `POST /projects` is the authorization secret for that project, and PM stores it at `.dev-pm/next_id.txt`.
+This is a personal public utility, not a public SaaS API. It has no user authentication and no admin API in this slice. The project key returned by `POST /projects` authorizes ID allocation for that project, and PM stores it at `.dev-pm/next_id.txt`.
 
-Treat `.dev-pm/next_id.txt` as a secret. Anyone who can read it can allocate or peek IDs for that PM project. The Worker stores only a SHA-512 hash of the key, and error handling must avoid logging project keys or request paths.
+For ordinary PM projects, treat `.dev-pm/next_id.txt` as a secret. Anyone who can read it can allocate or peek IDs for that PM project. This repository intentionally publishes its own `.dev-pm/next_id.txt`; do not copy that policy to other projects without reviewing the impact. The Worker stores only a SHA-512 hash of the key, and error handling must avoid logging project keys or request paths.
 
 Abuse controls such as rate limiting, key rotation, admin secrets, and monitoring are intentionally deferred.
 
