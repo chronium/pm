@@ -11,15 +11,21 @@ public static class BoardHtmlRenderer
         return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{filters}}", RenderFilters(board), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board), StringComparison.Ordinal)
             .Replace("{{board}}", RenderBoard(board), StringComparison.Ordinal);
     }
 
     public static string RenderBoard(BoardData board)
     {
+        var rows = board.States
+            .Where(state => string.IsNullOrWhiteSpace(board.Query.State) || state.Key == board.Query.State)
+            .Reverse()
+            .Select(state => RenderStateRows(board, state))
+            .ToList();
+
         var tasks = board.Tasks.Count == 0
             ? """  <p class="empty">No tasks match the current filters.</p>"""
-            : string.Join(Environment.NewLine, board.Tasks.Select(task => RenderTaskRow(board, task)));
+            : string.Join(Environment.NewLine, rows);
 
         return Template("Board/Board.html")
             .Replace("{{tasks}}", tasks, StringComparison.Ordinal);
@@ -94,19 +100,6 @@ public static class BoardHtmlRenderer
         return $"""<section id="board" hx-swap-oob="innerHTML">{RenderBoard(board)}</section>""";
     }
 
-    private static string RenderFilters(BoardData board)
-    {
-        var selects = string.Join(Environment.NewLine,
-        [
-            RenderSelect("track", "Track", board.Tracks, board.Query.Track, "All tracks"),
-            RenderSelect("milestone", "Milestone", board.Milestones, board.Query.Milestone, "All milestones"),
-            RenderSelect("state", "State", board.States, board.Query.State, "All states"),
-        ]);
-
-        return Template("Controls/Filters.html")
-            .Replace("{{selects}}", selects, StringComparison.Ordinal);
-    }
-
     private static string RenderFilterInputs(BoardQuery query)
     {
         return string.Join(Environment.NewLine,
@@ -117,18 +110,48 @@ public static class BoardHtmlRenderer
         ]);
     }
 
-    private static string RenderSelect(
-        string name,
-        string label,
-        IReadOnlyList<BoardOption> options,
-        string? selected,
-        string allLabel)
+    private static string RenderSidebar(BoardData board)
     {
-        return Template("Controls/Select.html")
-            .Replace("{{label}}", H(label), StringComparison.Ordinal)
-            .Replace("{{name}}", H(name), StringComparison.Ordinal)
-            .Replace("{{allLabel}}", H(allLabel), StringComparison.Ordinal)
-            .Replace("{{options}}", RenderOptions(options, selected), StringComparison.Ordinal);
+        return Template("Layout/Sidebar.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{filterInputs}}", RenderFilterInputs(board.Query), StringComparison.Ordinal)
+            .Replace("{{wholeProjectActive}}", IsWholeProject(board.Query) ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{milestoneItems}}", RenderNavItems("milestone", board.Milestones, board.Query.Milestone),
+                StringComparison.Ordinal)
+            .Replace("{{trackItems}}", RenderNavItems("track", board.Tracks, board.Query.Track),
+                StringComparison.Ordinal);
+    }
+
+    private static string RenderNavItems(string queryName, IReadOnlyList<BoardOption> options, string? selected)
+    {
+        return string.Join(Environment.NewLine, options.Select(option =>
+        {
+            var active = option.Key == selected;
+            return Template("Layout/NavItem.html")
+                .Replace("{{active}}", active ? " active" : string.Empty, StringComparison.Ordinal)
+                .Replace("{{href}}", H($"/?{queryName}={Url(option.Key)}"), StringComparison.Ordinal)
+                .Replace("{{ariaCurrent}}", active ? " aria-current=\"page\"" : string.Empty,
+                    StringComparison.Ordinal)
+                .Replace("{{name}}", H(option.Name), StringComparison.Ordinal);
+        }));
+    }
+
+    private static string RenderStateRows(BoardData board, BoardOption state)
+    {
+        var tasks = board.Tasks
+            .Where(task => task.State == state.Key)
+            .ToList();
+
+        var rows = string.Join(Environment.NewLine, tasks.Select(task => RenderTaskRow(board, task)));
+        var stateRow = Template("Board/StateRow.html")
+            .Replace("{{stateKey}}", H(state.Key), StringComparison.Ordinal)
+            .Replace("{{stateName}}", H(state.Name), StringComparison.Ordinal)
+            .Replace("{{count}}", H(tasks.Count.ToString()), StringComparison.Ordinal);
+
+        return string.IsNullOrWhiteSpace(rows)
+            ? stateRow
+            : stateRow + Environment.NewLine + rows;
     }
 
     private static string RenderOptions(IReadOnlyList<BoardOption> options, string? selected)
@@ -168,6 +191,13 @@ public static class BoardHtmlRenderer
     private static string OptionName(IReadOnlyList<BoardOption> options, string key, string fallback)
     {
         return options.FirstOrDefault(option => option.Key == key)?.Name ?? fallback;
+    }
+
+    private static bool IsWholeProject(BoardQuery query)
+    {
+        return string.IsNullOrWhiteSpace(query.Track)
+               && string.IsNullOrWhiteSpace(query.Milestone)
+               && string.IsNullOrWhiteSpace(query.State);
     }
 
     private static string FormatModifiedAt(DateTime modifiedAt)

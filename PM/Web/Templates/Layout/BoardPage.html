@@ -32,15 +32,14 @@
   </script>
 </head>
 <body>
-  <header>
-    <h1>{{projectName}} Board</h1>
-{{filters}}
-  </header>
-  <main>
-    <section id="board" aria-live="polite">
+  <div class="app-shell">
+{{sidebar}}
+    <main>
+      <section id="board" aria-live="polite">
 {{board}}
-    </section>
-    <dialog id="task-dialog" aria-live="polite" aria-label="Task detail" onclose="this.innerHTML = ''" oncancel="this.close()"></dialog>
-  </main>
+      </section>
+      <dialog id="task-dialog" aria-live="polite" aria-label="Task detail" onclose="this.innerHTML = ''" oncancel="this.close()"></dialog>
+    </main>
+  </div>
 </body>
 </html>

@@ -101,18 +101,81 @@ public class WebBoardTests
 
         Assert.Contains("Render &lt;task&gt;", html);
         Assert.Contains("Heading", html);
-        Assert.Contains("hx-get=\"/board\"", html);
         Assert.Contains("hx-get=\"/task/new\"", html);
         Assert.Contains("hx-get=\"/task/PM-0001\"", html);
+        Assert.Contains("aria-label=\"Board navigation\"", html);
+        Assert.Contains("Whole project", html);
+        Assert.Contains("Milestones", html);
+        Assert.Contains("Tracks", html);
         Assert.Contains("class=\"board-list\"", html);
+        Assert.Contains("class=\"state-row\"", html);
         Assert.Contains("class=\"task-row\"", html);
         Assert.Contains("dialog id=\"task-dialog\"", html);
         Assert.Contains("hx-target=\"#task-dialog\"", html);
         Assert.Contains("htmx:beforeSwap", html);
+        Assert.DoesNotContain("class=\"state-section\"", html);
+        Assert.DoesNotContain("class=\"state-tasks\"", html);
+        Assert.DoesNotContain("<select name=\"track\"", html);
+        Assert.DoesNotContain("<select name=\"milestone\"", html);
+        Assert.DoesNotContain("<select name=\"state\"", html);
         Assert.DoesNotContain("task-detail", html);
         Assert.DoesNotContain("class=\"states\"", html);
         Assert.DoesNotContain("class=\"state\"", html);
         Assert.DoesNotContain(projectRoot.GetTaskFilePath("PM-0001"), html);
+    }
+
+    [Fact]
+    public async Task BoardPageRendersLeftNavLinksAndActiveFilter()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+
+        var trackBoard = new BoardService(projectRoot).GetBoard(new BoardQuery(Track: "BUILD")).Payload!;
+        var trackHtml = BoardHtmlRenderer.RenderPage(trackBoard);
+
+        Assert.Contains("href=\"/?track=BUILD\"", trackHtml);
+        Assert.Contains("href=\"/?milestone=m1\"", trackHtml);
+        Assert.Contains("Build &lt;track&gt;", trackHtml);
+        Assert.Contains("Milestone &lt;one&gt;", trackHtml);
+        Assert.Contains("class=\"nav-item active\" href=\"/?track=BUILD\" aria-current=\"page\"", trackHtml);
+        Assert.DoesNotContain("class=\"nav-item active\" href=\"/?milestone=m1\"", trackHtml);
+        Assert.Contains("name=\"filterTrack\" value=\"BUILD\"", trackHtml);
+        Assert.Contains("name=\"filterMilestone\" value=\"\"", trackHtml);
+
+        var milestoneBoard = new BoardService(projectRoot).GetBoard(new BoardQuery(Milestone: "m1")).Payload!;
+        var milestoneHtml = BoardHtmlRenderer.RenderPage(milestoneBoard);
+
+        Assert.Contains("class=\"nav-item active\" href=\"/?milestone=m1\" aria-current=\"page\"", milestoneHtml);
+        Assert.DoesNotContain("class=\"nav-item active\" href=\"/?track=BUILD\"", milestoneHtml);
+        Assert.Contains("name=\"filterTrack\" value=\"\"", milestoneHtml);
+        Assert.Contains("name=\"filterMilestone\" value=\"m1\"", milestoneHtml);
+    }
+
+    [Fact]
+    public async Task BoardRendersTasksGroupedByReversedStatusOrder()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var todo = TestData.Task("PM-0001", "Todo task");
+        var review = TestData.Task("PM-0002", "Review task");
+        var done = TestData.Task("PM-0003", "Done task");
+        foreach (var task in new[] { todo, review, done }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(todo, "todo");
+        projectRoot.UpdateTaskState(review, "review");
+        projectRoot.UpdateTaskState(done, "done");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var html = BoardHtmlRenderer.RenderBoard(board);
+
+        AssertBefore(html, "id=\"state-done\"", "Done task");
+        AssertBefore(html, "Done task", "id=\"state-review\"");
+        AssertBefore(html, "id=\"state-review\"", "Review task");
+        AssertBefore(html, "Review task", "id=\"state-todo\"");
+        AssertBefore(html, "id=\"state-todo\"", "Todo task");
+        Assert.DoesNotContain("state-section", html);
+        Assert.DoesNotContain("state-tasks", html);
     }
 
     [Fact]
@@ -385,6 +448,26 @@ public class WebBoardTests
     }
 
     [Fact]
+    public async Task MilestoneFilteredBoardHtmlContainsOnlyMatchingTasks()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+        var match = TestData.Task("PM-0001", "Matching milestone", milestone: "m1");
+        var other = TestData.Task("PM-0002", "Other milestone", milestone: "m2");
+        projectRoot.WriteTask(match);
+        projectRoot.WriteTask(other);
+        projectRoot.UpdateTaskState(match, "todo");
+        projectRoot.UpdateTaskState(other, "todo");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery(Milestone: "m1")).Payload!;
+        var html = BoardHtmlRenderer.RenderBoard(board);
+
+        Assert.Contains("Matching milestone", html);
+        Assert.DoesNotContain("Other milestone", html);
+    }
+
+    [Fact]
     public async Task MovingTaskUpdatesStateRefsAndRendersUpdatedFragments()
     {
         using var workspace = new TempWorkingDirectory();
@@ -482,6 +565,15 @@ public class WebBoardTests
         {
             AnsiConsole.Console = originalConsole;
         }
+    }
+
+    private static void AssertBefore(string content, string first, string second)
+    {
+        var firstIndex = content.IndexOf(first, StringComparison.Ordinal);
+        var secondIndex = content.IndexOf(second, StringComparison.Ordinal);
+        Assert.True(firstIndex >= 0, $"Expected to find '{first}'.");
+        Assert.True(secondIndex >= 0, $"Expected to find '{second}'.");
+        Assert.True(firstIndex < secondIndex, $"Expected '{first}' to appear before '{second}'.");
     }
 
     private sealed class FixedWidthConsoleOutput(TextWriter writer) : IAnsiConsoleOutput
