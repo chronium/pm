@@ -1,0 +1,15 @@
+<section class="wiki-page wiki-editor-page" aria-labelledby="wiki-editor-title">
+  <header class="wiki-header">
+    <p class="path">{{path}}</p>
+    <h2 id="wiki-editor-title">Edit {{title}}</h2>
+  </header>
+{{error}}
+  <form class="wiki-form" method="post" action="/wiki/edit/{{pathUrl}}">
+    <label>Markdown<textarea id="wiki-markdown" name="markdown" rows="28" required autofocus data-markdown-editor>{{markdown}}</textarea></label>
+    <div class="form-actions">
+      <button type="submit">Save</button>
+      <a class="secondary-link" href="/wiki/{{pathUrl}}">Cancel</a>
+    </div>
+  </form>
+{{editorAssets}}
+</section>

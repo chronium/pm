@@ -53,6 +53,41 @@ public static class BoardHtmlRenderer
             .Replace("{{board}}", RenderWikiDetail(page), StringComparison.Ordinal);
     }
 
+    public static string RenderWikiCreatePage(
+        BoardData board,
+        string path = "",
+        string title = "",
+        string markdown = "",
+        string? error = null)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"New Wiki Page - {board.ProjectName}"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiCreateForm(path, title, markdown, error), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiEditPage(BoardData board, WikiPageData page, string? error = null)
+    {
+        return RenderWikiEditPage(board, page.Path, page.Title, page.Markdown, error);
+    }
+
+    public static string RenderWikiEditPage(
+        BoardData board,
+        string path,
+        string title,
+        string markdown,
+        string? error = null)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"Edit {title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiEditForm(path, title, markdown, error), StringComparison.Ordinal);
+    }
+
     public static string RenderBoard(BoardData board)
     {
         var rows = board.States
@@ -174,9 +209,31 @@ public static class BoardHtmlRenderer
         return Template("Wiki/Detail.html")
             .Replace("{{title}}", H(page.Title), StringComparison.Ordinal)
             .Replace("{{path}}", H(page.Path), StringComparison.Ordinal)
+            .Replace("{{pathUrl}}", WikiPathUrl(page.Path), StringComparison.Ordinal)
             .Replace("{{filePath}}", H(page.FilePath), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(page.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{body}}", H(page.Body), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiCreateForm(string path, string title, string markdown, string? error = null)
+    {
+        return Template("Wiki/CreateForm.html")
+            .Replace("{{error}}", RenderWikiFormError(error), StringComparison.Ordinal)
+            .Replace("{{path}}", H(path), StringComparison.Ordinal)
+            .Replace("{{title}}", H(title), StringComparison.Ordinal)
+            .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
+            .Replace("{{editorAssets}}", RenderMarkdownEditorAssets(), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiEditForm(string path, string title, string markdown, string? error = null)
+    {
+        return Template("Wiki/EditForm.html")
+            .Replace("{{error}}", RenderWikiFormError(error), StringComparison.Ordinal)
+            .Replace("{{path}}", H(path), StringComparison.Ordinal)
+            .Replace("{{pathUrl}}", WikiPathUrl(path), StringComparison.Ordinal)
+            .Replace("{{title}}", H(title), StringComparison.Ordinal)
+            .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
+            .Replace("{{editorAssets}}", RenderMarkdownEditorAssets(), StringComparison.Ordinal);
     }
 
     private static string RenderFilterInputs(BoardQuery query)
@@ -326,8 +383,21 @@ public static class BoardHtmlRenderer
         return Uri.EscapeDataString(value);
     }
 
-    private static string WikiPathUrl(string value)
+    public static string WikiPathUrl(string value)
     {
         return string.Join('/', value.Split('/').Select(Uri.EscapeDataString));
+    }
+
+    private static string RenderWikiFormError(string? error)
+    {
+        return string.IsNullOrWhiteSpace(error)
+            ? string.Empty
+            : Template("Settings/Error.html")
+                .Replace("{{message}}", H(error), StringComparison.Ordinal);
+    }
+
+    private static string RenderMarkdownEditorAssets()
+    {
+        return Template("Markdown/EditorAssets.html");
     }
 }

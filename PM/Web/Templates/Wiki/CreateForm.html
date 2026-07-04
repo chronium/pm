@@ -1,0 +1,17 @@
+<section class="wiki-page wiki-editor-page" aria-labelledby="wiki-editor-title">
+  <header class="wiki-header">
+    <p class="path">New wiki page</p>
+    <h2 id="wiki-editor-title">New page</h2>
+  </header>
+{{error}}
+  <form class="wiki-form" method="post" action="/wiki/new">
+    <label>Path<input name="path" value="{{path}}" placeholder="notes/design" required autofocus></label>
+    <label>Title<input name="title" value="{{title}}" required></label>
+    <label>Body<textarea id="wiki-markdown" name="markdown" rows="24" data-markdown-editor>{{markdown}}</textarea></label>
+    <div class="form-actions">
+      <button type="submit">Create</button>
+      <a class="secondary-link" href="/wiki">Cancel</a>
+    </div>
+  </form>
+{{editorAssets}}
+</section>

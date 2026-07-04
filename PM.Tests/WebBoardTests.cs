@@ -253,6 +253,7 @@ public class WebBoardTests
         var emptyHtml = BoardHtmlRenderer.RenderWikiIndexPage(board, []);
 
         Assert.Contains("No wiki pages yet.", emptyHtml);
+        Assert.Contains("href=\"/wiki/new\"", emptyHtml);
 
         var page = new WikiPage
         {
@@ -268,6 +269,7 @@ public class WebBoardTests
         var html = BoardHtmlRenderer.RenderWikiIndexPage(board, pages);
 
         Assert.Contains("class=\"wiki-list\"", html);
+        Assert.Contains("href=\"/wiki/new\"", html);
         Assert.Contains("href=\"/wiki/architecture/rendering\"", html);
         Assert.Contains("Render &lt;wiki&gt;", html);
         Assert.Contains("architecture/rendering", html);
@@ -301,12 +303,52 @@ public class WebBoardTests
         Assert.Contains("id=\"wiki-content\"", html);
         Assert.Contains("id=\"wiki-markdown-source\" readonly hidden", html);
         Assert.Contains("id=\"wiki-markdown-fallback\"", html);
+        Assert.Contains("href=\"/wiki/edit/notes\"", html);
         Assert.Contains("# Heading &lt;unsafe&gt;", html);
         Assert.Contains("&lt;script&gt;alert(1)&lt;/script&gt;", html);
         Assert.Contains("https://unpkg.com/marked@18.0.5/lib/marked.umd.js", html);
         Assert.Contains("https://unpkg.com/dompurify@3.4.11/dist/purify.min.js", html);
         Assert.Contains("DOMPurify.sanitize", html);
         Assert.DoesNotContain("<script>alert(1)</script>", html);
+    }
+
+    [Fact]
+    public async Task WikiCreateAndEditFormsRenderEasyMdeAssetsAndEscapeValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var page = new WikiPage
+        {
+            Path = "notes/path <x>",
+            Title = "Notes <wiki>",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc),
+            Body = "# Body <unsafe>",
+        };
+        projectRoot.WriteWikiPage(page);
+        var data = new WikiService(projectRoot).ReadPage("notes/path <x>").Payload!;
+
+        var createHtml = BoardHtmlRenderer.RenderWikiCreatePage(board, "notes/<x>", "Title <x>", "Body <x>", "Nope <x>");
+        var editHtml = BoardHtmlRenderer.RenderWikiEditPage(board, data, "Bad <x>");
+
+        foreach (var html in new[] { createHtml, editHtml })
+        {
+            Assert.Contains("data-markdown-editor", html);
+            Assert.Contains("https://unpkg.com/easymde@2.20.0/dist/easymde.min.css", html);
+            Assert.Contains("https://unpkg.com/easymde@2.20.0/dist/easymde.min.js", html);
+            Assert.Contains("https://unpkg.com/marked@18.0.5/lib/marked.umd.js", html);
+            Assert.Contains("https://unpkg.com/dompurify@3.4.11/dist/purify.min.js", html);
+            Assert.Contains("DOMPurify.sanitize", html);
+            Assert.DoesNotContain("Body <x>", html);
+            Assert.DoesNotContain("Bad <x>", html);
+        }
+
+        Assert.Contains("notes/&lt;x&gt;", createHtml);
+        Assert.Contains("Title &lt;x&gt;", createHtml);
+        Assert.Contains("Bad &lt;x&gt;", editHtml);
+        Assert.Contains("Notes &lt;wiki&gt;", editHtml);
+        Assert.Contains("# Body &lt;unsafe&gt;", editHtml);
     }
 
     [Fact]
@@ -339,6 +381,91 @@ public class WebBoardTests
         Assert.Contains("# Rendering", pageHtml);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
+    public async Task WikiCreateAndEditEndpointsMutatePagesAndRenderValidationErrors()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        projectRoot.WriteWikiPage(new WikiPage
+        {
+            Path = "architecture/rendering",
+            Title = "Rendering",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            Body = "# Rendering",
+        });
+        var web = await CreateWebClient(projectRoot);
+        await using var app = web.App;
+        using var client = web.Client;
+
+        var newForm = await client.GetAsync("/wiki/new");
+        var newFormHtml = await newForm.Content.ReadAsStringAsync();
+        var created = await client.PostAsync("/wiki/new", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["path"] = "notes/new-page",
+            ["title"] = "New Page",
+            ["markdown"] = "# Hello",
+        }));
+        var createdHtml = await created.Content.ReadAsStringAsync();
+        var duplicate = await client.PostAsync("/wiki/new", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["path"] = "notes/new-page",
+            ["title"] = "Duplicate",
+            ["markdown"] = "Nope",
+        }));
+        var invalid = await client.PostAsync("/wiki/new", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["path"] = "notes.txt",
+            ["title"] = "Invalid",
+            ["markdown"] = "Nope",
+        }));
+        var missingTitle = await client.PostAsync("/wiki/new", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["path"] = "notes/missing-title",
+            ["title"] = "",
+            ["markdown"] = "Nope",
+        }));
+
+        var editForm = await client.GetAsync("/wiki/edit/architecture/rendering");
+        var editFormHtml = await editForm.Content.ReadAsStringAsync();
+        var editedMarkdown = """
+                             ---
+                             title: Rendering Updated
+                             createdAt: 2026-01-01T00:00:00.0000000Z
+                             modifiedAt: 2026-01-02T00:00:00.0000000Z
+                             ---
+
+                             # Updated
+                             """;
+        var edited = await client.PostAsync("/wiki/edit/architecture/rendering",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["markdown"] = editedMarkdown }));
+        var editedHtml = await edited.Content.ReadAsStringAsync();
+        var invalidEdit = await client.PostAsync("/wiki/edit/architecture/rendering",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["markdown"] = "not markdown" }));
+        var invalidEditHtml = await invalidEdit.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, newForm.StatusCode);
+        Assert.Contains("New page", newFormHtml);
+        Assert.Contains("data-markdown-editor", newFormHtml);
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        Assert.Contains("New Page", createdHtml);
+        Assert.Contains("# Hello", createdHtml);
+        Assert.Equal(HttpStatusCode.BadRequest, duplicate.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, missingTitle.StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, editForm.StatusCode);
+        Assert.Contains("Edit Rendering", editFormHtml);
+        Assert.Contains("data-markdown-editor", editFormHtml);
+        Assert.Contains("title: Rendering", editFormHtml);
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        Assert.Contains("Rendering Updated", editedHtml);
+        Assert.Contains("# Updated", editedHtml);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidEdit.StatusCode);
+        Assert.Contains("Edited wiki markdown is invalid.", invalidEditHtml);
+        Assert.Contains("not markdown", invalidEditHtml);
     }
 
     [Fact]

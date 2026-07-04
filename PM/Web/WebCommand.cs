@@ -93,6 +93,58 @@ public class WebCommand(
                     "text/html; charset=utf-8");
         });
 
+        endpoints.MapGet("/wiki/new", () =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            return Results.Content(BoardHtmlRenderer.RenderWikiCreatePage(board), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/wiki/new", async (HttpRequest request) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var form = await request.ReadFormAsync();
+            var path = form["path"].ToString();
+            var title = form["title"].ToString();
+            var markdown = form["markdown"].ToString();
+            var result = wikiService.CreatePage(path, title, markdown);
+            if (!result.Success)
+                return Results.Content(
+                    BoardHtmlRenderer.RenderWikiCreatePage(board, path, title, markdown, result.Message),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            return Results.Redirect($"/wiki/{BoardHtmlRenderer.WikiPathUrl(result.Payload!.Path)}");
+        });
+
+        endpoints.MapGet("/wiki/edit/{**path}", (string path) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var result = wikiService.ReadPage(path);
+            return !result.Success
+                ? WikiError(result)
+                : Results.Content(BoardHtmlRenderer.RenderWikiEditPage(board, result.Payload!),
+                    "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/wiki/edit/{**path}", async (string path, HttpRequest request) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var form = await request.ReadFormAsync();
+            var markdown = form["markdown"].ToString();
+            var result = wikiService.UpdatePageMarkdown(path, markdown);
+            if (!result.Success)
+            {
+                var readResult = wikiService.ReadPage(path);
+                var title = readResult.Success ? readResult.Payload!.Title : path;
+                return Results.Content(
+                    BoardHtmlRenderer.RenderWikiEditPage(board, path, title, markdown, result.Message),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return Results.Redirect($"/wiki/{BoardHtmlRenderer.WikiPathUrl(result.Payload!.Path)}");
+        });
+
         endpoints.MapGet("/wiki/{**path}", (string path) =>
         {
             var board = CreateBoard(boardService, new BoardQuery());
