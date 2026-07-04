@@ -9,9 +9,9 @@ public sealed record ProjectCreationRequest(
     int? IdWidth = null,
     string? IdPrefix = null,
     string? NextIdServiceUrl = null,
-    Dictionary<string, string>? States = null,
-    Dictionary<string, string>? Tracks = null,
-    Dictionary<string, string>? Milestones = null);
+    Dictionary<string, string?>? States = null,
+    Dictionary<string, string?>? Tracks = null,
+    Dictionary<string, string?>? Milestones = null);
 
 public sealed record ProjectCreationResult(
     string Name,
@@ -39,15 +39,29 @@ public sealed class ProjectCreationService(ProjectRoot projectRoot, INextIdServi
         if (idWidth < 1)
             return AppResult<ProjectCreationResult>.Fail("invalid_project", "Project ID width must be greater than zero.");
 
-        var states = NormalizeOptions(request.States ?? GlobalConfig.DefaultTaskStates);
+        var statesResult = NormalizeOptions(
+            request.States ?? GlobalConfig.DefaultTaskStates.ToDictionary(option => option.Key, option => (string?)option.Value),
+            "states");
+        if (!statesResult.Success)
+            return AppResult<ProjectCreationResult>.Fail(statesResult.ErrorCode!, statesResult.Message!);
+
+        var states = statesResult.Payload!;
         if (states.Count == 0)
             return AppResult<ProjectCreationResult>.Fail("invalid_states", "At least one task state is required.");
 
-        var tracks = NormalizeOptions(request.Tracks ?? new Dictionary<string, string> { [idPrefix] = idPrefix });
+        var tracksResult = NormalizeOptions(request.Tracks ?? new Dictionary<string, string?> { [idPrefix] = idPrefix }, "tracks");
+        if (!tracksResult.Success)
+            return AppResult<ProjectCreationResult>.Fail(tracksResult.ErrorCode!, tracksResult.Message!);
+
+        var tracks = tracksResult.Payload!;
         if (tracks.Count == 0)
             return AppResult<ProjectCreationResult>.Fail("invalid_tracks", "At least one track is required.");
 
-        var milestones = NormalizeOptions(request.Milestones ?? new Dictionary<string, string>());
+        var milestonesResult = NormalizeOptions(request.Milestones ?? new Dictionary<string, string?>(), "milestones");
+        if (!milestonesResult.Success)
+            return AppResult<ProjectCreationResult>.Fail(milestonesResult.ErrorCode!, milestonesResult.Message!);
+
+        var milestones = milestonesResult.Payload!;
         var config = new ProjectConfig
         {
             Name = name,
@@ -73,19 +87,24 @@ public sealed class ProjectCreationService(ProjectRoot projectRoot, INextIdServi
             config.Milestones));
     }
 
-    private static Dictionary<string, string> NormalizeOptions(Dictionary<string, string> options)
+    private static AppResult<Dictionary<string, string>> NormalizeOptions(
+        Dictionary<string, string?> options,
+        string optionName)
     {
         var normalized = new Dictionary<string, string>();
         foreach (var (key, value) in options)
         {
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                return AppResult<Dictionary<string, string>>.Fail(
+                    $"invalid_{optionName}",
+                    $"Project {optionName} cannot include blank keys or values.");
+
             var normalizedKey = key.Trim();
             var normalizedValue = value.Trim();
-            if (string.IsNullOrWhiteSpace(normalizedKey) || string.IsNullOrWhiteSpace(normalizedValue))
-                continue;
 
             normalized[normalizedKey] = normalizedValue;
         }
 
-        return normalized;
+        return AppResult<Dictionary<string, string>>.Ok(normalized);
     }
 }

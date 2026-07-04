@@ -53,9 +53,9 @@ public class McpToolTests
             idWidth: 3,
             idPrefix: "BUG",
             nextIdServiceUrl: "http://ids.local",
-            states: new Dictionary<string, string> { ["todo"] = "Todo" },
-            tracks: new Dictionary<string, string> { ["BUG"] = "Bugs" },
-            milestones: new Dictionary<string, string> { ["v1"] = "Version 1" });
+            states: new Dictionary<string, string?> { ["todo"] = "Todo" },
+            tracks: new Dictionary<string, string?> { ["BUG"] = "Bugs" },
+            milestones: new Dictionary<string, string?> { ["v1"] = "Version 1" });
 
         Assert.True(result.Success);
         Assert.Equal("MCP Project", result.Data!.Name);
@@ -63,6 +63,24 @@ public class McpToolTests
         Assert.Contains(result.Data.Tracks, track => track.Key == "BUG" && track.Name == "Bugs");
         Assert.Contains(result.Data.Milestones, milestone => milestone.Key == "v1");
         Assert.Contains(result.Data.States, state => state.Key == "todo" && state.Name == "Todo");
+    }
+
+    [Fact]
+    public async Task CreateProjectReturnsValidationFailuresForBlankOptions()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = new ProjectRoot();
+        var nextIds = new RecordingNextIdService();
+        var tools = CreateTools(projectRoot, nextIds);
+
+        var result = await tools.CreateProject(
+            "MCP Project",
+            milestones: new Dictionary<string, string?> { ["m1"] = null });
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_milestones", result.ErrorCode);
+        Assert.Equal(0, nextIds.HealthyCalls);
+        Assert.False(Directory.Exists(Path.Combine(workspace.Path, GlobalConfig.PmDirName)));
     }
 
     [Fact]
@@ -175,6 +193,24 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task BulkAssignTasksToMilestoneRejectsDuplicateIdsBeforeWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var task = TestData.Task("PM-0001", "Existing");
+        projectRoot.WriteTask(task);
+        var originalContent = File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001"));
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.BulkAssignTasksToMilestone("m1", ["PM-0001", " PM-0001 "]);
+
+        Assert.False(result.Success);
+        Assert.Equal("duplicate_task_id", result.ErrorCode);
+        Assert.Equal(originalContent, File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+    }
+
+    [Fact]
     public async Task MoveTaskUpdatesStateRefs()
     {
         using var workspace = new TempWorkingDirectory();
@@ -265,6 +301,7 @@ public class McpToolTests
         Assert.True(tools.RenameStatus("todo", "Ready").Success);
         Assert.Equal("status_in_use", tools.RemoveStatus("todo").ErrorCode);
         Assert.True(tools.RemoveStatus("blocked").Success);
+        Assert.False(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
         Assert.Equal("missing_status", tools.RemoveStatus("missing").ErrorCode);
 
         var project = tools.GetProject();
@@ -348,6 +385,7 @@ public class McpToolTests
         bool failWhenIdsExhausted = false) : INextIdService
     {
         public List<string> GetNextIdTracks { get; } = [];
+        public int HealthyCalls { get; private set; }
         private int _idIndex;
 
         public Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
@@ -378,6 +416,7 @@ public class McpToolTests
 
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)
         {
+            HealthyCalls++;
             return Task.FromResult(healthy);
         }
     }

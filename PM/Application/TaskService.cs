@@ -188,6 +188,10 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         if (normalizedIds.Any(string.IsNullOrWhiteSpace))
             return AppResult<BulkMilestoneAssignmentResult>.Fail("invalid_task_id", "All task IDs are required.");
 
+        if (normalizedIds.Distinct(StringComparer.Ordinal).Count() != normalizedIds.Count)
+            return AppResult<BulkMilestoneAssignmentResult>.Fail("duplicate_task_id",
+                "Bulk milestone assignment cannot include duplicate task IDs.");
+
         var tasks = new List<TaskItem>();
         foreach (var taskId in normalizedIds)
         {

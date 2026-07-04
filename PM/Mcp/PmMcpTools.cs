@@ -21,9 +21,9 @@ public sealed class PmMcpTools(
         int? idWidth = null,
         string? idPrefix = null,
         string? nextIdServiceUrl = null,
-        Dictionary<string, string>? states = null,
-        Dictionary<string, string>? tracks = null,
-        Dictionary<string, string>? milestones = null,
+        Dictionary<string, string?>? states = null,
+        Dictionary<string, string?>? tracks = null,
+        Dictionary<string, string?>? milestones = null,
         CancellationToken cancellationToken = default)
     {
         var result = await projectCreationService.CreateProject(new ProjectCreationRequest(

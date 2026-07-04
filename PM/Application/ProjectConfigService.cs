@@ -80,10 +80,20 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             return AppResult.Fail("last_status", "Cannot remove the last status.");
 
         var statePath = Path.Combine(projectRoot.StatesPath, key);
-        if (FileSystem.DirectoryExists(statePath) && FileSystem.ReadFiles(statePath, "*.ref").Count != 0)
-            return AppResult.Fail("status_in_use", $"Status {key} is referenced by one or more tasks.");
+        if (FileSystem.DirectoryExists(statePath))
+        {
+            if (FileSystem.ReadFiles(statePath, "*.ref").Count != 0)
+                return AppResult.Fail("status_in_use", $"Status {key} is referenced by one or more tasks.");
+
+            if (FileSystem.ReadFiles(statePath).Count != 0)
+                return AppResult.Fail("status_directory_not_empty",
+                    $"Status {key} directory contains non-task files and cannot be removed.");
+        }
 
         config.TaskStates.Remove(key);
+        if (FileSystem.DirectoryExists(statePath))
+            FileSystem.DeleteDirectory(statePath);
+
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }

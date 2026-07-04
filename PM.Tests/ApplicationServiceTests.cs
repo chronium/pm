@@ -71,9 +71,9 @@ public class ApplicationServiceTests
             3,
             "BUG",
             "http://ids.local",
-            new Dictionary<string, string> { ["new"] = "New", ["closed"] = "Closed" },
-            new Dictionary<string, string> { ["BUG"] = "Bugs", ["OPS"] = "Ops" },
-            new Dictionary<string, string> { ["v1"] = "Version 1" }));
+            new Dictionary<string, string?> { [" new "] = " New ", ["closed"] = "Closed" },
+            new Dictionary<string, string?> { ["BUG"] = "Bugs", [" OPS "] = " Ops " },
+            new Dictionary<string, string?> { [" v1 "] = " Version 1 " }));
 
         Assert.True(result.Success);
         var config = ProjectConfig.ReadConfig(projectRoot);
@@ -84,6 +84,83 @@ public class ApplicationServiceTests
         Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "new")));
         Assert.Equal("Ops", config.Tracks["OPS"]);
         Assert.Equal("Version 1", config.Milestones["v1"]);
+    }
+
+    [Fact]
+    public async Task ProjectCreationRejectsBlankCustomOptionEntriesBeforeWriting()
+    {
+        var cases = new[]
+        {
+            new
+            {
+                ErrorCode = "invalid_states",
+                Request = new ProjectCreationRequest("Bad states",
+                    States: new Dictionary<string, string?> { ["todo"] = "Todo", [" "] = "Missing" })
+            },
+            new
+            {
+                ErrorCode = "invalid_states",
+                Request = new ProjectCreationRequest("Bad states",
+                    States: new Dictionary<string, string?> { ["todo"] = " " })
+            },
+            new
+            {
+                ErrorCode = "invalid_states",
+                Request = new ProjectCreationRequest("Bad states",
+                    States: new Dictionary<string, string?> { ["todo"] = null })
+            },
+            new
+            {
+                ErrorCode = "invalid_tracks",
+                Request = new ProjectCreationRequest("Bad tracks",
+                    Tracks: new Dictionary<string, string?> { ["PM"] = "Project", [" "] = "Missing" })
+            },
+            new
+            {
+                ErrorCode = "invalid_tracks",
+                Request = new ProjectCreationRequest("Bad tracks",
+                    Tracks: new Dictionary<string, string?> { ["PM"] = " " })
+            },
+            new
+            {
+                ErrorCode = "invalid_tracks",
+                Request = new ProjectCreationRequest("Bad tracks",
+                    Tracks: new Dictionary<string, string?> { ["PM"] = null })
+            },
+            new
+            {
+                ErrorCode = "invalid_milestones",
+                Request = new ProjectCreationRequest("Bad milestones",
+                    Milestones: new Dictionary<string, string?> { [" "] = "Missing" })
+            },
+            new
+            {
+                ErrorCode = "invalid_milestones",
+                Request = new ProjectCreationRequest("Bad milestones",
+                    Milestones: new Dictionary<string, string?> { ["m1"] = " " })
+            },
+            new
+            {
+                ErrorCode = "invalid_milestones",
+                Request = new ProjectCreationRequest("Bad milestones",
+                    Milestones: new Dictionary<string, string?> { ["m1"] = null })
+            },
+        };
+
+        foreach (var testCase in cases)
+        {
+            using var workspace = new TempWorkingDirectory();
+            var projectRoot = new ProjectRoot();
+            var nextIds = new RecordingNextIdService();
+            var service = new ProjectCreationService(projectRoot, nextIds);
+
+            var result = await service.CreateProject(testCase.Request);
+
+            Assert.False(result.Success);
+            Assert.Equal(testCase.ErrorCode, result.ErrorCode);
+            Assert.Equal(0, nextIds.HealthyCalls);
+            Assert.False(Directory.Exists(Path.Combine(workspace.Path, GlobalConfig.PmDirName)));
+        }
     }
 
     [Fact]
@@ -201,12 +278,17 @@ public class ApplicationServiceTests
 
         var missingMilestone = service.BulkAssignTasksToMilestone("missing", ["PM-0001"]);
         var empty = service.BulkAssignTasksToMilestone("m1", []);
+        var originalContent = File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0001.md"));
+        var duplicateTask = service.BulkAssignTasksToMilestone("m1", ["PM-0001", " PM-0001 "]);
         var missingTask = service.BulkAssignTasksToMilestone("m1", ["PM-9999"]);
 
         Assert.Equal("missing_milestone", missingMilestone.ErrorCode);
         Assert.Equal("invalid_batch_size", empty.ErrorCode);
+        Assert.Equal("duplicate_task_id", duplicateTask.ErrorCode);
         Assert.Equal("missing_task", missingTask.ErrorCode);
-        Assert.Null(TaskItem.Parse(File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0001.md")))!.Milestone);
+        var currentContent = File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0001.md"));
+        Assert.Equal(originalContent, currentContent);
+        Assert.Null(TaskItem.Parse(currentContent)!.Milestone);
     }
 
     [Fact]
@@ -361,8 +443,10 @@ public class ApplicationServiceTests
         var service = new ProjectConfigService(projectRoot);
 
         Assert.Equal("status_in_use", service.RemoveStatus("todo").ErrorCode);
+        Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "todo")));
         Assert.Equal("missing_status", service.RemoveStatus("missing").ErrorCode);
         Assert.True(service.RemoveStatus("review").Success);
+        Assert.False(Directory.Exists(Path.Combine(projectRoot.StatesPath, "review")));
 
         var singleStatusRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project" }));
@@ -371,6 +455,24 @@ public class ApplicationServiceTests
         var singleStatusService = new ProjectConfigService(singleStatusRoot);
 
         Assert.Equal("last_status", singleStatusService.RemoveStatus("todo").ErrorCode);
+        Assert.True(Directory.Exists(Path.Combine(singleStatusRoot.StatesPath, "todo")));
+    }
+
+    [Fact]
+    public async Task StatusRemoveRejectsDirectoriesWithNonTaskFilesBeforeMutatingConfig()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var statePath = Path.Combine(projectRoot.StatesPath, "review");
+        File.WriteAllText(Path.Combine(statePath, ".DS_Store"), "");
+        var service = new ProjectConfigService(projectRoot);
+
+        var result = service.RemoveStatus("review");
+
+        Assert.False(result.Success);
+        Assert.Equal("status_directory_not_empty", result.ErrorCode);
+        Assert.True(Directory.Exists(statePath));
+        Assert.True(ProjectConfig.ReadConfig(projectRoot).TaskStates.ContainsKey("review"));
     }
 
     [Fact]

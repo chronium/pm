@@ -618,7 +618,7 @@ public class CommandBehaviorTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.TaskStates.ContainsKey("blocked"));
-        Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
+        Assert.False(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
     }
 
     [Fact]

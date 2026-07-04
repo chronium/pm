@@ -43,6 +43,19 @@ public static class FileSystem
         File.Delete(path);
     }
 
+    public static void DeleteDirectory(string path)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"Deleted [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}/[/]");
+        if (GlobalConfig.DryRun) return;
+        Directory.Delete(path);
+    }
+
+    public static List<FileInfo> ReadFiles(string path)
+    {
+        return ReadFiles(path, "*");
+    }
+
     public static List<FileInfo> ReadFiles(string path, string searchPattern = "*")
     {
         var files = Directory.EnumerateFiles(path, searchPattern, SearchOption.TopDirectoryOnly)
