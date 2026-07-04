@@ -18,7 +18,9 @@ public sealed record ProjectCreationResult(
     string RootPath,
     IReadOnlyDictionary<string, string> States,
     IReadOnlyDictionary<string, string> Tracks,
-    IReadOnlyDictionary<string, string> Milestones);
+    IReadOnlyDictionary<string, string> Milestones,
+    string ProjectId,
+    string? RecoveryKey);
 
 public sealed class ProjectCreationService(ProjectRoot projectRoot, INextIdService nextIdService)
 {
@@ -79,12 +81,15 @@ public sealed class ProjectCreationService(ProjectRoot projectRoot, INextIdServi
             return AppResult<ProjectCreationResult>.Fail("next_id_unavailable", "Unable to reach the next ID service.");
 
         await projectRoot.CreateProject(config, cancellationToken);
+        var registration = await nextIdService.RegisterProject(projectRoot, cancellationToken);
         return AppResult<ProjectCreationResult>.Ok(new ProjectCreationResult(
             config.Name,
             projectRoot.RootPath,
             config.TaskStates,
             config.Tracks,
-            config.Milestones));
+            config.Milestones,
+            registration.ProjectId,
+            registration.RecoveryKey));
     }
 
     private static AppResult<Dictionary<string, string>> NormalizeOptions(

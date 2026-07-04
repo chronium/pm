@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PM.Application;
+using PM.Auth;
 using PM.Project;
 using PM.Tasks;
 
@@ -21,6 +22,7 @@ public static class McpServerHost
 
         builder.Services.AddHttpClient<INextIdService, NextIdService>();
         builder.Services.Configure<NextIdServiceOptions>(options => options.WriteFailuresToConsole = false);
+        builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddSingleton<ProjectRoot>();
         builder.Services.AddSingleton<TaskService>();
         builder.Services.AddSingleton<ProjectCreationService>();

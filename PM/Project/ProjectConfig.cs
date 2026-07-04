@@ -5,7 +5,7 @@ namespace PM.Project;
 
 public class ProjectConfig
 {
-    public const string DefaultNextIdServiceUrl = "https://pm-next-id.apa-prod-monitor.workers.dev";
+    public const string DefaultNextIdServiceUrl = "https://pm-next-id.chronium.workers.dev";
     private Dictionary<string, string>? _tracks;
 
     public required string Name { get; set; }

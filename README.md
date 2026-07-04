@@ -1,6 +1,6 @@
 # PM
 
-PM is a local project-management tool for software work. It stores project state in a `.dev-pm/` directory, provides a .NET CLI for day-to-day changes, and includes a local server-rendered web board for dense task workflows.
+PM is a local project-management tool for software work. It stores project state in a `.pm/` directory, provides a .NET CLI for day-to-day changes, and includes a local server-rendered web board for dense task workflows.
 
 ## Features
 
@@ -9,7 +9,7 @@ PM is a local project-management tool for software work. It stores project state
 - Local web UI for task boards, task dialogs, settings, and wiki pages.
 - MCP server support for integrating PM data with agent workflows.
 - Project wiki pages stored alongside the project.
-- Optional Cloudflare Worker next-ID service for shared task ID allocation.
+- Optional Cloudflare Worker next-ID service for shared task ID allocation with signed local identity auth.
 
 ## Quick Start
 
@@ -64,4 +64,4 @@ See `next-id-worker/README.md` for the Worker API and trust model.
 
 ## Publishing Note
 
-This repository intentionally includes its own PM project metadata under `.dev-pm/`, including tasks, states, wiki pages, project config, and `.dev-pm/next_id.txt`. In ordinary PM projects, review `.dev-pm/next_id.txt` before publishing because it may authorize ID allocation for that project.
+PM project metadata under `.pm/` is intended to be public, commit-friendly project state: tasks, states, wiki pages, project config, and the public Worker project identifier. Hosted Worker operations are authenticated by a local user identity stored in the operating system user config, not by a secret committed into `.pm/`.

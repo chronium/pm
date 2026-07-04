@@ -48,9 +48,16 @@ public class InitCommand(ProjectRoot projectRoot, INextIdService nextIdService, 
         AnsiConsole.WriteLine();
 
         await projectRoot.CreateProject(config, cancellationToken);
+        var registration = await nextIdService.RegisterProject(projectRoot, cancellationToken);
 
         AnsiConsole.MarkupLineInterpolated(
             $"Project initialized in [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), projectRoot.RootPath)}/[/]");
+        if (!string.IsNullOrWhiteSpace(registration.RecoveryKey))
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[yellow]Save this PM recovery key somewhere safe. It will not be shown again.[/]");
+            AnsiConsole.MarkupLineInterpolated($"[green]{registration.RecoveryKey}[/]");
+        }
 
         return 0;
     }

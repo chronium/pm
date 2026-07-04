@@ -1,7 +1,7 @@
 name: Test Project
 idWidth: 4
 idPrefix: PM
-nextIdServiceUrl: https://pm-next-id.apa-prod-monitor.workers.dev
+nextIdServiceUrl: https://pm-next-id.chronium.workers.dev
 taskStates:
   todo: To Do
   in-progress: In Progress

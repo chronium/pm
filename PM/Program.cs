@@ -5,6 +5,7 @@ using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using Microsoft.Extensions.DependencyInjection;
 using PM;
 using PM.Application;
+using PM.Auth;
 using PM.Mcp;
 using PM.Project;
 using PM.Tasks;
@@ -30,6 +31,7 @@ if (args is [var command, ..] && string.Equals(command, GlobalConfig.McpCommandN
 
 serviceProvider.AddHttpClient<INextIdService, NextIdService>();
 
+serviceProvider.AddSingleton<IIdentityService, IdentityService>();
 serviceProvider.AddSingleton<ProjectRoot>();
 serviceProvider.AddSingleton<TaskService>();
 serviceProvider.AddSingleton<ProjectCreationService>();
@@ -53,6 +55,7 @@ app.Configure(config =>
     config.SetInterceptor(new TimingInterceptor());
 
     config.AddCommand<InitCommand>(GlobalConfig.InitCommandName);
+    config.AddCommand<ProjectClaimCommand>(GlobalConfig.ClaimCommandName);
 
     config.AddBranch(GlobalConfig.TrackBranchName,
         track =>

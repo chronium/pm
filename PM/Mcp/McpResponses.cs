@@ -26,7 +26,9 @@ public sealed record ProjectPayload(
     string RootPath,
     IReadOnlyList<OptionPayload> States,
     IReadOnlyList<OptionPayload> Tracks,
-    IReadOnlyList<OptionPayload> Milestones);
+    IReadOnlyList<OptionPayload> Milestones,
+    string? ProjectId = null,
+    string? RecoveryKey = null);
 
 public sealed record OptionPayload(string Key, string Name);
 

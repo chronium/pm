@@ -44,7 +44,9 @@ public sealed class PmMcpTools(
             project.RootPath,
             ToOptions(project.States),
             ToOptions(project.Tracks),
-            ToOptions(project.Milestones));
+            ToOptions(project.Milestones),
+            project.ProjectId,
+            project.RecoveryKey);
 
         return McpToolResponse<ProjectPayload>.Ok($"Project {project.Name} initialized.", payload);
     }

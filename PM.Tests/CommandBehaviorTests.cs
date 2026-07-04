@@ -169,7 +169,7 @@ public class CommandBehaviorTests
     }
 
     [Fact]
-    public async Task DryRunAddWithNoNextIdFileUsesPlaceholderAndDoesNotCreateProjectKey()
+    public async Task DryRunAddWithNoProjectIdFileUsesPlaceholderAndDoesNotRegisterProject()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
@@ -190,7 +190,7 @@ public class CommandBehaviorTests
             Assert.Equal(0, nextIdService.GetNextIdCalls);
             Assert.Equal(1, nextIdService.PeekExistingNextIdCalls);
             Assert.Equal(0, nextIdService.HealthyCalls);
-            Assert.False(File.Exists(Path.Combine(projectRoot.RootPath, GlobalConfig.NextIdFile)));
+            Assert.False(File.Exists(Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile)));
             Assert.False(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-????.md")));
         }
         finally
@@ -947,6 +947,12 @@ public class CommandBehaviorTests
         {
             PeekExistingNextIdCalls++;
             return Task.FromResult<int?>(null);
+        }
+
+        public Task<ProjectRegistration> RegisterProject(ProjectRoot projectRoot,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ProjectRegistration("project-test", "recovery-test"));
         }
 
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)

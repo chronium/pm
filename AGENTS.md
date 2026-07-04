@@ -27,7 +27,7 @@ No dedicated type-check, lint, or formatting commands are configured in this rep
 ## Architecture
 
 - `PM/` contains the main .NET `net10.0` CLI application. It uses Spectre.Console.Cli for commands and Microsoft DI from `Program.cs`.
-- `PM/Project/` owns project discovery, config, task/state file paths, and persistence under a `.dev-pm` project root.
+- `PM/Project/` owns project discovery, config, task/state file paths, and persistence under a `.pm` project root.
 - `PM/Tasks/` contains task model and CLI task commands.
 - `PM/Application/` contains service-level behavior such as `TaskService`, `BoardService`, and `AppResult`. Put cross-command workflow logic here rather than in renderers or command handlers.
 - `PM/Web/` contains the local web board command, endpoint mapping, HTML rendering, and template loading.
@@ -104,7 +104,7 @@ Avoid unnecessary re-renders, repeated expensive computation, avoidable layout s
 - Explain significant architectural deviations.
 - Remove obsolete code introduced by the change.
 - Update documentation and tests when behavior changes.
-- Preserve the Worker trust model: project keys are secrets, stored by PM at `.dev-pm/next_id.txt`, and Worker errors must not log keys or request paths.
+- Preserve the Worker trust model: `.pm/project_id.txt` is a public project identifier, local PM identity private keys stay in OS user config outside `.pm/`, and Worker errors must not log credentials, signatures, recovery keys, or request paths.
 - Do not commit generated artifacts such as `bin/`, `obj/`, `node_modules/`, `.wrangler/`, or local D1 database files.
 
 ## Validation Checklist

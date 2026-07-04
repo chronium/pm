@@ -3,25 +3,26 @@
 Cloudflare Worker backing PM's default next-ID service:
 
 ```text
-https://pm-next-id.apa-prod-monitor.workers.dev
+https://pm-next-id.chronium.workers.dev
 ```
 
 ## API
 
 - `GET /health` returns plain text `ok`.
-- `POST /projects` creates a project and returns JSON: `{ "key": "..." }`.
-- `GET /projects/{key}/tracks/{track}/nextid` returns JSON with the allocated ID: `{ "id": 1 }`.
-- `GET /projects/{key}/tracks/{track}/peekid` returns JSON with the next ID without incrementing it: `{ "id": 2 }`.
+- `POST /projects` creates an authenticated project and returns JSON: `{ "projectId": "..." }`.
+- `POST /legacy-projects/claim` claims an older bearer-key project into the authenticated model.
+- `GET /projects/{projectId}/tracks/{track}/nextid` returns JSON with the allocated ID: `{ "id": 1 }`.
+- `GET /projects/{projectId}/tracks/{track}/peekid` returns JSON with the next ID without incrementing it: `{ "id": 2 }`.
 
-Unknown project keys return `401`. Unknown routes return `404`.
+Project creation, legacy claim, and ID routes require PM signed-request headers. Unknown projects or invalid signatures return `401`. Unknown routes return `404`.
 
 ## Trust Model
 
-This is a personal public utility, not a public SaaS API. It has no user authentication and no admin API in this slice. The project key returned by `POST /projects` authorizes ID allocation for that project, and PM stores it at `.dev-pm/next_id.txt`.
+This is a personal public utility, not a public SaaS API. PM project files are designed to be public project artifacts. Worker auth only protects hosted operations such as shared ID allocation.
 
-For ordinary PM projects, treat `.dev-pm/next_id.txt` as a secret. Anyone who can read it can allocate or peek IDs for that PM project. This repository intentionally publishes its own `.dev-pm/next_id.txt`; do not copy that policy to other projects without reviewing the impact. The Worker stores only a SHA-512 hash of the key, and error handling must avoid logging project keys or request paths.
+PM stores the public Worker project identifier at `.pm/project_id.txt`. Local user identity and the signing private key live in OS user config, outside `.pm/`. Older `.pm/next_id.txt` bearer-key projects can be claimed into the new model; after claim, PM writes `.pm/project_id.txt`.
 
-Abuse controls such as rate limiting, key rotation, admin secrets, and monitoring are intentionally deferred.
+Recovery-key use, member management, rate limiting, key rotation, admin tooling, and monitoring are intentionally deferred.
 
 ## Development
 

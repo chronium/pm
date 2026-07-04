@@ -649,6 +649,12 @@ public class ApplicationServiceTests
             return Task.FromResult<int?>(null);
         }
 
+        public Task<ProjectRegistration> RegisterProject(ProjectRoot projectRoot,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ProjectRegistration("project-test", "recovery-test"));
+        }
+
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)
         {
             HealthyCalls++;
