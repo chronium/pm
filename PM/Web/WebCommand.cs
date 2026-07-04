@@ -16,7 +16,8 @@ public class WebCommand(
     ProjectRoot projectRoot,
     BoardService boardService,
     TaskService taskService,
-    ProjectConfigService configService) : AsyncCommand<WebCommand.Settings>
+    ProjectConfigService configService,
+    WikiService wikiService) : AsyncCommand<WebCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
@@ -34,7 +35,7 @@ public class WebCommand(
         builder.WebHost.UseUrls(url);
 
         var app = builder.Build();
-        MapEndpoints(app, boardService, taskService, configService);
+        MapEndpoints(app, boardService, taskService, configService, wikiService);
 
         await app.StartAsync(cancellationToken);
         AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
@@ -58,7 +59,8 @@ public class WebCommand(
         IEndpointRouteBuilder endpoints,
         BoardService boardService,
         TaskService taskService,
-        ProjectConfigService configService)
+        ProjectConfigService configService,
+        WikiService wikiService)
     {
         endpoints.MapGet("/favicon.ico", () => Results.NoContent());
 
@@ -79,6 +81,26 @@ public class WebCommand(
             var board = CreateBoard(boardService, new BoardQuery());
             var settings = CreateSettings(configService);
             return Results.Content(BoardHtmlRenderer.RenderSettingsPage(board, settings), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapGet("/wiki", () =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var result = wikiService.ListPages();
+            return !result.Success
+                ? WikiError(result)
+                : Results.Content(BoardHtmlRenderer.RenderWikiIndexPage(board, result.Payload!),
+                    "text/html; charset=utf-8");
+        });
+
+        endpoints.MapGet("/wiki/{**path}", (string path) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var result = wikiService.ReadPage(path);
+            return !result.Success
+                ? WikiError(result)
+                : Results.Content(BoardHtmlRenderer.RenderWikiPage(board, result.Payload!),
+                    "text/html; charset=utf-8");
         });
 
         endpoints.MapPost("/settings/statuses", async (HttpRequest request) =>
@@ -316,6 +338,18 @@ public class WebCommand(
             BoardHtmlRenderer.RenderSettings(settings, mutation.Success ? null : mutation.Message),
             "text/html; charset=utf-8",
             statusCode: mutation.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
+    }
+
+    private static IResult WikiError<T>(AppResult<T> result)
+    {
+        var statusCode = result.ErrorCode == "missing_wiki_page"
+            ? StatusCodes.Status404NotFound
+            : StatusCodes.Status400BadRequest;
+
+        return Results.Content(
+            BoardHtmlRenderer.RenderDialogError(result.Message ?? "Wiki page unavailable.", "Unable to open wiki"),
+            "text/html; charset=utf-8",
+            statusCode: statusCode);
     }
 
     private static BoardTask? FindTask(BoardData board, string id)

@@ -1,0 +1,32 @@
+<article class="wiki-page wiki-detail" aria-labelledby="wiki-page-title">
+  <header class="wiki-header">
+    <p class="path">{{path}}</p>
+    <h2 id="wiki-page-title">{{title}}</h2>
+    <dl class="wiki-meta">
+      <div>
+        <dt>Modified</dt>
+        <dd><time>{{modifiedAt}}</time></dd>
+      </div>
+      <div>
+        <dt>File</dt>
+        <dd class="path">{{filePath}}</dd>
+      </div>
+    </dl>
+  </header>
+  <textarea id="wiki-markdown-source" readonly hidden>{{body}}</textarea>
+  <div id="wiki-content" class="wiki-content" aria-live="polite"></div>
+  <pre id="wiki-markdown-fallback" class="wiki-fallback">{{body}}</pre>
+  <script src="https://unpkg.com/marked@18.0.5/lib/marked.umd.js"></script>
+  <script src="https://unpkg.com/dompurify@3.4.11/dist/purify.min.js"></script>
+  <script>
+    (() => {
+      const source = document.getElementById('wiki-markdown-source');
+      const target = document.getElementById('wiki-content');
+      const fallback = document.getElementById('wiki-markdown-fallback');
+      if (!source || !target || !window.marked || !window.DOMPurify) return;
+
+      target.innerHTML = window.DOMPurify.sanitize(window.marked.parse(source.value));
+      fallback?.setAttribute('hidden', '');
+    })();
+  </script>
+</article>

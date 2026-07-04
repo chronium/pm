@@ -6,13 +6,20 @@ namespace PM.Web;
 
 public static class BoardHtmlRenderer
 {
+    private enum SidebarPage
+    {
+        Board,
+        Wiki,
+        Settings,
+    }
+
     public static string RenderPage(BoardData board)
     {
         return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{board.ProjectName} Board"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, false), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Board), StringComparison.Ordinal)
             .Replace("{{board}}", RenderBoard(board), StringComparison.Ordinal);
     }
 
@@ -22,8 +29,28 @@ public static class BoardHtmlRenderer
             .Replace("{{projectName}}", H(settings.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{settings.ProjectName} Settings"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, true), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Settings), StringComparison.Ordinal)
             .Replace("{{board}}", RenderSettings(settings, error), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiIndexPage(BoardData board, IReadOnlyList<WikiPageSummary> pages)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"{board.ProjectName} Wiki"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiIndex(pages), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiPage(BoardData board, WikiPageData page)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"{page.Title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiDetail(page), StringComparison.Ordinal);
     }
 
     public static string RenderBoard(BoardData board)
@@ -128,6 +155,30 @@ public static class BoardHtmlRenderer
                 StringComparison.Ordinal);
     }
 
+    public static string RenderWikiIndex(IReadOnlyList<WikiPageSummary> pages)
+    {
+        var rows = pages.Count == 0
+            ? Template("Wiki/Empty.html")
+            : string.Join(Environment.NewLine, pages.Select(page => Template("Wiki/IndexRow.html")
+                .Replace("{{path}}", H(page.Path), StringComparison.Ordinal)
+                .Replace("{{pathUrl}}", WikiPathUrl(page.Path), StringComparison.Ordinal)
+                .Replace("{{title}}", H(page.Title), StringComparison.Ordinal)
+                .Replace("{{modifiedAt}}", H(FormatModifiedAt(page.ModifiedAt)), StringComparison.Ordinal)));
+
+        return Template("Wiki/Index.html")
+            .Replace("{{rows}}", rows, StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiDetail(WikiPageData page)
+    {
+        return Template("Wiki/Detail.html")
+            .Replace("{{title}}", H(page.Title), StringComparison.Ordinal)
+            .Replace("{{path}}", H(page.Path), StringComparison.Ordinal)
+            .Replace("{{filePath}}", H(page.FilePath), StringComparison.Ordinal)
+            .Replace("{{modifiedAt}}", H(FormatModifiedAt(page.ModifiedAt)), StringComparison.Ordinal)
+            .Replace("{{body}}", H(page.Body), StringComparison.Ordinal);
+    }
+
     private static string RenderFilterInputs(BoardQuery query)
     {
         return string.Join(Environment.NewLine,
@@ -138,19 +189,29 @@ public static class BoardHtmlRenderer
         ]);
     }
 
-    private static string RenderSidebar(BoardData board, bool settingsActive)
+    private static string RenderSidebar(BoardData board, SidebarPage activePage)
     {
         return Template("Layout/Sidebar.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{filterInputs}}", RenderFilterInputs(board.Query), StringComparison.Ordinal)
-            .Replace("{{wholeProjectActive}}", IsWholeProject(board.Query) && !settingsActive ? " active" : string.Empty,
+            .Replace("{{wholeProjectActive}}",
+                activePage == SidebarPage.Board && IsWholeProject(board.Query) ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wholeProjectAriaCurrent}}",
+                activePage == SidebarPage.Board && IsWholeProject(board.Query) ? " aria-current=\"page\"" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wikiActive}}", activePage == SidebarPage.Wiki ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wikiAriaCurrent}}", activePage == SidebarPage.Wiki ? " aria-current=\"page\"" : string.Empty,
                 StringComparison.Ordinal)
             .Replace("{{milestoneItems}}", RenderNavItems("milestone", board.Milestones, board.Query.Milestone),
                 StringComparison.Ordinal)
             .Replace("{{trackItems}}", RenderNavItems("track", board.Tracks, board.Query.Track),
                 StringComparison.Ordinal)
-            .Replace("{{settingsActive}}", settingsActive ? " active" : string.Empty, StringComparison.Ordinal)
-            .Replace("{{settingsAriaCurrent}}", settingsActive ? " aria-current=\"page\"" : string.Empty,
+            .Replace("{{settingsActive}}", activePage == SidebarPage.Settings ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{settingsAriaCurrent}}",
+                activePage == SidebarPage.Settings ? " aria-current=\"page\"" : string.Empty,
                 StringComparison.Ordinal);
     }
 
@@ -263,5 +324,10 @@ public static class BoardHtmlRenderer
     private static string Url(string value)
     {
         return Uri.EscapeDataString(value);
+    }
+
+    private static string WikiPathUrl(string value)
+    {
+        return string.Join('/', value.Split('/').Select(Uri.EscapeDataString));
     }
 }

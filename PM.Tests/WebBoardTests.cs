@@ -1,7 +1,11 @@
+using System.Net;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using PM.Application;
 using PM.Project;
 using PM.Tasks;
 using PM.Web;
+using PM.Wiki;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using Spectre.Console.Rendering;
@@ -16,7 +20,8 @@ public class WebBoardTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
         var command = new WebCommand(projectRoot, new BoardService(projectRoot),
-            new TaskService(projectRoot, new RecordingNextIdService()), new ProjectConfigService(projectRoot));
+            new TaskService(projectRoot, new RecordingNextIdService()), new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot));
 
         var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings());
 
@@ -217,6 +222,123 @@ public class WebBoardTests
         Assert.Contains("role=\"alert\"", error);
         Assert.Contains("Status todo is referenced by one or more tasks.", error);
         Assert.Contains("value=\"Ready\"", error);
+    }
+
+    [Fact]
+    public async Task SidebarIncludesWikiLinkAndMarksWikiPagesActive()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+
+        var boardHtml = BoardHtmlRenderer.RenderPage(board);
+        var wikiHtml = BoardHtmlRenderer.RenderWikiIndexPage(board, []);
+
+        Assert.Contains("href=\"/wiki\"", boardHtml);
+        Assert.Contains("class=\"nav-item active\" href=\"/\" aria-current=\"page\"", boardHtml);
+        Assert.DoesNotContain("class=\"nav-item active\" href=\"/wiki\"", boardHtml);
+        Assert.Contains("class=\"nav-item active\" href=\"/wiki\" aria-current=\"page\"", wikiHtml);
+        Assert.DoesNotContain("class=\"nav-item active\" href=\"/\" aria-current=\"page\"", wikiHtml);
+        AssertBefore(wikiHtml, "href=\"/\"", "href=\"/wiki\"");
+        AssertBefore(wikiHtml, "href=\"/wiki\"", "href=\"/settings\"");
+    }
+
+    [Fact]
+    public async Task WikiIndexRendersEmptyAndPopulatedStatesWithEscapedValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+
+        var emptyHtml = BoardHtmlRenderer.RenderWikiIndexPage(board, []);
+
+        Assert.Contains("No wiki pages yet.", emptyHtml);
+
+        var page = new WikiPage
+        {
+            Path = "architecture/rendering",
+            Title = "Render <wiki>",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc),
+            Body = "Body",
+        };
+        projectRoot.WriteWikiPage(page);
+        var pages = new WikiService(projectRoot).ListPages().Payload!;
+
+        var html = BoardHtmlRenderer.RenderWikiIndexPage(board, pages);
+
+        Assert.Contains("class=\"wiki-list\"", html);
+        Assert.Contains("href=\"/wiki/architecture/rendering\"", html);
+        Assert.Contains("Render &lt;wiki&gt;", html);
+        Assert.Contains("architecture/rendering", html);
+        Assert.Contains("2026-01-02 03:04", html);
+        Assert.DoesNotContain("Render <wiki>", html);
+    }
+
+    [Fact]
+    public async Task WikiPageRendersMetadataFallbackAndClientRenderTarget()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var page = new WikiPage
+        {
+            Path = "notes",
+            Title = "Notes <wiki>",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc),
+            Body = "# Heading <unsafe>\n\n<script>alert(1)</script>",
+        };
+        projectRoot.WriteWikiPage(page);
+        var data = new WikiService(projectRoot).ReadPage("notes").Payload!;
+
+        var html = BoardHtmlRenderer.RenderWikiPage(board, data);
+
+        Assert.Contains("Notes &lt;wiki&gt;", html);
+        Assert.Contains("notes", html);
+        Assert.Contains(projectRoot.WikiPath, html);
+        Assert.Contains("2026-01-02 03:04", html);
+        Assert.Contains("id=\"wiki-content\"", html);
+        Assert.Contains("id=\"wiki-markdown-source\" readonly hidden", html);
+        Assert.Contains("id=\"wiki-markdown-fallback\"", html);
+        Assert.Contains("# Heading &lt;unsafe&gt;", html);
+        Assert.Contains("&lt;script&gt;alert(1)&lt;/script&gt;", html);
+        Assert.Contains("https://unpkg.com/marked@18.0.5/lib/marked.umd.js", html);
+        Assert.Contains("https://unpkg.com/dompurify@3.4.11/dist/purify.min.js", html);
+        Assert.Contains("DOMPurify.sanitize", html);
+        Assert.DoesNotContain("<script>alert(1)</script>", html);
+    }
+
+    [Fact]
+    public async Task WikiEndpointsRenderIndexNestedPageMissingAndInvalidResponses()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        projectRoot.WriteWikiPage(new WikiPage
+        {
+            Path = "architecture/rendering",
+            Title = "Rendering",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            Body = "# Rendering",
+        });
+        var web = await CreateWebClient(projectRoot);
+        await using var app = web.App;
+        using var client = web.Client;
+
+        var index = await client.GetAsync("/wiki");
+        var indexHtml = await index.Content.ReadAsStringAsync();
+        var page = await client.GetAsync("/wiki/architecture/rendering");
+        var pageHtml = await page.Content.ReadAsStringAsync();
+        var missing = await client.GetAsync("/wiki/missing");
+        var invalid = await client.GetAsync("/wiki/notes.txt");
+
+        Assert.Equal(HttpStatusCode.OK, index.StatusCode);
+        Assert.Contains("Rendering", indexHtml);
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        Assert.Contains("# Rendering", pageHtml);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
     }
 
     [Fact]
@@ -631,6 +753,32 @@ public class WebBoardTests
         {
             AnsiConsole.Console = originalConsole;
         }
+    }
+
+    private static async Task<(WebApplication App, HttpClient Client)> CreateWebClient(ProjectRoot projectRoot)
+    {
+        var port = GetAvailablePort();
+        var url = $"http://127.0.0.1:{port}";
+        var builder = WebApplication.CreateBuilder(Array.Empty<string>());
+        builder.WebHost.UseUrls(url);
+
+        var app = builder.Build();
+        WebCommand.MapEndpoints(
+            app,
+            new BoardService(projectRoot),
+            new TaskService(projectRoot, new RecordingNextIdService()),
+            new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot));
+
+        await app.StartAsync();
+        return (app, new HttpClient { BaseAddress = new Uri(url) });
+    }
+
+    private static int GetAvailablePort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private static void AssertBefore(string content, string first, string second)
