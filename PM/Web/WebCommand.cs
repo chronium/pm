@@ -79,6 +79,88 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
                 : Results.Content(BoardHtmlRenderer.RenderTaskDetail(task, board.States), "text/html; charset=utf-8");
         });
 
+        endpoints.MapGet("/task/new", (HttpRequest request) =>
+        {
+            var board = CreateBoard(boardService, request);
+            return Results.Content(BoardHtmlRenderer.RenderTaskCreateForm(board), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/task/new", async (HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            var result = await taskService.CreateTask(
+                form["title"].ToString(),
+                form["track"].ToString(),
+                ReadFormValue(form, "milestone"),
+                form["description"].ToString(),
+                false,
+                request.HttpContext.RequestAborted);
+
+            if (!result.Success)
+                return Results.Content(
+                    BoardHtmlRenderer.RenderDialogError(result.Message ?? "Task creation failed.",
+                        "Unable to create task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var filteredBoard = CreateBoard(boardService, form);
+            var taskBoard = boardService.GetBoard(new BoardQuery());
+            if (!taskBoard.Success)
+                return Results.Content(
+                    BoardHtmlRenderer.RenderDialogError(taskBoard.Message ?? "Task not found.",
+                        "Unable to create task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var task = FindTask(taskBoard.Payload!, result.Payload!.Id);
+            return task == null
+                ? Results.Content(
+                    BoardHtmlRenderer.RenderDialogError("Created task was not found.", "Unable to create task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest)
+                : Results.Content(BoardHtmlRenderer.RenderTaskCreated(filteredBoard, task), "text/html; charset=utf-8");
+        });
+
+        endpoints.MapGet("/task/{id}/edit", (string id, HttpRequest request) =>
+        {
+            var result = taskService.ReadTaskMarkdown(id);
+            return !result.Success
+                ? Results.Content(
+                    BoardHtmlRenderer.RenderDialogError(result.Message ?? "Task not found.", "Unable to edit task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest)
+                : Results.Content(
+                    BoardHtmlRenderer.RenderTaskEditForm(id, result.Payload!, ReadQuery(request)),
+                    "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/task/{id}/edit", async (string id, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            var result = taskService.SaveEditedTaskContent(id, form["markdown"].ToString());
+            if (!result.Success)
+                return Results.Content(
+                    BoardHtmlRenderer.RenderDialogError(result.Message ?? "Task edit failed.", "Unable to edit task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var filteredBoard = CreateBoard(boardService, form);
+            var taskBoard = boardService.GetBoard(new BoardQuery());
+            if (!taskBoard.Success)
+                return Results.Content(
+                    BoardHtmlRenderer.RenderDialogError(taskBoard.Message ?? "Task not found.",
+                        "Unable to edit task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var task = FindTask(taskBoard.Payload!, id);
+            return task == null
+                ? Results.Content(BoardHtmlRenderer.RenderDialogError("Task not found.", "Unable to edit task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest)
+                : Results.Content(BoardHtmlRenderer.RenderTaskUpdate(filteredBoard, task), "text/html; charset=utf-8");
+        });
+
         endpoints.MapPost("/task/{id}/state", async (string id, HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
@@ -116,10 +198,7 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
 
     private static BoardData CreateBoard(BoardService boardService, HttpRequest request)
     {
-        var query = new BoardQuery(
-            ReadQueryValue(request, "track"),
-            ReadQueryValue(request, "milestone"),
-            ReadQueryValue(request, "state"));
+        var query = ReadQuery(request);
 
         var result = boardService.GetBoard(query);
         if (!result.Success) throw new InvalidOperationException(result.Message);
@@ -130,14 +209,22 @@ public class WebCommand(ProjectRoot projectRoot, BoardService boardService, Task
     private static BoardData CreateBoard(BoardService boardService, IFormCollection form)
     {
         var query = new BoardQuery(
-            ReadFormValue(form, "track"),
-            ReadFormValue(form, "milestone"),
-            ReadFormValue(form, "state"));
+            ReadFormValue(form, "filterTrack") ?? ReadFormValue(form, "track"),
+            ReadFormValue(form, "filterMilestone") ?? ReadFormValue(form, "milestone"),
+            ReadFormValue(form, "filterState") ?? ReadFormValue(form, "state"));
 
         var result = boardService.GetBoard(query);
         if (!result.Success) throw new InvalidOperationException(result.Message);
 
         return result.Payload!;
+    }
+
+    private static BoardQuery ReadQuery(HttpRequest request)
+    {
+        return new BoardQuery(
+            ReadQueryValue(request, "track"),
+            ReadQueryValue(request, "milestone"),
+            ReadQueryValue(request, "state"));
     }
 
     private static BoardTask? FindTask(BoardData board, string id)

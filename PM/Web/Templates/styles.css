@@ -6,7 +6,10 @@ h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; }
 main { padding: 18px 28px 32px; }
 form.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 16px; }
 label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 650; text-transform: uppercase; }
-select { min-width: 160px; height: 36px; border: 1px solid var(--line); border-radius: 6px; padding: 0 32px 0 10px; background: white; color: var(--ink); font: inherit; }
+select, input, textarea { min-width: 160px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); font: inherit; }
+select, input { height: 36px; padding: 0 10px; }
+select { padding-right: 32px; }
+textarea { width: 100%; min-height: 180px; padding: 10px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.45; text-transform: none; }
 .board { display: grid; gap: 20px; }
 .milestone { display: grid; gap: 10px; }
 .milestone h2 { margin: 0; font-size: 18px; line-height: 1.3; }
@@ -33,6 +36,9 @@ select { min-width: 160px; height: 36px; border: 1px solid var(--line); border-r
 .dialog-close button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--muted); font: inherit; cursor: pointer; }
 .state-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; padding-top: 4px; border-top: 1px solid var(--line); }
 button { height: 36px; border: 1px solid var(--accent); border-radius: 6px; padding: 0 12px; background: var(--accent); color: white; font: inherit; font-weight: 650; cursor: pointer; }
+button.secondary { width: fit-content; border-color: var(--line); background: #fff; color: var(--ink); }
+.task-form { display: grid; gap: 12px; }
+.task-form label { text-transform: none; }
 button.danger { border-color: #9f2f3f; background: #9f2f3f; }
 .remove-area { display: grid; gap: 8px; justify-items: start; }
 .remove-confirmation { display: grid; gap: 8px; padding: 10px; border: 1px solid #e0b4bc; border-radius: 6px; background: #fff7f8; }

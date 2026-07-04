@@ -1,5 +1,137 @@
+# Repository Instructions
+
 ## Dotnet CLI Usage
 
 In the codex sandbox, run dotnet commands that build in single node mode and without restore.
 Use `-m:1 --no-restore` for `dotnet build` and for any command that triggers a build, such as `dotnet test`.
 If you do not do this, the builds may sit indefinitely and produce no output.
+In Codex/sandboxed sessions, any .NET command that needs NuGet package access or restore, including `dotnet restore`, must run from an elevated shell. Running the built app from Codex may also require an elevated shell.
+
+## Repository Workflow
+
+- Restore .NET dependencies with elevated shell: `dotnet restore PM.slnx`.
+- Build the .NET solution: `dotnet build PM.slnx -m:1 --no-restore`.
+- Run .NET tests: `dotnet test PM.slnx -m:1 --no-restore`.
+- In Codex/sandboxed sessions, run the CLI locally after build with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll <command>`.
+- In Codex/sandboxed sessions, start the web board from inside an initialized PM project with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll web --port 51237`.
+- Worker dependencies: run `socket npm install` in `next-id-worker/` only when Node tooling needs local install state.
+- Worker tests: `npm test` in `next-id-worker/`.
+- Worker dev server: `npm run dev` in `next-id-worker/`.
+- Worker deploy: `npm run deploy` in `next-id-worker/`.
+- Worker D1 migrations: `npm run migrate:local` or `npm run migrate:remote` in `next-id-worker/`.
+
+Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. No Playwright test command is configured in this repository. Use `playwright-cli` for ad hoc UI validation when available; if formal Playwright tests are added later, document their command before relying on it.
+
+No dedicated type-check, lint, or formatting commands are configured in this repository. Do not invent them. Before work is complete, run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; worker changes need `npm test` from `next-id-worker/`.
+
+## Architecture
+
+- `PM/` contains the main .NET `net10.0` CLI application. It uses Spectre.Console.Cli for commands and Microsoft DI from `Program.cs`.
+- `PM/Project/` owns project discovery, config, task/state file paths, and persistence under a `.dev-pm` project root.
+- `PM/Tasks/` contains task model and CLI task commands.
+- `PM/Application/` contains service-level behavior such as `TaskService`, `BoardService`, and `AppResult`. Put cross-command workflow logic here rather than in renderers or command handlers.
+- `PM/Web/` contains the local web board command, endpoint mapping, HTML rendering, and template loading.
+- `PM/Web/Templates/` contains embedded HTML fragments and `styles.css`. Templates are embedded by `PM.csproj`; keep template names stable and update renderer tests when changing markup.
+- `PM/Mcp/` contains MCP server host, tools, and response shapes.
+- `PM/Files/` contains file-system abstractions.
+- `PM.Tests/` contains xUnit tests and test helpers. Add tests near the behavior being changed, especially for rendered HTML and file mutation behavior.
+- `next-id-worker/` contains the Cloudflare Worker used by the default next-ID service. Its API and trust model are documented in `next-id-worker/README.md`.
+- `next_id.cs` is listed in the solution under `/NanoServices/`.
+
+Use existing constructor-injected services and `AppResult`/`AppResult<T>` for application failures. Keep data access through `ProjectRoot`, `TaskService`, `BoardService`, and Worker D1 prepared statements rather than scattering file or database access through UI code. Keep HTML escaping in `BoardHtmlRenderer` for user-controlled values.
+
+Prefer extending established patterns over introducing new abstractions. Do not add dependencies when the current .NET libraries, htmx, native browser APIs, or Worker runtime APIs are enough. All `npm` and `npx` flows for the Worker should go through the existing package scripts; Wrangler commands are Socket-wrapped there.
+
+## UI Principles
+
+The web UI is a focused professional tool: server-rendered HTML fragments, htmx interactions, minimal JavaScript, and CSS variables in `PM/Web/Templates/styles.css`. Do not broadly restyle existing screens unless the task explicitly requires it.
+
+Non-negotiables:
+
+- Keep task content more prominent than navigation, filters, metadata, and controls.
+- Preserve dense but readable layouts for real task-board usage.
+- Reuse existing templates, htmx patterns, native browser APIs, and CSS tokens before adding new primitives.
+- Keep destructive and advanced actions contextual, confirmable, and keyboard-accessible.
+- Do not introduce decorative gradients, broad shadows, arbitrary colors, or excessive card nesting.
+- Preserve filters, board context, and immediate feedback after mutations.
+
+1. Content over chrome
+   Keep navigation, filters, and metadata visually quieter than task content. Avoid decorative containers when spacing, alignment, typography, and surface contrast are sufficient. Do not wrap every section in a card. Avoid unnecessary shadows, gradients, thick borders, and ornamental effects.
+2. Dense but readable
+   Optimize task boards and dialogs for efficient scanning. Use compact controls and rows without compromising legibility, visible focus, or practical touch targets. Avoid oversized headings or excessive whitespace that reduces useful task density.
+3. Semantic color
+   Use the existing CSS token system in `styles.css`. Use accent colors sparingly. Reserve strong color for status, priority, validation, selection, warnings, destructive actions, and meaningful emphasis. Do not introduce arbitrary colors directly in templates or components.
+4. Consistent interaction grammar
+   The same task should behave consistently in board cards, dialogs, forms, and filtered views. Reuse existing htmx targeting, dialog, selection, editing, filtering, and mutation patterns before adding new ones.
+5. Progressive disclosure
+   Keep common paths visible: filtering, opening a task, creating a task, editing, state changes, and removal flows should remain straightforward. Put advanced or destructive choices in contextual controls, dialogs, confirmations, popovers, drawers, expandable sections, or command interfaces.
+6. Contextual controls
+   Secondary actions may appear on hover, focus, selection, or overflow menus, but essential actions must remain discoverable. Hover-only actions must also be reachable by keyboard and touch.
+7. Keyboard efficiency
+   Preserve logical tab order and visible focus. Important repetitive workflows should be keyboard accessible. Add shortcuts only when they do not conflict with text entry, browser behavior, or accessibility. If a command menu is added, expose relevant actions there and show shortcut hints in menus where appropriate.
+8. Immediate, trustworthy feedback
+   Acknowledge actions immediately. Use htmx fragment swaps, out-of-band board updates, localized loading/error states, and stable layouts rather than unnecessary full-page loading. Use optimistic updates only when failure can be detected and safely rolled back. Preserve filters and user context after mutations.
+9. Motion
+   Motion must explain state changes, hierarchy, or spatial relationships. Keep transitions subtle and brief, avoid decorative animation, and respect reduced-motion preferences.
+10. Responsive behavior
+   Preserve task priority instead of merely shrinking desktop layouts. Collapse or move secondary information before hiding primary actions. Do not depend on hover. Avoid accidental horizontal scrolling except where intentionally required.
+
+## Component Requirements
+
+- Reuse existing templates, renderer helpers, CSS variables, controls, and htmx conventions before creating new primitives.
+- Support states that matter for the component's behavior: default, hover, active, selected, focus-visible, disabled, loading, empty, and error where relevant.
+- Keep business logic in services and endpoint handlers; keep reusable presentation in templates and rendering helpers.
+- Prefer composition of templates and small renderer helpers over large components with many unrelated boolean options.
+- Avoid one-off styling that duplicates an existing selector or token.
+- Keep variants intentional and limited.
+- Ensure icons, if introduced, have consistent sizing, alignment, stroke treatment, accessible labels, and tooltips for icon-only buttons.
+- Keep user-controlled content HTML-escaped and URL-escaped through renderer helpers.
+
+## Accessibility
+
+Accessibility is part of completion, not a later enhancement. Use semantic HTML or framework equivalents, keyboard-operable interactions, visible focus states, correct labels and accessible names, and ARIA only where native semantics are insufficient. Maintain sufficient contrast, support reduced motion, announce meaningful asynchronous changes where necessary, and never communicate critical information by color alone.
+
+## Performance
+
+Avoid unnecessary re-renders, repeated expensive computation, avoidable layout shift, and full-page reloads for local fragment updates. Lazy-load only where it meaningfully improves startup cost. Use virtualization for genuinely large collections when appropriate. Debounce or cancel rapid query-driven interactions when needed. Measure before introducing complex performance optimizations.
+
+## Implementation Discipline
+
+- Inspect nearby code before modifying a feature.
+- Follow existing naming, file organization, dependency injection, result handling, and testing conventions.
+- Make the smallest coherent change that solves the problem.
+- Avoid unrelated refactoring and broad visual restyling.
+- Explain significant architectural deviations.
+- Remove obsolete code introduced by the change.
+- Update documentation and tests when behavior changes.
+- Preserve the Worker trust model: project keys are secrets, stored by PM at `.dev-pm/next_id.txt`, and Worker errors must not log keys or request paths.
+- Do not commit generated artifacts such as `bin/`, `obj/`, `node_modules/`, `.wrangler/`, or local D1 database files.
+
+## Validation Checklist
+
+Before declaring UI work complete, verify:
+
+- The primary workflow is visually obvious.
+- Secondary chrome does not compete with task content.
+- The screen remains useful at realistic data density.
+- Keyboard navigation and focus behavior work.
+- Loading, empty, error, disabled, and permission-restricted states are handled.
+- Responsive layouts preserve primary actions.
+- Interaction feedback is immediate and understandable.
+- Existing templates, renderer helpers, and tokens were reused where possible.
+- Relevant .NET and/or Worker tests pass, along with the .NET build when application code changes.
+- No unrelated behavior or visual regressions were introduced.
+
+## Review Guidance
+
+When reviewing changes, prioritize:
+
+1. correctness and data safety
+2. accessibility
+3. workflow efficiency
+4. consistency with existing interaction patterns
+5. information hierarchy
+6. performance
+7. visual polish
+
+Flag unnecessary visual ornamentation, excessive card usage, inconsistent spacing, hard-coded styling values, hidden essential actions, inaccessible custom controls, unsafe HTML rendering, secret leakage, and new patterns that duplicate established ones.

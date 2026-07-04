@@ -45,16 +45,40 @@ public static class BoardHtmlRenderer
             .Replace("{{stateOptions}}", string.Join(Environment.NewLine, stateOptions), StringComparison.Ordinal);
     }
 
-    public static string RenderDialogError(string message)
+    public static string RenderTaskCreateForm(BoardData board)
+    {
+        var selectedTrack = string.IsNullOrWhiteSpace(board.Query.Track) ? board.Tracks.FirstOrDefault()?.Key : board.Query.Track;
+
+        return Template("TaskCreateForm.html")
+            .Replace("{{trackOptions}}", RenderOptions(board.Tracks, selectedTrack), StringComparison.Ordinal)
+            .Replace("{{milestoneOptions}}", RenderOptions(board.Milestones, board.Query.Milestone), StringComparison.Ordinal)
+            .Replace("{{filterInputs}}", RenderFilterInputs(board.Query), StringComparison.Ordinal);
+    }
+
+    public static string RenderTaskEditForm(string taskId, string markdown, BoardQuery query)
+    {
+        return Template("TaskEditForm.html")
+            .Replace("{{taskId}}", H(taskId), StringComparison.Ordinal)
+            .Replace("{{taskIdUrl}}", Url(taskId), StringComparison.Ordinal)
+            .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
+            .Replace("{{filterInputs}}", RenderFilterInputs(query), StringComparison.Ordinal);
+    }
+
+    public static string RenderDialogError(string message, string title = "Unable to update task")
     {
         return Template("DialogError.html")
-            .Replace("{{title}}", "Unable to update task", StringComparison.Ordinal)
+            .Replace("{{title}}", H(title), StringComparison.Ordinal)
             .Replace("{{message}}", H(message), StringComparison.Ordinal);
     }
 
     public static string RenderTaskUpdate(BoardData board, BoardTask task)
     {
         return RenderTaskDetail(task, board.States) + Environment.NewLine + RenderBoardOutOfBand(board);
+    }
+
+    public static string RenderTaskCreated(BoardData board, BoardTask task)
+    {
+        return RenderTaskUpdate(board, task);
     }
 
     public static string RenderTaskRemoval(BoardData board)
@@ -101,6 +125,16 @@ public static class BoardHtmlRenderer
             .Replace("{{selects}}", selects, StringComparison.Ordinal);
     }
 
+    private static string RenderFilterInputs(BoardQuery query)
+    {
+        return string.Join(Environment.NewLine,
+        [
+            $"""<input type="hidden" name="filterTrack" value="{H(query.Track)}">""",
+            $"""<input type="hidden" name="filterMilestone" value="{H(query.Milestone)}">""",
+            $"""<input type="hidden" name="filterState" value="{H(query.State)}">""",
+        ]);
+    }
+
     private static string RenderSelect(
         string name,
         string label,
@@ -108,16 +142,21 @@ public static class BoardHtmlRenderer
         string? selected,
         string allLabel)
     {
+        return Template("Select.html")
+            .Replace("{{label}}", H(label), StringComparison.Ordinal)
+            .Replace("{{name}}", H(name), StringComparison.Ordinal)
+            .Replace("{{allLabel}}", H(allLabel), StringComparison.Ordinal)
+            .Replace("{{options}}", RenderOptions(options, selected), StringComparison.Ordinal);
+    }
+
+    private static string RenderOptions(IReadOnlyList<BoardOption> options, string? selected)
+    {
         var optionHtml = options.Select(option => Template("SelectOption.html")
             .Replace("{{key}}", H(option.Key), StringComparison.Ordinal)
             .Replace("{{name}}", H(option.Name), StringComparison.Ordinal)
             .Replace("{{selected}}", option.Key == selected ? " selected" : string.Empty, StringComparison.Ordinal));
 
-        return Template("Select.html")
-            .Replace("{{label}}", H(label), StringComparison.Ordinal)
-            .Replace("{{name}}", H(name), StringComparison.Ordinal)
-            .Replace("{{allLabel}}", H(allLabel), StringComparison.Ordinal)
-            .Replace("{{options}}", string.Join(Environment.NewLine, optionHtml), StringComparison.Ordinal);
+        return string.Join(Environment.NewLine, optionHtml);
     }
 
     private static string RenderTaskCard(BoardTask task)

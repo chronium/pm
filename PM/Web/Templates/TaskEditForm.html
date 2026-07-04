@@ -1,0 +1,11 @@
+<article class="detail">
+  <form method="dialog" class="dialog-close">
+    <button type="submit" aria-label="Close">x</button>
+  </form>
+  <h2>Edit {{taskId}}</h2>
+  <form class="task-form" hx-post="/task/{{taskIdUrl}}/edit" hx-target="#task-dialog" hx-swap="innerHTML">
+{{filterInputs}}
+    <label>Markdown<textarea name="markdown" rows="22" required autofocus>{{markdown}}</textarea></label>
+    <button type="submit">Save</button>
+  </form>
+</article>

@@ -11,6 +11,7 @@
   </div>
   <p class="path">{{filePath}}</p>
   <div class="description">{{description}}</div>
+  <button type="button" class="secondary" hx-get="/task/{{taskIdUrl}}/edit" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">Edit</button>
   <form class="state-form" hx-post="/task/{{taskIdUrl}}/state" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters, closest form">
     <label>State<select name="targetState">
 {{stateOptions}}

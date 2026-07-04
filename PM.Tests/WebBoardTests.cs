@@ -104,9 +104,11 @@ public class WebBoardTests
         Assert.Contains("Render &lt;task&gt;", html);
         Assert.Contains("Heading", html);
         Assert.Contains("hx-get=\"/board\"", html);
+        Assert.Contains("hx-get=\"/task/new\"", html);
         Assert.Contains("hx-get=\"/task/PM-0001\"", html);
         Assert.Contains("dialog id=\"task-dialog\"", html);
         Assert.Contains("hx-target=\"#task-dialog\"", html);
+        Assert.Contains("htmx:beforeSwap", html);
         Assert.DoesNotContain("task-detail", html);
     }
 
@@ -127,6 +129,7 @@ public class WebBoardTests
         Assert.Contains("Description &lt;body&gt;", html);
         Assert.Contains("PM-0001", html);
         Assert.Contains("hx-post=\"/task/PM-0001/state\"", html);
+        Assert.Contains("hx-get=\"/task/PM-0001/edit\"", html);
         Assert.Contains("name=\"targetState\"", html);
         Assert.Contains("<option value=\"todo\" selected>", html);
         Assert.Contains("hx-post=\"/task/PM-0001/remove\"", html);
@@ -153,6 +156,151 @@ public class WebBoardTests
         Assert.Contains("Body &amp; notes", html);
         Assert.Contains(">PM<", html);
         Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
+    }
+
+    [Fact]
+    public async Task TaskCreateFormContainsFieldsAndPreservedFilters()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery("BUILD", "m1", "review")).Payload!;
+        var html = BoardHtmlRenderer.RenderTaskCreateForm(board);
+
+        Assert.Contains("hx-post=\"/task/new\"", html);
+        Assert.Contains("name=\"title\"", html);
+        Assert.Contains("name=\"track\"", html);
+        Assert.Contains("<option value=\"BUILD\" selected>", html);
+        Assert.Contains("name=\"milestone\"", html);
+        Assert.Contains("<option value=\"m1\" selected>", html);
+        Assert.Contains("name=\"description\"", html);
+        Assert.Contains("name=\"filterTrack\" value=\"BUILD\"", html);
+        Assert.Contains("name=\"filterMilestone\" value=\"m1\"", html);
+        Assert.Contains("name=\"filterState\" value=\"review\"", html);
+    }
+
+    [Fact]
+    public async Task TaskEditFormContainsEscapedMarkdownAndPreservedFilters()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Render <task>", "Body <unsafe>");
+        projectRoot.WriteTask(task);
+
+        var markdown = new TaskService(projectRoot, new RecordingNextIdService()).ReadTaskMarkdown("PM-0001").Payload!;
+        var html = BoardHtmlRenderer.RenderTaskEditForm("PM-0001", markdown, new BoardQuery("PM", null, "todo"));
+
+        Assert.Contains("hx-post=\"/task/PM-0001/edit\"", html);
+        Assert.Contains("name=\"markdown\"", html);
+        Assert.Contains("Render &lt;task&gt;", html);
+        Assert.Contains("Body &lt;unsafe&gt;", html);
+        Assert.Contains("name=\"filterTrack\" value=\"PM\"", html);
+        Assert.Contains("name=\"filterState\" value=\"todo\"", html);
+    }
+
+    [Fact]
+    public async Task CreatingTaskWritesMarkdownStateRefAndRendersFragments()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var taskService = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = await taskService.CreateTask("Build task", "BUILD", "m1", "Body", false);
+
+        Assert.True(result.Success);
+        Assert.Equal("BUILD-0001", result.Payload!.Id);
+        Assert.True(File.Exists(projectRoot.GetTaskFilePath("BUILD-0001")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "BUILD-0001.ref")));
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var html = BoardHtmlRenderer.RenderTaskCreated(board, boardTask);
+
+        Assert.Contains("Build task", html);
+        Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
+    }
+
+    [Fact]
+    public async Task CreatingTaskFailuresRenderDialogErrors()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var invalidTrack = await new TaskService(projectRoot, new RecordingNextIdService()).CreateTask(
+            "Bad",
+            "NOPE",
+            null,
+            "",
+            false);
+        var unavailableNextId = await new TaskService(projectRoot, new RecordingNextIdService(healthy: false)).CreateTask(
+            "Bad",
+            "PM",
+            null,
+            "",
+            false);
+
+        Assert.False(invalidTrack.Success);
+        Assert.Equal("invalid_track", invalidTrack.ErrorCode);
+        Assert.False(unavailableNextId.Success);
+        Assert.Equal("next_id_unavailable", unavailableNextId.ErrorCode);
+
+        var errorHtml = BoardHtmlRenderer.RenderDialogError(invalidTrack.Message!, "Unable to create task");
+        Assert.Contains("Unable to create task", errorHtml);
+        Assert.Contains("Track NOPE not found.", errorHtml);
+    }
+
+    [Fact]
+    public async Task EditingTaskUpdatesMarkdownAndRendersFragments()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Original", "Old body");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var taskService = new TaskService(projectRoot, new RecordingNextIdService());
+        var edited = task with { Title = "Updated", Description = "New body" };
+
+        var result = taskService.SaveEditedTaskContent("PM-0001", edited.ToMarkdown());
+
+        Assert.True(result.Success);
+        Assert.Contains("Updated", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks));
+        var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
+
+        Assert.Contains("Updated", html);
+        Assert.Contains("New body", html);
+        Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
+    }
+
+    [Fact]
+    public async Task InvalidEditMarkdownPreservesOriginalFileAndRendersError()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Original", "Old body");
+        projectRoot.WriteTask(task);
+        var taskService = new TaskService(projectRoot, new RecordingNextIdService());
+        var original = File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001"));
+
+        var invalidMarkdown = taskService.SaveEditedTaskContent("PM-0001", "not markdown");
+        var changedId = taskService.SaveEditedTaskContent(
+            "PM-0001",
+            TestData.Task("PM-0002", "Changed").ToMarkdown());
+
+        Assert.False(invalidMarkdown.Success);
+        Assert.Equal("invalid_edited_markdown", invalidMarkdown.ErrorCode);
+        Assert.False(changedId.Success);
+        Assert.Equal("changed_task_id", changedId.ErrorCode);
+        Assert.Equal(original, File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        var errorHtml = BoardHtmlRenderer.RenderDialogError(changedId.Message!, "Unable to edit task");
+        Assert.Contains("Unable to edit task", errorHtml);
+        Assert.Contains("Task ID cannot be changed.", errorHtml);
     }
 
     [Fact]
@@ -287,7 +435,7 @@ public class WebBoardTests
         }
     }
 
-    private sealed class RecordingNextIdService : INextIdService
+    private sealed class RecordingNextIdService(bool healthy = true) : INextIdService
     {
         public Task<int> GetNextId(ProjectRoot projectRoot, string track, CancellationToken cancellationToken = default)
         {
@@ -307,7 +455,7 @@ public class WebBoardTests
 
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(true);
+            return Task.FromResult(healthy);
         }
     }
 }
