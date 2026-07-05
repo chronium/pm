@@ -177,6 +177,87 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task GetNextTaskDefaultCanReturnBlockedTask()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var blocked = TestData.Task("PM-0001", "Blocked", dependsOn: ["PM-9999"]);
+        projectRoot.WriteTask(blocked);
+        projectRoot.UpdateTaskState(blocked, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask();
+
+        Assert.True(result.Success);
+        Assert.True(result.Data!.Found);
+        Assert.Equal("PM-0001", result.Data.Task!.Id);
+        Assert.False(result.Data.Task.DependenciesReady);
+        Assert.Equal(["PM-9999"], result.Data.Task.MissingDependencies);
+    }
+
+    [Fact]
+    public async Task GetNextTaskReadyOnlyReturnsNoTaskWhenAllCandidatesAreBlocked()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var blocked = TestData.Task("PM-0001", "Blocked", dependsOn: ["PM-9999"]);
+        projectRoot.WriteTask(blocked);
+        projectRoot.UpdateTaskState(blocked, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask(readyOnly: true);
+
+        Assert.True(result.Success);
+        Assert.False(result.Data!.Found);
+        Assert.Null(result.Data.Task);
+        Assert.Equal("No dependency-ready actionable task found.", result.Data.Reason);
+        Assert.Equal(result.Data.Reason, result.Summary);
+    }
+
+    [Fact]
+    public async Task GetNextTaskReadyOnlyReturnsBestReadyTask()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var blocked = TestData.Task("PM-0001", "Blocked urgent", priority: "urgent", dependsOn: ["PM-9999"]);
+        var ready = TestData.Task("PM-0002", "Ready low", priority: "low");
+        projectRoot.WriteTask(blocked);
+        projectRoot.WriteTask(ready);
+        projectRoot.UpdateTaskState(blocked, "todo");
+        projectRoot.UpdateTaskState(ready, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask(readyOnly: true);
+
+        Assert.True(result.Success);
+        Assert.True(result.Data!.Found);
+        Assert.Equal("PM-0002", result.Data.Task!.Id);
+        Assert.True(result.Data.Task.DependenciesReady);
+    }
+
+    [Fact]
+    public async Task GetNextTaskReadyOnlyRespectsTrackFilter()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
+        var projectReady = TestData.Task("PM-0001", "Project ready", track: "PM");
+        var buildBlocked = TestData.Task("BUILD-0001", "Build blocked", track: "BUILD", dependsOn: ["BUILD-9999"]);
+        projectRoot.WriteTask(projectReady);
+        projectRoot.WriteTask(buildBlocked);
+        projectRoot.UpdateTaskState(projectReady, "todo");
+        projectRoot.UpdateTaskState(buildBlocked, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask("BUILD", readyOnly: true);
+
+        Assert.True(result.Success);
+        Assert.False(result.Data!.Found);
+        Assert.Null(result.Data.Task);
+        Assert.Equal("No dependency-ready actionable task found for track BUILD.", result.Data.Reason);
+    }
+
+    [Fact]
     public async Task GetNextTaskReturnsSuccessWhenNoActionableTaskExists()
     {
         using var workspace = new TempWorkingDirectory();
@@ -202,10 +283,14 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
 
         var result = tools.GetNextTask("NOPE");
+        var readyOnly = tools.GetNextTask("NOPE", readyOnly: true);
 
         Assert.False(result.Success);
         Assert.Equal("invalid_track", result.ErrorCode);
         Assert.Equal("Track NOPE not found.", result.Message);
+        Assert.False(readyOnly.Success);
+        Assert.Equal("invalid_track", readyOnly.ErrorCode);
+        Assert.Equal("Track NOPE not found.", readyOnly.Message);
     }
 
     [Fact]

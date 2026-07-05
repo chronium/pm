@@ -96,10 +96,10 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "get_next_task", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns one deterministic recommended actionable task, optionally filtered by track.")]
-    public McpToolResponse<NextTaskPayload> GetNextTask(string? track = null)
+    [Description("Returns one deterministic recommended actionable task, optionally filtered by track. By default blocked tasks can be returned when no dependency-ready task is available; set readyOnly to true to return only dependency-ready tasks.")]
+    public McpToolResponse<NextTaskPayload> GetNextTask(string? track = null, bool readyOnly = false)
     {
-        var result = boardService.GetNextTask(new NextTaskQuery(NormalizeFilter(track)));
+        var result = boardService.GetNextTask(new NextTaskQuery(NormalizeFilter(track), readyOnly));
         if (!result.Success)
             return McpToolResponse<NextTaskPayload>.FromFailure(result);
 

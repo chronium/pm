@@ -39,7 +39,7 @@ public sealed record DependencyStatus(
     IReadOnlyList<string> Missing,
     string Summary);
 
-public sealed record NextTaskQuery(string? Track = null);
+public sealed record NextTaskQuery(string? Track = null, bool ReadyOnly = false);
 
 public sealed record NextTaskResult(bool Found, BoardTask? Task, string Reason);
 
@@ -133,6 +133,7 @@ public partial class BoardService(ProjectRoot projectRoot)
         var milestoneIndex = BuildMilestoneIndex(config);
         var selected = GetBoardTasks(new BoardQuery(query.Track), descriptionPreviewLength, orderLookup)
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+            .Where(task => !query.ReadyOnly || task.Dependencies.Ready)
             .OrderBy(task => task.Dependencies.Ready ? 0 : 1)
             .ThenByDescending(task => PriorityLevel.Rank(task.Priority))
             .ThenBy(task => GetStateIndex(task, stateIndex))
@@ -151,9 +152,7 @@ public partial class BoardService(ProjectRoot projectRoot)
         return AppResult<NextTaskResult>.Ok(new NextTaskResult(
             false,
             null,
-            string.IsNullOrWhiteSpace(query.Track)
-                ? "No actionable task found."
-                : $"No actionable task found for track {query.Track}."));
+            BuildNoNextTaskReason(query)));
     }
 
     public DependencyStatus GetDependencyStatus(TaskItem task)
@@ -277,6 +276,17 @@ public partial class BoardService(ProjectRoot projectRoot)
             _ => "no priority source",
         };
         return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}; {task.Dependencies.Summary}.";
+    }
+
+    private static string BuildNoNextTaskReason(NextTaskQuery query)
+    {
+        var scope = string.IsNullOrWhiteSpace(query.Track)
+            ? string.Empty
+            : $" for track {query.Track}";
+
+        return query.ReadyOnly
+            ? $"No dependency-ready actionable task found{scope}."
+            : $"No actionable task found{scope}.";
     }
 
     private static string BuildWaitingSummary(IReadOnlyList<string> waitingOn, IReadOnlyList<string> missing)

@@ -592,10 +592,12 @@ public class ApplicationServiceTests
         var next = service.GetNextTask(new NextTaskQuery()).Payload!;
         var filtered = service.GetNextTask(new NextTaskQuery("BUILD")).Payload!;
         var invalid = service.GetNextTask(new NextTaskQuery("NOPE"));
+        var invalidReadyOnly = service.GetNextTask(new NextTaskQuery("NOPE", ReadyOnly: true));
 
         Assert.Equal("PM-0001", next.Task!.Task.Id);
         Assert.Equal("BUILD-0001", filtered.Task!.Task.Id);
         Assert.Equal("invalid_track", invalid.ErrorCode);
+        Assert.Equal("invalid_track", invalidReadyOnly.ErrorCode);
     }
 
     [Fact]
@@ -717,15 +719,71 @@ public class ApplicationServiceTests
 
         var service = new BoardService(projectRoot);
         var first = service.GetNextTask(new NextTaskQuery()).Payload!;
+        var readyOnly = service.GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
         projectRoot.UpdateTaskState(dependency, "done");
         var afterDependencyDone = service.GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.Equal("PM-0002", first.Task!.Task.Id);
         Assert.True(first.Task.Dependencies.Ready);
         Assert.Contains("no dependencies", first.Reason);
+        Assert.Equal("PM-0002", readyOnly.Task!.Task.Id);
+        Assert.True(readyOnly.Task.Dependencies.Ready);
         Assert.Equal("PM-0001", afterDependencyDone.Task!.Task.Id);
         Assert.True(afterDependencyDone.Task.Dependencies.Ready);
         Assert.Contains("all dependencies complete", afterDependencyDone.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskDefaultCanReturnBlockedTaskWhenNoReadyTaskExists()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var blocked = TestData.Task("PM-0001", "Blocked", priority: "urgent", dependsOn: ["PM-9999"]);
+        projectRoot.WriteTask(blocked);
+        projectRoot.UpdateTaskState(blocked, "todo");
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.True(next.Found);
+        Assert.Equal("PM-0001", next.Task!.Task.Id);
+        Assert.False(next.Task.Dependencies.Ready);
+        Assert.Contains("missing PM-9999", next.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskReadyOnlyReturnsEmptyResultWhenAllCandidatesAreBlocked()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var blocked = TestData.Task("PM-0001", "Blocked", dependsOn: ["PM-9999"]);
+        projectRoot.WriteTask(blocked);
+        projectRoot.UpdateTaskState(blocked, "todo");
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
+
+        Assert.False(next.Found);
+        Assert.Null(next.Task);
+        Assert.Equal("No dependency-ready actionable task found.", next.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskReadyOnlyRespectsTrackFilter()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
+        var projectReady = TestData.Task("PM-0001", "Project ready", track: "PM", priority: "urgent");
+        var buildBlocked = TestData.Task("BUILD-0001", "Build blocked", track: "BUILD", dependsOn: ["BUILD-9999"]);
+        projectRoot.WriteTask(projectReady);
+        projectRoot.WriteTask(buildBlocked);
+        projectRoot.UpdateTaskState(projectReady, "todo");
+        projectRoot.UpdateTaskState(buildBlocked, "todo");
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery("BUILD", ReadyOnly: true)).Payload!;
+
+        Assert.False(next.Found);
+        Assert.Null(next.Task);
+        Assert.Equal("No dependency-ready actionable task found for track BUILD.", next.Reason);
     }
 
     [Fact]
@@ -806,10 +864,14 @@ public class ApplicationServiceTests
         using var emptyWorkspace = new TempWorkingDirectory();
         var emptyRoot = await emptyWorkspace.CreateProject();
         var empty = new BoardService(emptyRoot).GetNextTask(new NextTaskQuery());
+        var emptyReadyOnly = new BoardService(emptyRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true));
 
         Assert.True(empty.Success);
         Assert.False(empty.Payload!.Found);
         Assert.Null(empty.Payload.Task);
+        Assert.True(emptyReadyOnly.Success);
+        Assert.False(emptyReadyOnly.Payload!.Found);
+        Assert.Null(emptyReadyOnly.Payload.Task);
 
         using var doneWorkspace = new TempWorkingDirectory();
         var doneRoot = await doneWorkspace.CreateProject();
@@ -818,9 +880,12 @@ public class ApplicationServiceTests
         doneRoot.UpdateTaskState(doneTask, "done");
 
         var doneOnly = new BoardService(doneRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var doneOnlyReadyOnly = new BoardService(doneRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
 
         Assert.False(doneOnly.Found);
         Assert.Null(doneOnly.Task);
+        Assert.False(doneOnlyReadyOnly.Found);
+        Assert.Null(doneOnlyReadyOnly.Task);
     }
 
     [Fact]
