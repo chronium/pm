@@ -29,6 +29,7 @@ public static class McpServerHost
         builder.Services.AddSingleton<ProjectConfigService>();
         builder.Services.AddSingleton<BoardService>();
         builder.Services.AddSingleton<WikiService>();
+        builder.Services.AddSingleton<ProjectValidationService>();
 
         builder.Services
             .AddMcpServer()

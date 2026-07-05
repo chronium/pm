@@ -49,6 +49,8 @@ public partial class BoardService(ProjectRoot projectRoot)
         if (!string.IsNullOrWhiteSpace(query.Milestone) && !config.Milestones.ContainsKey(query.Milestone))
             return AppResult<BoardData>.Fail("invalid_milestone", $"Milestone {query.Milestone} not found.");
 
+        var orderLookup = BuildOrderLookup(projectRoot.ReadTaskOrder());
+
         var entries = projectRoot.GetAllTasks()
             .Select(task => new BoardTask(
                 task,
@@ -60,7 +62,8 @@ public partial class BoardService(ProjectRoot projectRoot)
             .Where(entry => string.IsNullOrWhiteSpace(query.Track) || entry.Track == query.Track)
             .Where(entry => string.IsNullOrWhiteSpace(query.Milestone) || entry.Milestone == query.Milestone)
             .Where(entry => string.IsNullOrWhiteSpace(query.State) || entry.State == query.State)
-            .OrderByDescending(entry => entry.Task.ModifiedAt)
+            .OrderBy(entry => GetOrderIndex(entry, orderLookup))
+            .ThenByDescending(entry => entry.Task.ModifiedAt)
             .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
             .ToList();
 
@@ -92,7 +95,8 @@ public partial class BoardService(ProjectRoot projectRoot)
                         entries
                             .Where(entry => string.Equals(entry.Milestone, milestone, StringComparison.Ordinal))
                             .Where(entry => entry.State == state.Key)
-                            .OrderByDescending(entry => entry.Task.ModifiedAt)
+                            .OrderBy(entry => GetOrderIndex(entry, orderLookup))
+                            .ThenByDescending(entry => entry.Task.ModifiedAt)
                             .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
                             .ToList()))
                     .ToList()))
@@ -127,6 +131,34 @@ public partial class BoardService(ProjectRoot projectRoot)
     {
         if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
         return projectRoot.Config!.Milestones.TryGetValue(milestone, out var title) ? title : milestone;
+    }
+
+    private static Dictionary<TaskOrderScope, Dictionary<string, int>> BuildOrderLookup(TaskOrderFile order)
+    {
+        var lookup = new Dictionary<TaskOrderScope, Dictionary<string, int>>();
+        foreach (var entry in order.Orders)
+        {
+            var scope = new TaskOrderScope(entry.Track, entry.State,
+                string.IsNullOrWhiteSpace(entry.Milestone) ? null : entry.Milestone.Trim());
+            lookup[scope] = entry.TaskIds
+                .Select((id, index) => new { Id = id, Index = index })
+                .GroupBy(item => item.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().Index, StringComparer.Ordinal);
+        }
+
+        return lookup;
+    }
+
+    private static int GetOrderIndex(
+        BoardTask task,
+        Dictionary<TaskOrderScope, Dictionary<string, int>> orderLookup)
+    {
+        var scope = new TaskOrderScope(task.Track, task.State,
+            string.IsNullOrWhiteSpace(task.Milestone) ? null : task.Milestone);
+        return orderLookup.TryGetValue(scope, out var orderedIds) &&
+               orderedIds.TryGetValue(task.Task.Id, out var index)
+            ? index
+            : int.MaxValue;
     }
 
     private static string StripMarkdownPrefix(string line)

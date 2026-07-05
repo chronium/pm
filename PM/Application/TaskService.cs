@@ -28,6 +28,15 @@ public sealed record BulkMilestoneAssignmentResult(
     int RequestedCount,
     int UpdatedCount);
 
+public sealed record TaskMutationResult(bool Changed, TaskItem Task);
+
+public sealed record TaskReorderResult(
+    string Track,
+    string State,
+    string? Milestone,
+    IReadOnlyList<string> TaskIds,
+    bool Changed);
+
 public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdService)
 {
     private const int MaxBulkTaskCount = 100;
@@ -207,6 +216,11 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             if (string.Equals(task.Milestone, milestone, StringComparison.Ordinal))
                 continue;
 
+            if (projectRoot.TryGetState(task, out var state))
+                projectRoot.MoveTaskOrderScope(task.Id,
+                    new TaskOrderScope(projectRoot.ResolveTaskTrack(task), state, task.Milestone),
+                    new TaskOrderScope(projectRoot.ResolveTaskTrack(task), state, milestone));
+
             projectRoot.WriteTask(task with { Milestone = milestone, ModifiedAt = DateTime.UtcNow });
             changed++;
         }
@@ -252,8 +266,139 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         var validation = ValidateEditedTaskMarkdown(taskId, editedContent);
         if (!validation.Success) return validation;
 
+        var oldTask = TaskItem.Parse(projectRoot.TryReadTaskFile(taskId, out var oldContent) ? oldContent : string.Empty);
+        var editedTask = TaskItem.Parse(editedContent);
+        if (oldTask != null && editedTask != null && projectRoot.TryGetState(oldTask, out var state))
+            projectRoot.MoveTaskOrderScope(taskId,
+                new TaskOrderScope(projectRoot.ResolveTaskTrack(oldTask), state, oldTask.Milestone),
+                new TaskOrderScope(projectRoot.ResolveTaskTrack(editedTask), state, editedTask.Milestone));
+
         projectRoot.WriteTaskFile(taskId, editedContent);
         return AppResult.Ok();
+    }
+
+    public AppResult<TaskMutationResult> PatchTaskMetadata(
+        string taskId,
+        string? title = null,
+        string? track = null,
+        string? milestone = null,
+        string? description = null)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<TaskMutationResult>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        var config = projectRoot.Config!;
+        if (title != null && string.IsNullOrWhiteSpace(title))
+            return AppResult<TaskMutationResult>.Fail("invalid_title", "Task title is required.");
+
+        var normalizedTrack = track == null ? null : track.Trim();
+        if (normalizedTrack != null && !config.Tracks.ContainsKey(normalizedTrack))
+            return AppResult<TaskMutationResult>.Fail("invalid_track", $"Track {normalizedTrack} not found.");
+
+        var normalizedMilestone = milestone == null
+            ? null
+            : string.IsNullOrWhiteSpace(milestone) ? null : milestone.Trim();
+        if (milestone != null && normalizedMilestone != null && !config.Milestones.ContainsKey(normalizedMilestone))
+            return AppResult<TaskMutationResult>.Fail("invalid_milestone", $"Milestone {normalizedMilestone} not found.");
+
+        if (!projectRoot.TryGetById(taskId, out var task))
+            return AppResult<TaskMutationResult>.Fail("missing_task", $"Task with ID {taskId} not found.");
+
+        if (!projectRoot.TryGetState(task, out var state))
+            return AppResult<TaskMutationResult>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
+
+        var updated = task with
+        {
+            Title = title == null ? task.Title : title.Trim(),
+            Track = normalizedTrack ?? task.Track,
+            Milestone = milestone == null ? task.Milestone : normalizedMilestone,
+            Description = description ?? task.Description,
+        };
+
+        var changed =
+            !string.Equals(updated.Title, task.Title, StringComparison.Ordinal) ||
+            !string.Equals(projectRoot.ResolveTaskTrack(updated), projectRoot.ResolveTaskTrack(task), StringComparison.Ordinal) ||
+            !string.Equals(updated.Milestone, task.Milestone, StringComparison.Ordinal) ||
+            !string.Equals(updated.Description, task.Description, StringComparison.Ordinal);
+
+        if (!changed)
+            return AppResult<TaskMutationResult>.Ok(new TaskMutationResult(false, task));
+
+        updated = updated with { ModifiedAt = DateTime.UtcNow };
+        projectRoot.MoveTaskOrderScope(task.Id,
+            new TaskOrderScope(projectRoot.ResolveTaskTrack(task), state, task.Milestone),
+            new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), state, updated.Milestone));
+        projectRoot.WriteTask(updated);
+        return AppResult<TaskMutationResult>.Ok(new TaskMutationResult(true, updated));
+    }
+
+    public AppResult<TaskMutationResult> AppendTaskNote(string taskId, string note)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<TaskMutationResult>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (string.IsNullOrWhiteSpace(note))
+            return AppResult<TaskMutationResult>.Fail("invalid_note", "Task note is required.");
+
+        if (!projectRoot.TryGetById(taskId, out var task))
+            return AppResult<TaskMutationResult>.Fail("missing_task", $"Task with ID {taskId} not found.");
+
+        if (!projectRoot.TryGetState(task, out _))
+            return AppResult<TaskMutationResult>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
+
+        var updated = task with
+        {
+            Description = AppendNote(task.Description, note),
+            ModifiedAt = DateTime.UtcNow,
+        };
+        projectRoot.WriteTask(updated);
+        return AppResult<TaskMutationResult>.Ok(new TaskMutationResult(true, updated));
+    }
+
+    public AppResult<TaskReorderResult> ReorderTasks(
+        string track,
+        string state,
+        IReadOnlyList<string> taskIds,
+        string? milestone = null)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<TaskReorderResult>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        track = track.Trim();
+        state = state.Trim();
+        milestone = string.IsNullOrWhiteSpace(milestone) ? null : milestone.Trim();
+        var config = projectRoot.Config!;
+
+        if (!config.Tracks.ContainsKey(track))
+            return AppResult<TaskReorderResult>.Fail("invalid_track", $"Track {track} not found.");
+
+        if (!config.TaskStates.ContainsKey(state))
+            return AppResult<TaskReorderResult>.Fail("invalid_state", $"State {state} not found.");
+
+        if (milestone != null && !config.Milestones.ContainsKey(milestone))
+            return AppResult<TaskReorderResult>.Fail("invalid_milestone", $"Milestone {milestone} not found.");
+
+        var normalizedIds = taskIds.Select(id => id.Trim()).ToList();
+        if (normalizedIds.Any(string.IsNullOrWhiteSpace) ||
+            normalizedIds.Distinct(StringComparer.Ordinal).Count() != normalizedIds.Count)
+            return AppResult<TaskReorderResult>.Fail("invalid_task_order",
+                "Task order must contain each task in the scope exactly once.");
+
+        var scopedIds = projectRoot.GetAllTasks()
+            .Where(task => projectRoot.ResolveTaskTrack(task) == track)
+            .Where(task => string.Equals(task.Milestone, milestone, StringComparison.Ordinal))
+            .Where(task => projectRoot.TryGetState(task, out var taskState) && taskState == state)
+            .Select(task => task.Id)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToList();
+
+        if (!scopedIds.SequenceEqual(normalizedIds.OrderBy(id => id, StringComparer.Ordinal), StringComparer.Ordinal))
+            return AppResult<TaskReorderResult>.Fail("invalid_task_order",
+                "Task order must contain each task in the scope exactly once.");
+
+        var scope = new TaskOrderScope(track, state, milestone);
+        var changed = projectRoot.SetTaskOrder(scope, normalizedIds);
+        return AppResult<TaskReorderResult>.Ok(new TaskReorderResult(track, state, milestone, normalizedIds, changed));
     }
 
     public AppResult<TaskItem> UpdateTaskDetails(string taskId, string title, string targetState, string description)
@@ -283,6 +428,25 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         projectRoot.WriteTask(updated);
         projectRoot.UpdateTaskState(task, targetState);
         return AppResult<TaskItem>.Ok(updated);
+    }
+
+    private static string AppendNote(string description, string note)
+    {
+        var normalizedDescription = (description ?? string.Empty).ReplaceLineEndings("\n").TrimEnd();
+        var normalizedNote = note.Trim().ReplaceLineEndings("\n");
+        var noteLines = normalizedNote.Split('\n');
+        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm 'UTC'");
+        var formattedNote = $"- {timestamp} - {noteLines[0]}";
+        if (noteLines.Length > 1)
+            formattedNote += "\n" + string.Join('\n', noteLines.Skip(1).Select(line => $"  {line}"));
+
+        if (string.IsNullOrWhiteSpace(normalizedDescription))
+            return $"## Notes\n\n{formattedNote}";
+
+        if (normalizedDescription.Contains("## Notes", StringComparison.Ordinal))
+            return $"{normalizedDescription}\n{formattedNote}";
+
+        return $"{normalizedDescription}\n\n## Notes\n\n{formattedNote}";
     }
 
     private static TaskItem BuildTask(

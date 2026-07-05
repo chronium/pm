@@ -17,6 +17,21 @@ public interface IProjectRoot
     string WikiPath { get; }
 }
 
+public sealed record TaskOrderScope(string Track, string State, string? Milestone);
+
+public sealed record TaskOrderEntry
+{
+    public string Track { get; init; } = string.Empty;
+    public string State { get; init; } = string.Empty;
+    public string? Milestone { get; init; }
+    public List<string> TaskIds { get; init; } = [];
+}
+
+public sealed record TaskOrderFile
+{
+    public List<TaskOrderEntry> Orders { get; init; } = [];
+}
+
 public class ProjectRoot : IProjectRoot
 {
     public ProjectRoot()
@@ -31,6 +46,7 @@ public class ProjectRoot : IProjectRoot
     public string TasksPath => Path.Combine(RootPath!, GlobalConfig.TasksDirName);
     public string StatesPath => Path.Combine(RootPath!, GlobalConfig.StatesDirName);
     public string WikiPath => Path.Combine(RootPath!, GlobalConfig.WikiDirName);
+    public string TaskOrderPath => Path.Combine(RootPath!, GlobalConfig.TaskOrderFile);
 
     public bool Exists { get; private set; }
     public string RootPath { get; private set; }
@@ -126,12 +142,18 @@ public class ProjectRoot : IProjectRoot
         }
 
         FileSystem.DeleteFile(GetTaskPath(task.Id));
+        RemoveTaskFromOrders(task.Id);
     }
 
     public void UpdateTaskState(TaskItem task, string state)
     {
+        var track = ResolveTaskTrack(task);
         if (TryGetState(task, out var currentState))
+        {
             FileSystem.DeleteFile(Path.Combine(StatesPath, currentState, $"{task.Id}.ref"));
+            MoveTaskOrderScope(task.Id, new TaskOrderScope(track, currentState, task.Milestone),
+                new TaskOrderScope(track, state, task.Milestone));
+        }
 
         var stateDir = Path.Combine(StatesPath, state);
         var stateRelativePath = Path.GetRelativePath(stateDir, TasksPath);
@@ -192,6 +214,84 @@ public class ProjectRoot : IProjectRoot
         return items;
     }
 
+    public TaskOrderFile ReadTaskOrder()
+    {
+        if (!FileSystem.FileExists(TaskOrderPath))
+            return new TaskOrderFile();
+
+        try
+        {
+            return YamlSerde.Deserialize<TaskOrderFile>(FileSystem.ReadAllText(TaskOrderPath)) ?? new TaskOrderFile();
+        }
+        catch
+        {
+            return new TaskOrderFile();
+        }
+    }
+
+    public void WriteTaskOrder(TaskOrderFile order)
+    {
+        FileSystem.WriteAllText(TaskOrderPath, YamlSerde.Serialize(order));
+    }
+
+    public IReadOnlyList<string> GetTaskOrder(TaskOrderScope scope)
+    {
+        return ReadTaskOrder().Orders
+            .FirstOrDefault(entry => MatchesScope(entry, scope))
+            ?.TaskIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToList() ?? [];
+    }
+
+    public bool SetTaskOrder(TaskOrderScope scope, IReadOnlyList<string> taskIds)
+    {
+        var order = ReadTaskOrder();
+        var normalized = taskIds.Select(id => id.Trim()).ToList();
+        var existing = order.Orders.FirstOrDefault(entry => MatchesScope(entry, scope));
+        if (existing != null && existing.TaskIds.SequenceEqual(normalized, StringComparer.Ordinal))
+            return false;
+
+        order.Orders.RemoveAll(entry => MatchesScope(entry, scope));
+        order.Orders.Add(new TaskOrderEntry
+        {
+            Track = scope.Track,
+            State = scope.State,
+            Milestone = NormalizeMilestone(scope.Milestone),
+            TaskIds = normalized,
+        });
+        WriteTaskOrder(order);
+        return true;
+    }
+
+    public void RemoveTaskFromOrders(string taskId)
+    {
+        var order = ReadTaskOrder();
+        var changed = false;
+        foreach (var entry in order.Orders)
+            changed |= entry.TaskIds.RemoveAll(id => string.Equals(id, taskId, StringComparison.Ordinal)) > 0;
+
+        if (changed) WriteTaskOrder(order);
+    }
+
+    public void MoveTaskOrderScope(string taskId, TaskOrderScope oldScope, TaskOrderScope newScope)
+    {
+        if (oldScope == newScope) return;
+
+        var order = ReadTaskOrder();
+        var changed = false;
+        foreach (var entry in order.Orders.Where(entry => MatchesScope(entry, oldScope)))
+            changed |= entry.TaskIds.RemoveAll(id => string.Equals(id, taskId, StringComparison.Ordinal)) > 0;
+
+        var target = order.Orders.FirstOrDefault(entry => MatchesScope(entry, newScope));
+        if (target != null && !target.TaskIds.Contains(taskId, StringComparer.Ordinal))
+        {
+            target.TaskIds.Add(taskId);
+            changed = true;
+        }
+
+        if (changed) WriteTaskOrder(order);
+    }
+
     public string ResolveTaskTrack(TaskItem task)
     {
         return string.IsNullOrWhiteSpace(task.Track) ? Config!.DefaultTrackKey : task.Track;
@@ -215,6 +315,19 @@ public class ProjectRoot : IProjectRoot
     public string GetTaskFilePath(string id)
     {
         return GetTaskPath(id);
+    }
+
+    private static bool MatchesScope(TaskOrderEntry entry, TaskOrderScope scope)
+    {
+        return string.Equals(entry.Track, scope.Track, StringComparison.Ordinal) &&
+               string.Equals(entry.State, scope.State, StringComparison.Ordinal) &&
+               string.Equals(NormalizeMilestone(entry.Milestone), NormalizeMilestone(scope.Milestone),
+                   StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeMilestone(string? milestone)
+    {
+        return string.IsNullOrWhiteSpace(milestone) ? null : milestone.Trim();
     }
 
     public bool TryResolveWikiPath(string pagePath, [MaybeNullWhen(false)] out string normalizedPath,

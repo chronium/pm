@@ -59,6 +59,15 @@ public sealed record CreatedTaskPayload(string Id, string Title, string Track, s
 
 public sealed record MutatedPayload(bool Changed);
 
+public sealed record TaskMutationPayload(bool Changed, TaskDetailPayload Task);
+
+public sealed record TaskReorderPayload(
+    string Track,
+    string State,
+    string? Milestone,
+    IReadOnlyList<string> TaskIds,
+    bool Changed);
+
 public sealed record BulkTaskInputPayload(string Title, string? Description = null);
 
 public sealed record BulkCreatedTaskPayload(
@@ -100,3 +109,26 @@ public sealed record WikiPagePayload(
     string FilePath,
     string Markdown,
     string Body);
+
+public sealed record WikiSearchPayload(IReadOnlyList<WikiSearchResultPayload> Pages);
+
+public sealed record WikiSearchResultPayload(
+    string Path,
+    string Title,
+    DateTime ModifiedAt,
+    string FilePath,
+    int MatchCount,
+    string Snippet);
+
+public sealed record ProjectValidationPayload(
+    bool Valid,
+    IReadOnlyList<ProjectValidationIssuePayload> Issues);
+
+public sealed record ProjectValidationIssuePayload(
+    string Severity,
+    string Code,
+    string Message,
+    string? Path,
+    string? TaskId,
+    string? WikiPath,
+    string? State);

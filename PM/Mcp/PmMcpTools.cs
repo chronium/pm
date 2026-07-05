@@ -2,6 +2,7 @@ using System.ComponentModel;
 using ModelContextProtocol.Server;
 using PM.Application;
 using PM.Project;
+using PM.Tasks;
 
 namespace PM.Mcp;
 
@@ -12,7 +13,8 @@ public sealed class PmMcpTools(
     ProjectCreationService projectCreationService,
     ProjectConfigService configService,
     BoardService boardService,
-    WikiService wikiService)
+    WikiService wikiService,
+    ProjectValidationService validationService)
 {
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -271,6 +273,63 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "update_task_metadata", Destructive = true, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Updates selected task metadata fields without replacing the full markdown file.")]
+    public McpToolResponse<TaskMutationPayload> UpdateTaskMetadata(
+        string taskId,
+        string? title = null,
+        string? track = null,
+        string? milestone = null,
+        string? description = null)
+    {
+        var result = taskService.PatchTaskMetadata(taskId, title, track, milestone, description);
+        if (!result.Success)
+            return McpToolResponse<TaskMutationPayload>.FromFailure(result);
+
+        var mutation = result.Payload!;
+        return McpToolResponse<TaskMutationPayload>.Ok(
+            mutation.Changed ? $"Updated task {taskId}." : $"Task {taskId} already matched.",
+            new TaskMutationPayload(mutation.Changed, ToTaskDetailPayload(mutation.Task)));
+    }
+
+    [McpServerTool(Name = "append_task_note", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Appends a dated note under a task's Notes section.")]
+    public McpToolResponse<TaskMutationPayload> AppendTaskNote(string taskId, string note)
+    {
+        var result = taskService.AppendTaskNote(taskId, note);
+        if (!result.Success)
+            return McpToolResponse<TaskMutationPayload>.FromFailure(result);
+
+        var mutation = result.Payload!;
+        return McpToolResponse<TaskMutationPayload>.Ok($"Appended note to task {taskId}.",
+            new TaskMutationPayload(mutation.Changed, ToTaskDetailPayload(mutation.Task)));
+    }
+
+    [McpServerTool(Name = "reorder_tasks", Destructive = true, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Persists explicit task order for one track, state, and milestone scope.")]
+    public McpToolResponse<TaskReorderPayload> ReorderTasks(
+        string track,
+        string state,
+        IReadOnlyList<string> taskIds,
+        string? milestone = null)
+    {
+        var result = taskService.ReorderTasks(track, state, taskIds, milestone);
+        if (!result.Success)
+            return McpToolResponse<TaskReorderPayload>.FromFailure(result);
+
+        var reorder = result.Payload!;
+        return McpToolResponse<TaskReorderPayload>.Ok(
+            reorder.Changed ? "Task order updated." : "Task order already matched.",
+            new TaskReorderPayload(
+                reorder.Track,
+                reorder.State,
+                reorder.Milestone,
+                reorder.TaskIds,
+                reorder.Changed));
+    }
+
     [McpServerTool(Name = "list_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Lists wiki pages with path, title, modified timestamp, and file path.")]
@@ -298,6 +357,28 @@ public sealed class PmMcpTools(
             ? McpToolResponse<WikiPagePayload>.Ok($"Wiki page {result.Payload!.Path} loaded.",
                 ToWikiPagePayload(result.Payload))
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "search_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Searches wiki page title, path, and body with case-insensitive matching.")]
+    public McpToolResponse<WikiSearchPayload> SearchWikiPages(string query, int limit = 20)
+    {
+        var result = wikiService.SearchPages(query, limit);
+        if (!result.Success)
+            return McpToolResponse<WikiSearchPayload>.FromFailure(result);
+
+        var pages = result.Payload!
+            .Select(page => new WikiSearchResultPayload(
+                page.Path,
+                page.Title,
+                page.ModifiedAt,
+                page.FilePath,
+                page.MatchCount,
+                page.Snippet))
+            .ToList();
+        return McpToolResponse<WikiSearchPayload>.Ok($"Returned {pages.Count} wiki search result(s).",
+            new WikiSearchPayload(pages));
     }
 
     [McpServerTool(Name = "create_wiki_page", Destructive = false, OpenWorld = false,
@@ -440,6 +521,33 @@ public sealed class PmMcpTools(
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "validate_project", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Validates task files, state refs, wiki pages, and stored task order data.")]
+    public McpToolResponse<ProjectValidationPayload> ValidateProject()
+    {
+        var result = validationService.ValidateProject();
+        if (!result.Success)
+            return McpToolResponse<ProjectValidationPayload>.FromFailure(result);
+
+        var validation = result.Payload!;
+        var payload = new ProjectValidationPayload(
+            validation.Valid,
+            validation.Issues.Select(issue => new ProjectValidationIssuePayload(
+                issue.Severity,
+                issue.Code,
+                issue.Message,
+                issue.Path,
+                issue.TaskId,
+                issue.WikiPath,
+                issue.State)).ToList());
+        return McpToolResponse<ProjectValidationPayload>.Ok(
+            validation.Valid
+                ? "Project validation passed."
+                : $"Project validation found {validation.Issues.Count} issue(s).",
+            payload);
+    }
+
     private static IReadOnlyList<OptionPayload> ToOptions(IReadOnlyDictionary<string, string> options)
     {
         return options.Select(option => new OptionPayload(option.Key, option.Value)).ToList();
@@ -455,6 +563,23 @@ public sealed class PmMcpTools(
             task.State,
             task.DescriptionPreview,
             task.FilePath);
+    }
+
+    private TaskDetailPayload ToTaskDetailPayload(TaskItem task)
+    {
+        var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
+        var markdown = projectRoot.TryReadTaskFile(task.Id, out var content) ? content : task.ToMarkdown();
+        return new TaskDetailPayload(
+            task.Id,
+            task.Title,
+            projectRoot.ResolveTaskTrack(task),
+            task.Milestone,
+            task.CreatedAt,
+            task.ModifiedAt,
+            state,
+            projectRoot.GetTaskFilePath(task.Id),
+            markdown,
+            task.Description);
     }
 
     private static WikiPagePayload ToWikiPagePayload(WikiPageData page)

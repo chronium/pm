@@ -420,6 +420,90 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task PatchTaskMetadataUpdatesIndependentFieldsAndMaintainsOrderScopes()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var first = TestData.Task("PM-0001", "First", track: "PM");
+        var second = TestData.Task("PM-0002", "Second", track: "PM");
+        projectRoot.WriteTask(first);
+        projectRoot.WriteTask(second);
+        projectRoot.UpdateTaskState(first, "todo");
+        projectRoot.UpdateTaskState(second, "todo");
+        projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), ["PM-0001", "PM-0002"]);
+        projectRoot.SetTaskOrder(new TaskOrderScope("BUILD", "todo", "m1"), []);
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var updated = service.PatchTaskMetadata("PM-0001", title: " Updated ", track: "BUILD", milestone: "m1",
+            description: "New body");
+
+        Assert.True(updated.Success);
+        Assert.True(updated.Payload!.Changed);
+        Assert.Equal("Updated", updated.Payload.Task.Title);
+        Assert.Equal("BUILD", updated.Payload.Task.Track);
+        Assert.Equal("m1", updated.Payload.Task.Milestone);
+        Assert.Equal("New body", updated.Payload.Task.Description);
+        Assert.Equal(["PM-0002"], projectRoot.GetTaskOrder(new TaskOrderScope("PM", "todo", null)));
+        Assert.Equal(["PM-0001"], projectRoot.GetTaskOrder(new TaskOrderScope("BUILD", "todo", "m1")));
+
+        var unchanged = service.PatchTaskMetadata("PM-0001", title: "Updated", track: "BUILD", milestone: "m1",
+            description: "New body");
+        Assert.True(unchanged.Success);
+        Assert.False(unchanged.Payload!.Changed);
+
+        Assert.Equal("invalid_title", service.PatchTaskMetadata("PM-0001", title: " ").ErrorCode);
+        Assert.Equal("invalid_track", service.PatchTaskMetadata("PM-0001", track: "missing").ErrorCode);
+        Assert.Equal("invalid_milestone", service.PatchTaskMetadata("PM-0001", milestone: "missing").ErrorCode);
+    }
+
+    [Fact]
+    public async Task AppendTaskNoteCreatesNotesSectionAndFormatsMultilineNotes()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Existing", "Body");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = service.AppendTaskNote("PM-0001", "First line\nSecond line");
+
+        Assert.True(result.Success);
+        Assert.Contains("Body\n\n## Notes\n\n- ", result.Payload!.Task.Description);
+        Assert.Contains(" UTC - First line\n  Second line", result.Payload.Task.Description);
+        Assert.Equal("invalid_note", service.AppendTaskNote("PM-0001", " ").ErrorCode);
+    }
+
+    [Fact]
+    public async Task ReorderTasksPersistsExactScopeAndBoardUsesStoredOrder()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var first = TestData.Task("PM-0001", "First") with { ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) };
+        var second = TestData.Task("PM-0002", "Second") with { ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) };
+        var third = TestData.Task("PM-0003", "Third") with { ModifiedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc) };
+        foreach (var task in new[] { first, second, third })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var reordered = service.ReorderTasks("PM", "todo", ["PM-0002", "PM-0001", "PM-0003"]);
+        var invalidDuplicate = service.ReorderTasks("PM", "todo", ["PM-0001", "PM-0001", "PM-0003"]);
+        var invalidMissing = service.ReorderTasks("PM", "todo", ["PM-0001", "PM-0002"]);
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery("PM", null, "todo")).Payload!;
+
+        Assert.True(reordered.Success);
+        Assert.True(reordered.Payload!.Changed);
+        Assert.Equal("invalid_task_order", invalidDuplicate.ErrorCode);
+        Assert.Equal("invalid_task_order", invalidMissing.ErrorCode);
+        Assert.Equal(["PM-0002", "PM-0001", "PM-0003"], board.Tasks.Select(task => task.Task.Id));
+    }
+
+    [Fact]
     public async Task TrackAndMilestoneAddRejectDuplicatesAndEmptyValues()
     {
         using var workspace = new TempWorkingDirectory();
@@ -640,6 +724,61 @@ public class ApplicationServiceTests
         Assert.Equal(created.Payload.CreatedAt, bodyOnly.Payload.CreatedAt);
         Assert.Equal("# Body only", bodyOnly.Payload.Body);
         Assert.True(bodyOnly.Payload.ModifiedAt > updated.Payload.ModifiedAt);
+    }
+
+    [Fact]
+    public async Task WikiServiceSearchesTitlePathAndBody()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("architecture/rendering", "Rendering", "Canvas rendering pipeline");
+        service.CreatePage("operations/runbook", "Runbook", "Deploy checklist");
+
+        var results = service.SearchPages("render", 10);
+        var blank = service.SearchPages(" ");
+
+        Assert.True(results.Success);
+        var result = Assert.Single(results.Payload!);
+        Assert.Equal("architecture/rendering", result.Path);
+        Assert.True(result.MatchCount >= 2);
+        Assert.Contains("render", result.Snippet, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("invalid_wiki_query", blank.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ProjectValidationReportsProjectHealthIssuesAsData()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var task = TestData.Task("PM-0001", "Existing", track: "missing", milestone: "missing");
+        projectRoot.WriteTask(task);
+        File.WriteAllText(Path.Combine(projectRoot.TasksPath, "copy.md"), task.ToMarkdown());
+        File.WriteAllText(Path.Combine(projectRoot.TasksPath, "bad.md"), "not markdown");
+        Directory.CreateDirectory(Path.Combine(projectRoot.StatesPath, "unknown"));
+        File.WriteAllText(Path.Combine(projectRoot.StatesPath, "unknown", "PM-0001.ref"), "../../tasks/PM-0001.md");
+        File.WriteAllText(Path.Combine(projectRoot.StatesPath, "todo", "PM-9999.ref"), "../../tasks/PM-9999.md");
+        File.WriteAllText(Path.Combine(projectRoot.WikiPath, "bad.md"), "not markdown");
+        projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), ["PM-9999"]);
+        var service = new ProjectValidationService(projectRoot);
+
+        var result = service.ValidateProject();
+
+        Assert.True(result.Success);
+        Assert.False(result.Payload!.Valid);
+        var codes = result.Payload.Issues.Select(issue => issue.Code).ToHashSet();
+        Assert.Contains("invalid_task_markdown", codes);
+        Assert.Contains("duplicate_task_id", codes);
+        Assert.Contains("task_filename_mismatch", codes);
+        Assert.Contains("missing_current_state", codes);
+        Assert.Contains("unknown_state_directory", codes);
+        Assert.Contains("broken_ref_target", codes);
+        Assert.Contains("unknown_task_track", codes);
+        Assert.Contains("unknown_task_milestone", codes);
+        Assert.Contains("invalid_wiki_markdown", codes);
+        Assert.Contains("stale_task_order_task", codes);
     }
 
     [Fact]

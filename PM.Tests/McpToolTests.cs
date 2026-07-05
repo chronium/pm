@@ -344,6 +344,61 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task TaskMetadataNoteAndReorderToolsReturnStructuredPayloads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var first = TestData.Task("PM-0001", "First");
+        var second = TestData.Task("PM-0002", "Second");
+        projectRoot.WriteTask(first);
+        projectRoot.WriteTask(second);
+        projectRoot.UpdateTaskState(first, "todo");
+        projectRoot.UpdateTaskState(second, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var metadata = tools.UpdateTaskMetadata("PM-0001", title: "Updated", track: "BUILD", milestone: "m1",
+            description: "Body");
+        var note = tools.AppendTaskNote("PM-0001", "MCP note");
+        var reorder = tools.ReorderTasks("PM", "todo", ["PM-0002"]);
+
+        Assert.True(metadata.Success);
+        Assert.True(metadata.Data!.Changed);
+        Assert.Equal("Updated", metadata.Data.Task.Title);
+        Assert.Equal("BUILD", metadata.Data.Task.Track);
+        Assert.Equal("m1", metadata.Data.Task.Milestone);
+        Assert.Contains("title: Updated", metadata.Data.Task.Markdown);
+        Assert.True(note.Success);
+        Assert.Contains("MCP note", note.Data!.Task.Description);
+        Assert.True(reorder.Success);
+        Assert.Equal(["PM-0002"], reorder.Data!.TaskIds);
+        Assert.Equal("invalid_task_order", tools.ReorderTasks("PM", "todo", ["PM-0002", "PM-9999"]).ErrorCode);
+    }
+
+    [Fact]
+    public async Task SearchWikiAndValidateProjectToolsReturnStructuredPayloads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot);
+        tools.CreateWikiPage("architecture/rendering", "Rendering", "Canvas rendering details");
+
+        var search = tools.SearchWikiPages("render", 5);
+        var invalidSearch = tools.SearchWikiPages(" ");
+        var validation = tools.ValidateProject();
+
+        Assert.True(search.Success);
+        var page = Assert.Single(search.Data!.Pages);
+        Assert.Equal("architecture/rendering", page.Path);
+        Assert.True(page.MatchCount >= 2);
+        Assert.Equal("invalid_wiki_query", invalidSearch.ErrorCode);
+        Assert.True(validation.Success);
+        Assert.True(validation.Data!.Valid);
+        Assert.Empty(validation.Data.Issues);
+    }
+
+    [Fact]
     public async Task AddTrackAndMilestoneReturnDuplicateAndInvalidErrors()
     {
         using var workspace = new TempWorkingDirectory();
@@ -452,7 +507,8 @@ public class McpToolTests
             new ProjectCreationService(projectRoot, nextIdService),
             new ProjectConfigService(projectRoot),
             new BoardService(projectRoot),
-            new WikiService(projectRoot));
+            new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot));
     }
 
     private sealed class RecordingNextIdService(
