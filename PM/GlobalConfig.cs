@@ -36,6 +36,8 @@ public static class GlobalConfig
     public static string WikiShowCommandName => "show";
     public static string WikiCreateCommandName => "create";
     public static string WikiEditCommandName => "edit";
+    public static string WikiRenameCommandName => "rename";
+    public static string WikiRemoveCommandName => "remove";
     public static string TrackBranchName => "track";
     public static string TrackAddCommandName => "add";
     public static string TrackRenameCommandName => "rename";

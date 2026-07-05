@@ -395,6 +395,9 @@ main {
 #task-dialog {
   width: min(820px, calc(100vw - 28px));
   max-height: min(760px, calc(100vh - 28px));
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 #task-dialog::backdrop {
@@ -623,6 +626,30 @@ main {
 .remove-confirmation p {
   margin: 0;
   color: #6b2832;
+  font-size: 13px;
+}
+
+.button.danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--danger-foreground);
+}
+
+.wiki-danger-zone {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.wiki-danger-zone h3,
+.wiki-danger-zone p {
+  margin: 0;
+}
+
+.wiki-danger-zone p {
+  color: var(--muted-foreground);
   font-size: 13px;
 }
 
@@ -938,12 +965,18 @@ main {
 
 .task-form .CodeMirror {
   min-height: 260px;
+  max-height: min(360px, 42vh);
 }
 
 .wiki-form .CodeMirror-scroll,
 .task-form .CodeMirror-scroll {
   max-width: 100%;
-  overflow-x: auto !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+}
+
+.task-form .CodeMirror-scroll {
+  max-height: min(360px, 42vh);
 }
 
 .wiki-form .editor-preview,

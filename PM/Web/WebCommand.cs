@@ -176,6 +176,79 @@ public class WebCommand(
             return Results.Redirect($"/wiki/{BoardHtmlRenderer.WikiPathUrl(result.Payload!.Path)}");
         });
 
+        endpoints.MapGet("/wiki/meta/{**path}", (string path) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var result = wikiService.ReadPage(path);
+            if (!result.Success) return WikiError(result);
+
+            var pagesResult = wikiService.ListPages();
+            return !pagesResult.Success
+                ? WikiError(pagesResult)
+                : Results.Content(BoardHtmlRenderer.RenderWikiMetadataPage(board, result.Payload!, pagesResult.Payload!),
+                    "text/html; charset=utf-8");
+        });
+
+        endpoints.MapPost("/wiki/meta/{**path}", async (string path, HttpRequest request) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var form = await request.ReadFormAsync();
+            var newPath = form["path"].ToString();
+            var title = form["title"].ToString();
+            var result = wikiService.RenamePage(path, newPath, title);
+            if (!result.Success)
+            {
+                var pagesResult = wikiService.ListPages();
+                if (!pagesResult.Success) return WikiError(pagesResult);
+
+                return Results.Content(
+                    BoardHtmlRenderer.RenderWikiMetadataPage(board, path, newPath, title, pagesResult.Payload!,
+                        result.Message),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return Results.Redirect($"/wiki/{BoardHtmlRenderer.WikiPathUrl(result.Payload!.Path)}");
+        });
+
+        endpoints.MapPost("/wiki/delete/{**path}", async (string path, HttpRequest request) =>
+        {
+            var board = CreateBoard(boardService, new BoardQuery());
+            var form = await request.ReadFormAsync();
+            var confirmation = form["confirm"].ToString();
+            if (!string.Equals(confirmation, "delete", StringComparison.OrdinalIgnoreCase))
+            {
+                var readResult = wikiService.ReadPage(path);
+                if (!readResult.Success) return WikiError(readResult);
+
+                var pagesResult = wikiService.ListPages();
+                if (!pagesResult.Success) return WikiError(pagesResult);
+
+                return Results.Content(
+                    BoardHtmlRenderer.RenderWikiMetadataPage(board, readResult.Payload!, pagesResult.Payload!,
+                        "Type delete to confirm permanent removal."),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            var result = wikiService.RemovePage(path);
+            if (!result.Success)
+            {
+                var readResult = wikiService.ReadPage(path);
+                var title = readResult.Success ? readResult.Payload!.Title : path;
+                var pagesResult = wikiService.ListPages();
+                if (!pagesResult.Success) return WikiError(pagesResult);
+
+                return Results.Content(
+                    BoardHtmlRenderer.RenderWikiMetadataPage(board, path, path, title, pagesResult.Payload!,
+                        result.Message),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            return Results.Redirect("/wiki");
+        });
+
         endpoints.MapGet("/wiki/{**path}", (string path) =>
         {
             var board = CreateBoard(boardService, new BoardQuery());

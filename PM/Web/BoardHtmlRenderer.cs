@@ -186,6 +186,33 @@ public static class BoardHtmlRenderer
             .Replace("{{board}}", RenderWikiEditForm(path, title, body, error), StringComparison.Ordinal);
     }
 
+    public static string RenderWikiMetadataPage(
+        BoardData board,
+        WikiPageData page,
+        IReadOnlyList<WikiPageSummary> sidebarPages,
+        string? error = null)
+    {
+        return RenderWikiMetadataPage(board, page.Path, page.Path, page.Title, sidebarPages, error);
+    }
+
+    public static string RenderWikiMetadataPage(
+        BoardData board,
+        string currentPath,
+        string path,
+        string title,
+        IReadOnlyList<WikiPageSummary> sidebarPages,
+        string? error = null)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"Metadata {title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar(sidebarPages, WikiSidebarPage.Other, currentPath,
+                WikiTreeActiveKind.Page), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiMetadataForm(currentPath, path, title, error), StringComparison.Ordinal);
+    }
+
     public static string RenderBoard(BoardData board)
     {
         var rows = board.States
@@ -362,6 +389,17 @@ public static class BoardHtmlRenderer
             .Replace("{{title}}", H(title), StringComparison.Ordinal)
             .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
             .Replace("{{editorAssets}}", RenderMarkdownEditorAssets(), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiMetadataForm(string currentPath, string path, string title, string? error = null)
+    {
+        return Template("Wiki/MetadataForm.html")
+            .Replace("{{error}}", RenderWikiFormError(error), StringComparison.Ordinal)
+            .Replace("{{currentPath}}", H(currentPath), StringComparison.Ordinal)
+            .Replace("{{currentPathUrl}}", WikiPathUrl(currentPath), StringComparison.Ordinal)
+            .Replace("{{path}}", H(path), StringComparison.Ordinal)
+            .Replace("{{title}}", H(title), StringComparison.Ordinal)
+            .Replace("{{breadcrumbs}}", RenderWikiBreadcrumbs(currentPath), StringComparison.Ordinal);
     }
 
     private static string RenderFilterInputs(BoardQuery query)

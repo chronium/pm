@@ -324,6 +324,29 @@ public sealed class PmMcpTools(
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "rename_wiki_page", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Renames a wiki page path, title, or both while preserving body and created timestamp.")]
+    public McpToolResponse<WikiPagePayload> RenameWikiPage(string path, string newPath, string title)
+    {
+        var result = wikiService.RenamePage(path, newPath, title);
+        return result.Success
+            ? McpToolResponse<WikiPagePayload>.Ok($"Renamed wiki page {result.Payload!.Path}.",
+                ToWikiPagePayload(result.Payload))
+            : McpToolResponse<WikiPagePayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "remove_wiki_page", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Permanently removes one wiki page.")]
+    public McpToolResponse<MutatedPayload> RemoveWikiPage(string path)
+    {
+        var result = wikiService.RemovePage(path);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed wiki page {path}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
     [McpServerTool(Name = "add_track", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
     [Description("Adds a new track.")]
     public McpToolResponse<MutatedPayload> AddTrack(string key, string displayName)

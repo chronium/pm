@@ -314,6 +314,36 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task WikiRenameAndRemoveToolsMutatePagesAndReturnStableFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot);
+
+        var created = tools.CreateWikiPage("architecture/rendering", "Rendering", "# Rendering");
+        Assert.True(created.Success);
+
+        var renamed = tools.RenameWikiPage("architecture/rendering", "reference/rendering", "Rendering Reference");
+        Assert.True(renamed.Success);
+        Assert.Equal("reference/rendering", renamed.Data!.Path);
+        Assert.Equal("Rendering Reference", renamed.Data.Title);
+        Assert.Equal("# Rendering", renamed.Data.Body);
+        Assert.Equal(created.Data!.CreatedAt, renamed.Data.CreatedAt);
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+
+        Assert.Equal("missing_wiki_page", tools.RenameWikiPage("missing", "reference/missing", "Missing").ErrorCode);
+        Assert.Equal("invalid_wiki_path", tools.RenameWikiPage("reference/rendering", "../escape", "Escape").ErrorCode);
+        Assert.Equal("invalid_wiki_page", tools.RenameWikiPage("reference/rendering", "reference/rendering", "").ErrorCode);
+
+        var removed = tools.RemoveWikiPage("reference/rendering");
+        Assert.True(removed.Success);
+        Assert.True(removed.Data!.Changed);
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "reference", "rendering.md")));
+        Assert.Equal("missing_wiki_page", tools.RemoveWikiPage("reference/rendering").ErrorCode);
+        Assert.Equal("invalid_wiki_path", tools.RemoveWikiPage("../escape").ErrorCode);
+    }
+
+    [Fact]
     public async Task AddTrackAndMilestoneReturnDuplicateAndInvalidErrors()
     {
         using var workspace = new TempWorkingDirectory();

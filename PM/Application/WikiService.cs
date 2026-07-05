@@ -172,6 +172,79 @@ public sealed class WikiService(ProjectRoot projectRoot)
         return AppResult<WikiPageData>.Ok(ToData(updatedPage, filePath));
     }
 
+    public AppResult<WikiPageData> RenamePage(string path, string newPath, string title)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<WikiPageData>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (!projectRoot.TryResolveWikiPath(path, out var normalizedPath, out var filePath))
+            return AppResult<WikiPageData>.Fail("invalid_wiki_path", "Wiki page path is invalid.");
+
+        if (!projectRoot.TryResolveWikiPath(newPath, out var normalizedNewPath, out var newFilePath))
+            return AppResult<WikiPageData>.Fail("invalid_wiki_path", "Wiki page path is invalid.");
+
+        if (string.IsNullOrWhiteSpace(title))
+            return AppResult<WikiPageData>.Fail("invalid_wiki_page", "Wiki page title is required.");
+
+        if (!File.Exists(filePath))
+            return AppResult<WikiPageData>.Fail("missing_wiki_page", $"Wiki page {normalizedPath} not found.");
+
+        if (!string.Equals(filePath, newFilePath, StringComparison.Ordinal) && File.Exists(newFilePath))
+            return AppResult<WikiPageData>.Fail("duplicate_wiki_page", $"Wiki page {normalizedNewPath} already exists.");
+
+        var markdown = File.ReadAllText(filePath);
+        var page = WikiPage.Parse(normalizedPath, markdown);
+        if (page == null)
+            return AppResult<WikiPageData>.Fail("invalid_wiki_markdown", $"Wiki page {normalizedPath} markdown is invalid.");
+
+        var updatedPage = page with
+        {
+            Path = normalizedNewPath,
+            Title = title.Trim(),
+            ModifiedAt = DateTime.UtcNow,
+        };
+
+        projectRoot.WriteWikiPage(updatedPage);
+        if (!string.Equals(filePath, newFilePath, StringComparison.Ordinal))
+        {
+            File.Delete(filePath);
+            RemoveEmptyWikiParentDirectories(filePath);
+        }
+
+        return AppResult<WikiPageData>.Ok(ToData(updatedPage, newFilePath));
+    }
+
+    public AppResult RemovePage(string path)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (!projectRoot.TryResolveWikiPath(path, out var normalizedPath, out var filePath))
+            return AppResult.Fail("invalid_wiki_path", "Wiki page path is invalid.");
+
+        if (!File.Exists(filePath))
+            return AppResult.Fail("missing_wiki_page", $"Wiki page {normalizedPath} not found.");
+
+        File.Delete(filePath);
+        RemoveEmptyWikiParentDirectories(filePath);
+        return AppResult.Ok();
+    }
+
+    private void RemoveEmptyWikiParentDirectories(string filePath)
+    {
+        var wikiRoot = Path.GetFullPath(projectRoot.WikiPath);
+        var directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+
+        while (!string.IsNullOrWhiteSpace(directory) &&
+               !string.Equals(directory, wikiRoot, StringComparison.Ordinal))
+        {
+            if (Directory.EnumerateFileSystemEntries(directory).Any()) return;
+
+            Directory.Delete(directory);
+            directory = Path.GetDirectoryName(directory);
+        }
+    }
+
     private static WikiPageData ToData(WikiPage page, string filePath, string? markdown = null)
     {
         markdown ??= page.ToMarkdown();

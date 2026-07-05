@@ -712,6 +712,72 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task WikiRenamePersistsPathAndTitleAndRejectsFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        Assert.True(service.CreatePage("architecture/rendering", "Rendering", "# Rendering").Success);
+        Assert.True(service.CreatePage("reference/existing", "Existing", "").Success);
+        var command = new WikiRenameCommand(service);
+
+        Assert.Equal(0, command.Execute(null!,
+            new WikiRenameCommand.Settings
+            {
+                Path = "architecture/rendering",
+                NewPath = "architecture/pipeline",
+                Title = "Render Pipeline",
+            },
+            CancellationToken.None));
+
+        var page = service.ReadPage("architecture/pipeline");
+        Assert.True(page.Success);
+        Assert.Equal("Render Pipeline", page.Payload!.Title);
+        Assert.Equal("# Rendering", page.Payload.Body);
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+
+        Assert.Equal(1, command.Execute(null!,
+            new WikiRenameCommand.Settings
+            {
+                Path = "missing",
+                NewPath = "reference/missing",
+                Title = "Missing",
+            },
+            CancellationToken.None));
+        Assert.Equal(1, command.Execute(null!,
+            new WikiRenameCommand.Settings
+            {
+                Path = "architecture/pipeline",
+                NewPath = "reference/existing",
+                Title = "Duplicate",
+            },
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task WikiRemoveRequiresConfirmationDeletesPageAndRejectsMissingPage()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        Assert.True(service.CreatePage("architecture/rendering", "Rendering", "# Rendering").Success);
+        var command = new WikiRemoveCommand(service);
+
+        Assert.Equal(1, command.Execute(null!,
+            new WikiRemoveCommand.Settings { Path = "architecture/rendering" }, CancellationToken.None));
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+
+        Assert.Equal(0, command.Execute(null!,
+            new WikiRemoveCommand.Settings { Path = "architecture/rendering", Yes = true },
+            CancellationToken.None));
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+
+        Assert.Equal(1, command.Execute(null!,
+            new WikiRemoveCommand.Settings { Path = "architecture/rendering", Yes = true },
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task TaskRemoveDeletesTaskAndRejectsMissingTask()
     {
         using var workspace = new TempWorkingDirectory();

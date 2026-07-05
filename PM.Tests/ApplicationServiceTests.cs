@@ -643,6 +643,71 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task WikiServiceRenamesPathTitleOrBothAndPreservesPageContent()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        var created = service.CreatePage("architecture/rendering", "Rendering", "# Rendering");
+        Assert.True(created.Success);
+
+        var titleOnly = service.RenamePage("architecture/rendering", "architecture/rendering", "Render Pipeline");
+        Assert.True(titleOnly.Success);
+        Assert.Equal("architecture/rendering", titleOnly.Payload!.Path);
+        Assert.Equal("Render Pipeline", titleOnly.Payload.Title);
+        Assert.Equal("# Rendering", titleOnly.Payload.Body);
+        Assert.Equal(created.Payload!.CreatedAt, titleOnly.Payload.CreatedAt);
+        Assert.True(titleOnly.Payload.ModifiedAt > created.Payload.ModifiedAt);
+
+        var pathOnly = service.RenamePage("architecture/rendering", "architecture/pipeline", "Render Pipeline");
+        Assert.True(pathOnly.Success);
+        Assert.Equal("architecture/pipeline", pathOnly.Payload!.Path);
+        Assert.Equal("Render Pipeline", pathOnly.Payload.Title);
+        Assert.Equal("# Rendering", pathOnly.Payload.Body);
+        Assert.Equal(created.Payload.CreatedAt, pathOnly.Payload.CreatedAt);
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "pipeline.md")));
+
+        var both = service.RenamePage("architecture/pipeline", "reference/rendering", "Rendering Reference");
+        Assert.True(both.Success);
+        Assert.Equal("reference/rendering", both.Payload!.Path);
+        Assert.Equal("Rendering Reference", both.Payload.Title);
+        Assert.Equal("# Rendering", both.Payload.Body);
+        Assert.Equal(created.Payload.CreatedAt, both.Payload.CreatedAt);
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "reference", "rendering.md")));
+        Assert.False(Directory.Exists(Path.Combine(projectRoot.WikiPath, "architecture")));
+    }
+
+    [Fact]
+    public async Task WikiServiceRenameAndRemoveReturnStableFailuresAndCleanEmptyDirectories()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+
+        Assert.Equal("missing_wiki_page", service.RenamePage("missing", "renamed", "Renamed").ErrorCode);
+        Assert.Equal("invalid_wiki_path", service.RenamePage("../escape", "renamed", "Renamed").ErrorCode);
+        Assert.Equal("invalid_wiki_path", service.RenamePage("missing", "notes.txt", "Renamed").ErrorCode);
+        Assert.Equal("invalid_wiki_page", service.RenamePage("missing", "renamed", "").ErrorCode);
+
+        Assert.True(service.CreatePage("docs/keep", "Keep", "").Success);
+        Assert.True(service.CreatePage("docs/nested/remove-me", "Remove Me", "").Success);
+        Assert.True(service.CreatePage("target", "Target", "").Success);
+        Assert.Equal("duplicate_wiki_page", service.RenamePage("docs/keep", "target", "Target").ErrorCode);
+
+        var removed = service.RemovePage("docs/nested/remove-me");
+        Assert.True(removed.Success);
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "docs", "nested", "remove-me.md")));
+        Assert.False(Directory.Exists(Path.Combine(projectRoot.WikiPath, "docs", "nested")));
+        Assert.True(Directory.Exists(Path.Combine(projectRoot.WikiPath, "docs")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "docs", "keep.md")));
+        Assert.True(Directory.Exists(projectRoot.WikiPath));
+
+        Assert.Equal("missing_wiki_page", service.RemovePage("missing").ErrorCode);
+        Assert.Equal("invalid_wiki_path", service.RemovePage("../escape").ErrorCode);
+    }
+
+    [Fact]
     public async Task WikiServiceReturnsStableFailuresAndDoesNotEscapeWikiRoot()
     {
         using var workspace = new TempWorkingDirectory();

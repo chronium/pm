@@ -103,6 +103,8 @@ app.Configure(config =>
             wiki.AddCommand<WikiShowCommand>(GlobalConfig.WikiShowCommandName);
             wiki.AddCommand<WikiCreateCommand>(GlobalConfig.WikiCreateCommandName);
             wiki.AddCommand<WikiEditCommand>(GlobalConfig.WikiEditCommandName);
+            wiki.AddCommand<WikiRenameCommand>(GlobalConfig.WikiRenameCommandName);
+            wiki.AddCommand<WikiRemoveCommand>(GlobalConfig.WikiRemoveCommandName);
         });
 
     config.AddCommand<MoveCommand>(GlobalConfig.MoveCommandName);

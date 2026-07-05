@@ -153,6 +153,8 @@ public class WebBoardTests
         Assert.Contains("class=\"task-row\"", html);
         Assert.Contains("dialog id=\"task-dialog\"", html);
         Assert.Contains("hx-target=\"#task-dialog\"", html);
+        Assert.Contains("#task-dialog", html);
+        Assert.Contains("overscroll-behavior: contain;", html);
         Assert.Contains("htmx:beforeSwap", html);
         Assert.DoesNotContain("class=\"state-section\"", html);
         Assert.DoesNotContain("class=\"state-tasks\"", html);
@@ -426,6 +428,7 @@ public class WebBoardTests
         Assert.Contains("id=\"wiki-content\"", html);
         Assert.Contains("id=\"wiki-markdown-source\" readonly hidden", html);
         Assert.Contains("id=\"wiki-markdown-fallback\"", html);
+        Assert.Contains("href=\"/wiki/meta/notes\"", html);
         Assert.Contains("href=\"/wiki/edit/notes\"", html);
         Assert.Contains("# Heading &lt;unsafe&gt;", html);
         Assert.Contains("&lt;script&gt;alert(1)&lt;/script&gt;", html);
@@ -454,6 +457,7 @@ public class WebBoardTests
 
         var createHtml = BoardHtmlRenderer.RenderWikiCreatePage(board, "notes/<x>", "Title <x>", "Body <x>", "Nope <x>");
         var editHtml = BoardHtmlRenderer.RenderWikiEditPage(board, data, "Bad <x>");
+        var metaHtml = BoardHtmlRenderer.RenderWikiMetadataPage(board, data, [new(data.Path, data.Title, data.ModifiedAt, data.FilePath)], "Bad <x>");
 
         foreach (var html in new[] { createHtml, editHtml })
         {
@@ -474,6 +478,13 @@ public class WebBoardTests
         Assert.Contains("href=\"/wiki/notes\">notes</a>", editHtml);
         Assert.Contains("<span aria-current=\"page\">path &lt;x&gt;</span>", editHtml);
         Assert.Contains("# Body &lt;unsafe&gt;", editHtml);
+
+        Assert.Contains("action=\"/wiki/meta/notes/path%20%3Cx%3E\"", metaHtml);
+        Assert.Contains("action=\"/wiki/delete/notes/path%20%3Cx%3E\"", metaHtml);
+        Assert.Contains("value=\"notes/path &lt;x&gt;\"", metaHtml);
+        Assert.Contains("value=\"Notes &lt;wiki&gt;\"", metaHtml);
+        Assert.Contains("Bad &lt;x&gt;", metaHtml);
+        Assert.DoesNotContain("Bad <x>", metaHtml);
     }
 
     [Fact]
@@ -503,6 +514,8 @@ public class WebBoardTests
         var newFormHtml = await newForm.Content.ReadAsStringAsync();
         var editForm = await client.GetAsync("/wiki/edit/architecture/rendering");
         var editFormHtml = await editForm.Content.ReadAsStringAsync();
+        var metaForm = await client.GetAsync("/wiki/meta/architecture/rendering");
+        var metaFormHtml = await metaForm.Content.ReadAsStringAsync();
         var missing = await client.GetAsync("/wiki/missing");
         var invalid = await client.GetAsync("/wiki/notes.txt");
 
@@ -524,8 +537,90 @@ public class WebBoardTests
         Assert.DoesNotContain("wiki-tree-page-link active", newFormHtml);
         Assert.Equal(HttpStatusCode.OK, editForm.StatusCode);
         Assert.Contains("class=\"wiki-tree-link wiki-tree-page-link active\" style=\"--tree-depth: 1\" href=\"/wiki/architecture/rendering\" aria-current=\"page\">Rendering</a>", editFormHtml);
+        Assert.Equal(HttpStatusCode.OK, metaForm.StatusCode);
+        Assert.Contains("action=\"/wiki/meta/architecture/rendering\"", metaFormHtml);
+        Assert.Contains("action=\"/wiki/delete/architecture/rendering\"", metaFormHtml);
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-page-link active\" style=\"--tree-depth: 1\" href=\"/wiki/architecture/rendering\" aria-current=\"page\">Rendering</a>", metaFormHtml);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
+    public async Task WikiMetadataAndDeleteEndpointsMutatePagesAndRenderValidationErrors()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        projectRoot.WriteWikiPage(new WikiPage
+        {
+            Path = "architecture/rendering",
+            Title = "Rendering",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            Body = "# Rendering",
+        });
+        projectRoot.WriteWikiPage(new WikiPage
+        {
+            Path = "reference/existing",
+            Title = "Existing",
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            Body = "",
+        });
+        var web = await CreateWebClient(projectRoot);
+        await using var app = web.App;
+        using var client = web.Client;
+
+        var duplicate = await client.PostAsync("/wiki/meta/architecture/rendering",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["path"] = "reference/existing",
+                ["title"] = "Duplicate <x>",
+            }));
+        var duplicateHtml = await duplicate.Content.ReadAsStringAsync();
+        var missingTitle = await client.PostAsync("/wiki/meta/architecture/rendering",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["path"] = "architecture/renamed",
+                ["title"] = "",
+            }));
+        var missingTitleHtml = await missingTitle.Content.ReadAsStringAsync();
+        var renamed = await client.PostAsync("/wiki/meta/architecture/rendering",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["path"] = "architecture/pipeline",
+                ["title"] = "Render Pipeline",
+            }));
+        var renamedHtml = await renamed.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, duplicate.StatusCode);
+        Assert.Contains("already exists", duplicateHtml);
+        Assert.Contains("value=\"reference/existing\"", duplicateHtml);
+        Assert.Contains("value=\"Duplicate &lt;x&gt;\"", duplicateHtml);
+        Assert.Contains("class=\"nav-section wiki-tree\"", duplicateHtml);
+        Assert.Equal(HttpStatusCode.BadRequest, missingTitle.StatusCode);
+        Assert.Contains("title is required", missingTitleHtml);
+        Assert.Contains("value=\"architecture/renamed\"", missingTitleHtml);
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+        Assert.Equal("/wiki/architecture/pipeline", renamed.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.Contains("Render Pipeline", renamedHtml);
+        Assert.Contains("# Rendering", renamedHtml);
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "pipeline.md")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "rendering.md")));
+
+        var deleteWithoutConfirmation = await client.PostAsync("/wiki/delete/architecture/pipeline",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["confirm"] = "" }));
+        var deleteWithoutConfirmationHtml = await deleteWithoutConfirmation.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, deleteWithoutConfirmation.StatusCode);
+        Assert.Contains("Type delete to confirm", deleteWithoutConfirmationHtml);
+        Assert.True(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "pipeline.md")));
+
+        var deleted = await client.PostAsync("/wiki/delete/architecture/pipeline",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["confirm"] = "delete" }));
+        var deletedHtml = await deleted.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
+        Assert.Equal("/wiki", deleted.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.DoesNotContain("Render Pipeline", deletedHtml);
+        Assert.False(File.Exists(Path.Combine(projectRoot.WikiPath, "architecture", "pipeline.md")));
     }
 
     [Fact]
