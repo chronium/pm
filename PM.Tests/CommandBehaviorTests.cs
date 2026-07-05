@@ -24,6 +24,55 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task DoctorOutsideProjectReturnsOne()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = new ProjectRoot();
+        var command = new DoctorCommand(new ProjectValidationService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Project not found. Run pm init first.", output);
+    }
+
+    [Fact]
+    public async Task DoctorValidProjectReturnsZero()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new DoctorCommand(new ProjectValidationService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Project validation passed.", output);
+    }
+
+    [Fact]
+    public async Task DoctorInvalidProjectReturnsOneAndPrintsIssueContext()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project" }));
+        var task = TestData.Task("PM-0001", "Broken task", track: "missing<tr>");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var command = new DoctorCommand(new ProjectValidationService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Project validation found 1 issue(s).", output);
+        Assert.Contains("error unknown_task_track: Task PM-0001 references unknown track missing<tr>.", output);
+        Assert.Contains("task PM-0001", output);
+        Assert.Contains("path ", output);
+    }
+
+    [Fact]
     public async Task ListEmptyStatesRendersWithoutCrashing()
     {
         using var workspace = new TempWorkingDirectory();

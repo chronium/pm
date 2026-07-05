@@ -112,6 +112,7 @@ app.Configure(config =>
 
     config.AddCommand<ListCommand>(GlobalConfig.ListCommandName);
     config.AddCommand<WebCommand>(GlobalConfig.WebCommandName);
+    config.AddCommand<DoctorCommand>(GlobalConfig.DoctorCommandName);
 });
 
 Console.CancelKeyPress += (_, e) =>

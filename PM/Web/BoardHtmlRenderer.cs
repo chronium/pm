@@ -52,7 +52,11 @@ public static class BoardHtmlRenderer
             .Replace("{{board}}", RenderBoard(board), StringComparison.Ordinal);
     }
 
-    public static string RenderSettingsPage(BoardData board, ProjectSettingsData settings, string? error = null)
+    public static string RenderSettingsPage(
+        BoardData board,
+        ProjectSettingsData settings,
+        string? error = null,
+        ProjectValidationResult? validation = null)
     {
         return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(settings.ProjectName), StringComparison.Ordinal)
@@ -60,7 +64,7 @@ public static class BoardHtmlRenderer
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
             .Replace("{{topBar}}", RenderTopBar(settings.ProjectName, ShellMode.Tasks), StringComparison.Ordinal)
             .Replace("{{sidebar}}", RenderTaskSidebar(board, SidebarPage.Settings), StringComparison.Ordinal)
-            .Replace("{{board}}", RenderSettings(settings, error), StringComparison.Ordinal);
+            .Replace("{{board}}", RenderSettings(settings, error, validation), StringComparison.Ordinal);
     }
 
     public static string RenderWikiIndexPage(BoardData board, IReadOnlyList<WikiPageSummary> pages)
@@ -310,7 +314,10 @@ public static class BoardHtmlRenderer
         return $"""<section id="board" hx-swap-oob="innerHTML">{RenderBoard(board)}</section>""";
     }
 
-    public static string RenderSettings(ProjectSettingsData settings, string? error = null)
+    public static string RenderSettings(
+        ProjectSettingsData settings,
+        string? error = null,
+        ProjectValidationResult? validation = null)
     {
         var errorHtml = string.IsNullOrWhiteSpace(error)
             ? string.Empty
@@ -319,6 +326,7 @@ public static class BoardHtmlRenderer
 
         return Template("Settings/Settings.html")
             .Replace("{{error}}", errorHtml, StringComparison.Ordinal)
+            .Replace("{{health}}", RenderProjectHealth(validation), StringComparison.Ordinal)
             .Replace("{{statusItems}}", RenderSettingsItems("statuses", settings.Statuses, "name"),
                 StringComparison.Ordinal)
             .Replace("{{trackItems}}", RenderSettingsItems("tracks", settings.Tracks, "name"),
@@ -630,6 +638,51 @@ public static class BoardHtmlRenderer
             .Replace("{{collection}}", H(collection), StringComparison.Ordinal)
             .Replace("{{valueName}}", H(valueName), StringComparison.Ordinal)
             .Replace("{{valueLabel}}", valueName == "title" ? "Title" : "Name", StringComparison.Ordinal)));
+    }
+
+    private static string RenderProjectHealth(ProjectValidationResult? validation)
+    {
+        if (validation == null)
+            return Template("Settings/Health.html")
+                .Replace("{{healthClass}}", "unknown", StringComparison.Ordinal)
+                .Replace("{{healthSummary}}", "Project health has not been checked.", StringComparison.Ordinal)
+                .Replace("{{healthIssues}}", string.Empty, StringComparison.Ordinal);
+
+        if (validation.Valid)
+            return Template("Settings/Health.html")
+                .Replace("{{healthClass}}", "valid", StringComparison.Ordinal)
+                .Replace("{{healthSummary}}", "Project validation passed.", StringComparison.Ordinal)
+                .Replace("{{healthIssues}}", string.Empty, StringComparison.Ordinal);
+
+        var issues = string.Join(Environment.NewLine, validation.Issues.Select(RenderProjectHealthIssue));
+        return Template("Settings/Health.html")
+            .Replace("{{healthClass}}", "invalid", StringComparison.Ordinal)
+            .Replace("{{healthSummary}}", H($"Project validation found {validation.Issues.Count} issue(s)."),
+                StringComparison.Ordinal)
+            .Replace("{{healthIssues}}", issues, StringComparison.Ordinal);
+    }
+
+    private static string RenderProjectHealthIssue(ProjectValidationIssue issue)
+    {
+        var context = RenderProjectHealthContext(issue);
+        return Template("Settings/HealthIssue.html")
+            .Replace("{{severity}}", H(issue.Severity), StringComparison.Ordinal)
+            .Replace("{{code}}", H(issue.Code), StringComparison.Ordinal)
+            .Replace("{{message}}", H(issue.Message), StringComparison.Ordinal)
+            .Replace("{{context}}", context, StringComparison.Ordinal);
+    }
+
+    private static string RenderProjectHealthContext(ProjectValidationIssue issue)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(issue.TaskId)) parts.Add($"Task {issue.TaskId}");
+        if (!string.IsNullOrWhiteSpace(issue.WikiPath)) parts.Add($"Wiki {issue.WikiPath}");
+        if (!string.IsNullOrWhiteSpace(issue.State)) parts.Add($"State {issue.State}");
+        if (!string.IsNullOrWhiteSpace(issue.Path)) parts.Add($"Path {issue.Path}");
+
+        return parts.Count == 0
+            ? string.Empty
+            : $"""<span class="settings-health-context">{H(string.Join(" | ", parts))}</span>""";
     }
 
     private static string MilestoneName(BoardData board, string? milestone)

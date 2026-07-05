@@ -690,6 +690,61 @@ main {
   text-transform: uppercase;
 }
 
+.settings-health {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+}
+
+.settings-health.valid {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+.settings-health.invalid {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.settings-health p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.settings-health-issue {
+  display: grid;
+  grid-template-columns: minmax(70px, 90px) minmax(180px, 240px) minmax(260px, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.settings-health-severity {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.settings-health-code {
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.settings-health-message,
+.settings-health-context {
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.settings-health-context {
+  grid-column: 3;
+  font-size: 12px;
+}
+
 .settings-add,
 .settings-item {
   display: grid;
@@ -993,7 +1048,8 @@ main {
   .wiki-row,
   .wiki-header-actions,
   .settings-add,
-  .settings-item {
+  .settings-item,
+  .settings-health-issue {
     grid-template-columns: 1fr;
   }
 
@@ -1017,6 +1073,10 @@ main {
   .settings-rename {
     display: grid;
     gap: 8px;
+  }
+
+  .settings-health-context {
+    grid-column: auto;
   }
 
   .wiki-row time {

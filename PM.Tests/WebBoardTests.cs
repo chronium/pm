@@ -21,7 +21,7 @@ public class WebBoardTests
         var projectRoot = new ProjectRoot();
         var command = new WebCommand(projectRoot, new BoardService(projectRoot),
             new TaskService(projectRoot, new RecordingNextIdService()), new ProjectConfigService(projectRoot),
-            new WikiService(projectRoot));
+            new WikiService(projectRoot), new ProjectValidationService(projectRoot));
 
         var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings());
 
@@ -43,6 +43,7 @@ public class WebBoardTests
             new TaskService(projectRoot, new RecordingNextIdService()),
             new ProjectConfigService(projectRoot),
             new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot),
             url =>
             {
                 openedUrl = url;
@@ -205,12 +206,15 @@ public class WebBoardTests
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
+        var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
 
         var boardHtml = BoardHtmlRenderer.RenderPage(board);
-        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board, settings);
+        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board, settings, validation: validation);
 
         Assert.Contains("href=\"/settings\"", boardHtml);
         Assert.Contains("Project settings", settingsHtml);
+        Assert.Contains("Project health", settingsHtml);
+        Assert.Contains("Project validation passed.", settingsHtml);
         Assert.Contains("class=\"nav-item settings-link active\" href=\"/settings\" aria-current=\"page\"", settingsHtml);
         Assert.Contains("Queued", settingsHtml);
         Assert.Contains("Build &lt;track&gt;", settingsHtml);
@@ -225,8 +229,9 @@ public class WebBoardTests
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
         var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
+        var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
 
-        var html = BoardHtmlRenderer.RenderSettings(settings);
+        var html = BoardHtmlRenderer.RenderSettings(settings, validation: validation);
 
         Assert.Contains("hx-post=\"/settings/statuses\"", html);
         Assert.Contains("hx-post=\"/settings/statuses/todo/rename\"", html);
@@ -248,18 +253,72 @@ public class WebBoardTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
         var service = new ProjectConfigService(projectRoot);
+        var validationService = new ProjectValidationService(projectRoot);
 
         var rename = service.RenameStatus("todo", "Ready");
-        var refreshed = BoardHtmlRenderer.RenderSettings(service.GetSettings().Payload!);
+        var refreshed = BoardHtmlRenderer.RenderSettings(service.GetSettings().Payload!,
+            validation: validationService.ValidateProject().Payload!);
         var blocked = service.RemoveStatus("todo");
-        var error = BoardHtmlRenderer.RenderSettings(service.GetSettings().Payload!, blocked.Message);
+        var error = BoardHtmlRenderer.RenderSettings(service.GetSettings().Payload!, blocked.Message,
+            validationService.ValidateProject().Payload!);
 
         Assert.True(rename.Success);
         Assert.Contains("value=\"Ready\"", refreshed);
+        Assert.Contains("Project validation passed.", refreshed);
         Assert.Equal("status_in_use", blocked.ErrorCode);
         Assert.Contains("role=\"alert\"", error);
         Assert.Contains("Status todo is referenced by one or more tasks.", error);
         Assert.Contains("value=\"Ready\"", error);
+        Assert.Contains("Project validation passed.", error);
+    }
+
+    [Fact]
+    public async Task SettingsHealthRendersEscapedValidationIssues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project" }));
+        var task = TestData.Task("PM-0001", "Escaped task", track: "missing<tr>");
+        projectRoot.WriteTask(task);
+        var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
+        var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
+
+        var html = BoardHtmlRenderer.RenderSettings(settings, validation: validation);
+
+        Assert.Contains("Project validation found 2 issue(s).", html);
+        Assert.Contains("unknown_task_track", html);
+        Assert.Contains("Task PM-0001 references unknown track missing&lt;tr&gt;.", html);
+        Assert.Contains("Task PM-0001", html);
+        Assert.Contains("Path ", html);
+        Assert.DoesNotContain("missing<tr>", html);
+    }
+
+    [Fact]
+    public async Task SettingsMutationFragmentIncludesRefreshedProjectHealth()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project" }));
+        var task = TestData.Task("BUILD-0001", "Build task", track: "BUILD");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var (app, client) = await CreateWebClient(projectRoot);
+        await using var appRegistration = app;
+        using var clientRegistration = client;
+
+        var response = await client.PostAsync("/settings/tracks",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["key"] = "BUILD",
+                ["name"] = "Build",
+            }));
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.Contains("id=\"settings\"", html);
+        Assert.Contains("value=\"Build\"", html);
+        Assert.Contains("Project validation passed.", html);
+        Assert.DoesNotContain("unknown_task_track", html);
     }
 
     [Fact]
@@ -272,10 +331,11 @@ public class WebBoardTests
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
+        var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
 
         var boardHtml = BoardHtmlRenderer.RenderPage(board);
         var wikiHtml = BoardHtmlRenderer.RenderWikiIndexPage(board, []);
-        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board, settings);
+        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board, settings, validation: validation);
 
         Assert.Contains("Project &lt;name&gt;", boardHtml);
         Assert.Contains("class=\"nav-item active\" href=\"/\" aria-current=\"page\"", boardHtml);
@@ -369,8 +429,10 @@ public class WebBoardTests
             "Body",
             "Body"), pages);
         var taskHtml = BoardHtmlRenderer.RenderPage(board);
+        var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
         var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board,
-            new ProjectConfigService(projectRoot).GetSettings().Payload!);
+            new ProjectConfigService(projectRoot).GetSettings().Payload!,
+            validation: validation);
 
         Assert.Contains("class=\"nav-section wiki-tree\"", indexHtml);
         Assert.Contains("href=\"/wiki/architecture\"", indexHtml);
@@ -1200,7 +1262,8 @@ public class WebBoardTests
             new BoardService(projectRoot),
             new TaskService(projectRoot, new RecordingNextIdService()),
             new ProjectConfigService(projectRoot),
-            new WikiService(projectRoot));
+            new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot));
 
         await app.StartAsync();
         return (app, new HttpClient { BaseAddress = new Uri(url) });
@@ -1240,7 +1303,9 @@ public class WebBoardTests
         TaskService taskService,
         ProjectConfigService configService,
         WikiService wikiService,
-        Action<string> onOpen) : WebCommand(projectRoot, boardService, taskService, configService, wikiService)
+        ProjectValidationService validationService,
+        Action<string> onOpen) : WebCommand(projectRoot, boardService, taskService, configService, wikiService,
+        validationService)
     {
         protected override void OpenBrowser(string url)
         {

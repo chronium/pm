@@ -18,7 +18,8 @@ public class WebCommand(
     BoardService boardService,
     TaskService taskService,
     ProjectConfigService configService,
-    WikiService wikiService) : AsyncCommand<WebCommand.Settings>
+    WikiService wikiService,
+    ProjectValidationService validationService) : AsyncCommand<WebCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
@@ -36,7 +37,7 @@ public class WebCommand(
         builder.WebHost.UseUrls(url);
 
         var app = builder.Build();
-        MapEndpoints(app, boardService, taskService, configService, wikiService);
+        MapEndpoints(app, boardService, taskService, configService, wikiService, validationService);
 
         await app.StartAsync(cancellationToken);
         AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
@@ -74,7 +75,8 @@ public class WebCommand(
         BoardService boardService,
         TaskService taskService,
         ProjectConfigService configService,
-        WikiService wikiService)
+        WikiService wikiService,
+        ProjectValidationService validationService)
     {
         endpoints.MapGet("/favicon.ico", () => Results.NoContent());
 
@@ -94,7 +96,9 @@ public class WebCommand(
         {
             var board = CreateBoard(boardService, new BoardQuery());
             var settings = CreateSettings(configService);
-            return Results.Content(BoardHtmlRenderer.RenderSettingsPage(board, settings), "text/html; charset=utf-8");
+            var validation = CreateValidation(validationService);
+            return Results.Content(BoardHtmlRenderer.RenderSettingsPage(board, settings, validation: validation),
+                "text/html; charset=utf-8");
         });
 
         endpoints.MapGet("/wiki", () =>
@@ -278,7 +282,7 @@ public class WebCommand(
         endpoints.MapPost("/settings/statuses", async (HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            return SettingsMutation(configService, configService.AddStatus(
+            return SettingsMutation(configService, validationService, configService.AddStatus(
                 form["key"].ToString(),
                 form["name"].ToString()));
         });
@@ -286,16 +290,17 @@ public class WebCommand(
         endpoints.MapPost("/settings/statuses/{key}/rename", async (string key, HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            return SettingsMutation(configService, configService.RenameStatus(key, form["name"].ToString()));
+            return SettingsMutation(configService, validationService,
+                configService.RenameStatus(key, form["name"].ToString()));
         });
 
         endpoints.MapPost("/settings/statuses/{key}/remove", (string key) =>
-            SettingsMutation(configService, configService.RemoveStatus(key)));
+            SettingsMutation(configService, validationService, configService.RemoveStatus(key)));
 
         endpoints.MapPost("/settings/tracks", async (HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            return SettingsMutation(configService, configService.AddTrack(
+            return SettingsMutation(configService, validationService, configService.AddTrack(
                 form["key"].ToString(),
                 form["name"].ToString()));
         });
@@ -303,16 +308,17 @@ public class WebCommand(
         endpoints.MapPost("/settings/tracks/{key}/rename", async (string key, HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            return SettingsMutation(configService, configService.RenameTrack(key, form["name"].ToString()));
+            return SettingsMutation(configService, validationService,
+                configService.RenameTrack(key, form["name"].ToString()));
         });
 
         endpoints.MapPost("/settings/tracks/{key}/remove", (string key) =>
-            SettingsMutation(configService, configService.RemoveTrack(key)));
+            SettingsMutation(configService, validationService, configService.RemoveTrack(key)));
 
         endpoints.MapPost("/settings/milestones", async (HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            return SettingsMutation(configService, configService.AddMilestone(
+            return SettingsMutation(configService, validationService, configService.AddMilestone(
                 form["key"].ToString(),
                 form["title"].ToString()));
         });
@@ -320,11 +326,12 @@ public class WebCommand(
         endpoints.MapPost("/settings/milestones/{key}/rename", async (string key, HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            return SettingsMutation(configService, configService.RenameMilestone(key, form["title"].ToString()));
+            return SettingsMutation(configService, validationService,
+                configService.RenameMilestone(key, form["title"].ToString()));
         });
 
         endpoints.MapPost("/settings/milestones/{key}/remove", (string key) =>
-            SettingsMutation(configService, configService.RemoveMilestone(key)));
+            SettingsMutation(configService, validationService, configService.RemoveMilestone(key)));
 
         endpoints.MapGet("/task/{id}", (string id) =>
         {
@@ -539,11 +546,23 @@ public class WebCommand(
         return result.Payload!;
     }
 
-    private static IResult SettingsMutation(ProjectConfigService configService, AppResult mutation)
+    private static ProjectValidationResult CreateValidation(ProjectValidationService validationService)
+    {
+        var result = validationService.ValidateProject();
+        if (!result.Success) throw new InvalidOperationException(result.Message);
+
+        return result.Payload!;
+    }
+
+    private static IResult SettingsMutation(
+        ProjectConfigService configService,
+        ProjectValidationService validationService,
+        AppResult mutation)
     {
         var settings = CreateSettings(configService);
+        var validation = CreateValidation(validationService);
         return Results.Content(
-            BoardHtmlRenderer.RenderSettings(settings, mutation.Success ? null : mutation.Message),
+            BoardHtmlRenderer.RenderSettings(settings, mutation.Success ? null : mutation.Message, validation),
             "text/html; charset=utf-8",
             statusCode: mutation.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
     }
