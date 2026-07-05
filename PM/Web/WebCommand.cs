@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -43,6 +44,19 @@ public class WebCommand(
         {
             _ = Task.Run(() => app.StopAsync(CancellationToken.None));
         });
+
+        if (settings.Open)
+        {
+            try
+            {
+                OpenBrowser(url);
+            }
+            catch (Exception exception)
+            {
+                AnsiConsole.MarkupLineInterpolated(
+                    $"[yellow]Unable to open browser automatically: {exception.Message.EscapeMarkup()}[/]");
+            }
+        }
 
         try
         {
@@ -96,7 +110,11 @@ public class WebCommand(
         endpoints.MapGet("/wiki/new", () =>
         {
             var board = CreateBoard(boardService, new BoardQuery());
-            return Results.Content(BoardHtmlRenderer.RenderWikiCreatePage(board), "text/html; charset=utf-8");
+            var pagesResult = wikiService.ListPages();
+            return !pagesResult.Success
+                ? WikiError(pagesResult)
+                : Results.Content(BoardHtmlRenderer.RenderWikiCreatePage(board, pagesResult.Payload!),
+                    "text/html; charset=utf-8");
         });
 
         endpoints.MapPost("/wiki/new", async (HttpRequest request) =>
@@ -108,10 +126,16 @@ public class WebCommand(
             var markdown = form["markdown"].ToString();
             var result = wikiService.CreatePage(path, title, markdown);
             if (!result.Success)
+            {
+                var pagesResult = wikiService.ListPages();
+                if (!pagesResult.Success) return WikiError(pagesResult);
+
                 return Results.Content(
-                    BoardHtmlRenderer.RenderWikiCreatePage(board, path, title, markdown, result.Message),
+                    BoardHtmlRenderer.RenderWikiCreatePage(board, pagesResult.Payload!, path, title, markdown,
+                        result.Message),
                     "text/html; charset=utf-8",
                     statusCode: StatusCodes.Status400BadRequest);
+            }
 
             return Results.Redirect($"/wiki/{BoardHtmlRenderer.WikiPathUrl(result.Payload!.Path)}");
         });
@@ -120,9 +144,12 @@ public class WebCommand(
         {
             var board = CreateBoard(boardService, new BoardQuery());
             var result = wikiService.ReadPage(path);
-            return !result.Success
-                ? WikiError(result)
-                : Results.Content(BoardHtmlRenderer.RenderWikiEditPage(board, result.Payload!),
+            if (!result.Success) return WikiError(result);
+
+            var pagesResult = wikiService.ListPages();
+            return !pagesResult.Success
+                ? WikiError(pagesResult)
+                : Results.Content(BoardHtmlRenderer.RenderWikiEditPage(board, result.Payload!, pagesResult.Payload!),
                     "text/html; charset=utf-8");
         });
 
@@ -136,8 +163,12 @@ public class WebCommand(
             {
                 var readResult = wikiService.ReadPage(path);
                 var title = readResult.Success ? readResult.Payload!.Title : path;
+                var pagesResult = wikiService.ListPages();
+                if (!pagesResult.Success) return WikiError(pagesResult);
+
                 return Results.Content(
-                    BoardHtmlRenderer.RenderWikiEditPage(board, path, title, markdown, result.Message),
+                    BoardHtmlRenderer.RenderWikiEditPage(board, path, title, markdown, pagesResult.Payload!,
+                        result.Message),
                     "text/html; charset=utf-8",
                     statusCode: StatusCodes.Status400BadRequest);
             }
@@ -150,15 +181,24 @@ public class WebCommand(
             var board = CreateBoard(boardService, new BoardQuery());
             var result = wikiService.ReadPage(path);
             if (result.Success)
-                return Results.Content(BoardHtmlRenderer.RenderWikiPage(board, result.Payload!),
+            {
+                var pagesResult = wikiService.ListPages();
+                if (!pagesResult.Success) return WikiError(pagesResult);
+
+                return Results.Content(BoardHtmlRenderer.RenderWikiPage(board, result.Payload!, pagesResult.Payload!),
                     "text/html; charset=utf-8");
+            }
 
             if (result.ErrorCode != "missing_wiki_page") return WikiError(result);
 
             var folderResult = wikiService.ListPagesUnder(path);
             if (!folderResult.Success || folderResult.Payload!.Count == 0) return WikiError(result);
 
-            return Results.Content(BoardHtmlRenderer.RenderWikiFolderPage(board, path, folderResult.Payload!),
+            var allPagesResult = wikiService.ListPages();
+            if (!allPagesResult.Success) return WikiError(allPagesResult);
+
+            return Results.Content(BoardHtmlRenderer.RenderWikiFolderPage(board, path, folderResult.Payload!,
+                    allPagesResult.Payload!),
                 "text/html; charset=utf-8");
         });
 
@@ -471,10 +511,39 @@ public class WebCommand(
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
+    protected virtual void OpenBrowser(string url)
+    {
+        OpenUrlInDefaultBrowser(url);
+    }
+
+    private static void OpenUrlInDefaultBrowser(string url)
+    {
+        var startInfo = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo(url)
+            {
+                UseShellExecute = true,
+            }
+            : OperatingSystem.IsMacOS()
+                ? new ProcessStartInfo("open", url)
+                {
+                    UseShellExecute = false,
+                }
+                : new ProcessStartInfo("xdg-open", url)
+                {
+                    UseShellExecute = false,
+                };
+
+        Process.Start(startInfo);
+    }
+
     public class Settings : CommandSettings
     {
         [CommandOption("--port <PORT>")]
         [Description("Localhost port to bind. Defaults to an available port.")]
         public int? Port { get; init; }
+
+        [CommandOption("--open")]
+        [Description("Open the board in the default browser after the server starts.")]
+        public bool Open { get; init; }
     }
 }

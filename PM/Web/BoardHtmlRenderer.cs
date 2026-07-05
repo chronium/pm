@@ -6,12 +6,40 @@ namespace PM.Web;
 
 public static class BoardHtmlRenderer
 {
+    private enum ShellMode
+    {
+        Tasks,
+        Wiki,
+    }
+
     private enum SidebarPage
     {
         Board,
-        Wiki,
         Settings,
     }
+
+    private enum WikiSidebarPage
+    {
+        Home,
+        Other,
+    }
+
+    private enum WikiTreeActiveKind
+    {
+        None,
+        Page,
+        Folder,
+    }
+
+    private sealed class WikiTreeFolder(string label, string path)
+    {
+        public string Label { get; } = label;
+        public string Path { get; } = path;
+        public Dictionary<string, WikiTreeFolder> Folders { get; } = new(StringComparer.Ordinal);
+        public List<WikiTreePage> Pages { get; } = [];
+    }
+
+    private sealed record WikiTreePage(string Title, string Path);
 
     public static string RenderPage(BoardData board)
     {
@@ -19,7 +47,8 @@ public static class BoardHtmlRenderer
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{board.ProjectName} Board"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Board), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Tasks), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderTaskSidebar(board, SidebarPage.Board), StringComparison.Ordinal)
             .Replace("{{board}}", RenderBoard(board), StringComparison.Ordinal);
     }
 
@@ -29,7 +58,8 @@ public static class BoardHtmlRenderer
             .Replace("{{projectName}}", H(settings.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{settings.ProjectName} Settings"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Settings), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(settings.ProjectName, ShellMode.Tasks), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderTaskSidebar(board, SidebarPage.Settings), StringComparison.Ordinal)
             .Replace("{{board}}", RenderSettings(settings, error), StringComparison.Ordinal);
     }
 
@@ -39,27 +69,39 @@ public static class BoardHtmlRenderer
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{board.ProjectName} Wiki"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar(pages, WikiSidebarPage.Home), StringComparison.Ordinal)
             .Replace("{{board}}", RenderWikiIndex(pages), StringComparison.Ordinal);
     }
 
-    public static string RenderWikiPage(BoardData board, WikiPageData page)
+    public static string RenderWikiPage(
+        BoardData board,
+        WikiPageData page,
+        IReadOnlyList<WikiPageSummary>? sidebarPages = null)
     {
         return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{page.Title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar(sidebarPages ?? [], WikiSidebarPage.Other, page.Path,
+                WikiTreeActiveKind.Page), StringComparison.Ordinal)
             .Replace("{{board}}", RenderWikiDetail(page), StringComparison.Ordinal);
     }
 
-    public static string RenderWikiFolderPage(BoardData board, string path, IReadOnlyList<WikiPageSummary> pages)
+    public static string RenderWikiFolderPage(
+        BoardData board,
+        string path,
+        IReadOnlyList<WikiPageSummary> pages,
+        IReadOnlyList<WikiPageSummary>? sidebarPages = null)
     {
         return Template("Layout/BoardPage.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"{path} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar(sidebarPages ?? pages, WikiSidebarPage.Other, path,
+                WikiTreeActiveKind.Folder), StringComparison.Ordinal)
             .Replace("{{board}}", RenderWikiFolder(path, pages), StringComparison.Ordinal);
     }
 
@@ -74,13 +116,40 @@ public static class BoardHtmlRenderer
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"New Wiki Page - {board.ProjectName}"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar([], WikiSidebarPage.Other), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiCreateForm(path, title, markdown, error), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiCreatePage(
+        BoardData board,
+        IReadOnlyList<WikiPageSummary> sidebarPages,
+        string path = "",
+        string title = "",
+        string markdown = "",
+        string? error = null)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"New Wiki Page - {board.ProjectName}"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar(sidebarPages, WikiSidebarPage.Other), StringComparison.Ordinal)
             .Replace("{{board}}", RenderWikiCreateForm(path, title, markdown, error), StringComparison.Ordinal);
     }
 
     public static string RenderWikiEditPage(BoardData board, WikiPageData page, string? error = null)
     {
         return RenderWikiEditPage(board, page.Path, page.Title, page.Body, error);
+    }
+
+    public static string RenderWikiEditPage(
+        BoardData board,
+        WikiPageData page,
+        IReadOnlyList<WikiPageSummary> sidebarPages,
+        string? error = null)
+    {
+        return RenderWikiEditPage(board, page.Path, page.Title, page.Body, sidebarPages, error);
     }
 
     public static string RenderWikiEditPage(
@@ -94,7 +163,26 @@ public static class BoardHtmlRenderer
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
             .Replace("{{pageTitle}}", H($"Edit {title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
-            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar([], WikiSidebarPage.Other), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiEditForm(path, title, body, error), StringComparison.Ordinal);
+    }
+
+    public static string RenderWikiEditPage(
+        BoardData board,
+        string path,
+        string title,
+        string body,
+        IReadOnlyList<WikiPageSummary> sidebarPages,
+        string? error = null)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"Edit {title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{topBar}}", RenderTopBar(board.ProjectName, ShellMode.Wiki), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderWikiSidebar(sidebarPages, WikiSidebarPage.Other, path,
+                WikiTreeActiveKind.Page), StringComparison.Ordinal)
             .Replace("{{board}}", RenderWikiEditForm(path, title, body, error), StringComparison.Ordinal);
     }
 
@@ -286,7 +374,21 @@ public static class BoardHtmlRenderer
         ]);
     }
 
-    private static string RenderSidebar(BoardData board, SidebarPage activePage)
+    private static string RenderTopBar(string projectName, ShellMode activeMode)
+    {
+        return Template("Layout/TopBar.html")
+            .Replace("{{projectName}}", H(projectName), StringComparison.Ordinal)
+            .Replace("{{tasksActive}}", activeMode == ShellMode.Tasks ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{tasksAriaCurrent}}", activeMode == ShellMode.Tasks ? " aria-current=\"page\"" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wikiActive}}", activeMode == ShellMode.Wiki ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wikiAriaCurrent}}", activeMode == ShellMode.Wiki ? " aria-current=\"page\"" : string.Empty,
+                StringComparison.Ordinal);
+    }
+
+    private static string RenderTaskSidebar(BoardData board, SidebarPage activePage)
     {
         return Template("Layout/Sidebar.html")
             .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
@@ -297,10 +399,6 @@ public static class BoardHtmlRenderer
             .Replace("{{wholeProjectAriaCurrent}}",
                 activePage == SidebarPage.Board && IsWholeProject(board.Query) ? " aria-current=\"page\"" : string.Empty,
                 StringComparison.Ordinal)
-            .Replace("{{wikiActive}}", activePage == SidebarPage.Wiki ? " active" : string.Empty,
-                StringComparison.Ordinal)
-            .Replace("{{wikiAriaCurrent}}", activePage == SidebarPage.Wiki ? " aria-current=\"page\"" : string.Empty,
-                StringComparison.Ordinal)
             .Replace("{{milestoneItems}}", RenderNavItems("milestone", board.Milestones, board.Query.Milestone),
                 StringComparison.Ordinal)
             .Replace("{{trackItems}}", RenderNavItems("track", board.Tracks, board.Query.Track),
@@ -310,6 +408,117 @@ public static class BoardHtmlRenderer
             .Replace("{{settingsAriaCurrent}}",
                 activePage == SidebarPage.Settings ? " aria-current=\"page\"" : string.Empty,
                 StringComparison.Ordinal);
+    }
+
+    private static string RenderWikiSidebar(
+        IReadOnlyList<WikiPageSummary> pages,
+        WikiSidebarPage activePage,
+        string? activePath = null,
+        WikiTreeActiveKind activeKind = WikiTreeActiveKind.None)
+    {
+        return Template("Layout/WikiSidebar.html")
+            .Replace("{{wikiHomeActive}}", activePage == WikiSidebarPage.Home ? " active" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wikiHomeAriaCurrent}}",
+                activePage == WikiSidebarPage.Home ? " aria-current=\"page\"" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{wikiTree}}", RenderWikiTree(pages, activePath, activeKind), StringComparison.Ordinal);
+    }
+
+    private static string RenderWikiTree(
+        IReadOnlyList<WikiPageSummary> pages,
+        string? activePath,
+        WikiTreeActiveKind activeKind)
+    {
+        if (pages.Count == 0) return string.Empty;
+
+        var root = new WikiTreeFolder(string.Empty, string.Empty);
+        foreach (var page in pages)
+        {
+            var segments = page.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0) continue;
+
+            var folder = root;
+            for (var index = 0; index < segments.Length - 1; index++)
+            {
+                var segmentPath = string.Join('/', segments.Take(index + 1));
+                if (!folder.Folders.TryGetValue(segments[index], out var child))
+                {
+                    child = new WikiTreeFolder(segments[index], segmentPath);
+                    folder.Folders.Add(segments[index], child);
+                }
+
+                folder = child;
+            }
+
+            folder.Pages.Add(new WikiTreePage(page.Title, page.Path));
+        }
+
+        var items = RenderWikiTreeItems(root, activePath, activeKind, 0);
+        return string.IsNullOrWhiteSpace(items)
+            ? string.Empty
+            : $"""
+        <section class="nav-section wiki-tree" aria-labelledby="wiki-pages-nav-title">
+          <h2 id="wiki-pages-nav-title">Pages</h2>
+{items}
+        </section>
+""";
+    }
+
+    private static string RenderWikiTreeItems(
+        WikiTreeFolder folder,
+        string? activePath,
+        WikiTreeActiveKind activeKind,
+        int depth)
+    {
+        var rendered = new List<string>();
+        foreach (var child in folder.Folders.Values.OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase))
+            rendered.Add(RenderWikiTreeFolder(child, activePath, activeKind, depth));
+
+        foreach (var page in folder.Pages.OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase))
+            rendered.Add(RenderWikiTreePage(page, activePath, activeKind, depth));
+
+        return string.Join(Environment.NewLine, rendered);
+    }
+
+    private static string RenderWikiTreeFolder(
+        WikiTreeFolder folder,
+        string? activePath,
+        WikiTreeActiveKind activeKind,
+        int depth)
+    {
+        var isActive = activeKind == WikiTreeActiveKind.Folder && string.Equals(folder.Path, activePath,
+            StringComparison.Ordinal);
+        var isOpen = IsWikiTreeBranchOpen(folder.Path, activePath);
+        var children = RenderWikiTreeItems(folder, activePath, activeKind, depth + 1);
+
+        return $"""
+          <details class="wiki-tree-folder" style="--tree-depth: {depth}"{(isOpen ? " open" : string.Empty)}>
+            <summary><a class="wiki-tree-link wiki-tree-folder-link{(isActive ? " active" : string.Empty)}" href="/wiki/{WikiPathUrl(folder.Path)}"{(isActive ? " aria-current=\"page\"" : string.Empty)}>{H(folder.Label)}</a></summary>
+            <div class="wiki-tree-children">
+{children}
+            </div>
+          </details>
+""";
+    }
+
+    private static string RenderWikiTreePage(
+        WikiTreePage page,
+        string? activePath,
+        WikiTreeActiveKind activeKind,
+        int depth)
+    {
+        var isActive = activeKind == WikiTreeActiveKind.Page && string.Equals(page.Path, activePath,
+            StringComparison.Ordinal);
+
+        return $"""          <a class="wiki-tree-link wiki-tree-page-link{(isActive ? " active" : string.Empty)}" style="--tree-depth: {depth}" href="/wiki/{WikiPathUrl(page.Path)}"{(isActive ? " aria-current=\"page\"" : string.Empty)}>{H(page.Title)}</a>""";
+    }
+
+    private static bool IsWikiTreeBranchOpen(string folderPath, string? activePath)
+    {
+        return !string.IsNullOrWhiteSpace(activePath)
+               && (string.Equals(folderPath, activePath, StringComparison.Ordinal)
+                   || activePath.StartsWith(folderPath + "/", StringComparison.Ordinal));
     }
 
     private static string RenderNavItems(string queryName, IReadOnlyList<BoardOption> options, string? selected)

@@ -30,6 +30,37 @@ public class WebBoardTests
     }
 
     [Fact]
+    public async Task WebOpenFlagLaunchesResolvedLocalUrl()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var port = GetAvailablePort();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        string? openedUrl = null;
+        var command = new RecordingOpenWebCommand(
+            projectRoot,
+            new BoardService(projectRoot),
+            new TaskService(projectRoot, new RecordingNextIdService()),
+            new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot),
+            url =>
+            {
+                openedUrl = url;
+                cancellation.Cancel();
+            });
+
+        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
+        {
+            Port = port,
+            Open = true,
+        }, cancellation.Token);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal($"http://127.0.0.1:{port}", openedUrl);
+        Assert.Contains($"Serving board at http://127.0.0.1:{port}", output);
+    }
+
+    [Fact]
     public async Task BoardDataGroupsByMilestoneAndState()
     {
         using var workspace = new TempWorkingDirectory();
@@ -108,6 +139,9 @@ public class WebBoardTests
         Assert.Contains("Heading", html);
         Assert.Contains("hx-get=\"/task/new\"", html);
         Assert.Contains("hx-get=\"/task/PM-0001\"", html);
+        Assert.Contains("aria-label=\"Application navigation\"", html);
+        Assert.Contains("class=\"mode-link active\" href=\"/\" aria-current=\"page\">Tasks</a>", html);
+        Assert.Contains("class=\"mode-link\" href=\"/wiki\">Wiki</a>", html);
         Assert.Contains("aria-label=\"Board navigation\"", html);
         Assert.Contains("Whole project", html);
         Assert.Contains("Milestones", html);
@@ -227,22 +261,40 @@ public class WebBoardTests
     }
 
     [Fact]
-    public async Task SidebarIncludesWikiLinkAndMarksWikiPagesActive()
+    public async Task TopModeBarAndModeSidebarsReflectActiveWorkspace()
     {
         using var workspace = new TempWorkingDirectory();
-        var projectRoot = await workspace.CreateProject();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            name: "Project <name>",
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
 
         var boardHtml = BoardHtmlRenderer.RenderPage(board);
         var wikiHtml = BoardHtmlRenderer.RenderWikiIndexPage(board, []);
+        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board, settings);
 
-        Assert.Contains("href=\"/wiki\"", boardHtml);
+        Assert.Contains("Project &lt;name&gt;", boardHtml);
         Assert.Contains("class=\"nav-item active\" href=\"/\" aria-current=\"page\"", boardHtml);
-        Assert.DoesNotContain("class=\"nav-item active\" href=\"/wiki\"", boardHtml);
-        Assert.Contains("class=\"nav-item active\" href=\"/wiki\" aria-current=\"page\"", wikiHtml);
-        Assert.DoesNotContain("class=\"nav-item active\" href=\"/\" aria-current=\"page\"", wikiHtml);
-        AssertBefore(wikiHtml, "href=\"/\"", "href=\"/wiki\"");
-        AssertBefore(wikiHtml, "href=\"/wiki\"", "href=\"/settings\"");
+        Assert.Contains("class=\"mode-link active\" href=\"/\" aria-current=\"page\">Tasks</a>", boardHtml);
+        Assert.Contains("class=\"mode-link\" href=\"/wiki\">Wiki</a>", boardHtml);
+        Assert.Contains("Build &lt;track&gt;", boardHtml);
+        Assert.Contains("Milestone &lt;one&gt;", boardHtml);
+        Assert.Contains("href=\"/settings\"", boardHtml);
+        Assert.DoesNotContain("Wiki home", boardHtml);
+
+        Assert.Contains("aria-label=\"Wiki navigation\"", wikiHtml);
+        Assert.Contains("class=\"mode-link\" href=\"/\">Tasks</a>", wikiHtml);
+        Assert.Contains("class=\"mode-link active\" href=\"/wiki\" aria-current=\"page\">Wiki</a>", wikiHtml);
+        Assert.Contains("class=\"nav-item active\" href=\"/wiki\" aria-current=\"page\">Wiki home</a>", wikiHtml);
+        Assert.Contains("href=\"/wiki/new\"", wikiHtml);
+        Assert.DoesNotContain("Milestones", wikiHtml);
+        Assert.DoesNotContain("Tracks", wikiHtml);
+        Assert.DoesNotContain("href=\"/settings\"", wikiHtml);
+
+        Assert.Contains("class=\"mode-link active\" href=\"/\" aria-current=\"page\">Tasks</a>", settingsHtml);
+        Assert.Contains("class=\"nav-item settings-link active\" href=\"/settings\" aria-current=\"page\"", settingsHtml);
     }
 
     [Fact]
@@ -277,6 +329,72 @@ public class WebBoardTests
         Assert.Contains("architecture/rendering", html);
         Assert.Contains("2026-01-02 03:04", html);
         Assert.DoesNotContain("Render <wiki>", html);
+    }
+
+    [Fact]
+    public async Task WikiSidebarRendersTreeEscapesValuesAndMarksActiveBranch()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var modifiedAt = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
+        var pages = new List<WikiPageSummary>
+        {
+            new("reference/zeta", "Zeta", modifiedAt, "/wiki/reference/zeta.md"),
+            new("architecture/rendering", "Render <wiki>", modifiedAt, "/wiki/architecture/rendering.md"),
+            new("architecture/api", "API", modifiedAt, "/wiki/architecture/api.md"),
+            new("docs <x>/guide & notes/start", "Start <here>", modifiedAt, "/wiki/docs/start.md"),
+        };
+
+        var indexHtml = BoardHtmlRenderer.RenderWikiIndexPage(board, pages);
+        var detailHtml = BoardHtmlRenderer.RenderWikiPage(board, new WikiPageData(
+            "architecture/rendering",
+            "Render <wiki>",
+            modifiedAt,
+            modifiedAt,
+            "/wiki/architecture/rendering.md",
+            "Body",
+            "Body"), pages);
+        var folderHtml = BoardHtmlRenderer.RenderWikiFolderPage(board, "architecture",
+            pages.Where(page => page.Path.StartsWith("architecture/", StringComparison.Ordinal)).ToList(), pages);
+        var createHtml = BoardHtmlRenderer.RenderWikiCreatePage(board, pages);
+        var editHtml = BoardHtmlRenderer.RenderWikiEditPage(board, new WikiPageData(
+            "architecture/api",
+            "API",
+            modifiedAt,
+            modifiedAt,
+            "/wiki/architecture/api.md",
+            "Body",
+            "Body"), pages);
+        var taskHtml = BoardHtmlRenderer.RenderPage(board);
+        var settingsHtml = BoardHtmlRenderer.RenderSettingsPage(board,
+            new ProjectConfigService(projectRoot).GetSettings().Payload!);
+
+        Assert.Contains("class=\"nav-section wiki-tree\"", indexHtml);
+        Assert.Contains("href=\"/wiki/architecture\"", indexHtml);
+        Assert.Contains("href=\"/wiki/architecture/rendering\"", indexHtml);
+        Assert.Contains("Render &lt;wiki&gt;", indexHtml);
+        Assert.Contains("docs &lt;x&gt;", indexHtml);
+        Assert.Contains("guide &amp; notes", indexHtml);
+        Assert.Contains("href=\"/wiki/docs%20%3Cx%3E/guide%20%26%20notes/start\"", indexHtml);
+        Assert.DoesNotContain("wiki-tree-page-link active", indexHtml);
+        Assert.DoesNotContain("wiki-tree-folder-link active", indexHtml);
+        AssertBefore(indexHtml, "href=\"/wiki/architecture\"", "href=\"/wiki/reference\"");
+        AssertBefore(indexHtml, "href=\"/wiki/architecture/api\"", "href=\"/wiki/architecture/rendering\"");
+
+        Assert.Contains("<details class=\"wiki-tree-folder\" style=\"--tree-depth: 0\" open>", detailHtml);
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-page-link active\" style=\"--tree-depth: 1\" href=\"/wiki/architecture/rendering\" aria-current=\"page\">Render &lt;wiki&gt;</a>", detailHtml);
+        Assert.DoesNotContain("href=\"/wiki/architecture\" aria-current=\"page\"", detailHtml);
+
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-folder-link active\" href=\"/wiki/architecture\" aria-current=\"page\">architecture</a>", folderHtml);
+        Assert.DoesNotContain("wiki-tree-page-link active", folderHtml);
+
+        Assert.DoesNotContain("wiki-tree-page-link active", createHtml);
+        Assert.DoesNotContain("wiki-tree-folder-link active", createHtml);
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-page-link active\" style=\"--tree-depth: 1\" href=\"/wiki/architecture/api\" aria-current=\"page\">API</a>", editHtml);
+
+        Assert.DoesNotContain("class=\"nav-section wiki-tree\"", taskHtml);
+        Assert.DoesNotContain("class=\"nav-section wiki-tree\"", settingsHtml);
     }
 
     [Fact]
@@ -381,18 +499,31 @@ public class WebBoardTests
         var pageHtml = await page.Content.ReadAsStringAsync();
         var folder = await client.GetAsync("/wiki/architecture");
         var folderHtml = await folder.Content.ReadAsStringAsync();
+        var newForm = await client.GetAsync("/wiki/new");
+        var newFormHtml = await newForm.Content.ReadAsStringAsync();
+        var editForm = await client.GetAsync("/wiki/edit/architecture/rendering");
+        var editFormHtml = await editForm.Content.ReadAsStringAsync();
         var missing = await client.GetAsync("/wiki/missing");
         var invalid = await client.GetAsync("/wiki/notes.txt");
 
         Assert.Equal(HttpStatusCode.OK, index.StatusCode);
         Assert.Contains("Rendering", indexHtml);
+        Assert.Contains("class=\"nav-section wiki-tree\"", indexHtml);
+        Assert.DoesNotContain("wiki-tree-page-link active", indexHtml);
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Contains("# Rendering", pageHtml);
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-page-link active\" style=\"--tree-depth: 1\" href=\"/wiki/architecture/rendering\" aria-current=\"page\">Rendering</a>", pageHtml);
         Assert.Equal(HttpStatusCode.OK, folder.StatusCode);
         Assert.Contains("aria-label=\"Wiki breadcrumbs\"", folderHtml);
         Assert.Contains("<span aria-current=\"page\">architecture</span>", folderHtml);
         Assert.Contains("href=\"/wiki/architecture/rendering\"", folderHtml);
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-folder-link active\" href=\"/wiki/architecture\" aria-current=\"page\">architecture</a>", folderHtml);
         Assert.Contains("Rendering", folderHtml);
+        Assert.Equal(HttpStatusCode.OK, newForm.StatusCode);
+        Assert.Contains("class=\"nav-section wiki-tree\"", newFormHtml);
+        Assert.DoesNotContain("wiki-tree-page-link active", newFormHtml);
+        Assert.Equal(HttpStatusCode.OK, editForm.StatusCode);
+        Assert.Contains("class=\"wiki-tree-link wiki-tree-page-link active\" style=\"--tree-depth: 1\" href=\"/wiki/architecture/rendering\" aria-current=\"page\">Rendering</a>", editFormHtml);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
     }
@@ -937,7 +1068,8 @@ public class WebBoardTests
 
     private static async Task<(int ExitCode, string Output)> ExecuteWebCommand(
         WebCommand command,
-        WebCommand.Settings settings)
+        WebCommand.Settings settings,
+        CancellationToken cancellationToken = default)
     {
         var originalConsole = AnsiConsole.Console;
         using var writer = new StringWriter();
@@ -951,7 +1083,7 @@ public class WebBoardTests
 
         try
         {
-            var exitCode = await command.ExecuteAsync(null!, settings, CancellationToken.None);
+            var exitCode = await command.ExecuteAsync(null!, settings, cancellationToken);
             return (exitCode, writer.ToString());
         }
         finally
@@ -1004,6 +1136,20 @@ public class WebBoardTests
 
         public void SetEncoding(System.Text.Encoding encoding)
         {
+        }
+    }
+
+    private sealed class RecordingOpenWebCommand(
+        ProjectRoot projectRoot,
+        BoardService boardService,
+        TaskService taskService,
+        ProjectConfigService configService,
+        WikiService wikiService,
+        Action<string> onOpen) : WebCommand(projectRoot, boardService, taskService, configService, wikiService)
+    {
+        protected override void OpenBrowser(string url)
+        {
+            onOpen(url);
         }
     }
 
