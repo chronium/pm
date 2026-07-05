@@ -253,6 +253,9 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         if (!string.Equals(editedTask.Id, taskId, StringComparison.Ordinal))
             return AppResult.Fail("changed_task_id", "Task ID cannot be changed.");
 
+        if (TaskItem.HasSelfDependency(editedTask.Id, editedTask.DependencyIds))
+            return AppResult.Fail("invalid_dependency", $"Task {editedTask.Id} cannot depend on itself.");
+
         return AppResult.Ok();
     }
 
@@ -284,7 +287,8 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         string? track = null,
         string? milestone = null,
         string? description = null,
-        string? priority = null)
+        string? priority = null,
+        IReadOnlyList<string>? dependsOn = null)
     {
         if (!projectRoot.Exists)
             return AppResult<TaskMutationResult>.Fail("missing_project", "Project not found. Run pm init first.");
@@ -308,8 +312,13 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             return AppResult<TaskMutationResult>.Fail("invalid_priority",
                 $"Task priority must be inherit or one of {string.Join(", ", PriorityLevel.Values)}.");
 
+        var normalizedDependencies = dependsOn == null ? null : TaskItem.NormalizeDependencyIds(dependsOn);
+
         if (!projectRoot.TryGetById(taskId, out var task))
             return AppResult<TaskMutationResult>.Fail("missing_task", $"Task with ID {taskId} not found.");
+
+        if (normalizedDependencies != null && TaskItem.HasSelfDependency(task.Id, normalizedDependencies))
+            return AppResult<TaskMutationResult>.Fail("invalid_dependency", $"Task {task.Id} cannot depend on itself.");
 
         if (!projectRoot.TryGetState(task, out var state))
             return AppResult<TaskMutationResult>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
@@ -320,6 +329,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             Track = normalizedTrack ?? task.Track,
             Milestone = milestone == null ? task.Milestone : normalizedMilestone,
             Priority = priority == null ? task.Priority : normalizedPriority,
+            DependsOn = dependsOn == null ? task.DependsOn : normalizedDependencies!.ToListOrNull(),
             Description = description ?? task.Description,
         };
 
@@ -328,6 +338,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             !string.Equals(projectRoot.ResolveTaskTrack(updated), projectRoot.ResolveTaskTrack(task), StringComparison.Ordinal) ||
             !string.Equals(updated.Milestone, task.Milestone, StringComparison.Ordinal) ||
             !string.Equals(updated.Priority, task.Priority, StringComparison.Ordinal) ||
+            !updated.DependencyIds.SequenceEqual(task.DependencyIds, StringComparer.Ordinal) ||
             !string.Equals(updated.Description, task.Description, StringComparison.Ordinal);
 
         if (!changed)

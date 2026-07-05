@@ -484,6 +484,24 @@ main {
   color: var(--primary);
 }
 
+.task-dependencies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.task-dependencies > * {
+  overflow-wrap: anywhere;
+}
+
+.task-dependencies > :first-child {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
 .description,
 .task-description {
   line-height: 1.55;

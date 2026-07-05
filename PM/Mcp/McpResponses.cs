@@ -46,6 +46,11 @@ public sealed record TaskSummaryPayload(
     string Priority,
     string PrioritySource,
     string State,
+    IReadOnlyList<string> DependsOn,
+    bool DependenciesReady,
+    string DependencySummary,
+    IReadOnlyList<string> WaitingOnDependencies,
+    IReadOnlyList<string> MissingDependencies,
     string DescriptionPreview,
     string FilePath);
 
@@ -59,6 +64,11 @@ public sealed record TaskDetailPayload(
     DateTime CreatedAt,
     DateTime ModifiedAt,
     string State,
+    IReadOnlyList<string> DependsOn,
+    bool DependenciesReady,
+    string DependencySummary,
+    IReadOnlyList<string> WaitingOnDependencies,
+    IReadOnlyList<string> MissingDependencies,
     string FilePath,
     string Markdown,
     string Description);

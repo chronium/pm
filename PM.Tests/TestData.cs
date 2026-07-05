@@ -38,7 +38,8 @@ internal static class TestData
         string description = "",
         string? track = "PM",
         string? milestone = null,
-        string? priority = null)
+        string? priority = null,
+        IReadOnlyList<string>? dependsOn = null)
     {
         return new TaskItem
         {
@@ -47,6 +48,7 @@ internal static class TestData
             Track = track,
             Milestone = milestone,
             Priority = priority,
+            DependsOn = dependsOn?.ToList(),
             Description = description,
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),

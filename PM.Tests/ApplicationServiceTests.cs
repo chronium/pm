@@ -493,6 +493,34 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task PatchTaskMetadataSetsNormalizesClearsAndRejectsDependencies()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var first = TestData.Task("PM-0001", "Existing");
+        var second = TestData.Task("PM-0002", "Dependency");
+        projectRoot.WriteTask(first);
+        projectRoot.WriteTask(second);
+        projectRoot.UpdateTaskState(first, "todo");
+        projectRoot.UpdateTaskState(second, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var set = service.PatchTaskMetadata("PM-0001", dependsOn: [" PM-0002 ", "", "PM-0002", "BUILD-0001"]);
+
+        Assert.True(set.Success);
+        Assert.Equal(["PM-0002", "BUILD-0001"], set.Payload!.Task.DependencyIds);
+        Assert.Contains("dependsOn:", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        var cleared = service.PatchTaskMetadata("PM-0001", dependsOn: []);
+        Assert.True(cleared.Success);
+        Assert.Empty(cleared.Payload!.Task.DependencyIds);
+        Assert.DoesNotContain("dependsOn:", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        var self = service.PatchTaskMetadata("PM-0001", dependsOn: ["PM-0001"]);
+        Assert.Equal("invalid_dependency", self.ErrorCode);
+    }
+
+    [Fact]
     public async Task AppendTaskNoteCreatesNotesSectionAndFormatsMultilineNotes()
     {
         using var workspace = new TempWorkingDirectory();
@@ -671,6 +699,52 @@ public class ApplicationServiceTests
         Assert.Equal("milestone", byId["PM-0003"].PrioritySource);
         Assert.Equal("PM-0001", next.Task!.Task.Id);
         Assert.Contains("task override", next.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskRanksReadyTasksBeforeHigherPriorityBlockedTasks()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var waiting = TestData.Task("PM-0001", "Urgent waiting", priority: "urgent", dependsOn: ["PM-0003"]);
+        var ready = TestData.Task("PM-0002", "Ready lower priority", priority: "low");
+        var dependency = TestData.Task("PM-0003", "Dependency");
+        foreach (var task in new[] { waiting, ready, dependency })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var service = new BoardService(projectRoot);
+        var first = service.GetNextTask(new NextTaskQuery()).Payload!;
+        projectRoot.UpdateTaskState(dependency, "done");
+        var afterDependencyDone = service.GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("PM-0002", first.Task!.Task.Id);
+        Assert.True(first.Task.Dependencies.Ready);
+        Assert.Contains("no dependencies", first.Reason);
+        Assert.Equal("PM-0001", afterDependencyDone.Task!.Task.Id);
+        Assert.True(afterDependencyDone.Task.Dependencies.Ready);
+        Assert.Contains("all dependencies complete", afterDependencyDone.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskTreatsMissingDependencyAsNotReady()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var missingDependency = TestData.Task("PM-0001", "Missing dependency", priority: "urgent",
+            dependsOn: ["PM-9999"]);
+        var ready = TestData.Task("PM-0002", "Ready", priority: "low");
+        foreach (var task in new[] { missingDependency, ready })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("PM-0002", next.Task!.Task.Id);
     }
 
     [Fact]
@@ -1076,6 +1150,31 @@ public class ApplicationServiceTests
         Assert.Contains("stale_task_order_task", codes);
         Assert.Contains("invalid_milestone_priority", codes);
         Assert.Contains("unknown_milestone_priority", codes);
+    }
+
+    [Fact]
+    public async Task ProjectValidationReportsDependencyIssues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var self = TestData.Task("PM-0001", "Self", dependsOn: ["PM-0001"]);
+        var missing = TestData.Task("PM-0002", "Missing", dependsOn: ["PM-9999"]);
+        var cycleA = TestData.Task("PM-0003", "Cycle A", dependsOn: ["PM-0004"]);
+        var cycleB = TestData.Task("PM-0004", "Cycle B", dependsOn: ["PM-0003"]);
+        foreach (var task in new[] { self, missing, cycleA, cycleB })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var result = new ProjectValidationService(projectRoot).ValidateProject();
+
+        Assert.True(result.Success);
+        Assert.False(result.Payload!.Valid);
+        var codes = result.Payload.Issues.Select(issue => issue.Code).ToList();
+        Assert.Contains("self_dependency", codes);
+        Assert.Contains("missing_dependency", codes);
+        Assert.Contains("dependency_cycle", codes);
     }
 
     [Fact]

@@ -126,6 +126,7 @@ public sealed class PmMcpTools(
 
         var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
         var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
+        var dependencies = boardService.GetDependencyStatus(task);
         var payload = new TaskDetailPayload(
             task.Id,
             task.Title,
@@ -136,6 +137,11 @@ public sealed class PmMcpTools(
             task.CreatedAt,
             task.ModifiedAt,
             state,
+            dependencies.DependsOn,
+            dependencies.Ready,
+            dependencies.Summary,
+            dependencies.WaitingOn,
+            dependencies.Missing,
             projectRoot.GetTaskFilePath(task.Id),
             markdownResult.Payload!,
             task.Description);
@@ -303,9 +309,10 @@ public sealed class PmMcpTools(
         string? track = null,
         string? milestone = null,
         string? description = null,
-        string? priority = null)
+        string? priority = null,
+        IReadOnlyList<string>? dependsOn = null)
     {
-        var result = taskService.PatchTaskMetadata(taskId, title, track, milestone, description, priority);
+        var result = taskService.PatchTaskMetadata(taskId, title, track, milestone, description, priority, dependsOn);
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);
 
@@ -611,6 +618,11 @@ public sealed class PmMcpTools(
             task.Priority,
             task.PrioritySource,
             task.State,
+            task.Dependencies.DependsOn,
+            task.Dependencies.Ready,
+            task.Dependencies.Summary,
+            task.Dependencies.WaitingOn,
+            task.Dependencies.Missing,
             task.DescriptionPreview,
             task.FilePath);
     }
@@ -620,6 +632,7 @@ public sealed class PmMcpTools(
         var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
         var markdown = projectRoot.TryReadTaskFile(task.Id, out var content) ? content : task.ToMarkdown();
         var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
+        var dependencies = boardService.GetDependencyStatus(task);
         return new TaskDetailPayload(
             task.Id,
             task.Title,
@@ -630,6 +643,11 @@ public sealed class PmMcpTools(
             task.CreatedAt,
             task.ModifiedAt,
             state,
+            dependencies.DependsOn,
+            dependencies.Ready,
+            dependencies.Summary,
+            dependencies.WaitingOn,
+            dependencies.Missing,
             projectRoot.GetTaskFilePath(task.Id),
             markdown,
             task.Description);

@@ -18,11 +18,17 @@ public partial record TaskItem
     [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
     public string? Priority { get; init; }
 
+    [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public List<string>? DependsOn { get; init; }
+
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; init; } = DateTime.UtcNow;
 
     [YamlIgnore]
     public string Description { get; init; } = string.Empty;
+
+    [YamlIgnore]
+    public IReadOnlyList<string> DependencyIds => DependsOn ?? [];
 
     public static TaskItem? Parse(string markdownContent)
     {
@@ -75,6 +81,7 @@ public partial record TaskItem
         task = task with
         {
             Priority = normalizedPriority,
+            DependsOn = NormalizeDependencyIds(task.DependsOn ?? []).ToListOrNull(),
             Description = NormalizeBody(match.Groups["body"].Value),
         };
         errorCode = string.Empty;
@@ -97,6 +104,28 @@ public partial record TaskItem
         return body;
     }
 
+    public static IReadOnlyList<string> NormalizeDependencyIds(IEnumerable<string?> dependencyIds)
+    {
+        return dependencyIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    public static bool HasSelfDependency(string taskId, IEnumerable<string?> dependencyIds)
+    {
+        return dependencyIds.Any(id => string.Equals(taskId, id, StringComparison.Ordinal));
+    }
+
     [GeneratedRegex(@"\A---[ \t]*\r?\n(?<yaml>.*?)\r?\n---[ \t]*(?:\r?\n|$)(?<body>.*)\z", RegexOptions.Singleline)]
     private static partial Regex FrontMatterRegex();
+}
+
+internal static class TaskItemDependencyExtensions
+{
+    public static List<string>? ToListOrNull(this IReadOnlyList<string> dependencyIds)
+    {
+        return dependencyIds.Count == 0 ? null : dependencyIds.ToList();
+    }
 }

@@ -251,6 +251,7 @@ public static class BoardHtmlRenderer
             .Replace("{{track}}", H(task.Track), StringComparison.Ordinal)
             .Replace("{{state}}", H(task.State), StringComparison.Ordinal)
             .Replace("{{priority}}", RenderPriorityPill(task.Priority), StringComparison.Ordinal)
+            .Replace("{{dependencies}}", RenderDependencies(task.Dependencies), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(task.Task.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{filePath}}", H(task.FilePath), StringComparison.Ordinal)
             .Replace("{{description}}", H(description), StringComparison.Ordinal)
@@ -819,6 +820,21 @@ public static class BoardHtmlRenderer
             ? string.Empty
             : Template("Settings/Error.html")
                 .Replace("{{message}}", H(error), StringComparison.Ordinal);
+    }
+
+    private static string RenderDependencies(DependencyStatus dependencies)
+    {
+        if (dependencies.DependsOn.Count == 0)
+            return string.Empty;
+
+        var ids = string.Join(", ", dependencies.DependsOn.Select(H));
+        return $"""
+                 <div class="task-dependencies">
+                   <span>Dependencies</span>
+                   <span>{ids}</span>
+                   <span>{H(dependencies.Summary)}</span>
+                 </div>
+                 """;
     }
 
     private static string RenderMarkdownEditorAssets()

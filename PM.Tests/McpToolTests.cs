@@ -93,7 +93,8 @@ public class McpToolTests
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" },
             milestonePriorities: new Dictionary<string, string> { ["m1"] = "medium" }));
-        var match = TestData.Task("BUILD-0001", "Matching task", "- Preview line", "BUILD", "m1");
+        var match = TestData.Task("BUILD-0001", "Matching task", "- Preview line", "BUILD", "m1",
+            dependsOn: ["PM-0001"]);
         var wrongTrack = TestData.Task("PM-0001", "Wrong track", track: "PM", milestone: "m1");
         var wrongMilestone = TestData.Task("BUILD-0002", "Wrong milestone", track: "BUILD", milestone: "m2");
         projectRoot.WriteTask(match);
@@ -113,6 +114,9 @@ public class McpToolTests
         Assert.Equal("review", task.State);
         Assert.Equal("medium", task.Priority);
         Assert.Equal("milestone", task.PrioritySource);
+        Assert.Equal(["PM-0001"], task.DependsOn);
+        Assert.False(task.DependenciesReady);
+        Assert.Equal(["PM-0001"], task.WaitingOnDependencies);
     }
 
     [Fact]
@@ -136,9 +140,12 @@ public class McpToolTests
         Assert.Equal("todo", result.Data.Task.State);
         Assert.Equal("urgent", result.Data.Task.Priority);
         Assert.Equal("milestone", result.Data.Task.PrioritySource);
+        Assert.True(result.Data.Task.DependenciesReady);
+        Assert.Equal("no dependencies", result.Data.Task.DependencySummary);
         Assert.Equal("Preview line", result.Data.Task.DescriptionPreview);
         Assert.Contains("urgent priority", result.Data.Reason);
         Assert.Contains("state todo", result.Data.Reason);
+        Assert.Contains("no dependencies", result.Data.Reason);
         Assert.Equal(result.Data.Reason, result.Summary);
     }
 
@@ -220,6 +227,8 @@ public class McpToolTests
         Assert.Equal("todo", result.Data.State);
         Assert.Equal("low", result.Data.Priority);
         Assert.Equal("milestone", result.Data.PrioritySource);
+        Assert.Empty(result.Data.DependsOn);
+        Assert.True(result.Data.DependenciesReady);
         Assert.Equal("Body text", result.Data.Description);
         Assert.Contains("title: Existing", result.Data.Markdown);
         Assert.Equal(projectRoot.GetTaskFilePath("PM-0001"), result.Data.FilePath);
@@ -454,10 +463,11 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
 
         var metadata = tools.UpdateTaskMetadata("PM-0001", title: "Updated", track: "BUILD", milestone: "m1",
-            description: "Body", priority: "urgent");
+            description: "Body", priority: "urgent", dependsOn: [" PM-0002 ", "PM-0002", "BUILD-0001"]);
         var cleared = tools.UpdateTaskMetadata("PM-0001", priority: "inherit");
         var none = tools.UpdateTaskMetadata("PM-0001", priority: "none");
         var invalidPriority = tools.UpdateTaskMetadata("PM-0001", priority: "later");
+        var invalidDependency = tools.UpdateTaskMetadata("PM-0001", dependsOn: ["PM-0001"]);
         var note = tools.AppendTaskNote("PM-0001", "MCP note");
         var reorder = tools.ReorderTasks("PM", "todo", ["PM-0002"]);
 
@@ -468,6 +478,10 @@ public class McpToolTests
         Assert.Equal("m1", metadata.Data.Task.Milestone);
         Assert.Equal("urgent", metadata.Data.Task.Priority);
         Assert.Equal("task", metadata.Data.Task.PrioritySource);
+        Assert.Equal(["PM-0002", "BUILD-0001"], metadata.Data.Task.DependsOn);
+        Assert.False(metadata.Data.Task.DependenciesReady);
+        Assert.Equal(["PM-0002"], metadata.Data.Task.WaitingOnDependencies);
+        Assert.Equal(["BUILD-0001"], metadata.Data.Task.MissingDependencies);
         Assert.Contains("title: Updated", metadata.Data.Task.Markdown);
         Assert.True(cleared.Success);
         Assert.DoesNotContain("priority:", cleared.Data!.Task.Markdown);
@@ -477,6 +491,7 @@ public class McpToolTests
         Assert.Equal("none", none.Data!.Task.Priority);
         Assert.Equal("task", none.Data.Task.PrioritySource);
         Assert.Equal("invalid_priority", invalidPriority.ErrorCode);
+        Assert.Equal("invalid_dependency", invalidDependency.ErrorCode);
         Assert.True(note.Success);
         Assert.Contains("MCP note", note.Data!.Task.Description);
         Assert.True(reorder.Success);

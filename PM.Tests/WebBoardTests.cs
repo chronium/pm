@@ -928,10 +928,29 @@ public class WebBoardTests
         Assert.Contains("<summary>File</summary>", html);
         Assert.Contains("hx-post=\"/task/PM-0001/remove\"", html);
         Assert.Contains("data-confirm-remove", html);
+        Assert.DoesNotContain("task-dependencies", html);
         var pageHtml = BoardHtmlRenderer.RenderPage(board);
         Assert.Contains(".remove-confirmation[hidden]", pageHtml);
         Assert.Contains("display: none;", pageHtml);
         Assert.Contains(projectRoot.GetTaskFilePath("PM-0001"), html);
+    }
+
+    [Fact]
+    public async Task TaskDetailDisplaysEscapedDependenciesWhenPresent()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Render task", dependsOn: ["PM-<0002>"]);
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var html = BoardHtmlRenderer.RenderTaskDetail(Assert.Single(board.Tasks), board.States);
+
+        Assert.Contains("class=\"task-dependencies\"", html);
+        Assert.Contains("Dependencies", html);
+        Assert.Contains("PM-&lt;0002&gt;", html);
+        Assert.Contains("missing PM-&lt;0002&gt;", html);
     }
 
     [Fact]

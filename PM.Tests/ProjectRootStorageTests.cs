@@ -63,6 +63,44 @@ public class ProjectRootStorageTests
     }
 
     [Fact]
+    public void ParsingTaskDependenciesNormalizesIds()
+    {
+        var task = TaskItem.Parse("""
+                                  ---
+                                  id: PM-0002
+                                  title: Describe task
+                                  dependsOn:
+                                  - ' PM-0001 '
+                                  - ''
+                                  - PM-0001
+                                  - BUILD-0002
+                                  createdAt: 2026-01-01T00:00:00.0000000Z
+                                  modifiedAt: 2026-01-01T00:00:00.0000000Z
+                                  ---
+
+                                  Body
+                                  """);
+
+        Assert.NotNull(task);
+        Assert.Equal(["PM-0001", "BUILD-0002"], task.DependencyIds);
+    }
+
+    [Fact]
+    public async Task WritingTaskWithDependenciesSerializesFrontmatter()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0005", "Write dependencies", dependsOn: ["PM-0001", "BUILD-0002"]);
+
+        projectRoot.WriteTask(task);
+
+        var content = File.ReadAllText(Path.Combine(projectRoot.TasksPath, "PM-0005.md"));
+        Assert.Contains("dependsOn:", content);
+        Assert.Contains("- PM-0001", content);
+        Assert.Contains("- BUILD-0002", content);
+    }
+
+    [Fact]
     public async Task WritingTaskWithDescriptionPreservesMarkdownBodyAfterFrontmatter()
     {
         using var workspace = new TempWorkingDirectory();

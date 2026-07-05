@@ -28,8 +28,16 @@ public sealed record BoardTask(
     string Priority,
     string PrioritySource,
     string State,
+    DependencyStatus Dependencies,
     string DescriptionPreview,
     string FilePath);
+
+public sealed record DependencyStatus(
+    bool Ready,
+    IReadOnlyList<string> DependsOn,
+    IReadOnlyList<string> WaitingOn,
+    IReadOnlyList<string> Missing,
+    string Summary);
 
 public sealed record NextTaskQuery(string? Track = null);
 
@@ -125,7 +133,8 @@ public partial class BoardService(ProjectRoot projectRoot)
         var milestoneIndex = BuildMilestoneIndex(config);
         var selected = GetBoardTasks(new BoardQuery(query.Track), descriptionPreviewLength, orderLookup)
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
-            .OrderByDescending(task => PriorityLevel.Rank(task.Priority))
+            .OrderBy(task => task.Dependencies.Ready ? 0 : 1)
+            .ThenByDescending(task => PriorityLevel.Rank(task.Priority))
             .ThenBy(task => GetStateIndex(task, stateIndex))
             .ThenBy(task => GetMilestoneIndex(task, milestoneIndex))
             .ThenBy(task => GetOrderIndex(task, orderLookup))
@@ -145,6 +154,18 @@ public partial class BoardService(ProjectRoot projectRoot)
             string.IsNullOrWhiteSpace(query.Track)
                 ? "No actionable task found."
                 : $"No actionable task found for track {query.Track}."));
+    }
+
+    public DependencyStatus GetDependencyStatus(TaskItem task)
+    {
+        var tasksById = BuildTaskLookup(projectRoot.GetAllTasks());
+        var stateById = tasksById.Values
+            .ToDictionary(
+                item => item.Id,
+                item => projectRoot.TryGetState(item, out var state) ? state : string.Empty,
+                StringComparer.Ordinal);
+
+        return BuildDependencyStatus(task, tasksById, stateById);
     }
 
     public static string GetDescriptionPreview(string description, int previewLength)
@@ -173,17 +194,26 @@ public partial class BoardService(ProjectRoot projectRoot)
         int descriptionPreviewLength,
         Dictionary<TaskOrderScope, Dictionary<string, int>> orderLookup)
     {
-        return projectRoot.GetAllTasks()
+        var tasksById = BuildTaskLookup(projectRoot.GetAllTasks());
+        var stateById = tasksById.Values
+            .ToDictionary(
+                task => task.Id,
+                task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+                StringComparer.Ordinal);
+
+        return tasksById.Values
             .Select(task =>
             {
                 var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
+                var state = stateById.TryGetValue(task.Id, out var currentState) ? currentState : string.Empty;
                 return new BoardTask(
                     task,
                     projectRoot.ResolveTaskTrack(task),
                     task.Milestone,
                     priority.Priority,
                     priority.Source,
-                    projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+                    state,
+                    BuildDependencyStatus(task, tasksById, stateById),
                     GetDescriptionPreview(task.Description, descriptionPreviewLength),
                     projectRoot.GetTaskFilePath(task.Id));
             })
@@ -194,6 +224,45 @@ public partial class BoardService(ProjectRoot projectRoot)
             .ThenByDescending(entry => entry.Task.ModifiedAt)
             .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static DependencyStatus BuildDependencyStatus(
+        TaskItem task,
+        IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateById)
+    {
+        var dependencies = task.DependencyIds;
+        if (dependencies.Count == 0)
+            return new DependencyStatus(true, [], [], [], "no dependencies");
+
+        var waitingOn = new List<string>();
+        var missing = new List<string>();
+        foreach (var dependencyId in dependencies)
+        {
+            if (!tasksById.ContainsKey(dependencyId))
+            {
+                missing.Add(dependencyId);
+                continue;
+            }
+
+            if (!stateById.TryGetValue(dependencyId, out var state) ||
+                !string.Equals(state, "done", StringComparison.Ordinal))
+                waitingOn.Add(dependencyId);
+        }
+
+        var ready = waitingOn.Count == 0 && missing.Count == 0;
+        var summary = ready
+            ? "all dependencies complete"
+            : BuildWaitingSummary(waitingOn, missing);
+
+        return new DependencyStatus(ready, dependencies.ToList(), waitingOn, missing, summary);
+    }
+
+    private static Dictionary<string, TaskItem> BuildTaskLookup(IEnumerable<TaskItem> tasks)
+    {
+        return tasks
+            .GroupBy(task => task.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
     }
 
     private static string BuildNextTaskReason(BoardTask task)
@@ -207,7 +276,18 @@ public partial class BoardService(ProjectRoot projectRoot)
             PriorityLevel.SourceMilestone => "milestone default",
             _ => "no priority source",
         };
-        return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}.";
+        return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}; {task.Dependencies.Summary}.";
+    }
+
+    private static string BuildWaitingSummary(IReadOnlyList<string> waitingOn, IReadOnlyList<string> missing)
+    {
+        var parts = new List<string>();
+        if (waitingOn.Count > 0)
+            parts.Add($"waiting on {string.Join(", ", waitingOn)}");
+        if (missing.Count > 0)
+            parts.Add($"missing {string.Join(", ", missing)}");
+
+        return string.Join("; ", parts);
     }
 
     private static Dictionary<TaskOrderScope, Dictionary<string, int>> BuildOrderLookup(TaskOrderFile order)

@@ -593,6 +593,38 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskMetadataCommandSetsClearsAndRejectsDependencies()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
+        var task = TestData.Task("PM-0001", "Existing task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var command = new TaskMetadataCommand(new TaskService(projectRoot, new RecordingNextIdService()));
+
+        Assert.Equal(0,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = "PM-0002, BUILD-0002,PM-0002" },
+                CancellationToken.None));
+        var content = File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001"));
+        Assert.Contains("dependsOn:", content);
+        Assert.Contains("- PM-0002", content);
+        Assert.Contains("- BUILD-0002", content);
+
+        Assert.Equal(0,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = "" },
+                CancellationToken.None));
+        Assert.DoesNotContain("dependsOn:", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        Assert.Equal(1,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = "PM-0001" },
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task WikiListEmptyAndPopulatedOutput()
     {
         using var workspace = new TempWorkingDirectory();

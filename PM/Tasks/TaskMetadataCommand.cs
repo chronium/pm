@@ -15,7 +15,10 @@ public class TaskMetadataCommand(TaskService taskService) : Command<TaskMetadata
             settings.Track,
             settings.Milestone,
             settings.Description,
-            settings.Priority);
+            settings.Priority,
+            settings.DependsOn == null
+                ? null
+                : settings.DependsOn.Split(',', StringSplitOptions.TrimEntries));
 
         if (!result.Success)
         {
@@ -54,5 +57,9 @@ public class TaskMetadataCommand(TaskService taskService) : Command<TaskMetadata
         [CommandOption("--description <DESCRIPTION>")]
         [Description("Markdown description body for the task")]
         public string? Description { get; init; }
+
+        [CommandOption("--depends-on <TASK-IDS>")]
+        [Description("Comma-separated dependency task IDs. Use an empty value to clear.")]
+        public string? DependsOn { get; init; }
     }
 }

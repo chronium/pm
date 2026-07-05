@@ -25,6 +25,7 @@ public sealed class ProjectValidationService(ProjectRoot projectRoot)
         var issues = new List<ProjectValidationIssue>();
         ValidateConfigMetadata(issues);
         var tasksById = ValidateTaskFiles(issues);
+        ValidateTaskDependencies(issues, tasksById);
         ValidateStateRefs(issues, tasksById);
         ValidateWikiPages(issues);
         ValidateTaskOrder(issues, tasksById);
@@ -111,6 +112,96 @@ public sealed class ProjectValidationService(ProjectRoot projectRoot)
                 TaskId: duplicate.Key));
 
         return tasksById;
+    }
+
+    private void ValidateTaskDependencies(List<ProjectValidationIssue> issues, Dictionary<string, TaskItem> tasksById)
+    {
+        foreach (var task in tasksById.Values)
+        {
+            foreach (var dependencyId in task.DependencyIds)
+            {
+                if (string.Equals(task.Id, dependencyId, StringComparison.Ordinal))
+                {
+                    issues.Add(new ProjectValidationIssue(
+                        "error",
+                        "self_dependency",
+                        $"Task {task.Id} cannot depend on itself.",
+                        projectRoot.GetTaskFilePath(task.Id),
+                        task.Id));
+                    continue;
+                }
+
+                if (!tasksById.ContainsKey(dependencyId))
+                    issues.Add(new ProjectValidationIssue(
+                        "error",
+                        "missing_dependency",
+                        $"Task {task.Id} depends on missing task {dependencyId}.",
+                        projectRoot.GetTaskFilePath(task.Id),
+                        task.Id));
+            }
+        }
+
+        foreach (var cycle in FindDependencyCycles(tasksById))
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                "dependency_cycle",
+                $"Task dependency cycle detected: {string.Join(" -> ", cycle)}.",
+                projectRoot.GetTaskFilePath(cycle[0]),
+                cycle[0]));
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> FindDependencyCycles(Dictionary<string, TaskItem> tasksById)
+    {
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var stack = new List<string>();
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        var cycles = new List<IReadOnlyList<string>>();
+
+        foreach (var taskId in tasksById.Keys)
+            Visit(taskId);
+
+        return cycles;
+
+        void Visit(string taskId)
+        {
+            if (visited.Contains(taskId))
+                return;
+
+            if (visiting.Contains(taskId))
+            {
+                AddCycle(taskId);
+                return;
+            }
+
+            visiting.Add(taskId);
+            stack.Add(taskId);
+
+            foreach (var dependencyId in tasksById[taskId].DependencyIds)
+            {
+                if (!tasksById.ContainsKey(dependencyId) ||
+                    string.Equals(taskId, dependencyId, StringComparison.Ordinal))
+                    continue;
+
+                Visit(dependencyId);
+            }
+
+            stack.RemoveAt(stack.Count - 1);
+            visiting.Remove(taskId);
+            visited.Add(taskId);
+        }
+
+        void AddCycle(string repeatedTaskId)
+        {
+            var startIndex = stack.FindIndex(id => string.Equals(id, repeatedTaskId, StringComparison.Ordinal));
+            if (startIndex < 0)
+                return;
+
+            var cycle = stack[startIndex..].Concat([repeatedTaskId]).ToList();
+            var canonical = string.Join(">", cycle.Take(cycle.Count - 1).OrderBy(id => id, StringComparer.Ordinal));
+            if (reported.Add(canonical))
+                cycles.Add(cycle);
+        }
     }
 
     private void ValidateStateRefs(List<ProjectValidationIssue> issues, Dictionary<string, TaskItem> tasksById)
