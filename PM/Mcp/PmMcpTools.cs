@@ -46,7 +46,7 @@ public sealed class PmMcpTools(
             project.RootPath,
             ToOptions(project.States),
             ToOptions(project.Tracks),
-            ToOptions(project.Milestones),
+            ToMilestones(project.Milestones, new Dictionary<string, string>()),
             project.ProjectId,
             project.RecoveryKey);
 
@@ -67,7 +67,7 @@ public sealed class PmMcpTools(
             projectRoot.RootPath,
             ToOptions(config.TaskStates),
             ToOptions(config.Tracks),
-            ToOptions(config.Milestones));
+            ToMilestones(config.Milestones, config.MilestonePriorities));
 
         return McpToolResponse<ProjectPayload>.Ok($"Project {config.Name} loaded.", payload);
     }
@@ -94,6 +94,24 @@ public sealed class PmMcpTools(
         return McpToolResponse<TaskListPayload>.Ok($"Returned {tasks.Count} task(s).", new TaskListPayload(tasks));
     }
 
+    [McpServerTool(Name = "get_next_task", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns one deterministic recommended actionable task, optionally filtered by track.")]
+    public McpToolResponse<NextTaskPayload> GetNextTask(string? track = null)
+    {
+        var result = boardService.GetNextTask(new NextTaskQuery(NormalizeFilter(track)));
+        if (!result.Success)
+            return McpToolResponse<NextTaskPayload>.FromFailure(result);
+
+        var next = result.Payload!;
+        var payload = new NextTaskPayload(
+            next.Found,
+            next.Task == null ? null : ToTaskSummary(next.Task),
+            next.Reason);
+
+        return McpToolResponse<NextTaskPayload>.Ok(next.Reason, payload);
+    }
+
     [McpServerTool(Name = "get_task", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Returns a task's metadata, current state, file path, markdown, and description.")]
@@ -107,11 +125,14 @@ public sealed class PmMcpTools(
             return McpToolResponse<TaskDetailPayload>.Fail("missing_task", $"Task {taskId} not found.");
 
         var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
+        var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
         var payload = new TaskDetailPayload(
             task.Id,
             task.Title,
             projectRoot.ResolveTaskTrack(task),
             task.Milestone,
+            priority.Priority,
+            priority.Source,
             task.CreatedAt,
             task.ModifiedAt,
             state,
@@ -137,13 +158,13 @@ public sealed class PmMcpTools(
     [McpServerTool(Name = "list_milestones", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Lists configured milestones.")]
-    public McpToolResponse<IReadOnlyList<OptionPayload>> ListMilestones()
+    public McpToolResponse<IReadOnlyList<MilestonePayload>> ListMilestones()
     {
         var project = GetProject();
         return project.Success
-            ? McpToolResponse<IReadOnlyList<OptionPayload>>.Ok(
+            ? McpToolResponse<IReadOnlyList<MilestonePayload>>.Ok(
                 $"Returned {project.Data!.Milestones.Count} milestone(s).", project.Data.Milestones)
-            : McpToolResponse<IReadOnlyList<OptionPayload>>.Fail(project.ErrorCode!, project.Message!);
+            : McpToolResponse<IReadOnlyList<MilestonePayload>>.Fail(project.ErrorCode!, project.Message!);
     }
 
     [McpServerTool(Name = "list_states", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -275,15 +296,16 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "update_task_metadata", Destructive = true, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Updates selected task metadata fields without replacing the full markdown file.")]
+    [Description("Updates selected task metadata fields without replacing the full markdown file. Use priority inherit to clear a task override, none to explicitly suppress inherited priority, or low/medium/high/urgent to override.")]
     public McpToolResponse<TaskMutationPayload> UpdateTaskMetadata(
         string taskId,
         string? title = null,
         string? track = null,
         string? milestone = null,
-        string? description = null)
+        string? description = null,
+        string? priority = null)
     {
-        var result = taskService.PatchTaskMetadata(taskId, title, track, milestone, description);
+        var result = taskService.PatchTaskMetadata(taskId, title, track, milestone, description, priority);
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);
 
@@ -492,11 +514,22 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "add_milestone", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
     [Description("Adds a new milestone.")]
-    public McpToolResponse<MutatedPayload> AddMilestone(string key, string title)
+    public McpToolResponse<MutatedPayload> AddMilestone(string key, string title, string? priority = null)
     {
-        var result = configService.AddMilestone(key, title);
+        var result = configService.AddMilestone(key, title, priority);
         return result.Success
             ? McpToolResponse<MutatedPayload>.Ok($"Added milestone {key}.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "set_milestone_priority", Destructive = false, Idempotent = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Sets a milestone priority to none, low, medium, high, or urgent.")]
+    public McpToolResponse<MutatedPayload> SetMilestonePriority(string key, string priority)
+    {
+        var result = configService.SetMilestonePriority(key, priority);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok($"Updated milestone {key} priority.", new MutatedPayload(true))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
@@ -553,6 +586,21 @@ public sealed class PmMcpTools(
         return options.Select(option => new OptionPayload(option.Key, option.Value)).ToList();
     }
 
+    private static IReadOnlyList<MilestonePayload> ToMilestones(
+        IReadOnlyDictionary<string, string> milestones,
+        IReadOnlyDictionary<string, string> priorities)
+    {
+        return milestones
+            .Select(milestone => new MilestonePayload(
+                milestone.Key,
+                milestone.Value,
+                priorities.TryGetValue(milestone.Key, out var configured) &&
+                PriorityLevel.TryNormalize(configured, out var priority)
+                    ? priority
+                    : PriorityLevel.None))
+            .ToList();
+    }
+
     private static TaskSummaryPayload ToTaskSummary(BoardTask task)
     {
         return new TaskSummaryPayload(
@@ -560,6 +608,8 @@ public sealed class PmMcpTools(
             task.Task.Title,
             task.Track,
             task.Milestone,
+            task.Priority,
+            task.PrioritySource,
             task.State,
             task.DescriptionPreview,
             task.FilePath);
@@ -569,11 +619,14 @@ public sealed class PmMcpTools(
     {
         var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
         var markdown = projectRoot.TryReadTaskFile(task.Id, out var content) ? content : task.ToMarkdown();
+        var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
         return new TaskDetailPayload(
             task.Id,
             task.Title,
             projectRoot.ResolveTaskTrack(task),
             task.Milestone,
+            priority.Priority,
+            priority.Source,
             task.CreatedAt,
             task.ModifiedAt,
             state,

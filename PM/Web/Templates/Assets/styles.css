@@ -337,6 +337,14 @@ main {
   min-width: 0;
 }
 
+.priority-pill {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  color: var(--foreground);
+  font-weight: 700;
+}
+
 .id,
 .path,
 .settings-key {
@@ -582,7 +590,7 @@ main {
 
 .task-edit-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) minmax(130px, 170px);
   gap: 10px;
   align-items: end;
 }
@@ -748,7 +756,7 @@ main {
 .settings-add,
 .settings-item {
   display: grid;
-  grid-template-columns: minmax(100px, 140px) minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(100px, 140px) minmax(220px, 1fr) auto auto auto;
   gap: 8px;
   align-items: end;
   padding: 10px 12px;
@@ -759,6 +767,10 @@ main {
 .settings-add {
   grid-template-columns: minmax(100px, 140px) minmax(220px, 1fr) auto;
   border-radius: var(--radius-large);
+}
+
+.settings-add-milestone {
+  grid-template-columns: minmax(100px, 140px) minmax(220px, 1fr) minmax(120px, 150px) auto;
 }
 
 .settings-list .settings-item {
@@ -775,6 +787,10 @@ main {
 }
 
 .settings-rename {
+  display: contents;
+}
+
+.settings-priority {
   display: contents;
 }
 
@@ -950,7 +966,9 @@ main {
 }
 
 .wiki-form input,
-.task-form input {
+.task-form input,
+.settings-add select,
+.settings-item select {
   width: 100%;
 }
 
@@ -1071,6 +1089,11 @@ main {
   }
 
   .settings-rename {
+    display: grid;
+    gap: 8px;
+  }
+
+  .settings-priority {
     display: grid;
     gap: 8px;
   }

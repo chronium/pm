@@ -39,6 +39,25 @@ public class ProjectConfigTests
     }
 
     [Fact]
+    public void DeserializingOldYamlUsesEmptyMilestonePriorities()
+    {
+        const string yaml = """
+                            name: Legacy
+                            idWidth: 4
+                            idPrefix: PM
+                            taskStates:
+                              todo: To Do
+                            milestones:
+                              m1: Milestone 1
+                            """;
+
+        var config = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.Empty(config.MilestonePriorities);
+        Assert.Equal(PriorityLevel.None, PriorityLevel.Resolve(config, "m1"));
+    }
+
+    [Fact]
     public void SerializingConfigIncludesNextIdServiceUrl()
     {
         var config = TestData.Config(nextIdServiceUrl: "https://ids.example.test");
@@ -60,5 +79,19 @@ public class ProjectConfigTests
 
         Assert.Equal("Build", roundTrip.Tracks["BUILD"]);
         Assert.Equal("Milestone 1", roundTrip.Milestones["m1"]);
+    }
+
+    [Fact]
+    public void SerializingConfigIncludesMilestonePriorities()
+    {
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "high" });
+
+        var yaml = YamlSerde.Serialize(config);
+        var roundTrip = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.Contains("milestonePriorities:", yaml);
+        Assert.Equal("high", roundTrip.MilestonePriorities["m1"]);
     }
 }

@@ -23,12 +23,33 @@ public sealed class ProjectValidationService(ProjectRoot projectRoot)
             return AppResult<ProjectValidationResult>.Fail("missing_project", "Project not found. Run pm init first.");
 
         var issues = new List<ProjectValidationIssue>();
+        ValidateConfigMetadata(issues);
         var tasksById = ValidateTaskFiles(issues);
         ValidateStateRefs(issues, tasksById);
         ValidateWikiPages(issues);
         ValidateTaskOrder(issues, tasksById);
 
         return AppResult<ProjectValidationResult>.Ok(new ProjectValidationResult(issues.Count == 0, issues));
+    }
+
+    private void ValidateConfigMetadata(List<ProjectValidationIssue> issues)
+    {
+        foreach (var (milestone, priority) in projectRoot.Config!.MilestonePriorities)
+        {
+            if (!projectRoot.Config.Milestones.ContainsKey(milestone))
+                issues.Add(new ProjectValidationIssue(
+                    "error",
+                    "unknown_milestone_priority",
+                    $"Milestone priority references unknown milestone {milestone}.",
+                    projectRoot.RootPath == null ? null : Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile)));
+
+            if (!PriorityLevel.TryNormalize(priority, out _))
+                issues.Add(new ProjectValidationIssue(
+                    "error",
+                    "invalid_milestone_priority",
+                    $"Milestone {milestone} has invalid priority {priority}.",
+                    projectRoot.RootPath == null ? null : Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile)));
+        }
     }
 
     private Dictionary<string, TaskItem> ValidateTaskFiles(List<ProjectValidationIssue> issues)
@@ -41,13 +62,12 @@ public sealed class ProjectValidationService(ProjectRoot projectRoot)
         foreach (var filePath in Directory.EnumerateFiles(projectRoot.TasksPath, $"*.{GlobalConfig.DefaultTaskExtension}"))
         {
             var content = File.ReadAllText(filePath);
-            var task = TaskItem.Parse(content);
-            if (task == null)
+            if (!TaskItem.TryParse(content, out var task, out var errorCode, out var message) || task == null)
             {
                 issues.Add(new ProjectValidationIssue(
                     "error",
-                    "invalid_task_markdown",
-                    "Task file has invalid frontmatter or body.",
+                    errorCode,
+                    message,
                     filePath));
                 continue;
             }

@@ -21,7 +21,12 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             config.Name,
             config.TaskStates.Select(status => new BoardOption(status.Key, status.Value)).ToList(),
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
-            config.Milestones.Select(milestone => new BoardOption(milestone.Key, milestone.Value)).ToList()));
+            config.Milestones
+                .Select(milestone => new BoardOption(
+                    milestone.Key,
+                    milestone.Value,
+                    PriorityLevel.Resolve(config, milestone.Key)))
+                .ToList()));
     }
 
     public AppResult AddStatus(string key, string name)
@@ -179,7 +184,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         return AppResult.Ok();
     }
 
-    public AppResult AddMilestone(string key, string title)
+    public AppResult AddMilestone(string key, string title, string? priority = null)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
@@ -189,11 +194,46 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(title))
             return AppResult.Fail("invalid_milestone", "Milestone key and title are required.");
 
+        if (!PriorityLevel.TryNormalize(priority, out var normalizedPriority))
+            return AppResult.Fail("invalid_priority",
+                $"Milestone priority must be one of {string.Join(", ", PriorityLevel.Values)}.");
+
         var config = projectRoot.Config!;
         if (config.Milestones.ContainsKey(key))
             return AppResult.Fail("duplicate_milestone", $"Milestone {key} already exists.");
 
         config.Milestones[key] = title;
+        if (normalizedPriority == PriorityLevel.None)
+            config.MilestonePriorities.Remove(key);
+        else
+            config.MilestonePriorities[key] = normalizedPriority;
+
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
+    public AppResult SetMilestonePriority(string key, string priority)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return AppResult.Fail("invalid_milestone", "Milestone key is required.");
+
+        if (!PriorityLevel.TryNormalize(priority, out var normalizedPriority))
+            return AppResult.Fail("invalid_priority",
+                $"Milestone priority must be one of {string.Join(", ", PriorityLevel.Values)}.");
+
+        var config = projectRoot.Config!;
+        if (!config.Milestones.ContainsKey(key))
+            return AppResult.Fail("missing_milestone", $"Milestone {key} not found.");
+
+        if (normalizedPriority == PriorityLevel.None)
+            config.MilestonePriorities.Remove(key);
+        else
+            config.MilestonePriorities[key] = normalizedPriority;
+
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }
@@ -215,6 +255,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             return AppResult.Fail("milestone_in_use", $"Milestone {key} is referenced by one or more tasks.");
 
         config.Milestones.Remove(key);
+        config.MilestonePriorities.Remove(key);
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }

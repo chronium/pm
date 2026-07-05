@@ -31,6 +31,7 @@ public static class GlobalConfig
     public static string TaskBranchName => "task";
     public static string TaskAddCommandName => "add";
     public static string TaskEditCommandName => "edit";
+    public static string TaskMetadataCommandName => "metadata";
     public static string TaskRemoveCommandName => "remove";
     public static string WikiBranchName => "wiki";
     public static string WikiListCommandName => "list";
@@ -47,6 +48,8 @@ public static class GlobalConfig
     public static string MilestoneAddCommandName => "add";
     public static string MilestoneRenameCommandName => "rename";
     public static string MilestoneRemoveCommandName => "remove";
+    public static string MilestonePriorityCommandName => "priority";
+    public static string MilestoneListCommandName => "list";
     public static string StatusBranchName => "status";
     public static string StatusAddCommandName => "add";
     public static string StatusRenameCommandName => "rename";

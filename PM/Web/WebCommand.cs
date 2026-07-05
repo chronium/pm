@@ -320,7 +320,8 @@ public class WebCommand(
             var form = await request.ReadFormAsync();
             return SettingsMutation(configService, validationService, configService.AddMilestone(
                 form["key"].ToString(),
-                form["title"].ToString()));
+                form["title"].ToString(),
+                form["priority"].ToString()));
         });
 
         endpoints.MapPost("/settings/milestones/{key}/rename", async (string key, HttpRequest request) =>
@@ -328,6 +329,13 @@ public class WebCommand(
             var form = await request.ReadFormAsync();
             return SettingsMutation(configService, validationService,
                 configService.RenameMilestone(key, form["title"].ToString()));
+        });
+
+        endpoints.MapPost("/settings/milestones/{key}/priority", async (string key, HttpRequest request) =>
+        {
+            var form = await request.ReadFormAsync();
+            return SettingsMutation(configService, validationService,
+                configService.SetMilestonePriority(key, form["priority"].ToString()));
         });
 
         endpoints.MapPost("/settings/milestones/{key}/remove", (string key) =>
@@ -415,7 +423,8 @@ public class WebCommand(
                 id,
                 form["title"].ToString(),
                 form["targetState"].ToString(),
-                form["description"].ToString());
+                form["description"].ToString(),
+                form["priority"].ToString());
             if (!result.Success)
             {
                 var editBoard = boardService.GetBoard(new BoardQuery());
@@ -442,6 +451,7 @@ public class WebCommand(
                         form["title"].ToString(),
                         form["targetState"].ToString(),
                         form["description"].ToString(),
+                        form["priority"].ToString(),
                         result.Message),
                     "text/html; charset=utf-8",
                     statusCode: StatusCodes.Status400BadRequest);

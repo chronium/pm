@@ -74,6 +74,8 @@ app.Configure(config =>
             milestone.AddCommand<MilestoneAddCommand>(GlobalConfig.MilestoneAddCommandName);
             milestone.AddCommand<MilestoneRenameCommand>(GlobalConfig.MilestoneRenameCommandName);
             milestone.AddCommand<MilestoneRemoveCommand>(GlobalConfig.MilestoneRemoveCommandName);
+            milestone.AddCommand<MilestonePriorityCommand>(GlobalConfig.MilestonePriorityCommandName);
+            milestone.AddCommand<MilestoneListCommand>(GlobalConfig.MilestoneListCommandName);
         });
 
     config.AddBranch(GlobalConfig.StatusBranchName,
@@ -92,6 +94,7 @@ app.Configure(config =>
 
             task.AddCommand<TaskAddCommand>(GlobalConfig.TaskAddCommandName);
             task.AddCommand<TaskEditCommand>(GlobalConfig.TaskEditCommandName);
+            task.AddCommand<TaskMetadataCommand>(GlobalConfig.TaskMetadataCommandName);
             task.AddCommand<TaskRemoveCommand>(GlobalConfig.TaskRemoveCommandName);
         });
 

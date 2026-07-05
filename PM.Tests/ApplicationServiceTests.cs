@@ -459,6 +459,40 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task PatchTaskMetadataSetsClearsAndSuppressesPriority()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "high" }));
+        var task = TestData.Task("PM-0001", "Existing", milestone: "m1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var set = service.PatchTaskMetadata("PM-0001", priority: "Urgent");
+        var changed = service.PatchTaskMetadata("PM-0001", priority: "low");
+        var inherit = service.PatchTaskMetadata("PM-0001", priority: "inherit");
+        var none = service.PatchTaskMetadata("PM-0001", priority: "none");
+        var invalid = service.PatchTaskMetadata("PM-0001", priority: "later");
+
+        Assert.True(set.Success);
+        Assert.Equal("urgent", set.Payload!.Task.Priority);
+        Assert.True(changed.Success);
+        Assert.Equal("low", changed.Payload!.Task.Priority);
+        Assert.True(inherit.Success);
+        Assert.Null(inherit.Payload!.Task.Priority);
+        Assert.True(none.Success);
+        Assert.Equal("none", none.Payload!.Task.Priority);
+        Assert.Equal("invalid_priority", invalid.ErrorCode);
+        Assert.Contains("priority: none", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        var boardTask = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!.Tasks.Single();
+        Assert.Equal("none", boardTask.Priority);
+        Assert.Equal("task", boardTask.PrioritySource);
+    }
+
+    [Fact]
     public async Task AppendTaskNoteCreatesNotesSectionAndFormatsMultilineNotes()
     {
         using var workspace = new TempWorkingDirectory();
@@ -504,6 +538,218 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task NextTaskSelectsConfiguredStateOrderBeforeNewerLaterStatesAndFiltersByTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
+        var todo = TestData.Task("PM-0001", "Todo", track: "PM") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var review = TestData.Task("PM-0002", "Review", track: "PM") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var build = TestData.Task("BUILD-0001", "Build", track: "BUILD") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        };
+        foreach (var task in new[] { todo, review, build }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(todo, "todo");
+        projectRoot.UpdateTaskState(review, "review");
+        projectRoot.UpdateTaskState(build, "todo");
+        var service = new BoardService(projectRoot);
+
+        var next = service.GetNextTask(new NextTaskQuery()).Payload!;
+        var filtered = service.GetNextTask(new NextTaskQuery("BUILD")).Payload!;
+        var invalid = service.GetNextTask(new NextTaskQuery("NOPE"));
+
+        Assert.Equal("PM-0001", next.Task!.Task.Id);
+        Assert.Equal("BUILD-0001", filtered.Task!.Task.Id);
+        Assert.Equal("invalid_track", invalid.ErrorCode);
+    }
+
+    [Fact]
+    public async Task NextTaskRespectsConfiguredMilestoneOrderWithUnassignedAfterConfiguredMilestones()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m2"] = "Milestone 2", ["m1"] = "Milestone 1" }));
+        var unassigned = TestData.Task("PM-0001", "Unassigned") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var secondMilestone = TestData.Task("PM-0002", "Second milestone", milestone: "m1") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var firstMilestone = TestData.Task("PM-0003", "First milestone", milestone: "m2") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        foreach (var task in new[] { unassigned, secondMilestone, firstMilestone })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("PM-0003", next.Task!.Task.Id);
+        Assert.Equal("m2", next.Task.Milestone);
+    }
+
+    [Fact]
+    public async Task NextTaskSelectsHigherPriorityMilestoneBeforeEarlierState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["low"] = "Low priority",
+                ["urgent"] = "Urgent priority",
+            },
+            milestonePriorities: new Dictionary<string, string>
+            {
+                ["low"] = "low",
+                ["urgent"] = "urgent",
+            }));
+        var todo = TestData.Task("PM-0001", "Todo low", milestone: "low") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var review = TestData.Task("PM-0002", "Review urgent", milestone: "urgent") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        projectRoot.WriteTask(todo);
+        projectRoot.WriteTask(review);
+        projectRoot.UpdateTaskState(todo, "todo");
+        projectRoot.UpdateTaskState(review, "review");
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("PM-0002", next.Task!.Task.Id);
+        Assert.Equal("urgent", next.Task.Priority);
+        Assert.Contains("urgent priority", next.Reason);
+    }
+
+    [Fact]
+    public async Task TaskPriorityOverrideControlsEffectivePriorityAndNextTaskRanking()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["low"] = "Low priority",
+                ["urgent"] = "Urgent priority",
+            },
+            milestonePriorities: new Dictionary<string, string>
+            {
+                ["low"] = "low",
+                ["urgent"] = "urgent",
+            }));
+        var taskOverride = TestData.Task("PM-0001", "Task override", milestone: "low", priority: "high");
+        var inheritedUrgent = TestData.Task("PM-0002", "Inherited urgent", milestone: "urgent", priority: "none");
+        var inheritedLow = TestData.Task("PM-0003", "Inherited low", milestone: "low");
+        foreach (var task in new[] { taskOverride, inheritedUrgent, inheritedLow })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var byId = board.Tasks.ToDictionary(task => task.Task.Id);
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("high", byId["PM-0001"].Priority);
+        Assert.Equal("task", byId["PM-0001"].PrioritySource);
+        Assert.Equal("none", byId["PM-0002"].Priority);
+        Assert.Equal("task", byId["PM-0002"].PrioritySource);
+        Assert.Equal("low", byId["PM-0003"].Priority);
+        Assert.Equal("milestone", byId["PM-0003"].PrioritySource);
+        Assert.Equal("PM-0001", next.Task!.Task.Id);
+        Assert.Contains("task override", next.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskStoredTaskOrderWinsWithinSelectedStateAndMilestone()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var older = TestData.Task("PM-0001", "Older", milestone: "m1") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var newer = TestData.Task("PM-0002", "Newer", milestone: "m1") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        };
+        foreach (var task in new[] { older, newer })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+        projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", "m1"), ["PM-0001", "PM-0002"]);
+
+        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("PM-0001", next.Task!.Task.Id);
+    }
+
+    [Fact]
+    public async Task NextTaskUsesModifiedTimeAndIdFallbacksDeterministically()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var older = TestData.Task("PM-0001", "Older") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var newer = TestData.Task("PM-0002", "Newer") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        };
+        projectRoot.WriteTask(older);
+        projectRoot.WriteTask(newer);
+        projectRoot.UpdateTaskState(older, "todo");
+        projectRoot.UpdateTaskState(newer, "todo");
+        var service = new BoardService(projectRoot);
+
+        var newest = service.GetNextTask(new NextTaskQuery()).Payload!;
+        projectRoot.WriteTask(older with { ModifiedAt = newer.ModifiedAt });
+        var lowestId = service.GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.Equal("PM-0002", newest.Task!.Task.Id);
+        Assert.Equal("PM-0001", lowestId.Task!.Task.Id);
+    }
+
+    [Fact]
+    public async Task NextTaskReturnsEmptyResultForEmptyOrDoneOnlyProjects()
+    {
+        using var emptyWorkspace = new TempWorkingDirectory();
+        var emptyRoot = await emptyWorkspace.CreateProject();
+        var empty = new BoardService(emptyRoot).GetNextTask(new NextTaskQuery());
+
+        Assert.True(empty.Success);
+        Assert.False(empty.Payload!.Found);
+        Assert.Null(empty.Payload.Task);
+
+        using var doneWorkspace = new TempWorkingDirectory();
+        var doneRoot = await doneWorkspace.CreateProject();
+        var doneTask = TestData.Task("PM-0001", "Done");
+        doneRoot.WriteTask(doneTask);
+        doneRoot.UpdateTaskState(doneTask, "done");
+
+        var doneOnly = new BoardService(doneRoot).GetNextTask(new NextTaskQuery()).Payload!;
+
+        Assert.False(doneOnly.Found);
+        Assert.Null(doneOnly.Task);
+    }
+
+    [Fact]
     public async Task TrackAndMilestoneAddRejectDuplicatesAndEmptyValues()
     {
         using var workspace = new TempWorkingDirectory();
@@ -517,6 +763,47 @@ public class ApplicationServiceTests
         Assert.True(service.AddMilestone("m1", "Milestone 1").Success);
         Assert.Equal("duplicate_milestone", service.AddMilestone("m1", "Duplicate").ErrorCode);
         Assert.Equal("invalid_milestone", service.AddMilestone("m2", " ").ErrorCode);
+    }
+
+    [Fact]
+    public async Task MilestonePriorityAddSetAndRemovePersist()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.True(service.AddMilestone("m1", "Milestone 1", "HIGH").Success);
+        Assert.Equal("high", ProjectConfig.ReadConfig(projectRoot).MilestonePriorities["m1"]);
+
+        Assert.True(service.SetMilestonePriority("m1", "urgent").Success);
+        Assert.Equal("urgent", ProjectConfig.ReadConfig(projectRoot).MilestonePriorities["m1"]);
+
+        Assert.True(service.SetMilestonePriority("m1", "none").Success);
+        Assert.False(ProjectConfig.ReadConfig(projectRoot).MilestonePriorities.ContainsKey("m1"));
+
+        Assert.True(service.RemoveMilestone("m1").Success);
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.False(config.Milestones.ContainsKey("m1"));
+        Assert.False(config.MilestonePriorities.ContainsKey("m1"));
+    }
+
+    [Fact]
+    public async Task MilestonePriorityRejectsInvalidPriorityAndMissingMilestoneBeforeWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "low" }));
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.Equal("invalid_priority", service.AddMilestone("m2", "Milestone 2", "later").ErrorCode);
+        Assert.Equal("invalid_priority", service.SetMilestonePriority("m1", "later").ErrorCode);
+        Assert.Equal("missing_milestone", service.SetMilestonePriority("missing", "high").ErrorCode);
+
+        var config = ProjectConfig.ReadConfig(projectRoot);
+        Assert.False(config.Milestones.ContainsKey("m2"));
+        Assert.Equal("low", config.MilestonePriorities["m1"]);
+        Assert.False(config.MilestonePriorities.ContainsKey("missing"));
     }
 
     [Fact]
@@ -624,7 +911,8 @@ public class ApplicationServiceTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build", ["UI"] = "UI" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" },
+            milestonePriorities: new Dictionary<string, string> { ["m2"] = "high" }));
         var task = TestData.Task("BUILD-0001", "Build task", track: "BUILD", milestone: "m1");
         projectRoot.WriteTask(task);
         var service = new ProjectConfigService(projectRoot);
@@ -640,6 +928,7 @@ public class ApplicationServiceTests
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.Tracks.ContainsKey("UI"));
         Assert.False(config.Milestones.ContainsKey("m2"));
+        Assert.False(config.MilestonePriorities.ContainsKey("m2"));
     }
 
     [Fact]
@@ -757,11 +1046,16 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(task);
         File.WriteAllText(Path.Combine(projectRoot.TasksPath, "copy.md"), task.ToMarkdown());
         File.WriteAllText(Path.Combine(projectRoot.TasksPath, "bad.md"), "not markdown");
+        File.WriteAllText(Path.Combine(projectRoot.TasksPath, "bad-priority.md"),
+            TestData.Task("PM-0002", "Bad priority", priority: "later").ToMarkdown());
         Directory.CreateDirectory(Path.Combine(projectRoot.StatesPath, "unknown"));
         File.WriteAllText(Path.Combine(projectRoot.StatesPath, "unknown", "PM-0001.ref"), "../../tasks/PM-0001.md");
         File.WriteAllText(Path.Combine(projectRoot.StatesPath, "todo", "PM-9999.ref"), "../../tasks/PM-9999.md");
         File.WriteAllText(Path.Combine(projectRoot.WikiPath, "bad.md"), "not markdown");
         projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), ["PM-9999"]);
+        projectRoot.Config!.MilestonePriorities["m1"] = "later";
+        projectRoot.Config.MilestonePriorities["missing"] = "urgent";
+        projectRoot.Config.WriteConfig(projectRoot);
         var service = new ProjectValidationService(projectRoot);
 
         var result = service.ValidateProject();
@@ -770,6 +1064,7 @@ public class ApplicationServiceTests
         Assert.False(result.Payload!.Valid);
         var codes = result.Payload.Issues.Select(issue => issue.Code).ToHashSet();
         Assert.Contains("invalid_task_markdown", codes);
+        Assert.Contains("invalid_task_priority", codes);
         Assert.Contains("duplicate_task_id", codes);
         Assert.Contains("task_filename_mismatch", codes);
         Assert.Contains("missing_current_state", codes);
@@ -779,6 +1074,8 @@ public class ApplicationServiceTests
         Assert.Contains("unknown_task_milestone", codes);
         Assert.Contains("invalid_wiki_markdown", codes);
         Assert.Contains("stale_task_order_task", codes);
+        Assert.Contains("invalid_milestone_priority", codes);
+        Assert.Contains("unknown_milestone_priority", codes);
     }
 
     [Fact]

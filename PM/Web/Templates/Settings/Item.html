@@ -4,6 +4,7 @@
           <label data-field>{{valueLabel}} <input name="{{valueName}}" value="{{name}}" autocomplete="off" required></label>
           <button class="outline small" type="submit">Rename</button>
         </form>
+{{extra}}
         <form hx-post="/settings/{{collection}}/{{keyUrl}}/remove" hx-target="#settings" hx-swap="outerHTML" onsubmit="return confirm('Remove {{key}}?');">
           <button class="outline small" type="submit">Remove</button>
         </form>

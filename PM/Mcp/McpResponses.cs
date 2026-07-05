@@ -26,19 +26,25 @@ public sealed record ProjectPayload(
     string RootPath,
     IReadOnlyList<OptionPayload> States,
     IReadOnlyList<OptionPayload> Tracks,
-    IReadOnlyList<OptionPayload> Milestones,
+    IReadOnlyList<MilestonePayload> Milestones,
     string? ProjectId = null,
     string? RecoveryKey = null);
 
 public sealed record OptionPayload(string Key, string Name);
 
+public sealed record MilestonePayload(string Key, string Name, string Priority);
+
 public sealed record TaskListPayload(IReadOnlyList<TaskSummaryPayload> Tasks);
+
+public sealed record NextTaskPayload(bool Found, TaskSummaryPayload? Task, string Reason);
 
 public sealed record TaskSummaryPayload(
     string Id,
     string Title,
     string Track,
     string? Milestone,
+    string Priority,
+    string PrioritySource,
     string State,
     string DescriptionPreview,
     string FilePath);
@@ -48,6 +54,8 @@ public sealed record TaskDetailPayload(
     string Title,
     string Track,
     string? Milestone,
+    string Priority,
+    string PrioritySource,
     DateTime CreatedAt,
     DateTime ModifiedAt,
     string State,

@@ -28,7 +28,8 @@ public class McpToolTests
         var projectRoot = await workspace.CreateProject(TestData.Config(
             name: "MCP Test",
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "high" }));
         var tools = CreateTools(projectRoot);
 
         var result = tools.GetProject();
@@ -37,7 +38,8 @@ public class McpToolTests
         Assert.Equal("MCP Test", result.Data!.Name);
         Assert.Equal(projectRoot.RootPath, result.Data.RootPath);
         Assert.Contains(result.Data.Tracks, track => track.Key == "BUILD" && track.Name == "Build");
-        Assert.Contains(result.Data.Milestones, milestone => milestone.Key == "m1");
+        Assert.Contains(result.Data.Milestones,
+            milestone => milestone.Key == "m1" && milestone.Priority == "high");
         Assert.Contains(result.Data.States, state => state.Key == "todo" && state.Name == "Queued");
     }
 
@@ -61,7 +63,7 @@ public class McpToolTests
         Assert.Equal("MCP Project", result.Data!.Name);
         Assert.Equal(projectRoot.RootPath, result.Data.RootPath);
         Assert.Contains(result.Data.Tracks, track => track.Key == "BUG" && track.Name == "Bugs");
-        Assert.Contains(result.Data.Milestones, milestone => milestone.Key == "v1");
+        Assert.Contains(result.Data.Milestones, milestone => milestone.Key == "v1" && milestone.Priority == "none");
         Assert.Contains(result.Data.States, state => state.Key == "todo" && state.Name == "Todo");
     }
 
@@ -89,7 +91,8 @@ public class McpToolTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "medium" }));
         var match = TestData.Task("BUILD-0001", "Matching task", "- Preview line", "BUILD", "m1");
         var wrongTrack = TestData.Task("PM-0001", "Wrong track", track: "PM", milestone: "m1");
         var wrongMilestone = TestData.Task("BUILD-0002", "Wrong milestone", track: "BUILD", milestone: "m2");
@@ -108,14 +111,104 @@ public class McpToolTests
         Assert.Equal("BUILD-0001", task.Id);
         Assert.Equal("Preview line", task.DescriptionPreview);
         Assert.Equal("review", task.State);
+        Assert.Equal("medium", task.Priority);
+        Assert.Equal("milestone", task.PrioritySource);
+    }
+
+    [Fact]
+    public async Task GetNextTaskReturnsStructuredTaskAndReason()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "urgent" }));
+        var task = TestData.Task("PM-0001", "Next task", "- Preview line", milestone: "m1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask();
+
+        Assert.True(result.Success);
+        Assert.True(result.Data!.Found);
+        Assert.Equal("PM-0001", result.Data.Task!.Id);
+        Assert.Equal("Next task", result.Data.Task.Title);
+        Assert.Equal("todo", result.Data.Task.State);
+        Assert.Equal("urgent", result.Data.Task.Priority);
+        Assert.Equal("milestone", result.Data.Task.PrioritySource);
+        Assert.Equal("Preview line", result.Data.Task.DescriptionPreview);
+        Assert.Contains("urgent priority", result.Data.Reason);
+        Assert.Contains("state todo", result.Data.Reason);
+        Assert.Equal(result.Data.Reason, result.Summary);
+    }
+
+    [Fact]
+    public async Task GetNextTaskFiltersByTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
+        var projectTask = TestData.Task("PM-0001", "Project task", track: "PM") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var buildTask = TestData.Task("BUILD-0001", "Build task", track: "BUILD") with
+        {
+            ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        projectRoot.WriteTask(projectTask);
+        projectRoot.WriteTask(buildTask);
+        projectRoot.UpdateTaskState(projectTask, "todo");
+        projectRoot.UpdateTaskState(buildTask, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask(" BUILD ");
+
+        Assert.True(result.Success);
+        Assert.Equal("BUILD-0001", result.Data!.Task!.Id);
+        Assert.Equal("BUILD", result.Data.Task.Track);
+    }
+
+    [Fact]
+    public async Task GetNextTaskReturnsSuccessWhenNoActionableTaskExists()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Done task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "done");
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask();
+
+        Assert.True(result.Success);
+        Assert.False(result.Data!.Found);
+        Assert.Null(result.Data.Task);
+        Assert.Equal("No actionable task found.", result.Data.Reason);
+    }
+
+    [Fact]
+    public async Task GetNextTaskReturnsStructuredFailureForInvalidTrack()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot);
+
+        var result = tools.GetNextTask("NOPE");
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_track", result.ErrorCode);
+        Assert.Equal("Track NOPE not found.", result.Message);
     }
 
     [Fact]
     public async Task GetTaskReturnsMarkdownAndState()
     {
         using var workspace = new TempWorkingDirectory();
-        var projectRoot = await workspace.CreateProject();
-        var task = TestData.Task("PM-0001", "Existing", "Body text");
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "low" }));
+        var task = TestData.Task("PM-0001", "Existing", "Body text", milestone: "m1");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
         var tools = CreateTools(projectRoot);
@@ -125,6 +218,8 @@ public class McpToolTests
         Assert.True(result.Success);
         Assert.Equal("PM-0001", result.Data!.Id);
         Assert.Equal("todo", result.Data.State);
+        Assert.Equal("low", result.Data.Priority);
+        Assert.Equal("milestone", result.Data.PrioritySource);
         Assert.Equal("Body text", result.Data.Description);
         Assert.Contains("title: Existing", result.Data.Markdown);
         Assert.Equal(projectRoot.GetTaskFilePath("PM-0001"), result.Data.FilePath);
@@ -359,7 +454,10 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
 
         var metadata = tools.UpdateTaskMetadata("PM-0001", title: "Updated", track: "BUILD", milestone: "m1",
-            description: "Body");
+            description: "Body", priority: "urgent");
+        var cleared = tools.UpdateTaskMetadata("PM-0001", priority: "inherit");
+        var none = tools.UpdateTaskMetadata("PM-0001", priority: "none");
+        var invalidPriority = tools.UpdateTaskMetadata("PM-0001", priority: "later");
         var note = tools.AppendTaskNote("PM-0001", "MCP note");
         var reorder = tools.ReorderTasks("PM", "todo", ["PM-0002"]);
 
@@ -368,7 +466,17 @@ public class McpToolTests
         Assert.Equal("Updated", metadata.Data.Task.Title);
         Assert.Equal("BUILD", metadata.Data.Task.Track);
         Assert.Equal("m1", metadata.Data.Task.Milestone);
+        Assert.Equal("urgent", metadata.Data.Task.Priority);
+        Assert.Equal("task", metadata.Data.Task.PrioritySource);
         Assert.Contains("title: Updated", metadata.Data.Task.Markdown);
+        Assert.True(cleared.Success);
+        Assert.DoesNotContain("priority:", cleared.Data!.Task.Markdown);
+        Assert.Equal("none", cleared.Data.Task.Priority);
+        Assert.Equal("none", cleared.Data.Task.PrioritySource);
+        Assert.True(none.Success);
+        Assert.Equal("none", none.Data!.Task.Priority);
+        Assert.Equal("task", none.Data.Task.PrioritySource);
+        Assert.Equal("invalid_priority", invalidPriority.ErrorCode);
         Assert.True(note.Success);
         Assert.Contains("MCP note", note.Data!.Task.Description);
         Assert.True(reorder.Success);
@@ -409,9 +517,34 @@ public class McpToolTests
         Assert.Equal("duplicate_track", tools.AddTrack("BUILD", "Duplicate").ErrorCode);
         Assert.Equal("invalid_track", tools.AddTrack(" ", "Missing").ErrorCode);
 
-        Assert.True(tools.AddMilestone("m1", "Milestone 1").Success);
+        Assert.True(tools.AddMilestone("m1", "Milestone 1", "HIGH").Success);
         Assert.Equal("duplicate_milestone", tools.AddMilestone("m1", "Duplicate").ErrorCode);
         Assert.Equal("invalid_milestone", tools.AddMilestone("m2", " ").ErrorCode);
+        Assert.Equal("invalid_priority", tools.AddMilestone("m2", "Milestone 2", "later").ErrorCode);
+
+        var project = tools.GetProject();
+        Assert.Contains(project.Data!.Milestones,
+            milestone => milestone.Key == "m1" && milestone.Priority == "high");
+    }
+
+    [Fact]
+    public async Task SetMilestonePriorityReturnsStructuredResultAndUpdatesPayloads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var tools = CreateTools(projectRoot);
+
+        var update = tools.SetMilestonePriority("m1", "Urgent");
+        var invalid = tools.SetMilestonePriority("m1", "later");
+        var missing = tools.SetMilestonePriority("missing", "high");
+
+        Assert.True(update.Success);
+        Assert.Equal("invalid_priority", invalid.ErrorCode);
+        Assert.Equal("missing_milestone", missing.ErrorCode);
+
+        var milestone = Assert.Single(tools.ListMilestones().Data!);
+        Assert.Equal("urgent", milestone.Priority);
     }
 
     [Fact]
@@ -465,7 +598,8 @@ public class McpToolTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build", ["UI"] = "UI" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" },
+            milestonePriorities: new Dictionary<string, string> { ["m2"] = "medium" }));
         projectRoot.WriteTask(TestData.Task("BUILD-0001", "Build task", track: "BUILD", milestone: "m1"));
         var tools = CreateTools(projectRoot);
 

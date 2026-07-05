@@ -245,9 +245,10 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
 
     public AppResult ValidateEditedTaskMarkdown(string taskId, string editedContent)
     {
-        var editedTask = TaskItem.Parse(editedContent);
-        if (editedTask == null)
-            return AppResult.Fail("invalid_edited_markdown", "Edited task markdown is invalid.");
+        if (!TaskItem.TryParse(editedContent, out var editedTask, out var errorCode, out var message) ||
+            editedTask == null)
+            return AppResult.Fail(errorCode == "invalid_task_priority" ? "invalid_priority" : "invalid_edited_markdown",
+                errorCode == "invalid_task_priority" ? message : "Edited task markdown is invalid.");
 
         if (!string.Equals(editedTask.Id, taskId, StringComparison.Ordinal))
             return AppResult.Fail("changed_task_id", "Task ID cannot be changed.");
@@ -282,7 +283,8 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         string? title = null,
         string? track = null,
         string? milestone = null,
-        string? description = null)
+        string? description = null,
+        string? priority = null)
     {
         if (!projectRoot.Exists)
             return AppResult<TaskMutationResult>.Fail("missing_project", "Project not found. Run pm init first.");
@@ -301,6 +303,11 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         if (milestone != null && normalizedMilestone != null && !config.Milestones.ContainsKey(normalizedMilestone))
             return AppResult<TaskMutationResult>.Fail("invalid_milestone", $"Milestone {normalizedMilestone} not found.");
 
+        string? normalizedPriority = null;
+        if (priority != null && !PriorityLevel.TryNormalizePatchValue(priority, out normalizedPriority))
+            return AppResult<TaskMutationResult>.Fail("invalid_priority",
+                $"Task priority must be inherit or one of {string.Join(", ", PriorityLevel.Values)}.");
+
         if (!projectRoot.TryGetById(taskId, out var task))
             return AppResult<TaskMutationResult>.Fail("missing_task", $"Task with ID {taskId} not found.");
 
@@ -312,6 +319,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             Title = title == null ? task.Title : title.Trim(),
             Track = normalizedTrack ?? task.Track,
             Milestone = milestone == null ? task.Milestone : normalizedMilestone,
+            Priority = priority == null ? task.Priority : normalizedPriority,
             Description = description ?? task.Description,
         };
 
@@ -319,6 +327,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             !string.Equals(updated.Title, task.Title, StringComparison.Ordinal) ||
             !string.Equals(projectRoot.ResolveTaskTrack(updated), projectRoot.ResolveTaskTrack(task), StringComparison.Ordinal) ||
             !string.Equals(updated.Milestone, task.Milestone, StringComparison.Ordinal) ||
+            !string.Equals(updated.Priority, task.Priority, StringComparison.Ordinal) ||
             !string.Equals(updated.Description, task.Description, StringComparison.Ordinal);
 
         if (!changed)
@@ -401,7 +410,12 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         return AppResult<TaskReorderResult>.Ok(new TaskReorderResult(track, state, milestone, normalizedIds, changed));
     }
 
-    public AppResult<TaskItem> UpdateTaskDetails(string taskId, string title, string targetState, string description)
+    public AppResult<TaskItem> UpdateTaskDetails(
+        string taskId,
+        string title,
+        string targetState,
+        string description,
+        string? priority = null)
     {
         if (!projectRoot.Exists)
             return AppResult<TaskItem>.Fail("missing_project", "Project not found. Run pm init first.");
@@ -412,6 +426,11 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         if (!projectRoot.Config!.TaskStates.ContainsKey(targetState))
             return AppResult<TaskItem>.Fail("invalid_state", $"State {targetState} not found.");
 
+        string? normalizedPriority = null;
+        if (priority != null && !PriorityLevel.TryNormalizePatchValue(priority, out normalizedPriority))
+            return AppResult<TaskItem>.Fail("invalid_priority",
+                $"Task priority must be inherit or one of {string.Join(", ", PriorityLevel.Values)}.");
+
         if (!projectRoot.TryGetById(taskId, out var task))
             return AppResult<TaskItem>.Fail("missing_task", $"Task with ID {taskId} not found.");
 
@@ -421,6 +440,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         var updated = task with
         {
             Title = title.Trim(),
+            Priority = priority == null ? task.Priority : normalizedPriority,
             ModifiedAt = DateTime.UtcNow,
             Description = description ?? string.Empty,
         };

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using PM.Project;
 using YamlDotNet.Serialization;
 
 namespace PM.Tasks;
@@ -14,6 +15,9 @@ public partial record TaskItem
     [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
     public string? Milestone { get; init; }
 
+    [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? Priority { get; init; }
+
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; init; } = DateTime.UtcNow;
 
@@ -22,23 +26,60 @@ public partial record TaskItem
 
     public static TaskItem? Parse(string markdownContent)
     {
-        var match = FrontMatterPattern.Match(markdownContent);
-        if (!match.Success) return null;
+        return TryParse(markdownContent, out var task, out _, out _) ? task : null;
+    }
 
-        TaskItem? task;
+    public static bool TryParse(
+        string markdownContent,
+        out TaskItem? task,
+        out string errorCode,
+        out string message)
+    {
+        var match = FrontMatterPattern.Match(markdownContent);
+        if (!match.Success)
+        {
+            task = null;
+            errorCode = "invalid_task_markdown";
+            message = "Task file has invalid frontmatter or body.";
+            return false;
+        }
+
         try
         {
             task = YamlSerde.Deserialize<TaskItem>(match.Groups["yaml"].Value);
         }
         catch
         {
-            return null;
+            task = null;
+            errorCode = "invalid_task_markdown";
+            message = "Task file has invalid frontmatter or body.";
+            return false;
         }
 
         if (task == null || string.IsNullOrWhiteSpace(task.Id) || string.IsNullOrWhiteSpace(task.Title))
-            return null;
+        {
+            task = null;
+            errorCode = "invalid_task_markdown";
+            message = "Task file has invalid frontmatter or body.";
+            return false;
+        }
 
-        return task with { Description = NormalizeBody(match.Groups["body"].Value) };
+        if (!PriorityLevel.TryNormalizeTaskOverride(task.Priority, out var normalizedPriority))
+        {
+            errorCode = "invalid_task_priority";
+            message = $"Task {task.Id} has invalid priority {task.Priority}.";
+            task = null;
+            return false;
+        }
+
+        task = task with
+        {
+            Priority = normalizedPriority,
+            Description = NormalizeBody(match.Groups["body"].Value),
+        };
+        errorCode = string.Empty;
+        message = string.Empty;
+        return true;
     }
 
     public string ToMarkdown()

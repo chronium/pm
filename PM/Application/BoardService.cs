@@ -15,7 +15,7 @@ public sealed record BoardData(
     IReadOnlyList<BoardMilestoneGroup> MilestoneGroups,
     BoardQuery Query);
 
-public sealed record BoardOption(string Key, string Name);
+public sealed record BoardOption(string Key, string Name, string Priority = PriorityLevel.None);
 
 public sealed record BoardMilestoneGroup(string? Key, string Name, IReadOnlyList<BoardStateGroup> States);
 
@@ -25,9 +25,15 @@ public sealed record BoardTask(
     TaskItem Task,
     string Track,
     string? Milestone,
+    string Priority,
+    string PrioritySource,
     string State,
     string DescriptionPreview,
     string FilePath);
+
+public sealed record NextTaskQuery(string? Track = null);
+
+public sealed record NextTaskResult(bool Found, BoardTask? Task, string Reason);
 
 public partial class BoardService(ProjectRoot projectRoot)
 {
@@ -51,21 +57,7 @@ public partial class BoardService(ProjectRoot projectRoot)
 
         var orderLookup = BuildOrderLookup(projectRoot.ReadTaskOrder());
 
-        var entries = projectRoot.GetAllTasks()
-            .Select(task => new BoardTask(
-                task,
-                projectRoot.ResolveTaskTrack(task),
-                task.Milestone,
-                projectRoot.TryGetState(task, out var state) ? state : string.Empty,
-                GetDescriptionPreview(task.Description, descriptionPreviewLength),
-                projectRoot.GetTaskFilePath(task.Id)))
-            .Where(entry => string.IsNullOrWhiteSpace(query.Track) || entry.Track == query.Track)
-            .Where(entry => string.IsNullOrWhiteSpace(query.Milestone) || entry.Milestone == query.Milestone)
-            .Where(entry => string.IsNullOrWhiteSpace(query.State) || entry.State == query.State)
-            .OrderBy(entry => GetOrderIndex(entry, orderLookup))
-            .ThenByDescending(entry => entry.Task.ModifiedAt)
-            .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
-            .ToList();
+        var entries = GetBoardTasks(query, descriptionPreviewLength, orderLookup);
 
         var milestoneKeys = entries
             .Select(entry => entry.Milestone)
@@ -105,11 +97,54 @@ public partial class BoardService(ProjectRoot projectRoot)
         return AppResult<BoardData>.Ok(new BoardData(
             config.Name,
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
-            config.Milestones.Select(milestone => new BoardOption(milestone.Key, milestone.Value)).ToList(),
+            config.Milestones
+                .Select(milestone => new BoardOption(
+                    milestone.Key,
+                    milestone.Value,
+                    PriorityLevel.Resolve(config, milestone.Key)))
+                .ToList(),
             stateOptions,
             entries,
             groups,
             query));
+    }
+
+    public AppResult<NextTaskResult> GetNextTask(
+        NextTaskQuery query,
+        int descriptionPreviewLength = CliDescriptionPreviewLength)
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<NextTaskResult>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        var config = projectRoot.Config;
+        if (!string.IsNullOrWhiteSpace(query.Track) && !config.Tracks.ContainsKey(query.Track))
+            return AppResult<NextTaskResult>.Fail("invalid_track", $"Track {query.Track} not found.");
+
+        var orderLookup = BuildOrderLookup(projectRoot.ReadTaskOrder());
+        var stateIndex = BuildStateIndex(config);
+        var milestoneIndex = BuildMilestoneIndex(config);
+        var selected = GetBoardTasks(new BoardQuery(query.Track), descriptionPreviewLength, orderLookup)
+            .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+            .OrderByDescending(task => PriorityLevel.Rank(task.Priority))
+            .ThenBy(task => GetStateIndex(task, stateIndex))
+            .ThenBy(task => GetMilestoneIndex(task, milestoneIndex))
+            .ThenBy(task => GetOrderIndex(task, orderLookup))
+            .ThenByDescending(task => task.Task.ModifiedAt)
+            .ThenBy(task => task.Task.Id, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        if (selected != null)
+            return AppResult<NextTaskResult>.Ok(new NextTaskResult(
+                true,
+                selected,
+                BuildNextTaskReason(selected)));
+
+        return AppResult<NextTaskResult>.Ok(new NextTaskResult(
+            false,
+            null,
+            string.IsNullOrWhiteSpace(query.Track)
+                ? "No actionable task found."
+                : $"No actionable task found for track {query.Track}."));
     }
 
     public static string GetDescriptionPreview(string description, int previewLength)
@@ -131,6 +166,48 @@ public partial class BoardService(ProjectRoot projectRoot)
     {
         if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
         return projectRoot.Config!.Milestones.TryGetValue(milestone, out var title) ? title : milestone;
+    }
+
+    private List<BoardTask> GetBoardTasks(
+        BoardQuery query,
+        int descriptionPreviewLength,
+        Dictionary<TaskOrderScope, Dictionary<string, int>> orderLookup)
+    {
+        return projectRoot.GetAllTasks()
+            .Select(task =>
+            {
+                var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
+                return new BoardTask(
+                    task,
+                    projectRoot.ResolveTaskTrack(task),
+                    task.Milestone,
+                    priority.Priority,
+                    priority.Source,
+                    projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+                    GetDescriptionPreview(task.Description, descriptionPreviewLength),
+                    projectRoot.GetTaskFilePath(task.Id));
+            })
+            .Where(entry => string.IsNullOrWhiteSpace(query.Track) || entry.Track == query.Track)
+            .Where(entry => string.IsNullOrWhiteSpace(query.Milestone) || entry.Milestone == query.Milestone)
+            .Where(entry => string.IsNullOrWhiteSpace(query.State) || entry.State == query.State)
+            .OrderBy(entry => GetOrderIndex(entry, orderLookup))
+            .ThenByDescending(entry => entry.Task.ModifiedAt)
+            .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static string BuildNextTaskReason(BoardTask task)
+    {
+        var milestone = string.IsNullOrWhiteSpace(task.Milestone)
+            ? "unassigned milestone"
+            : $"milestone {task.Milestone}";
+        var source = task.PrioritySource switch
+        {
+            PriorityLevel.SourceTask => "task override",
+            PriorityLevel.SourceMilestone => "milestone default",
+            _ => "no priority source",
+        };
+        return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}.";
     }
 
     private static Dictionary<TaskOrderScope, Dictionary<string, int>> BuildOrderLookup(TaskOrderFile order)
@@ -159,6 +236,35 @@ public partial class BoardService(ProjectRoot projectRoot)
                orderedIds.TryGetValue(task.Task.Id, out var index)
             ? index
             : int.MaxValue;
+    }
+
+    private static Dictionary<string, int> BuildStateIndex(ProjectConfig config)
+    {
+        return config.TaskStates.Keys
+            .Select((state, index) => new { State = state, Index = index })
+            .ToDictionary(item => item.State, item => item.Index, StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, int> BuildMilestoneIndex(ProjectConfig config)
+    {
+        return config.Milestones.Keys
+            .Select((milestone, index) => new { Milestone = milestone, Index = index })
+            .ToDictionary(item => item.Milestone, item => item.Index, StringComparer.Ordinal);
+    }
+
+    private static int GetStateIndex(BoardTask task, Dictionary<string, int> stateIndex)
+    {
+        return stateIndex.TryGetValue(task.State, out var index) ? index : int.MaxValue;
+    }
+
+    private static int GetMilestoneIndex(BoardTask task, Dictionary<string, int> milestoneIndex)
+    {
+        if (string.IsNullOrWhiteSpace(task.Milestone))
+            return milestoneIndex.Count;
+
+        return milestoneIndex.TryGetValue(task.Milestone, out var index)
+            ? index
+            : milestoneIndex.Count + 1;
     }
 
     private static string StripMarkdownPrefix(string line)

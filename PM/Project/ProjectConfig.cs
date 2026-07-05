@@ -25,6 +25,7 @@ public class ProjectConfig
     }
 
     public Dictionary<string, string> Milestones { get; set; } = new();
+    public Dictionary<string, string> MilestonePriorities { get; set; } = new();
 
     [YamlIgnore]
     public string DefaultTrackKey => Tracks.Keys.First();

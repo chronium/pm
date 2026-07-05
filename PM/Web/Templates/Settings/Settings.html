@@ -17,9 +17,12 @@
   </section>
   <section class="settings-section" aria-labelledby="milestones-settings-title">
     <h3 id="milestones-settings-title">Milestones</h3>
-    <form class="settings-add" hx-post="/settings/milestones" hx-target="#settings" hx-swap="outerHTML">
+    <form class="settings-add settings-add-milestone" hx-post="/settings/milestones" hx-target="#settings" hx-swap="outerHTML">
       <label data-field>Key <input name="key" autocomplete="off" required></label>
       <label data-field>Title <input name="title" autocomplete="off" required></label>
+      <label data-field>Priority <select name="priority">
+{{priorityOptions}}
+      </select></label>
       <button type="submit" class="small">Add milestone</button>
     </form>
     <div class="settings-list">

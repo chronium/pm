@@ -11,7 +11,8 @@ internal static class TestData
         string idPrefix = "PM",
         string nextIdServiceUrl = "http://ids.example.test",
         Dictionary<string, string>? tracks = null,
-        Dictionary<string, string>? milestones = null)
+        Dictionary<string, string>? milestones = null,
+        Dictionary<string, string>? milestonePriorities = null)
     {
         return new ProjectConfig
         {
@@ -21,6 +22,7 @@ internal static class TestData
             NextIdServiceUrl = nextIdServiceUrl,
             Tracks = tracks ?? new Dictionary<string, string> { [idPrefix] = idPrefix },
             Milestones = milestones ?? new Dictionary<string, string>(),
+            MilestonePriorities = milestonePriorities ?? new Dictionary<string, string>(),
             TaskStates = new()
             {
                 ["todo"] = "Queued",
@@ -35,7 +37,8 @@ internal static class TestData
         string title,
         string description = "",
         string? track = "PM",
-        string? milestone = null)
+        string? milestone = null,
+        string? priority = null)
     {
         return new TaskItem
         {
@@ -43,6 +46,7 @@ internal static class TestData
             Title = title,
             Track = track,
             Milestone = milestone,
+            Priority = priority,
             Description = description,
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             ModifiedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),

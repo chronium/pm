@@ -1,6 +1,7 @@
 using System.Net;
 
 using PM.Application;
+using PM.Project;
 
 namespace PM.Web;
 
@@ -249,6 +250,7 @@ public static class BoardHtmlRenderer
             .Replace("{{taskIdUrl}}", Url(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{track}}", H(task.Track), StringComparison.Ordinal)
             .Replace("{{state}}", H(task.State), StringComparison.Ordinal)
+            .Replace("{{priority}}", RenderPriorityPill(task.Priority), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(task.Task.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{filePath}}", H(task.FilePath), StringComparison.Ordinal)
             .Replace("{{description}}", H(description), StringComparison.Ordinal)
@@ -272,15 +274,18 @@ public static class BoardHtmlRenderer
         string? title = null,
         string? targetState = null,
         string? description = null,
+        string? priority = null,
         string? error = null)
     {
         var selectedState = targetState ?? task.State;
+        var selectedPriority = priority ?? task.Task.Priority;
         return Template("Dialog/TaskEditForm.html")
             .Replace("{{error}}", RenderDialogFormError(error), StringComparison.Ordinal)
             .Replace("{{taskId}}", H(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{taskIdUrl}}", Url(task.Task.Id), StringComparison.Ordinal)
             .Replace("{{title}}", H(title ?? task.Task.Title), StringComparison.Ordinal)
             .Replace("{{stateOptions}}", RenderOptions(states, selectedState), StringComparison.Ordinal)
+            .Replace("{{priorityOptions}}", RenderTaskPriorityOptions(selectedPriority), StringComparison.Ordinal)
             .Replace("{{description}}", H(description ?? task.Task.Description), StringComparison.Ordinal)
             .Replace("{{filterInputs}}", RenderFilterInputs(query), StringComparison.Ordinal)
             .Replace("{{editorAssets}}", RenderMarkdownEditorAssets(), StringComparison.Ordinal);
@@ -327,11 +332,12 @@ public static class BoardHtmlRenderer
         return Template("Settings/Settings.html")
             .Replace("{{error}}", errorHtml, StringComparison.Ordinal)
             .Replace("{{health}}", RenderProjectHealth(validation), StringComparison.Ordinal)
+            .Replace("{{priorityOptions}}", RenderPriorityOptions(PriorityLevel.None), StringComparison.Ordinal)
             .Replace("{{statusItems}}", RenderSettingsItems("statuses", settings.Statuses, "name"),
                 StringComparison.Ordinal)
             .Replace("{{trackItems}}", RenderSettingsItems("tracks", settings.Tracks, "name"),
                 StringComparison.Ordinal)
-            .Replace("{{milestoneItems}}", RenderSettingsItems("milestones", settings.Milestones, "title"),
+            .Replace("{{milestoneItems}}", RenderMilestoneSettingsItems(settings.Milestones),
                 StringComparison.Ordinal);
     }
 
@@ -608,6 +614,23 @@ public static class BoardHtmlRenderer
         return string.Join(Environment.NewLine, optionHtml);
     }
 
+    private static string RenderPriorityOptions(string selected)
+    {
+        return string.Join(Environment.NewLine, PriorityLevel.Values.Select(priority =>
+            $"""        <option value="{H(priority)}"{(priority == selected ? " selected" : string.Empty)}>{H(priority)}</option>"""));
+    }
+
+    private static string RenderTaskPriorityOptions(string? selected)
+    {
+        var options = new List<string>
+        {
+            $"""        <option value=""{(string.IsNullOrWhiteSpace(selected) ? " selected" : string.Empty)}>Inherit</option>""",
+        };
+        options.AddRange(PriorityLevel.Values.Select(priority =>
+            $"""        <option value="{H(priority)}"{(priority == selected ? " selected" : string.Empty)}>{H(priority)}</option>"""));
+        return string.Join(Environment.NewLine, options);
+    }
+
     private static string RenderTaskRow(BoardData board, BoardTask task)
     {
         var preview = string.IsNullOrWhiteSpace(task.DescriptionPreview)
@@ -622,8 +645,16 @@ public static class BoardHtmlRenderer
             .Replace("{{track}}", H(task.Track), StringComparison.Ordinal)
             .Replace("{{state}}", H(OptionName(board.States, task.State, task.State)), StringComparison.Ordinal)
             .Replace("{{milestone}}", H(MilestoneName(board, task.Milestone)), StringComparison.Ordinal)
+            .Replace("{{priority}}", RenderPriorityPill(task.Priority), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(task.Task.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{preview}}", preview, StringComparison.Ordinal);
+    }
+
+    private static string RenderPriorityPill(string priority)
+    {
+        return string.Equals(priority, PriorityLevel.None, StringComparison.Ordinal)
+            ? string.Empty
+            : $"""    <span class="priority-pill">{H(priority)}</span>""";
     }
 
     private static string RenderSettingsItems(
@@ -637,7 +668,32 @@ public static class BoardHtmlRenderer
             .Replace("{{name}}", H(option.Name), StringComparison.Ordinal)
             .Replace("{{collection}}", H(collection), StringComparison.Ordinal)
             .Replace("{{valueName}}", H(valueName), StringComparison.Ordinal)
-            .Replace("{{valueLabel}}", valueName == "title" ? "Title" : "Name", StringComparison.Ordinal)));
+            .Replace("{{valueLabel}}", valueName == "title" ? "Title" : "Name", StringComparison.Ordinal)
+            .Replace("{{extra}}", string.Empty, StringComparison.Ordinal)));
+    }
+
+    private static string RenderMilestoneSettingsItems(IReadOnlyList<BoardOption> milestones)
+    {
+        return string.Join(Environment.NewLine, milestones.Select(milestone =>
+        {
+            var priorityForm = $"""
+        <form class="settings-priority" hx-post="/settings/milestones/{Url(milestone.Key)}/priority" hx-target="#settings" hx-swap="outerHTML">
+          <label data-field>Priority <select name="priority">
+{RenderPriorityOptions(milestone.Priority)}
+          </select></label>
+          <button class="outline small" type="submit">Set priority</button>
+        </form>
+""";
+
+            return Template("Settings/Item.html")
+                .Replace("{{key}}", H(milestone.Key), StringComparison.Ordinal)
+                .Replace("{{keyUrl}}", Url(milestone.Key), StringComparison.Ordinal)
+                .Replace("{{name}}", H(milestone.Name), StringComparison.Ordinal)
+                .Replace("{{collection}}", "milestones", StringComparison.Ordinal)
+                .Replace("{{valueName}}", "title", StringComparison.Ordinal)
+                .Replace("{{valueLabel}}", "Title", StringComparison.Ordinal)
+                .Replace("{{extra}}", priorityForm, StringComparison.Ordinal);
+        }));
     }
 
     private static string RenderProjectHealth(ProjectValidationResult? validation)

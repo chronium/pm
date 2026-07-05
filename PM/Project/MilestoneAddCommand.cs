@@ -9,7 +9,7 @@ public class MilestoneAddCommand(ProjectConfigService configService) : Command<M
 {
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var result = configService.AddMilestone(settings.Key, settings.Title);
+        var result = configService.AddMilestone(settings.Key, settings.Title, settings.Priority);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated(
@@ -30,5 +30,9 @@ public class MilestoneAddCommand(ProjectConfigService configService) : Command<M
         [CommandArgument(1, "<title>")]
         [Description("Milestone title")]
         public string Title { get; init; } = string.Empty;
+
+        [CommandOption("--priority <PRIORITY>")]
+        [Description("Milestone priority: none, low, medium, high, urgent")]
+        public string Priority { get; init; } = PriorityLevel.None;
     }
 }

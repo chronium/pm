@@ -565,6 +565,34 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskMetadataCommandSetsClearsAndRejectsPriority()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Existing task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var command = new TaskMetadataCommand(new TaskService(projectRoot, new RecordingNextIdService()));
+
+        Assert.Equal(0,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", Priority = "High" },
+                CancellationToken.None));
+        Assert.Contains("priority: high", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        Assert.Equal(0,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", Priority = "inherit" },
+                CancellationToken.None));
+        Assert.DoesNotContain("priority:", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
+        Assert.Equal(1,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", Priority = "later" },
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task WikiListEmptyAndPopulatedOutput()
     {
         using var workspace = new TempWorkingDirectory();
@@ -958,14 +986,15 @@ public class CommandBehaviorTests
     }
 
     [Fact]
-    public async Task MilestoneAddWritesConfigAndRejectsDuplicatesAndEmptyValues()
+    public async Task MilestoneAddWritesConfigAndRejectsDuplicatesEmptyValuesAndInvalidPriority()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var command = new MilestoneAddCommand(new ProjectConfigService(projectRoot));
 
         Assert.Equal(0,
-            command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m1", Title = "Milestone 1" },
+            command.Execute(null!,
+                new MilestoneAddCommand.Settings { Key = "m1", Title = "Milestone 1", Priority = "HIGH" },
                 CancellationToken.None));
         Assert.Equal(1,
             command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m1", Title = "Duplicate" },
@@ -973,9 +1002,51 @@ public class CommandBehaviorTests
         Assert.Equal(1,
             command.Execute(null!, new MilestoneAddCommand.Settings { Key = "m2", Title = " " },
                 CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!,
+                new MilestoneAddCommand.Settings { Key = "m2", Title = "Milestone 2", Priority = "later" },
+                CancellationToken.None));
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.Equal("Milestone 1", config.Milestones["m1"]);
+        Assert.Equal("high", config.MilestonePriorities["m1"]);
+        Assert.False(config.Milestones.ContainsKey("m2"));
+    }
+
+    [Fact]
+    public async Task MilestonePriorityCommandPersistsPriority()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var command = new MilestonePriorityCommand(new ProjectConfigService(projectRoot));
+
+        Assert.Equal(0,
+            command.Execute(null!, new MilestonePriorityCommand.Settings { Key = "m1", Priority = "Urgent" },
+                CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!, new MilestonePriorityCommand.Settings { Key = "m1", Priority = "later" },
+                CancellationToken.None));
+
+        Assert.Equal("urgent", ProjectConfig.ReadConfig(projectRoot).MilestonePriorities["m1"]);
+    }
+
+    [Fact]
+    public async Task MilestoneListCommandShowsEscapedTitleAndPriority()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m<1"] = "Milestone <One>" },
+            milestonePriorities: new Dictionary<string, string> { ["m<1"] = "medium" }));
+        var command = new MilestoneListCommand(new ProjectConfigService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new MilestoneListCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("m<1", output);
+        Assert.Contains("Milestone <One>", output);
+        Assert.Contains("medium", output);
     }
 
     [Fact]
@@ -983,7 +1054,8 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1", ["m2"] = "Milestone 2" },
+            milestonePriorities: new Dictionary<string, string> { ["m2"] = "high" }));
         projectRoot.WriteTask(TestData.Task("PM-0001", "Milestone task", milestone: "m1"));
         var command = new MilestoneRemoveCommand(new ProjectConfigService(projectRoot));
 
@@ -994,6 +1066,7 @@ public class CommandBehaviorTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.Milestones.ContainsKey("m2"));
+        Assert.False(config.MilestonePriorities.ContainsKey("m2"));
     }
 
     private static SyntaxHighlighter CreateHighlighter()

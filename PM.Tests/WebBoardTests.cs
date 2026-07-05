@@ -169,12 +169,31 @@ public class WebBoardTests
     }
 
     [Fact]
+    public async Task BoardPageShowsEscapedPriorityPillForPrioritizedMilestoneTasks()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "high" }));
+        var task = TestData.Task("PM-0001", "Prioritized", milestone: "m1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var html = BoardHtmlRenderer.RenderPage(board);
+
+        Assert.Contains("class=\"priority-pill\">high</span>", html);
+        Assert.Contains("Milestone &lt;one&gt;", html);
+    }
+
+    [Fact]
     public async Task BoardPageRendersLeftNavLinksAndActiveFilter()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "urgent" }));
 
         var trackBoard = new BoardService(projectRoot).GetBoard(new BoardQuery(Track: "BUILD")).Payload!;
         var trackHtml = BoardHtmlRenderer.RenderPage(trackBoard);
@@ -203,7 +222,8 @@ public class WebBoardTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "urgent" }));
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
         var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
@@ -227,7 +247,8 @@ public class WebBoardTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build <track>" },
-            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone <one>" },
+            milestonePriorities: new Dictionary<string, string> { ["m1"] = "urgent" }));
         var settings = new ProjectConfigService(projectRoot).GetSettings().Payload!;
         var validation = new ProjectValidationService(projectRoot).ValidateProject().Payload!;
 
@@ -239,7 +260,10 @@ public class WebBoardTests
         Assert.Contains("hx-post=\"/settings/tracks/BUILD/rename\"", html);
         Assert.Contains("value=\"Build &lt;track&gt;\"", html);
         Assert.Contains("hx-post=\"/settings/milestones/m1/rename\"", html);
+        Assert.Contains("hx-post=\"/settings/milestones/m1/priority\"", html);
         Assert.Contains("value=\"Milestone &lt;one&gt;\"", html);
+        Assert.Contains("<option value=\"urgent\" selected>urgent</option>", html);
+        Assert.Contains("<select name=\"priority\">", html);
         Assert.Contains("hx-target=\"#settings\"", html);
         Assert.DoesNotContain("Build <track>", html);
     }
@@ -319,6 +343,40 @@ public class WebBoardTests
         Assert.Contains("value=\"Build\"", html);
         Assert.Contains("Project validation passed.", html);
         Assert.DoesNotContain("unknown_task_track", html);
+    }
+
+    [Fact]
+    public async Task SettingsMilestonePriorityMutationsRefreshSettingsAndHealth()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var (app, client) = await CreateWebClient(projectRoot);
+        await using var appRegistration = app;
+        using var clientRegistration = client;
+
+        var add = await client.PostAsync("/settings/milestones",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["key"] = "m2",
+                ["title"] = "Milestone 2",
+                ["priority"] = "high",
+            }));
+        var addHtml = await add.Content.ReadAsStringAsync();
+        var update = await client.PostAsync("/settings/milestones/m1/priority",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["priority"] = "urgent",
+            }));
+        var updateHtml = await update.Content.ReadAsStringAsync();
+
+        Assert.True(add.IsSuccessStatusCode);
+        Assert.Contains("value=\"Milestone 2\"", addHtml);
+        Assert.Contains("<option value=\"high\" selected>high</option>", addHtml);
+        Assert.Contains("Project validation passed.", addHtml);
+        Assert.True(update.IsSuccessStatusCode);
+        Assert.Contains("<option value=\"urgent\" selected>urgent</option>", updateHtml);
+        Assert.Contains("Project validation passed.", updateHtml);
     }
 
     [Fact]
@@ -936,6 +994,9 @@ public class WebBoardTests
         Assert.Contains("name=\"title\"", html);
         Assert.Contains("name=\"targetState\"", html);
         Assert.Contains("<option value=\"todo\" selected>", html);
+        Assert.Contains("name=\"priority\"", html);
+        Assert.Contains("<option value=\"\" selected>Inherit</option>", html);
+        Assert.Contains("<option value=\"none\">none</option>", html);
         Assert.Contains("name=\"description\"", html);
         Assert.Contains("data-markdown-editor", html);
         Assert.Contains("data-markdown-editor-min-height=\"260px\"", html);
@@ -967,6 +1028,7 @@ public class WebBoardTests
             {
                 ["title"] = "Updated",
                 ["targetState"] = "review",
+                ["priority"] = "high",
                 ["description"] = "# New body",
                 ["filterTrack"] = "",
                 ["filterMilestone"] = "",
@@ -978,6 +1040,7 @@ public class WebBoardTests
             {
                 ["title"] = "",
                 ["targetState"] = "review",
+                ["priority"] = "later",
                 ["description"] = "Nope",
                 ["filterTrack"] = "",
                 ["filterMilestone"] = "",
@@ -994,8 +1057,10 @@ public class WebBoardTests
 
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
         Assert.Contains("Updated", savedHtml);
+        Assert.Contains("priority-pill\">high</span>", savedHtml);
         Assert.Contains("# New body", savedHtml);
         Assert.Contains("hx-swap-oob=\"innerHTML\"", savedHtml);
+        Assert.Contains("priority: high", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
         Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "review", "PM-0001.ref")));
         Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
 
@@ -1066,10 +1131,11 @@ public class WebBoardTests
         projectRoot.UpdateTaskState(task, "todo");
         var taskService = new TaskService(projectRoot, new RecordingNextIdService());
 
-        var result = taskService.UpdateTaskDetails("PM-0001", "Updated", "review", "New body");
+        var result = taskService.UpdateTaskDetails("PM-0001", "Updated", "review", "New body", "urgent");
 
         Assert.True(result.Success);
         Assert.Contains("Updated", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+        Assert.Contains("priority: urgent", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
         Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
         Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "review", "PM-0001.ref")));
 
@@ -1078,6 +1144,7 @@ public class WebBoardTests
         var html = BoardHtmlRenderer.RenderTaskUpdate(board, boardTask);
 
         Assert.Contains("Updated", html);
+        Assert.Contains("priority-pill\">urgent</span>", html);
         Assert.Contains("New body", html);
         Assert.Contains("hx-swap-oob=\"innerHTML\"", html);
     }
