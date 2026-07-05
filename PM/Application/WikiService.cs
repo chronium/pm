@@ -91,6 +91,27 @@ public sealed class WikiService(ProjectRoot projectRoot)
         if (!projectRoot.Exists)
             return AppResult<IReadOnlyList<WikiPageSummary>>.Fail("missing_project", "Project not found. Run pm init first.");
 
+        return ListAllPages();
+    }
+
+    public AppResult<IReadOnlyList<WikiPageSummary>> ListPagesUnder(string path)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<IReadOnlyList<WikiPageSummary>>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (!projectRoot.TryResolveWikiPath(path, out var normalizedPath, out _))
+            return AppResult<IReadOnlyList<WikiPageSummary>>.Fail("invalid_wiki_path", "Wiki page path is invalid.");
+
+        var pages = ListAllPages();
+        if (!pages.Success) return pages;
+
+        return AppResult<IReadOnlyList<WikiPageSummary>>.Ok(pages.Payload!
+            .Where(page => page.Path.StartsWith(normalizedPath + "/", StringComparison.Ordinal))
+            .ToList());
+    }
+
+    private AppResult<IReadOnlyList<WikiPageSummary>> ListAllPages()
+    {
         var pages = new List<WikiPageSummary>();
         foreach (var (path, filePath, content) in projectRoot.GetWikiMarkdownFiles())
         {

@@ -1,8 +1,10 @@
 <article class="detail">
   <form method="dialog" class="dialog-close">
-    <button type="submit" aria-label="Close">x</button>
+    <button type="submit" class="icon small ghost" aria-label="Close">x</button>
   </form>
-  <h2>{{title}}</h2>
+  <header>
+    <h2>{{title}}</h2>
+  </header>
   <div class="meta">
     <span>{{taskId}}</span>
     <span>{{track}}</span>
@@ -11,19 +13,19 @@
   </div>
   <p class="path">{{filePath}}</p>
   <div class="description">{{description}}</div>
-  <button type="button" class="secondary" hx-get="/task/{{taskIdUrl}}/edit" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">Edit</button>
+  <button type="button" class="outline small" hx-get="/task/{{taskIdUrl}}/edit" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">Edit</button>
   <form class="state-form" hx-post="/task/{{taskIdUrl}}/state" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters, closest form">
-    <label>State<select name="targetState">
+    <label data-field>State<select name="targetState">
 {{stateOptions}}
     </select></label>
-    <button type="submit">Move</button>
+    <button type="submit" class="small">Move</button>
   </form>
   <div class="remove-area">
-    <button type="button" class="danger" data-confirm-remove>Remove</button>
+    <button type="button" class="outline small" data-variant="danger" data-confirm-remove>Remove</button>
     <div id="remove-confirmation" class="remove-confirmation" hidden>
       <p>This permanently removes the task file and state reference.</p>
       <form hx-post="/task/{{taskIdUrl}}/remove" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">
-        <button type="submit" class="danger">Confirm remove</button>
+        <button type="submit" class="small" data-variant="danger">Confirm remove</button>
       </form>
     </div>
   </div>

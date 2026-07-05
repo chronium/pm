@@ -1,7 +1,7 @@
     <aside class="sidebar" aria-label="Board navigation">
       <div class="sidebar-header">
         <h1>{{projectName}} Board</h1>
-        <button type="button" hx-get="/task/new" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">New task</button>
+        <button type="button" class="small" hx-get="/task/new" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters">New task</button>
       </div>
       <form id="filters" class="filters" aria-hidden="true">
 {{filterInputs}}

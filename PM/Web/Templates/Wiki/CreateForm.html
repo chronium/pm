@@ -5,12 +5,12 @@
   </header>
 {{error}}
   <form class="wiki-form" method="post" action="/wiki/new">
-    <label>Path<input name="path" value="{{path}}" placeholder="notes/design" required autofocus></label>
-    <label>Title<input name="title" value="{{title}}" required></label>
-    <label>Body<textarea id="wiki-markdown" name="markdown" rows="24" data-markdown-editor>{{markdown}}</textarea></label>
+    <label data-field>Path<input name="path" value="{{path}}" placeholder="notes/design" required autofocus></label>
+    <label data-field>Title<input name="title" value="{{title}}" required></label>
+    <label data-field>Body<textarea id="wiki-markdown" name="markdown" rows="24" data-markdown-editor>{{markdown}}</textarea></label>
     <div class="form-actions">
       <button type="submit">Create</button>
-      <a class="secondary-link" href="/wiki">Cancel</a>
+      <a class="button outline" href="/wiki">Cancel</a>
     </div>
   </form>
 {{editorAssets}}

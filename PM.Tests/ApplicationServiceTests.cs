@@ -579,6 +579,12 @@ public class ApplicationServiceTests
         Assert.True(list.Success);
         Assert.Equal(["architecture/rendering", "getting-started"], list.Payload!.Select(page => page.Path));
 
+        var folder = service.ListPagesUnder("architecture");
+        Assert.True(folder.Success);
+        Assert.Equal(["architecture/rendering"], folder.Payload!.Select(page => page.Path));
+        Assert.Empty(service.ListPagesUnder("missing").Payload!);
+        Assert.Equal("invalid_wiki_path", service.ListPagesUnder("notes.txt").ErrorCode);
+
         var oldModifiedAt = read.Payload.ModifiedAt;
         var updatedMarkdown = read.Payload.Markdown.Replace("title: Rendering", "title: Render Pipeline")
             .Replace("# Rendering", "# Updated");

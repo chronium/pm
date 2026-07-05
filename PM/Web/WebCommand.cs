@@ -149,10 +149,17 @@ public class WebCommand(
         {
             var board = CreateBoard(boardService, new BoardQuery());
             var result = wikiService.ReadPage(path);
-            return !result.Success
-                ? WikiError(result)
-                : Results.Content(BoardHtmlRenderer.RenderWikiPage(board, result.Payload!),
+            if (result.Success)
+                return Results.Content(BoardHtmlRenderer.RenderWikiPage(board, result.Payload!),
                     "text/html; charset=utf-8");
+
+            if (result.ErrorCode != "missing_wiki_page") return WikiError(result);
+
+            var folderResult = wikiService.ListPagesUnder(path);
+            if (!folderResult.Success || folderResult.Payload!.Count == 0) return WikiError(result);
+
+            return Results.Content(BoardHtmlRenderer.RenderWikiFolderPage(board, path, folderResult.Payload!),
+                "text/html; charset=utf-8");
         });
 
         endpoints.MapPost("/settings/statuses", async (HttpRequest request) =>

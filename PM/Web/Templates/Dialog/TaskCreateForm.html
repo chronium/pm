@@ -1,19 +1,23 @@
 <article class="detail">
   <form method="dialog" class="dialog-close">
-    <button type="submit" aria-label="Close">x</button>
+    <button type="submit" class="icon small ghost" aria-label="Close">x</button>
   </form>
-  <h2>New task</h2>
+  <header>
+    <h2>New task</h2>
+  </header>
   <form class="task-form" hx-post="/task/new" hx-target="#task-dialog" hx-swap="innerHTML">
 {{filterInputs}}
-    <label>Title<input name="title" required autofocus></label>
-    <label>Track<select name="track" required>
+    <label data-field>Title<input name="title" required autofocus></label>
+    <label data-field>Track<select name="track" required>
 {{trackOptions}}
     </select></label>
-    <label>Milestone<select name="milestone">
+    <label data-field>Milestone<select name="milestone">
       <option value="">No milestone</option>
 {{milestoneOptions}}
     </select></label>
-    <label>Description<textarea name="description" rows="10"></textarea></label>
-    <button type="submit">Create</button>
+    <label data-field>Description<textarea name="description" rows="10"></textarea></label>
+    <footer class="form-actions">
+      <button type="submit">Create</button>
+    </footer>
   </form>
 </article>

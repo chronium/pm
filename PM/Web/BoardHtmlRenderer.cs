@@ -53,6 +53,16 @@ public static class BoardHtmlRenderer
             .Replace("{{board}}", RenderWikiDetail(page), StringComparison.Ordinal);
     }
 
+    public static string RenderWikiFolderPage(BoardData board, string path, IReadOnlyList<WikiPageSummary> pages)
+    {
+        return Template("Layout/BoardPage.html")
+            .Replace("{{projectName}}", H(board.ProjectName), StringComparison.Ordinal)
+            .Replace("{{pageTitle}}", H($"{path} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
+            .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
+            .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
+            .Replace("{{board}}", RenderWikiFolder(path, pages), StringComparison.Ordinal);
+    }
+
     public static string RenderWikiCreatePage(
         BoardData board,
         string path = "",
@@ -204,12 +214,29 @@ public static class BoardHtmlRenderer
             .Replace("{{rows}}", rows, StringComparison.Ordinal);
     }
 
+    public static string RenderWikiFolder(string path, IReadOnlyList<WikiPageSummary> pages)
+    {
+        var rows = pages.Count == 0
+            ? Template("Wiki/Empty.html")
+            : string.Join(Environment.NewLine, pages.Select(page => Template("Wiki/IndexRow.html")
+                .Replace("{{path}}", H(page.Path), StringComparison.Ordinal)
+                .Replace("{{pathUrl}}", WikiPathUrl(page.Path), StringComparison.Ordinal)
+                .Replace("{{title}}", H(page.Title), StringComparison.Ordinal)
+                .Replace("{{modifiedAt}}", H(FormatModifiedAt(page.ModifiedAt)), StringComparison.Ordinal)));
+
+        return Template("Wiki/Folder.html")
+            .Replace("{{breadcrumbs}}", RenderWikiBreadcrumbs(path), StringComparison.Ordinal)
+            .Replace("{{folder}}", H(path), StringComparison.Ordinal)
+            .Replace("{{rows}}", rows, StringComparison.Ordinal);
+    }
+
     public static string RenderWikiDetail(WikiPageData page)
     {
         return Template("Wiki/Detail.html")
             .Replace("{{title}}", H(page.Title), StringComparison.Ordinal)
             .Replace("{{path}}", H(page.Path), StringComparison.Ordinal)
             .Replace("{{pathUrl}}", WikiPathUrl(page.Path), StringComparison.Ordinal)
+            .Replace("{{breadcrumbs}}", RenderWikiBreadcrumbs(page.Path), StringComparison.Ordinal)
             .Replace("{{filePath}}", H(page.FilePath), StringComparison.Ordinal)
             .Replace("{{modifiedAt}}", H(FormatModifiedAt(page.ModifiedAt)), StringComparison.Ordinal)
             .Replace("{{body}}", H(page.Body), StringComparison.Ordinal);
@@ -231,6 +258,7 @@ public static class BoardHtmlRenderer
             .Replace("{{error}}", RenderWikiFormError(error), StringComparison.Ordinal)
             .Replace("{{path}}", H(path), StringComparison.Ordinal)
             .Replace("{{pathUrl}}", WikiPathUrl(path), StringComparison.Ordinal)
+            .Replace("{{breadcrumbs}}", RenderWikiBreadcrumbs(path), StringComparison.Ordinal)
             .Replace("{{title}}", H(title), StringComparison.Ordinal)
             .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
             .Replace("{{editorAssets}}", RenderMarkdownEditorAssets(), StringComparison.Ordinal);
@@ -386,6 +414,27 @@ public static class BoardHtmlRenderer
     public static string WikiPathUrl(string value)
     {
         return string.Join('/', value.Split('/').Select(Uri.EscapeDataString));
+    }
+
+    private static string RenderWikiBreadcrumbs(string path)
+    {
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var crumbs = new List<string>
+        {
+            """<a href="/wiki">Wiki</a>""",
+        };
+
+        for (var index = 0; index < segments.Length; index++)
+        {
+            var segmentPath = string.Join('/', segments.Take(index + 1));
+            var label = H(segments[index]);
+            if (index == segments.Length - 1)
+                crumbs.Add($"""<span aria-current="page">{label}</span>""");
+            else
+                crumbs.Add($"""<a href="/wiki/{WikiPathUrl(segmentPath)}">{label}</a>""");
+        }
+
+        return $"""<nav class="breadcrumbs" aria-label="Wiki breadcrumbs">{string.Join("<span aria-hidden=\"true\">/</span>", crumbs)}</nav>""";
     }
 
     private static string RenderWikiFormError(string? error)

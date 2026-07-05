@@ -112,6 +112,8 @@ public class WebBoardTests
         Assert.Contains("Whole project", html);
         Assert.Contains("Milestones", html);
         Assert.Contains("Tracks", html);
+        Assert.Contains("https://unpkg.com/@knadh/oat@0.6.2/oat.min.css", html);
+        Assert.Contains("https://unpkg.com/@knadh/oat@0.6.2/oat.min.js", html);
         Assert.Contains("class=\"board-list\"", html);
         Assert.Contains("class=\"state-row\"", html);
         Assert.Contains("class=\"task-row\"", html);
@@ -298,6 +300,9 @@ public class WebBoardTests
 
         Assert.Contains("Notes &lt;wiki&gt;", html);
         Assert.Contains("notes", html);
+        Assert.Contains("aria-label=\"Wiki breadcrumbs\"", html);
+        Assert.Contains("href=\"/wiki\">Wiki</a>", html);
+        Assert.Contains("<span aria-current=\"page\">notes</span>", html);
         Assert.Contains(projectRoot.WikiPath, html);
         Assert.Contains("2026-01-02 03:04", html);
         Assert.Contains("id=\"wiki-content\"", html);
@@ -348,6 +353,8 @@ public class WebBoardTests
         Assert.Contains("Title &lt;x&gt;", createHtml);
         Assert.Contains("Bad &lt;x&gt;", editHtml);
         Assert.Contains("Notes &lt;wiki&gt;", editHtml);
+        Assert.Contains("href=\"/wiki/notes\">notes</a>", editHtml);
+        Assert.Contains("<span aria-current=\"page\">path &lt;x&gt;</span>", editHtml);
         Assert.Contains("# Body &lt;unsafe&gt;", editHtml);
     }
 
@@ -372,6 +379,8 @@ public class WebBoardTests
         var indexHtml = await index.Content.ReadAsStringAsync();
         var page = await client.GetAsync("/wiki/architecture/rendering");
         var pageHtml = await page.Content.ReadAsStringAsync();
+        var folder = await client.GetAsync("/wiki/architecture");
+        var folderHtml = await folder.Content.ReadAsStringAsync();
         var missing = await client.GetAsync("/wiki/missing");
         var invalid = await client.GetAsync("/wiki/notes.txt");
 
@@ -379,6 +388,11 @@ public class WebBoardTests
         Assert.Contains("Rendering", indexHtml);
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Contains("# Rendering", pageHtml);
+        Assert.Equal(HttpStatusCode.OK, folder.StatusCode);
+        Assert.Contains("aria-label=\"Wiki breadcrumbs\"", folderHtml);
+        Assert.Contains("<span aria-current=\"page\">architecture</span>", folderHtml);
+        Assert.Contains("href=\"/wiki/architecture/rendering\"", folderHtml);
+        Assert.Contains("Rendering", folderHtml);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
     }
@@ -573,7 +587,9 @@ public class WebBoardTests
         Assert.Contains("<option value=\"todo\" selected>", html);
         Assert.Contains("hx-post=\"/task/PM-0001/remove\"", html);
         Assert.Contains("data-confirm-remove", html);
-        Assert.Contains("remove-confirmation[hidden] { display: none; }", BoardHtmlRenderer.RenderPage(board));
+        var pageHtml = BoardHtmlRenderer.RenderPage(board);
+        Assert.Contains(".remove-confirmation[hidden]", pageHtml);
+        Assert.Contains("display: none;", pageHtml);
         Assert.Contains(projectRoot.GetTaskFilePath("PM-0001"), html);
     }
 
