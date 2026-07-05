@@ -15,7 +15,7 @@
         autofocus: textarea.hasAttribute('autofocus'),
         spellChecker: false,
         status: false,
-        minHeight: '360px',
+        minHeight: textarea.dataset.markdownEditorMinHeight || '360px',
         renderingConfig: { singleLineBreaks: false },
         previewRender: (markdown) => {
           if (!window.marked || !window.DOMPurify) {

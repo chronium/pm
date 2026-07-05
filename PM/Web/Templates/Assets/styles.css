@@ -237,8 +237,20 @@ main {
   font-size: 13px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 #task-dialog {
-  width: min(760px, calc(100vw - 28px));
+  width: min(820px, calc(100vw - 28px));
   max-height: min(760px, calc(100vh - 28px));
 }
 
@@ -246,27 +258,105 @@ main {
   background: rgb(23 32 42 / 0.38);
 }
 
-.detail {
+.detail,
+.task-detail {
   position: relative;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   margin: 0;
-  padding: 18px;
+  padding: 18px 20px;
 }
 
 .detail header,
-.detail h2 {
+.detail h2,
+.task-detail h2 {
   margin: 0;
 }
 
-.detail h2 {
+.detail h2,
+.task-detail h2 {
   font-size: 18px;
   line-height: 1.25;
 }
 
-.description {
+.detail-header,
+.task-dialog-header {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  justify-content: space-between;
+  padding-right: 34px;
+}
+
+.task-heading {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-heading h2 {
+  font-size: 19px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.task-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.task-meta > * {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--faint);
+}
+
+.task-meta .id {
+  color: var(--primary);
+}
+
+.description,
+.task-description {
+  line-height: 1.55;
+}
+
+.markdown-content {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-fallback {
+  margin: 0;
   white-space: pre-wrap;
-  line-height: 1.5;
+}
+
+.task-description {
+  min-height: 78px;
+  padding: 4px 0 8px;
+  color: var(--foreground);
 }
 
 .dialog-close {
@@ -284,10 +374,71 @@ main {
   border-top: 1px solid var(--border);
 }
 
+.task-dialog-footer {
+  display: grid;
+  grid-template-columns: minmax(0, auto) 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.task-state-compact {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.task-state-compact [data-field] {
+  margin: 0;
+}
+
+.task-state-compact select {
+  min-width: 180px;
+  height: 32px;
+  margin: 0;
+  padding-block: 4px;
+  font-size: 13px;
+}
+
+.task-file-meta {
+  justify-self: start;
+  border: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.task-file-meta summary {
+  display: inline-flex;
+  padding: 4px 0;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+.task-file-meta summary:after {
+  display: none;
+}
+
+.task-file-meta p {
+  margin: 4px 0 0;
+}
+
 .task-form,
 .wiki-form {
   display: grid;
   gap: 12px;
+}
+
+.task-form {
+  gap: 10px;
+}
+
+.task-edit-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 10px;
+  align-items: end;
 }
 
 .task-form [data-field],
@@ -309,7 +460,7 @@ main {
 .remove-area {
   display: grid;
   gap: 8px;
-  justify-items: start;
+  justify-items: end;
 }
 
 .remove-confirmation {
@@ -319,6 +470,7 @@ main {
   border: 1px solid #e0b4bc;
   border-radius: var(--radius-medium);
   background: #fff7f8;
+  max-width: 320px;
 }
 
 .remove-confirmation[hidden] {
@@ -572,25 +724,33 @@ main {
   max-width: 1040px;
 }
 
-.wiki-form input {
+.wiki-form input,
+.task-form input {
   width: 100%;
 }
 
-.wiki-form .EasyMDEContainer {
+.wiki-form .EasyMDEContainer,
+.task-form .EasyMDEContainer {
   max-width: 100%;
   overflow: hidden;
   color: var(--foreground);
   font: inherit;
 }
 
-.wiki-form .editor-toolbar {
+.wiki-form .editor-toolbar,
+.task-form .editor-toolbar {
   border-color: var(--border);
   border-radius: var(--radius-medium) var(--radius-medium) 0 0;
   background: var(--muted);
   opacity: 1;
 }
 
-.wiki-form .editor-toolbar button {
+.task-form .editor-toolbar {
+  padding: 4px 6px;
+}
+
+.wiki-form .editor-toolbar button,
+.task-form .editor-toolbar button {
   display: inline-block !important;
   width: 30px !important;
   min-width: 0 !important;
@@ -606,13 +766,23 @@ main {
   transform: none !important;
 }
 
+.task-form .editor-toolbar button {
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 14px !important;
+  line-height: 26px !important;
+}
+
 .wiki-form .editor-toolbar button:hover,
-.wiki-form .editor-toolbar button.active {
+.wiki-form .editor-toolbar button.active,
+.task-form .editor-toolbar button:hover,
+.task-form .editor-toolbar button.active {
   background: var(--background);
   color: var(--foreground) !important;
 }
 
-.wiki-form .CodeMirror {
+.wiki-form .CodeMirror,
+.task-form .CodeMirror {
   max-width: 100%;
   overflow: hidden;
   border-color: var(--border);
@@ -623,13 +793,20 @@ main {
   line-height: 1.5;
 }
 
-.wiki-form .CodeMirror-scroll {
+.task-form .CodeMirror {
+  min-height: 260px;
+}
+
+.wiki-form .CodeMirror-scroll,
+.task-form .CodeMirror-scroll {
   max-width: 100%;
   overflow-x: auto !important;
 }
 
 .wiki-form .editor-preview,
-.wiki-form .editor-preview-side {
+.wiki-form .editor-preview-side,
+.task-form .editor-preview,
+.task-form .editor-preview-side {
   background: var(--background);
   color: var(--foreground);
   line-height: 1.6;
@@ -642,6 +819,23 @@ main {
   .settings-add,
   .settings-item {
     grid-template-columns: 1fr;
+  }
+
+  .task-dialog-header,
+  .task-dialog-footer,
+  .task-edit-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .task-dialog-header {
+    display: grid;
+    padding-right: 34px;
+  }
+
+  .task-dialog-actions,
+  .remove-area {
+    justify-content: start;
+    justify-items: start;
   }
 
   .settings-rename {

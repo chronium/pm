@@ -80,14 +80,14 @@ public static class BoardHtmlRenderer
 
     public static string RenderWikiEditPage(BoardData board, WikiPageData page, string? error = null)
     {
-        return RenderWikiEditPage(board, page.Path, page.Title, page.Markdown, error);
+        return RenderWikiEditPage(board, page.Path, page.Title, page.Body, error);
     }
 
     public static string RenderWikiEditPage(
         BoardData board,
         string path,
         string title,
-        string markdown,
+        string body,
         string? error = null)
     {
         return Template("Layout/BoardPage.html")
@@ -95,7 +95,7 @@ public static class BoardHtmlRenderer
             .Replace("{{pageTitle}}", H($"Edit {title} - {board.ProjectName} Wiki"), StringComparison.Ordinal)
             .Replace("{{styles}}", Template("Assets/styles.css"), StringComparison.Ordinal)
             .Replace("{{sidebar}}", RenderSidebar(board, SidebarPage.Wiki), StringComparison.Ordinal)
-            .Replace("{{board}}", RenderWikiEditForm(path, title, markdown, error), StringComparison.Ordinal);
+            .Replace("{{board}}", RenderWikiEditForm(path, title, body, error), StringComparison.Ordinal);
     }
 
     public static string RenderBoard(BoardData board)
@@ -146,13 +146,25 @@ public static class BoardHtmlRenderer
             .Replace("{{filterInputs}}", RenderFilterInputs(board.Query), StringComparison.Ordinal);
     }
 
-    public static string RenderTaskEditForm(string taskId, string markdown, BoardQuery query)
+    public static string RenderTaskEditForm(
+        BoardTask task,
+        IReadOnlyList<BoardOption> states,
+        BoardQuery query,
+        string? title = null,
+        string? targetState = null,
+        string? description = null,
+        string? error = null)
     {
+        var selectedState = targetState ?? task.State;
         return Template("Dialog/TaskEditForm.html")
-            .Replace("{{taskId}}", H(taskId), StringComparison.Ordinal)
-            .Replace("{{taskIdUrl}}", Url(taskId), StringComparison.Ordinal)
-            .Replace("{{markdown}}", H(markdown), StringComparison.Ordinal)
-            .Replace("{{filterInputs}}", RenderFilterInputs(query), StringComparison.Ordinal);
+            .Replace("{{error}}", RenderDialogFormError(error), StringComparison.Ordinal)
+            .Replace("{{taskId}}", H(task.Task.Id), StringComparison.Ordinal)
+            .Replace("{{taskIdUrl}}", Url(task.Task.Id), StringComparison.Ordinal)
+            .Replace("{{title}}", H(title ?? task.Task.Title), StringComparison.Ordinal)
+            .Replace("{{stateOptions}}", RenderOptions(states, selectedState), StringComparison.Ordinal)
+            .Replace("{{description}}", H(description ?? task.Task.Description), StringComparison.Ordinal)
+            .Replace("{{filterInputs}}", RenderFilterInputs(query), StringComparison.Ordinal)
+            .Replace("{{editorAssets}}", RenderMarkdownEditorAssets(), StringComparison.Ordinal);
     }
 
     public static string RenderDialogError(string message, string title = "Unable to update task")
@@ -438,6 +450,14 @@ public static class BoardHtmlRenderer
     }
 
     private static string RenderWikiFormError(string? error)
+    {
+        return string.IsNullOrWhiteSpace(error)
+            ? string.Empty
+            : Template("Settings/Error.html")
+                .Replace("{{message}}", H(error), StringComparison.Ordinal);
+    }
+
+    private static string RenderDialogFormError(string? error)
     {
         return string.IsNullOrWhiteSpace(error)
             ? string.Empty

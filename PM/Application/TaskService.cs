@@ -256,6 +256,35 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         return AppResult.Ok();
     }
 
+    public AppResult<TaskItem> UpdateTaskDetails(string taskId, string title, string targetState, string description)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<TaskItem>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (string.IsNullOrWhiteSpace(title))
+            return AppResult<TaskItem>.Fail("invalid_title", "Task title is required.");
+
+        if (!projectRoot.Config!.TaskStates.ContainsKey(targetState))
+            return AppResult<TaskItem>.Fail("invalid_state", $"State {targetState} not found.");
+
+        if (!projectRoot.TryGetById(taskId, out var task))
+            return AppResult<TaskItem>.Fail("missing_task", $"Task with ID {taskId} not found.");
+
+        if (!projectRoot.TryGetState(task, out _))
+            return AppResult<TaskItem>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
+
+        var updated = task with
+        {
+            Title = title.Trim(),
+            ModifiedAt = DateTime.UtcNow,
+            Description = description ?? string.Empty,
+        };
+
+        projectRoot.WriteTask(updated);
+        projectRoot.UpdateTaskState(task, targetState);
+        return AppResult<TaskItem>.Ok(updated);
+    }
+
     private static TaskItem BuildTask(
         string title,
         string track,

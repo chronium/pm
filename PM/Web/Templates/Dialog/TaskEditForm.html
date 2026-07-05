@@ -1,15 +1,27 @@
-<article class="detail">
+<article class="task-detail task-detail-edit">
   <form method="dialog" class="dialog-close">
     <button type="submit" class="icon small ghost" aria-label="Close">x</button>
   </form>
-  <header>
-    <h2>Edit {{taskId}}</h2>
+  <header class="task-dialog-header">
+    <div class="task-heading">
+      <p class="path">{{taskId}}</p>
+      <h2>Edit task</h2>
+    </div>
+    <div class="task-dialog-actions">
+      <button type="submit" class="small" form="task-edit-form">Save</button>
+      <button type="button" class="outline small" hx-get="/task/{{taskIdUrl}}" hx-target="#task-dialog" hx-swap="innerHTML">Cancel</button>
+    </div>
   </header>
-  <form class="task-form" hx-post="/task/{{taskIdUrl}}/edit" hx-target="#task-dialog" hx-swap="innerHTML">
+{{error}}
+  <form id="task-edit-form" class="task-form" hx-post="/task/{{taskIdUrl}}/edit" hx-target="#task-dialog" hx-swap="innerHTML" hx-include="#filters, closest form">
 {{filterInputs}}
-    <label data-field>Markdown<textarea name="markdown" rows="22" required autofocus>{{markdown}}</textarea></label>
-    <footer class="form-actions">
-      <button type="submit">Save</button>
-    </footer>
+    <div class="task-edit-fields">
+      <label data-field>Title<input name="title" value="{{title}}" required autofocus></label>
+      <label data-field>Status<select name="targetState" required>
+{{stateOptions}}
+      </select></label>
+    </div>
+    <label data-field>Description<textarea id="task-markdown" name="description" rows="12" data-markdown-editor data-markdown-editor-min-height="260px">{{description}}</textarea></label>
   </form>
+{{editorAssets}}
 </article>

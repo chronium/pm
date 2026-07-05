@@ -381,6 +381,45 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task StructuredTaskUpdateChangesTitleStateAndBodyOnly()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Existing", "Old body", track: "PM", milestone: "m1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var updated = service.UpdateTaskDetails("PM-0001", "Updated", "done", "New body");
+
+        Assert.True(updated.Success);
+        Assert.Equal("Updated", updated.Payload!.Title);
+        Assert.Equal("PM-0001", updated.Payload.Id);
+        Assert.Equal("PM", updated.Payload.Track);
+        Assert.Equal("m1", updated.Payload.Milestone);
+        Assert.Equal(task.CreatedAt, updated.Payload.CreatedAt);
+        Assert.Equal("New body", updated.Payload.Description);
+        Assert.True(updated.Payload.ModifiedAt > task.ModifiedAt);
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "done", "PM-0001.ref")));
+    }
+
+    [Fact]
+    public async Task StructuredTaskUpdateValidatesTitleStateTaskAndCurrentState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Existing");
+        projectRoot.WriteTask(task);
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        Assert.Equal("invalid_title", service.UpdateTaskDetails("PM-0001", " ", "todo", "").ErrorCode);
+        Assert.Equal("invalid_state", service.UpdateTaskDetails("PM-0001", "Title", "missing", "").ErrorCode);
+        Assert.Equal("missing_task", service.UpdateTaskDetails("PM-9999", "Title", "todo", "").ErrorCode);
+        Assert.Equal("missing_current_state", service.UpdateTaskDetails("PM-0001", "Title", "todo", "").ErrorCode);
+    }
+
+    [Fact]
     public async Task TrackAndMilestoneAddRejectDuplicatesAndEmptyValues()
     {
         using var workspace = new TempWorkingDirectory();
@@ -594,6 +633,13 @@ public class ApplicationServiceTests
         Assert.Equal("Render Pipeline", updated.Payload!.Title);
         Assert.Equal("# Updated", updated.Payload.Body);
         Assert.True(updated.Payload.ModifiedAt > oldModifiedAt);
+
+        var bodyOnly = service.UpdatePageBody("architecture/rendering", "# Body only");
+        Assert.True(bodyOnly.Success);
+        Assert.Equal("Render Pipeline", bodyOnly.Payload!.Title);
+        Assert.Equal(created.Payload.CreatedAt, bodyOnly.Payload.CreatedAt);
+        Assert.Equal("# Body only", bodyOnly.Payload.Body);
+        Assert.True(bodyOnly.Payload.ModifiedAt > updated.Payload.ModifiedAt);
     }
 
     [Fact]

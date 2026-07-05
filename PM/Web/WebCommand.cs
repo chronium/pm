@@ -131,7 +131,7 @@ public class WebCommand(
             var board = CreateBoard(boardService, new BoardQuery());
             var form = await request.ReadFormAsync();
             var markdown = form["markdown"].ToString();
-            var result = wikiService.UpdatePageMarkdown(path, markdown);
+            var result = wikiService.UpdatePageBody(path, markdown);
             if (!result.Success)
             {
                 var readResult = wikiService.ReadPage(path);
@@ -270,26 +270,62 @@ public class WebCommand(
 
         endpoints.MapGet("/task/{id}/edit", (string id, HttpRequest request) =>
         {
-            var result = taskService.ReadTaskMarkdown(id);
-            return !result.Success
-                ? Results.Content(
+            var result = boardService.GetBoard(new BoardQuery());
+            if (!result.Success)
+                return Results.Content(
                     BoardHtmlRenderer.RenderDialogError(result.Message ?? "Task not found.", "Unable to edit task"),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status400BadRequest);
+
+            var task = FindTask(result.Payload!, id);
+            return task == null
+                ? Results.Content(
+                    BoardHtmlRenderer.RenderDialogError("Task not found.", "Unable to edit task"),
                     "text/html; charset=utf-8",
                     statusCode: StatusCodes.Status400BadRequest)
                 : Results.Content(
-                    BoardHtmlRenderer.RenderTaskEditForm(id, result.Payload!, ReadQuery(request)),
+                    BoardHtmlRenderer.RenderTaskEditForm(task, result.Payload!.States, ReadQuery(request)),
                     "text/html; charset=utf-8");
         });
 
         endpoints.MapPost("/task/{id}/edit", async (string id, HttpRequest request) =>
         {
             var form = await request.ReadFormAsync();
-            var result = taskService.SaveEditedTaskContent(id, form["markdown"].ToString());
+            var result = taskService.UpdateTaskDetails(
+                id,
+                form["title"].ToString(),
+                form["targetState"].ToString(),
+                form["description"].ToString());
             if (!result.Success)
+            {
+                var editBoard = boardService.GetBoard(new BoardQuery());
+                if (!editBoard.Success)
+                    return Results.Content(
+                        BoardHtmlRenderer.RenderDialogError(editBoard.Message ?? "Task edit failed.",
+                            "Unable to edit task"),
+                        "text/html; charset=utf-8",
+                        statusCode: StatusCodes.Status400BadRequest);
+
+                var editTask = FindTask(editBoard.Payload!, id);
+                if (editTask == null)
+                    return Results.Content(
+                        BoardHtmlRenderer.RenderDialogError(result.Message ?? "Task edit failed.",
+                            "Unable to edit task"),
+                        "text/html; charset=utf-8",
+                        statusCode: StatusCodes.Status400BadRequest);
+
                 return Results.Content(
-                    BoardHtmlRenderer.RenderDialogError(result.Message ?? "Task edit failed.", "Unable to edit task"),
+                    BoardHtmlRenderer.RenderTaskEditForm(
+                        editTask,
+                        editBoard.Payload!.States,
+                        CreateBoard(boardService, form).Query,
+                        form["title"].ToString(),
+                        form["targetState"].ToString(),
+                        form["description"].ToString(),
+                        result.Message),
                     "text/html; charset=utf-8",
                     statusCode: StatusCodes.Status400BadRequest);
+            }
 
             var filteredBoard = CreateBoard(boardService, form);
             var taskBoard = boardService.GetBoard(new BoardQuery());

@@ -125,7 +125,7 @@ public class WebBoardTests
         Assert.DoesNotContain("<select name=\"track\"", html);
         Assert.DoesNotContain("<select name=\"milestone\"", html);
         Assert.DoesNotContain("<select name=\"state\"", html);
-        Assert.DoesNotContain("task-detail", html);
+        Assert.DoesNotContain("<article class=\"task-detail", html);
         Assert.DoesNotContain("class=\"states\"", html);
         Assert.DoesNotContain("class=\"state\"", html);
         Assert.DoesNotContain(projectRoot.GetTaskFilePath("PM-0001"), html);
@@ -444,21 +444,9 @@ public class WebBoardTests
 
         var editForm = await client.GetAsync("/wiki/edit/architecture/rendering");
         var editFormHtml = await editForm.Content.ReadAsStringAsync();
-        var editedMarkdown = """
-                             ---
-                             title: Rendering Updated
-                             createdAt: 2026-01-01T00:00:00.0000000Z
-                             modifiedAt: 2026-01-02T00:00:00.0000000Z
-                             ---
-
-                             # Updated
-                             """;
         var edited = await client.PostAsync("/wiki/edit/architecture/rendering",
-            new FormUrlEncodedContent(new Dictionary<string, string> { ["markdown"] = editedMarkdown }));
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["markdown"] = "# Updated" }));
         var editedHtml = await edited.Content.ReadAsStringAsync();
-        var invalidEdit = await client.PostAsync("/wiki/edit/architecture/rendering",
-            new FormUrlEncodedContent(new Dictionary<string, string> { ["markdown"] = "not markdown" }));
-        var invalidEditHtml = await invalidEdit.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, newForm.StatusCode);
         Assert.Contains("New page", newFormHtml);
@@ -473,13 +461,13 @@ public class WebBoardTests
         Assert.Equal(HttpStatusCode.OK, editForm.StatusCode);
         Assert.Contains("Edit Rendering", editFormHtml);
         Assert.Contains("data-markdown-editor", editFormHtml);
-        Assert.Contains("title: Rendering", editFormHtml);
+        Assert.Contains("# Rendering", editFormHtml);
+        Assert.DoesNotContain("title: Rendering", editFormHtml);
+        Assert.DoesNotContain("createdAt:", editFormHtml);
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
-        Assert.Contains("Rendering Updated", editedHtml);
+        Assert.Contains("Rendering", editedHtml);
+        Assert.DoesNotContain("Rendering Updated", editedHtml);
         Assert.Contains("# Updated", editedHtml);
-        Assert.Equal(HttpStatusCode.BadRequest, invalidEdit.StatusCode);
-        Assert.Contains("Edited wiki markdown is invalid.", invalidEditHtml);
-        Assert.Contains("not markdown", invalidEditHtml);
     }
 
     [Fact]
@@ -579,12 +567,19 @@ public class WebBoardTests
         var html = BoardHtmlRenderer.RenderTaskDetail(boardTask, board.States);
 
         Assert.Contains("Render &lt;task&gt;", html);
+        Assert.Contains("id=\"task-content\"", html);
+        Assert.Contains("id=\"task-markdown-source\" readonly hidden", html);
         Assert.Contains("Description &lt;body&gt;", html);
+        Assert.Contains("DOMPurify.sanitize", html);
         Assert.Contains("PM-0001", html);
+        Assert.Contains("class=\"task-meta\"", html);
+        Assert.Contains("class=\"task-state-compact\"", html);
         Assert.Contains("hx-post=\"/task/PM-0001/state\"", html);
         Assert.Contains("hx-get=\"/task/PM-0001/edit\"", html);
         Assert.Contains("name=\"targetState\"", html);
         Assert.Contains("<option value=\"todo\" selected>", html);
+        Assert.Contains("class=\"task-file-meta\"", html);
+        Assert.Contains("<summary>File</summary>", html);
         Assert.Contains("hx-post=\"/task/PM-0001/remove\"", html);
         Assert.Contains("data-confirm-remove", html);
         var pageHtml = BoardHtmlRenderer.RenderPage(board);
@@ -637,22 +632,88 @@ public class WebBoardTests
     }
 
     [Fact]
-    public async Task TaskEditFormContainsEscapedMarkdownAndPreservedFilters()
+    public async Task TaskEditFormContainsStructuredFieldsEasyMdeAndPreservedFilters()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config());
         var task = TestData.Task("PM-0001", "Render <task>", "Body <unsafe>");
         projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
 
-        var markdown = new TaskService(projectRoot, new RecordingNextIdService()).ReadTaskMarkdown("PM-0001").Payload!;
-        var html = BoardHtmlRenderer.RenderTaskEditForm("PM-0001", markdown, new BoardQuery("PM", null, "todo"));
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery("PM", null, "todo")).Payload!;
+        var boardTask = Assert.Single(board.Tasks);
+        var html = BoardHtmlRenderer.RenderTaskEditForm(boardTask, board.States, board.Query);
 
         Assert.Contains("hx-post=\"/task/PM-0001/edit\"", html);
-        Assert.Contains("name=\"markdown\"", html);
+        Assert.Contains("name=\"title\"", html);
+        Assert.Contains("name=\"targetState\"", html);
+        Assert.Contains("<option value=\"todo\" selected>", html);
+        Assert.Contains("name=\"description\"", html);
+        Assert.Contains("data-markdown-editor", html);
+        Assert.Contains("data-markdown-editor-min-height=\"260px\"", html);
+        Assert.Contains("form=\"task-edit-form\"", html);
+        Assert.Contains("hx-get=\"/task/PM-0001\"", html);
+        Assert.Contains("https://unpkg.com/easymde@2.20.0/dist/easymde.min.js", html);
         Assert.Contains("Render &lt;task&gt;", html);
         Assert.Contains("Body &lt;unsafe&gt;", html);
         Assert.Contains("name=\"filterTrack\" value=\"PM\"", html);
         Assert.Contains("name=\"filterState\" value=\"todo\"", html);
+    }
+
+    [Fact]
+    public async Task TaskEditEndpointsRenderStructuredEditorAndSaveTitleStatusAndBody()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Original", "Old body");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var web = await CreateWebClient(projectRoot);
+        await using var app = web.App;
+        using var client = web.Client;
+
+        var editForm = await client.GetAsync("/task/PM-0001/edit?track=PM&state=todo");
+        var editFormHtml = await editForm.Content.ReadAsStringAsync();
+        var saved = await client.PostAsync("/task/PM-0001/edit", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["title"] = "Updated",
+                ["targetState"] = "review",
+                ["description"] = "# New body",
+                ["filterTrack"] = "",
+                ["filterMilestone"] = "",
+                ["filterState"] = "",
+            }));
+        var savedHtml = await saved.Content.ReadAsStringAsync();
+        var invalid = await client.PostAsync("/task/PM-0001/edit", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["title"] = "",
+                ["targetState"] = "review",
+                ["description"] = "Nope",
+                ["filterTrack"] = "",
+                ["filterMilestone"] = "",
+                ["filterState"] = "",
+            }));
+        var invalidHtml = await invalid.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, editForm.StatusCode);
+        Assert.Contains("data-markdown-editor", editFormHtml);
+        Assert.Contains("name=\"title\"", editFormHtml);
+        Assert.Contains("name=\"targetState\"", editFormHtml);
+        Assert.Contains("name=\"description\"", editFormHtml);
+        Assert.DoesNotContain("createdAt:", editFormHtml);
+
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        Assert.Contains("Updated", savedHtml);
+        Assert.Contains("# New body", savedHtml);
+        Assert.Contains("hx-swap-oob=\"innerHTML\"", savedHtml);
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "review", "PM-0001.ref")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Contains("Task title is required.", invalidHtml);
+        Assert.Contains("data-markdown-editor", invalidHtml);
     }
 
     [Fact]
@@ -708,7 +769,7 @@ public class WebBoardTests
     }
 
     [Fact]
-    public async Task EditingTaskUpdatesMarkdownAndRendersFragments()
+    public async Task EditingTaskUpdatesStructuredFieldsAndRendersFragments()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config());
@@ -716,12 +777,13 @@ public class WebBoardTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
         var taskService = new TaskService(projectRoot, new RecordingNextIdService());
-        var edited = task with { Title = "Updated", Description = "New body" };
 
-        var result = taskService.SaveEditedTaskContent("PM-0001", edited.ToMarkdown());
+        var result = taskService.UpdateTaskDetails("PM-0001", "Updated", "review", "New body");
 
         Assert.True(result.Success);
         Assert.Contains("Updated", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "review", "PM-0001.ref")));
 
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var boardTask = Assert.Single(board.Tasks);
