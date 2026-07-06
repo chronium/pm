@@ -1269,6 +1269,7 @@ public class ApplicationServiceTests
 
                                              ```
                                              # Ignored
+                                             const value = 1;
                                              ```
 
                                              ## Sub
@@ -1293,6 +1294,10 @@ public class ApplicationServiceTests
         Assert.Equal("h2-duplicate-1", outline.Payload.Headings[2].Id);
         Assert.Equal("h2-duplicate-2", outline.Payload.Headings[3].Id);
         Assert.Equal(["Root", "Sub"], outline.Payload.Headings[1].Breadcrumb);
+        Assert.DoesNotContain("```", outline.Payload.Headings[0].Preview);
+        Assert.Contains("# Ignored", outline.Payload.Headings[0].Preview);
+        Assert.Contains("const value = 1;", outline.Payload.Headings[0].Preview);
+        Assert.DoesNotContain("## Sub", outline.Payload.Headings[0].Preview);
         Assert.Contains("Nested text.", outline.Payload.Headings[1].Preview);
     }
 
@@ -1329,7 +1334,8 @@ public class ApplicationServiceTests
         var after = PatchFresh("after", "insert_after_section", "Inserted after.");
 
         Assert.True(appended.Success);
-        Assert.Contains("Child body.\n\nAppended.\n\n## Next", appended.Payload.Page.Body);
+        Assert.Contains("Existing body.\n\nAppended.\n\n### Child", appended.Payload.Page.Body);
+        Assert.DoesNotContain("Child body.\n\nAppended.", appended.Payload.Page.Body);
         Assert.NotEqual(service.OutlinePage("append").Payload!.Version, service.OutlinePage("replace").Payload!.Version);
 
         Assert.True(prepended.Success);

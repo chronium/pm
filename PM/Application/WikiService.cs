@@ -238,7 +238,7 @@ public sealed class WikiService(ProjectRoot projectRoot)
         switch (operation.Trim())
         {
             case "append_to_section":
-                updatedBody = InsertMarkdownBlock(body, section.SectionEnd, patchMarkdown);
+                updatedBody = InsertMarkdownBlock(body, section.DirectContentEnd, patchMarkdown);
                 break;
             case "prepend_to_section":
                 updatedBody = InsertMarkdownBlock(body, section.ContentStart, patchMarkdown);
@@ -523,11 +523,16 @@ public sealed class WikiService(ProjectRoot projectRoot)
             foreach (var level in breadcrumbs.Keys.Where(level => level > heading.Level).ToList())
                 breadcrumbs.Remove(level);
 
+            var directContentEnd = body.Length;
             var sectionEnd = body.Length;
             for (var nextHeadingIndex = headingIndex + 1; nextHeadingIndex < headings.Count; nextHeadingIndex++)
             {
-                if (headings[nextHeadingIndex].Level > heading.Level) continue;
-                sectionEnd = headings[nextHeadingIndex].HeadingStart;
+                var nextHeading = headings[nextHeadingIndex];
+                if (directContentEnd == body.Length)
+                    directContentEnd = nextHeading.HeadingStart;
+
+                if (nextHeading.Level > heading.Level) continue;
+                sectionEnd = nextHeading.HeadingStart;
                 break;
             }
 
@@ -541,6 +546,7 @@ public sealed class WikiService(ProjectRoot projectRoot)
                     .ToList(),
                 heading.HeadingStart,
                 heading.ContentStart,
+                directContentEnd,
                 sectionEnd));
         }
 
@@ -611,12 +617,39 @@ public sealed class WikiService(ProjectRoot projectRoot)
     private static string BuildSectionPreview(string body, WikiHeadingSection section)
     {
         var sectionBody = body[section.ContentStart..section.SectionEnd];
-        var preview = string.Join(" ", sectionBody
-                .Split('\n')
-                .Select(line => line.Trim())
-                .Where(line => !string.IsNullOrWhiteSpace(line))
-                .Where(line => !TryParseHeading(line, out _, out _)))
-            .Trim();
+        var previewLines = new List<string>();
+        var inFence = false;
+        var fenceCharacter = '\0';
+        var fenceLength = 0;
+
+        foreach (var rawLine in sectionBody.Split('\n'))
+        {
+            var parseLine = rawLine.TrimEnd();
+            var line = rawLine.Trim();
+            if (TryParseFence(parseLine, out var currentFenceCharacter, out var currentFenceLength, out var canCloseFence))
+            {
+                if (!inFence)
+                {
+                    inFence = true;
+                    fenceCharacter = currentFenceCharacter;
+                    fenceLength = currentFenceLength;
+                }
+                else if (currentFenceCharacter == fenceCharacter && currentFenceLength >= fenceLength && canCloseFence)
+                {
+                    inFence = false;
+                    fenceCharacter = '\0';
+                    fenceLength = 0;
+                }
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (!inFence && TryParseHeading(parseLine, out _, out _)) continue;
+            previewLines.Add(line);
+        }
+
+        var preview = string.Join(" ", previewLines).Trim();
 
         return preview.Length <= 160 ? preview : preview[..157].TrimEnd() + "...";
     }
@@ -677,5 +710,6 @@ public sealed class WikiService(ProjectRoot projectRoot)
         IReadOnlyList<string> Breadcrumb,
         int HeadingStart,
         int ContentStart,
+        int DirectContentEnd,
         int SectionEnd);
 }

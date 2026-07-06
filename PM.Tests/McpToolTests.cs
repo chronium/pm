@@ -540,6 +540,9 @@ public class McpToolTests
 
                                                                     ## Pipeline
                                                                     Existing details.
+
+                                                                    ### Child
+                                                                    Child details.
                                                                     """);
 
         var outline = tools.OutlineWikiPage("architecture/rendering");
@@ -560,7 +563,8 @@ public class McpToolTests
 
         Assert.True(patched.Success);
         Assert.Equal("architecture/rendering", patched.Data.Page.Path);
-        Assert.Contains("Existing details.\n\nNew details.", patched.Data.Page.Body);
+        Assert.Contains("Existing details.\n\nNew details.\n\n### Child", patched.Data.Page.Body);
+        Assert.DoesNotContain("Child details.\n\nNew details.", patched.Data.Page.Body);
         Assert.NotEqual(outline.Data.Version, patched.Data.Version);
 
         Assert.Equal("stale_wiki_page", stale.ErrorCode);
