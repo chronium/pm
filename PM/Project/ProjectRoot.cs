@@ -214,6 +214,17 @@ public class ProjectRoot : IProjectRoot
         return items;
     }
 
+    public IReadOnlyList<(string FilePath, string Content)> GetTaskMarkdownFiles()
+    {
+        if (!FileSystem.DirectoryExists(TasksPath)) return [];
+
+        return Directory
+            .EnumerateFiles(TasksPath, $"*.{GlobalConfig.DefaultTaskExtension}", SearchOption.TopDirectoryOnly)
+            .Select(file => (file, FileSystem.ReadAllText(file)))
+            .OrderBy(task => task.file, StringComparer.Ordinal)
+            .ToList();
+    }
+
     public TaskOrderFile ReadTaskOrder()
     {
         if (!FileSystem.FileExists(TaskOrderPath))

@@ -94,6 +94,23 @@ public sealed class PmMcpTools(
         return McpToolResponse<TaskListPayload>.Ok($"Returned {tasks.Count} task(s).", new TaskListPayload(tasks));
     }
 
+    [McpServerTool(Name = "search_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown with case-insensitive matching.")]
+    public McpToolResponse<TaskSearchPayload> SearchTasks(string query, int limit = 20)
+    {
+        var result = taskService.SearchTasks(query, limit);
+        if (!result.Success)
+            return McpToolResponse<TaskSearchPayload>.FromFailure(result);
+
+        var tasks = result.Payload!
+            .Select(ToTaskSearchResult)
+            .ToList();
+
+        return McpToolResponse<TaskSearchPayload>.Ok($"Returned {tasks.Count} task search result(s).",
+            new TaskSearchPayload(tasks));
+    }
+
     [McpServerTool(Name = "get_next_task", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Returns one deterministic recommended actionable task, optionally filtered by track. By default blocked tasks can be returned when no dependency-ready task is available; set readyOnly to true to return only dependency-ready tasks.")]
@@ -388,6 +405,18 @@ public sealed class PmMcpTools(
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
     }
 
+    [McpServerTool(Name = "outline_wiki_page", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns a wiki page body version and ATX markdown heading outline for targeted patching.")]
+    public McpToolResponse<WikiPageOutlinePayload> OutlineWikiPage(string path)
+    {
+        var result = wikiService.OutlinePage(path);
+        return result.Success
+            ? McpToolResponse<WikiPageOutlinePayload>.Ok($"Outlined wiki page {result.Payload!.Path}.",
+                ToWikiPageOutlinePayload(result.Payload))
+            : McpToolResponse<WikiPageOutlinePayload>.FromFailure(result);
+    }
+
     [McpServerTool(Name = "search_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Searches wiki page title, path, and body with case-insensitive matching.")]
@@ -432,6 +461,23 @@ public sealed class PmMcpTools(
             ? McpToolResponse<WikiPagePayload>.Ok($"Updated wiki page {result.Payload!.Path}.",
                 ToWikiPagePayload(result.Payload))
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "patch_wiki_page", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Applies a guarded body-only wiki patch under or around a heading from outline_wiki_page.")]
+    public McpToolResponse<WikiPagePatchPayload> PatchWikiPage(
+        string path,
+        string version,
+        string headingId,
+        string operation,
+        string markdown)
+    {
+        var result = wikiService.PatchPageSection(path, version, headingId, operation, markdown);
+        return result.Success
+            ? McpToolResponse<WikiPagePatchPayload>.Ok($"Patched wiki page {result.Payload!.Page.Path}.",
+                new WikiPagePatchPayload(ToWikiPagePayload(result.Payload.Page), result.Payload.Version))
+            : McpToolResponse<WikiPagePatchPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "rename_wiki_page", Destructive = true, OpenWorld = false,
@@ -627,6 +673,27 @@ public sealed class PmMcpTools(
             task.FilePath);
     }
 
+    private static TaskSearchResultPayload ToTaskSearchResult(TaskSearchResult task)
+    {
+        return new TaskSearchResultPayload(
+            task.Task.Id,
+            task.Task.Title,
+            task.Track,
+            task.Milestone,
+            task.Priority,
+            task.PrioritySource,
+            task.State,
+            task.Dependencies.DependsOn,
+            task.Dependencies.Ready,
+            task.Dependencies.Summary,
+            task.Dependencies.WaitingOn,
+            task.Dependencies.Missing,
+            task.DescriptionPreview,
+            task.FilePath,
+            task.MatchCount,
+            task.Snippet);
+    }
+
     private TaskDetailPayload ToTaskDetailPayload(TaskItem task)
     {
         var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
@@ -663,6 +730,24 @@ public sealed class PmMcpTools(
             page.FilePath,
             page.Markdown,
             page.Body);
+    }
+
+    private static WikiPageOutlinePayload ToWikiPageOutlinePayload(WikiPageOutlineData page)
+    {
+        return new WikiPageOutlinePayload(
+            page.Path,
+            page.Title,
+            page.CreatedAt,
+            page.ModifiedAt,
+            page.FilePath,
+            page.Version,
+            page.Headings.Select(heading => new WikiHeadingOutlinePayload(
+                    heading.Id,
+                    heading.Level,
+                    heading.Title,
+                    heading.Breadcrumb,
+                    heading.Preview))
+                .ToList());
     }
 
     private static string? NormalizeFilter(string? value)

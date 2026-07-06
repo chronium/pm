@@ -225,7 +225,7 @@ public partial class BoardService(ProjectRoot projectRoot)
             .ToList();
     }
 
-    private static DependencyStatus BuildDependencyStatus(
+    public static DependencyStatus BuildDependencyStatus(
         TaskItem task,
         IReadOnlyDictionary<string, TaskItem> tasksById,
         IReadOnlyDictionary<string, string> stateById)

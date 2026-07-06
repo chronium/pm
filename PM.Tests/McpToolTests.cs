@@ -320,6 +320,50 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task SearchTasksReturnsStructuredPayloadAndHonorsLimit()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var blocked = TestData.Task("PM-0001", "Needle render task",
+            "Needle body context for agents.",
+            milestone: "m1",
+            priority: "urgent",
+            dependsOn: ["PM-0002"]);
+        var dependency = TestData.Task("PM-0002", "Dependency task");
+        var limitedOut = TestData.Task("PM-0003", "Needle later task");
+        projectRoot.WriteTask(blocked);
+        projectRoot.WriteTask(dependency);
+        projectRoot.WriteTask(limitedOut);
+        projectRoot.UpdateTaskState(blocked, "review");
+        projectRoot.UpdateTaskState(dependency, "todo");
+        projectRoot.UpdateTaskState(limitedOut, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var search = tools.SearchTasks("NEEDLE", 1);
+        var blank = tools.SearchTasks(" ");
+
+        Assert.True(search.Success);
+        Assert.Equal("Returned 1 task search result(s).", search.Summary);
+        var result = Assert.Single(search.Data!.Tasks);
+        Assert.Equal("PM-0001", result.Id);
+        Assert.Equal("Needle render task", result.Title);
+        Assert.Equal("PM", result.Track);
+        Assert.Equal("m1", result.Milestone);
+        Assert.Equal("urgent", result.Priority);
+        Assert.Equal("task", result.PrioritySource);
+        Assert.Equal("review", result.State);
+        Assert.Equal(["PM-0002"], result.DependsOn);
+        Assert.False(result.DependenciesReady);
+        Assert.Equal(["PM-0002"], result.WaitingOnDependencies);
+        Assert.Empty(result.MissingDependencies);
+        Assert.Equal(projectRoot.GetTaskFilePath("PM-0001"), result.FilePath);
+        Assert.True(result.MatchCount > 0);
+        Assert.Contains("needle", result.Snippet, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("invalid_task_query", blank.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateTaskCreatesTrackScopedTask()
     {
         using var workspace = new TempWorkingDirectory();
@@ -485,6 +529,45 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task WikiOutlineAndPatchToolsReturnStructuredPayloadsAndStableFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot);
+        tools.CreateWikiPage("architecture/rendering", "Rendering", """
+                                                                    # Rendering
+                                                                    Overview.
+
+                                                                    ## Pipeline
+                                                                    Existing details.
+                                                                    """);
+
+        var outline = tools.OutlineWikiPage("architecture/rendering");
+        var heading = Assert.Single(outline.Data!.Headings, item => item.Title == "Pipeline");
+        var patched = tools.PatchWikiPage("architecture/rendering", outline.Data.Version, heading.Id,
+            "append_to_section", "New details.");
+        var stale = tools.PatchWikiPage("architecture/rendering", outline.Data.Version, heading.Id,
+            "append_to_section", "Too late.");
+        var missingHeading = tools.PatchWikiPage("architecture/rendering", patched.Data!.Version, "h2-missing-1",
+            "append_to_section", "No target.");
+
+        Assert.True(outline.Success);
+        Assert.Equal("architecture/rendering", outline.Data.Path);
+        Assert.False(string.IsNullOrWhiteSpace(outline.Data.Version));
+        Assert.Equal("h2-pipeline-1", heading.Id);
+        Assert.Equal(["Rendering", "Pipeline"], heading.Breadcrumb);
+        Assert.Contains("Existing details.", heading.Preview);
+
+        Assert.True(patched.Success);
+        Assert.Equal("architecture/rendering", patched.Data.Page.Path);
+        Assert.Contains("Existing details.\n\nNew details.", patched.Data.Page.Body);
+        Assert.NotEqual(outline.Data.Version, patched.Data.Version);
+
+        Assert.Equal("stale_wiki_page", stale.ErrorCode);
+        Assert.Equal("missing_wiki_heading", missingHeading.ErrorCode);
+    }
+
+    [Fact]
     public async Task WikiToolsReturnStableFailures()
     {
         using var workspace = new TempWorkingDirectory();
@@ -497,6 +580,7 @@ public class McpToolTests
 
         Assert.Equal("invalid_wiki_path", tools.CreateWikiPage("../escape", "Escape").ErrorCode);
         Assert.Equal("missing_wiki_page", tools.GetWikiPage("missing").ErrorCode);
+        Assert.Equal("missing_wiki_page", tools.OutlineWikiPage("missing").ErrorCode);
         Assert.True(tools.CreateWikiPage("notes", "Notes").Success);
         Assert.Equal("duplicate_wiki_page", tools.CreateWikiPage("notes", "Duplicate").ErrorCode);
         Assert.Equal("invalid_wiki_markdown", tools.UpdateWikiPageMarkdown("notes", "not markdown").ErrorCode);

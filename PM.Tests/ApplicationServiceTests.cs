@@ -566,6 +566,89 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task TaskServiceSearchesTaskMetadataMarkdownAndDependencies()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["NEEDLE"] = "Needle Track" },
+            milestones: new Dictionary<string, string> { ["mneedle"] = "Needle Milestone" }));
+        var richMatch = TestData.Task("PM-0001", "Needle rich task",
+            "Body has needle twice for snippet context.\nSecond needle line.",
+            milestone: "mneedle",
+            priority: "urgent",
+            dependsOn: ["DEP-0001"]);
+        var titleMatch = TestData.Task("PM-0002", "Needle title");
+        var trackIdMatch = TestData.Task("NEEDLE-0001", "Track ID match", track: "NEEDLE");
+        var stateMatch = TestData.Task("PM-0003", "Review state match");
+
+        foreach (var task in new[] { richMatch, titleMatch, trackIdMatch, stateMatch })
+            projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(richMatch, "todo");
+        projectRoot.UpdateTaskState(titleMatch, "todo");
+        projectRoot.UpdateTaskState(trackIdMatch, "todo");
+        projectRoot.UpdateTaskState(stateMatch, "review");
+
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var needle = service.SearchTasks("needle");
+        var priority = service.SearchTasks("URGENT");
+        var dependencySearch = service.SearchTasks("DEP-0001");
+        var state = service.SearchTasks("review");
+        var frontmatter = service.SearchTasks("dependsOn:");
+
+        Assert.True(needle.Success);
+        var needleResults = needle.Payload!;
+        Assert.Equal("PM-0001", needleResults.First().Task.Id);
+        Assert.Equal(
+            needleResults.OrderByDescending(result => result.MatchCount).ThenBy(result => result.Task.Id).Select(result => result.Task.Id),
+            needleResults.Select(result => result.Task.Id));
+        Assert.Contains("needle", needleResults.First().Snippet, StringComparison.OrdinalIgnoreCase);
+
+        var priorityResult = Assert.Single(priority.Payload!);
+        Assert.Equal("PM-0001", priorityResult.Task.Id);
+        Assert.Equal("urgent", priorityResult.Priority);
+        Assert.Equal("task", priorityResult.PrioritySource);
+
+        var dependencyResult = Assert.Single(dependencySearch.Payload!);
+        Assert.Equal("PM-0001", dependencyResult.Task.Id);
+        Assert.Equal(["DEP-0001"], dependencyResult.Dependencies.DependsOn);
+        Assert.False(dependencyResult.Dependencies.Ready);
+        Assert.Equal(["DEP-0001"], dependencyResult.Dependencies.Missing);
+
+        Assert.Equal("PM-0003", Assert.Single(state.Payload!).Task.Id);
+        Assert.Equal("PM-0001", Assert.Single(frontmatter.Payload!).Task.Id);
+    }
+
+    [Fact]
+    public async Task TaskServiceSearchClampsLimitAndReturnsStableFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        for (var index = 1; index <= 105; index++)
+        {
+            var task = TestData.Task($"PM-{index:0000}", $"Common task {index}");
+            projectRoot.WriteTask(task);
+        }
+
+        var lowerClamp = service.SearchTasks("common", 0);
+        var upperClamp = service.SearchTasks("common", 200);
+        var blank = service.SearchTasks(" ");
+
+        Assert.True(lowerClamp.Success);
+        Assert.Single(lowerClamp.Payload!);
+        Assert.True(upperClamp.Success);
+        Assert.Equal(100, upperClamp.Payload!.Count);
+        Assert.Equal("invalid_task_query", blank.ErrorCode);
+
+        File.WriteAllText(Path.Combine(projectRoot.TasksPath, "bad.md"), "not markdown");
+        var invalid = service.SearchTasks("common");
+
+        Assert.False(invalid.Success);
+        Assert.Equal("invalid_task_markdown", invalid.ErrorCode);
+        Assert.Contains("bad.md", invalid.Message);
+    }
+
+    [Fact]
     public async Task NextTaskSelectsConfiguredStateOrderBeforeNewerLaterStatesAndFiltersByTrack()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1172,6 +1255,136 @@ public class ApplicationServiceTests
         Assert.True(result.MatchCount >= 2);
         Assert.Contains("render", result.Snippet, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("invalid_wiki_query", blank.ErrorCode);
+    }
+
+    [Fact]
+    public async Task WikiServiceOutlinesAtxHeadingsWithBreadcrumbsVersionsAndPreviews()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("guide", "Guide", """
+                                             # Root
+                                             Intro text.
+
+                                             ```
+                                             # Ignored
+                                             ```
+
+                                             ## Sub
+                                             Nested text.
+
+                                             ## Duplicate
+                                             Duplicate one.
+
+                                             ## Duplicate
+                                             Duplicate two.
+                                             """);
+
+        var outline = service.OutlinePage("guide");
+
+        Assert.True(outline.Success);
+        Assert.False(string.IsNullOrWhiteSpace(outline.Payload!.Version));
+        Assert.Equal("guide", outline.Payload.Path);
+        Assert.Equal(["Root", "Sub", "Duplicate", "Duplicate"], outline.Payload.Headings.Select(heading => heading.Title));
+        Assert.DoesNotContain(outline.Payload.Headings, heading => heading.Title == "Ignored");
+        Assert.Equal("h1-root-1", outline.Payload.Headings[0].Id);
+        Assert.Equal("h2-sub-1", outline.Payload.Headings[1].Id);
+        Assert.Equal("h2-duplicate-1", outline.Payload.Headings[2].Id);
+        Assert.Equal("h2-duplicate-2", outline.Payload.Headings[3].Id);
+        Assert.Equal(["Root", "Sub"], outline.Payload.Headings[1].Breadcrumb);
+        Assert.Contains("Nested text.", outline.Payload.Headings[1].Preview);
+    }
+
+    [Fact]
+    public async Task WikiServicePatchOperationsMutateBodyOnlyUnderVersionAndHeadingGuards()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+
+        AppResult<(WikiPageData Page, string Version)> PatchFresh(string path, string operation, string markdown)
+        {
+            service.CreatePage(path, "Guide", """
+                                              # Guide
+                                              Intro
+
+                                              ## Target
+                                              Existing body.
+
+                                              ### Child
+                                              Child body.
+
+                                              ## Next
+                                              Next body.
+                                              """);
+            var outline = service.OutlinePage(path).Payload!;
+            return service.PatchPageSection(path, outline.Version, "h2-target-1", operation, markdown);
+        }
+
+        var appended = PatchFresh("append", "append_to_section", "Appended.");
+        var prepended = PatchFresh("prepend", "prepend_to_section", "Prepended.");
+        var replaced = PatchFresh("replace", "replace_section_body", "Replacement.");
+        var before = PatchFresh("before", "insert_before_heading", "Inserted before.");
+        var after = PatchFresh("after", "insert_after_section", "Inserted after.");
+
+        Assert.True(appended.Success);
+        Assert.Contains("Child body.\n\nAppended.\n\n## Next", appended.Payload.Page.Body);
+        Assert.NotEqual(service.OutlinePage("append").Payload!.Version, service.OutlinePage("replace").Payload!.Version);
+
+        Assert.True(prepended.Success);
+        Assert.Contains("## Target\n\nPrepended.\n\nExisting body.", prepended.Payload.Page.Body);
+
+        Assert.True(replaced.Success);
+        Assert.Contains("## Target\n\nReplacement.\n\n## Next", replaced.Payload.Page.Body);
+        Assert.DoesNotContain("Existing body.", replaced.Payload.Page.Body);
+        Assert.DoesNotContain("Child body.", replaced.Payload.Page.Body);
+
+        Assert.True(before.Success);
+        Assert.Contains("Inserted before.\n\n## Target", before.Payload.Page.Body);
+
+        Assert.True(after.Success);
+        Assert.Contains("Child body.\n\nInserted after.\n\n## Next", after.Payload.Page.Body);
+
+        var original = service.ReadPage("append").Payload!;
+        Assert.Equal("Guide", appended.Payload.Page.Title);
+        Assert.Equal(original.CreatedAt, appended.Payload.Page.CreatedAt);
+        Assert.True(appended.Payload.Page.ModifiedAt > original.CreatedAt);
+    }
+
+    [Fact]
+    public async Task WikiServicePatchRejectsStaleMissingInvalidAndMalformedInputsWithoutMutation()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("guide", "Guide", """
+                                             # Guide
+                                             Body.
+                                             """);
+        var outline = service.OutlinePage("guide").Payload!;
+        var originalMarkdown = File.ReadAllText(Path.Combine(projectRoot.WikiPath, "guide.md"));
+
+        Assert.Equal("stale_wiki_page",
+            service.PatchPageSection("guide", "stale", "h1-guide-1", "append_to_section", "Text").ErrorCode);
+        Assert.Equal("missing_wiki_heading",
+            service.PatchPageSection("guide", outline.Version, "h2-missing-1", "append_to_section", "Text").ErrorCode);
+        Assert.Equal("invalid_wiki_patch_operation",
+            service.PatchPageSection("guide", outline.Version, "h1-guide-1", "bad", "Text").ErrorCode);
+        Assert.Equal("invalid_wiki_patch_markdown",
+            service.PatchPageSection("guide", outline.Version, "h1-guide-1", "append_to_section", " ").ErrorCode);
+        Assert.Equal("missing_wiki_page",
+            service.PatchPageSection("missing", outline.Version, "h1-guide-1", "append_to_section", "Text").ErrorCode);
+        Assert.Equal("invalid_wiki_path",
+            service.PatchPageSection("../escape", outline.Version, "h1-guide-1", "append_to_section", "Text").ErrorCode);
+
+        File.WriteAllText(Path.Combine(projectRoot.WikiPath, "bad.md"), "not markdown");
+        Assert.Equal("invalid_wiki_markdown",
+            service.OutlinePage("bad").ErrorCode);
+        Assert.Equal("invalid_wiki_markdown",
+            service.PatchPageSection("bad", "version", "h1-guide-1", "append_to_section", "Text").ErrorCode);
+
+        Assert.Equal(originalMarkdown, File.ReadAllText(Path.Combine(projectRoot.WikiPath, "guide.md")));
     }
 
     [Fact]

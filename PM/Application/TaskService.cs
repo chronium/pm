@@ -37,6 +37,19 @@ public sealed record TaskReorderResult(
     IReadOnlyList<string> TaskIds,
     bool Changed);
 
+public sealed record TaskSearchResult(
+    TaskItem Task,
+    string Track,
+    string? Milestone,
+    string Priority,
+    string PrioritySource,
+    string State,
+    DependencyStatus Dependencies,
+    string DescriptionPreview,
+    string FilePath,
+    int MatchCount,
+    string Snippet);
+
 public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdService)
 {
     private const int MaxBulkTaskCount = 100;
@@ -145,6 +158,67 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             tasks.Count,
             createdTasks.Count,
             null));
+    }
+
+    public AppResult<IReadOnlyList<TaskSearchResult>> SearchTasks(string query, int limit = 20)
+    {
+        if (!projectRoot.Exists)
+            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (string.IsNullOrWhiteSpace(query))
+            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_task_query", "Task search query is required.");
+
+        var normalizedQuery = query.Trim();
+        limit = Math.Clamp(limit, 1, 100);
+        var parsedTasks = new List<(TaskItem Task, string FilePath, string Markdown)>();
+        foreach (var (filePath, markdown) in projectRoot.GetTaskMarkdownFiles())
+        {
+            if (!TaskItem.TryParse(markdown, out var task, out _, out _) || task == null)
+                return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_task_markdown",
+                    $"Task file {filePath} markdown is invalid.");
+
+            parsedTasks.Add((task, filePath, markdown));
+        }
+
+        var tasksById = parsedTasks
+            .Select(entry => entry.Task)
+            .GroupBy(task => task.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var stateById = tasksById.Values
+            .ToDictionary(
+                task => task.Id,
+                task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+                StringComparer.Ordinal);
+
+        var results = new List<TaskSearchResult>();
+        foreach (var (task, filePath, markdown) in parsedTasks)
+        {
+            var track = projectRoot.ResolveTaskTrack(task);
+            var state = stateById.TryGetValue(task.Id, out var currentState) ? currentState : string.Empty;
+            var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
+            var fields = BuildSearchFields(task, markdown, track, state, priority.Priority);
+            var matchCount = fields.Sum(field => CountMatches(field.Value, normalizedQuery));
+            if (matchCount == 0) continue;
+
+            results.Add(new TaskSearchResult(
+                task,
+                track,
+                task.Milestone,
+                priority.Priority,
+                priority.Source,
+                state,
+                BoardService.BuildDependencyStatus(task, tasksById, stateById),
+                BoardService.GetDescriptionPreview(task.Description, BoardService.WebDescriptionPreviewLength),
+                filePath,
+                matchCount,
+                BuildSnippet(fields, normalizedQuery)));
+        }
+
+        return AppResult<IReadOnlyList<TaskSearchResult>>.Ok(results
+            .OrderByDescending(result => result.MatchCount)
+            .ThenBy(result => result.Task.Id, StringComparer.Ordinal)
+            .Take(limit)
+            .ToList());
     }
 
     public AppResult MoveTask(string taskId, string targetState)
@@ -478,6 +552,69 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             return $"{normalizedDescription}\n{formattedNote}";
 
         return $"{normalizedDescription}\n\n## Notes\n\n{formattedNote}";
+    }
+
+    private static IReadOnlyList<(string Label, string Value)> BuildSearchFields(
+        TaskItem task,
+        string markdown,
+        string track,
+        string state,
+        string priority)
+    {
+        return
+        [
+            ("Description", task.Description),
+            ("Title", task.Title),
+            ("ID", task.Id),
+            ("Track", track),
+            ("Milestone", task.Milestone ?? string.Empty),
+            ("State", state),
+            ("Priority", priority),
+            ("Dependencies", string.Join(' ', task.DependencyIds)),
+            ("Markdown", markdown),
+        ];
+    }
+
+    private static int CountMatches(string value, string query)
+    {
+        var count = 0;
+        var index = 0;
+        while (true)
+        {
+            index = value.IndexOf(query, index, StringComparison.OrdinalIgnoreCase);
+            if (index < 0) return count;
+            count++;
+            index += query.Length;
+        }
+    }
+
+    private static string BuildSnippet(IReadOnlyList<(string Label, string Value)> fields, string query)
+    {
+        var field = fields.FirstOrDefault(field =>
+            !string.IsNullOrWhiteSpace(field.Value) &&
+            field.Value.Contains(query, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(field.Value))
+            field = fields.FirstOrDefault(field => !string.IsNullOrWhiteSpace(field.Value));
+
+        if (string.IsNullOrWhiteSpace(field.Value)) return string.Empty;
+
+        var haystack = NormalizeSnippetText(field.Value);
+        var index = haystack.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (index < 0) index = 0;
+
+        var start = Math.Max(0, index - 40);
+        var length = Math.Min(120, haystack.Length - start);
+        var snippet = haystack.Substring(start, length).Trim();
+        if (start > 0) snippet = "..." + snippet;
+        if (start + length < haystack.Length) snippet += "...";
+        return $"{field.Label}: {snippet}";
+    }
+
+    private static string NormalizeSnippetText(string value)
+    {
+        return string.Join(' ', value
+            .ReplaceLineEndings("\n")
+            .Split([' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static TaskItem BuildTask(

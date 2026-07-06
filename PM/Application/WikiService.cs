@@ -1,5 +1,8 @@
 using PM.Project;
 using PM.Wiki;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PM.Application;
 
@@ -26,8 +29,28 @@ public sealed record WikiSearchResult(
     int MatchCount,
     string Snippet);
 
+public sealed record WikiPageOutlineData(
+    string Path,
+    string Title,
+    DateTime CreatedAt,
+    DateTime ModifiedAt,
+    string FilePath,
+    string Version,
+    IReadOnlyList<WikiHeadingOutline> Headings);
+
+public sealed record WikiHeadingOutline(
+    string Id,
+    int Level,
+    string Title,
+    IReadOnlyList<string> Breadcrumb,
+    string Preview);
+
 public sealed class WikiService(ProjectRoot projectRoot)
 {
+    private static readonly Regex AtxHeadingPattern =
+        new(@"^[ \t]{0,3}(?<marks>#{1,6})(?:[ \t]+|$)(?<title>.*?)(?:[ \t]+#+[ \t]*)?$",
+            RegexOptions.Compiled);
+
     public AppResult<WikiPageData> CreatePage(string path, string title, string body)
     {
         if (!projectRoot.Exists)
@@ -156,6 +179,92 @@ public sealed class WikiService(ProjectRoot projectRoot)
             .ThenBy(result => result.Path, StringComparer.Ordinal)
             .Take(limit)
             .ToList());
+    }
+
+    public AppResult<WikiPageOutlineData> OutlinePage(string path)
+    {
+        var read = ReadPage(path);
+        if (!read.Success)
+            return AppResult<WikiPageOutlineData>.Fail(read.ErrorCode ?? "unknown_error",
+                read.Message ?? "Operation failed.");
+
+        var page = read.Payload!;
+        return AppResult<WikiPageOutlineData>.Ok(ToOutlineData(page));
+    }
+
+    public AppResult<(WikiPageData Page, string Version)> PatchPageSection(
+        string path,
+        string version,
+        string headingId,
+        string operation,
+        string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return AppResult<(WikiPageData Page, string Version)>.Fail("stale_wiki_page",
+                "Wiki page version is required.");
+
+        if (string.IsNullOrWhiteSpace(headingId))
+            return AppResult<(WikiPageData Page, string Version)>.Fail("missing_wiki_heading",
+                "Wiki heading id is required.");
+
+        if (string.IsNullOrWhiteSpace(markdown))
+            return AppResult<(WikiPageData Page, string Version)>.Fail("invalid_wiki_patch_markdown",
+                "Wiki patch markdown is required.");
+
+        if (string.IsNullOrWhiteSpace(operation))
+            return AppResult<(WikiPageData Page, string Version)>.Fail("invalid_wiki_patch_operation",
+                "Wiki patch operation is invalid.");
+
+        var read = ReadPage(path);
+        if (!read.Success)
+            return AppResult<(WikiPageData Page, string Version)>.Fail(read.ErrorCode ?? "unknown_error",
+                read.Message ?? "Operation failed.");
+
+        var page = read.Payload!;
+        var currentVersion = ComputeBodyVersion(page.Body);
+        if (!string.Equals(currentVersion, version.Trim(), StringComparison.Ordinal))
+            return AppResult<(WikiPageData Page, string Version)>.Fail("stale_wiki_page",
+                "Wiki page body changed since it was outlined.");
+
+        var body = page.Body.ReplaceLineEndings("\n");
+        var sections = ParseHeadingSections(body);
+        var section = sections.FirstOrDefault(heading => string.Equals(heading.Id, headingId.Trim(), StringComparison.Ordinal));
+        if (section == null)
+            return AppResult<(WikiPageData Page, string Version)>.Fail("missing_wiki_heading",
+                $"Wiki heading {headingId.Trim()} was not found.");
+
+        var patchMarkdown = NormalizePatchMarkdown(markdown);
+        string updatedBody;
+        switch (operation.Trim())
+        {
+            case "append_to_section":
+                updatedBody = InsertMarkdownBlock(body, section.SectionEnd, patchMarkdown);
+                break;
+            case "prepend_to_section":
+                updatedBody = InsertMarkdownBlock(body, section.ContentStart, patchMarkdown);
+                break;
+            case "replace_section_body":
+                updatedBody = ReplaceMarkdownBlock(body, section.ContentStart, section.SectionEnd, patchMarkdown);
+                break;
+            case "insert_before_heading":
+                updatedBody = InsertMarkdownBlock(body, section.HeadingStart, patchMarkdown);
+                break;
+            case "insert_after_section":
+                updatedBody = InsertMarkdownBlock(body, section.SectionEnd, patchMarkdown);
+                break;
+            default:
+                return AppResult<(WikiPageData Page, string Version)>.Fail("invalid_wiki_patch_operation",
+                    "Wiki patch operation is invalid.");
+        }
+
+        var updated = UpdatePageBody(path, updatedBody);
+        if (!updated.Success)
+            return AppResult<(WikiPageData Page, string Version)>.Fail(updated.ErrorCode ?? "unknown_error",
+                updated.Message ?? "Operation failed.");
+
+        var updatedPage = updated.Payload!;
+        return AppResult<(WikiPageData Page, string Version)>.Ok(
+            (updatedPage, ComputeBodyVersion(updatedPage.Body)));
     }
 
     private AppResult<IReadOnlyList<WikiPageSummary>> ListAllPages()
@@ -293,6 +402,225 @@ public sealed class WikiService(ProjectRoot projectRoot)
         }
     }
 
+    private static WikiPageOutlineData ToOutlineData(WikiPageData page)
+    {
+        var body = page.Body.ReplaceLineEndings("\n");
+        var sections = ParseHeadingSections(body);
+        return new WikiPageOutlineData(
+            page.Path,
+            page.Title,
+            page.CreatedAt,
+            page.ModifiedAt,
+            page.FilePath,
+            ComputeBodyVersion(page.Body),
+            sections.Select(section => new WikiHeadingOutline(
+                    section.Id,
+                    section.Level,
+                    section.Title,
+                    section.Breadcrumb,
+                    BuildSectionPreview(body, section)))
+                .ToList());
+    }
+
+    private static string ComputeBodyVersion(string body)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(body ?? string.Empty));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string NormalizePatchMarkdown(string markdown)
+    {
+        return markdown.ReplaceLineEndings("\n").Trim('\n');
+    }
+
+    private static string InsertMarkdownBlock(string body, int offset, string markdown)
+    {
+        var before = body[..offset];
+        var after = body[offset..];
+        return before + BoundaryBefore(before) + markdown + BoundaryAfter(after) + after;
+    }
+
+    private static string ReplaceMarkdownBlock(string body, int start, int end, string markdown)
+    {
+        var before = body[..start];
+        var after = body[end..];
+        return before + BoundaryBefore(before) + markdown + BoundaryAfter(after) + after;
+    }
+
+    private static string BoundaryBefore(string before)
+    {
+        if (before.Length == 0 || before.EndsWith("\n\n", StringComparison.Ordinal)) return string.Empty;
+        return before.EndsWith('\n') ? "\n" : "\n\n";
+    }
+
+    private static string BoundaryAfter(string after)
+    {
+        if (after.Length == 0 || after.StartsWith("\n\n", StringComparison.Ordinal)) return string.Empty;
+        return after.StartsWith('\n') ? "\n" : "\n\n";
+    }
+
+    private static IReadOnlyList<WikiHeadingSection> ParseHeadingSections(string body)
+    {
+        body = body.ReplaceLineEndings("\n");
+        var headings = new List<ParsedHeading>();
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        var inFence = false;
+        var fenceCharacter = '\0';
+        var fenceLength = 0;
+        var index = 0;
+
+        while (index < body.Length)
+        {
+            var lineStart = index;
+            var newlineIndex = body.IndexOf('\n', index);
+            var lineEnd = newlineIndex < 0 ? body.Length : newlineIndex;
+            var nextIndex = newlineIndex < 0 ? body.Length : newlineIndex + 1;
+            var line = body[lineStart..lineEnd];
+
+            if (TryParseFence(line, out var currentFenceCharacter, out var currentFenceLength, out var canCloseFence))
+            {
+                if (!inFence)
+                {
+                    inFence = true;
+                    fenceCharacter = currentFenceCharacter;
+                    fenceLength = currentFenceLength;
+                }
+                else if (currentFenceCharacter == fenceCharacter && currentFenceLength >= fenceLength && canCloseFence)
+                {
+                    inFence = false;
+                    fenceCharacter = '\0';
+                    fenceLength = 0;
+                }
+
+                index = nextIndex;
+                continue;
+            }
+
+            if (!inFence && TryParseHeading(line, out var level, out var title))
+            {
+                var slug = SlugifyHeadingTitle(title);
+                var occurrenceKey = $"{level}:{slug}";
+                occurrences.TryGetValue(occurrenceKey, out var occurrence);
+                occurrence++;
+                occurrences[occurrenceKey] = occurrence;
+                headings.Add(new ParsedHeading(
+                    $"h{level}-{slug}-{occurrence}",
+                    level,
+                    title,
+                    lineStart,
+                    nextIndex));
+            }
+
+            index = nextIndex;
+        }
+
+        var sections = new List<WikiHeadingSection>(headings.Count);
+        var breadcrumbs = new Dictionary<int, string>();
+        for (var headingIndex = 0; headingIndex < headings.Count; headingIndex++)
+        {
+            var heading = headings[headingIndex];
+            breadcrumbs[heading.Level] = heading.Title;
+            foreach (var level in breadcrumbs.Keys.Where(level => level > heading.Level).ToList())
+                breadcrumbs.Remove(level);
+
+            var sectionEnd = body.Length;
+            for (var nextHeadingIndex = headingIndex + 1; nextHeadingIndex < headings.Count; nextHeadingIndex++)
+            {
+                if (headings[nextHeadingIndex].Level > heading.Level) continue;
+                sectionEnd = headings[nextHeadingIndex].HeadingStart;
+                break;
+            }
+
+            sections.Add(new WikiHeadingSection(
+                heading.Id,
+                heading.Level,
+                heading.Title,
+                Enumerable.Range(1, heading.Level)
+                    .Where(breadcrumbs.ContainsKey)
+                    .Select(level => breadcrumbs[level])
+                    .ToList(),
+                heading.HeadingStart,
+                heading.ContentStart,
+                sectionEnd));
+        }
+
+        return sections;
+    }
+
+    private static bool TryParseHeading(string line, out int level, out string title)
+    {
+        level = 0;
+        title = string.Empty;
+        var match = AtxHeadingPattern.Match(line);
+        if (!match.Success) return false;
+
+        level = match.Groups["marks"].Value.Length;
+        title = match.Groups["title"].Value.Trim();
+        return true;
+    }
+
+    private static bool TryParseFence(string line, out char fenceCharacter, out int fenceLength, out bool canClose)
+    {
+        fenceCharacter = '\0';
+        fenceLength = 0;
+        canClose = false;
+        var index = 0;
+        while (index < line.Length && index < 4 && (line[index] == ' ' || line[index] == '\t'))
+            index++;
+
+        if (index > 3 || index >= line.Length || (line[index] != '`' && line[index] != '~')) return false;
+
+        var marker = line[index];
+        var markerIndex = index;
+        while (markerIndex < line.Length && line[markerIndex] == marker)
+            markerIndex++;
+
+        var count = markerIndex - index;
+        if (count < 3) return false;
+
+        fenceCharacter = marker;
+        fenceLength = count;
+        canClose = string.IsNullOrWhiteSpace(line[markerIndex..]);
+        return true;
+    }
+
+    private static string SlugifyHeadingTitle(string title)
+    {
+        var builder = new StringBuilder();
+        var previousWasSeparator = false;
+        foreach (var character in title.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(character);
+                previousWasSeparator = false;
+            }
+            else if (!previousWasSeparator && builder.Length > 0)
+            {
+                builder.Append('-');
+                previousWasSeparator = true;
+            }
+        }
+
+        if (builder.Length > 0 && builder[^1] == '-')
+            builder.Length--;
+
+        return builder.Length == 0 ? "section" : builder.ToString();
+    }
+
+    private static string BuildSectionPreview(string body, WikiHeadingSection section)
+    {
+        var sectionBody = body[section.ContentStart..section.SectionEnd];
+        var preview = string.Join(" ", sectionBody
+                .Split('\n')
+                .Select(line => line.Trim())
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .Where(line => !TryParseHeading(line, out _, out _)))
+            .Trim();
+
+        return preview.Length <= 160 ? preview : preview[..157].TrimEnd() + "...";
+    }
+
     private static int CountMatches(string value, string query)
     {
         var count = 0;
@@ -334,4 +662,20 @@ public sealed class WikiService(ProjectRoot projectRoot)
             markdown,
             page.Body);
     }
+
+    private sealed record ParsedHeading(
+        string Id,
+        int Level,
+        string Title,
+        int HeadingStart,
+        int ContentStart);
+
+    private sealed record WikiHeadingSection(
+        string Id,
+        int Level,
+        string Title,
+        IReadOnlyList<string> Breadcrumb,
+        int HeadingStart,
+        int ContentStart,
+        int SectionEnd);
 }

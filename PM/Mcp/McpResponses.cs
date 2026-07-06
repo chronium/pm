@@ -36,6 +36,8 @@ public sealed record MilestonePayload(string Key, string Name, string Priority);
 
 public sealed record TaskListPayload(IReadOnlyList<TaskSummaryPayload> Tasks);
 
+public sealed record TaskSearchPayload(IReadOnlyList<TaskSearchResultPayload> Tasks);
+
 public sealed record NextTaskPayload(bool Found, TaskSummaryPayload? Task, string Reason);
 
 public sealed record TaskSummaryPayload(
@@ -53,6 +55,24 @@ public sealed record TaskSummaryPayload(
     IReadOnlyList<string> MissingDependencies,
     string DescriptionPreview,
     string FilePath);
+
+public sealed record TaskSearchResultPayload(
+    string Id,
+    string Title,
+    string Track,
+    string? Milestone,
+    string Priority,
+    string PrioritySource,
+    string State,
+    IReadOnlyList<string> DependsOn,
+    bool DependenciesReady,
+    string DependencySummary,
+    IReadOnlyList<string> WaitingOnDependencies,
+    IReadOnlyList<string> MissingDependencies,
+    string DescriptionPreview,
+    string FilePath,
+    int MatchCount,
+    string Snippet);
 
 public sealed record TaskDetailPayload(
     string Id,
@@ -127,6 +147,26 @@ public sealed record WikiPagePayload(
     string FilePath,
     string Markdown,
     string Body);
+
+public sealed record WikiPageOutlinePayload(
+    string Path,
+    string Title,
+    DateTime CreatedAt,
+    DateTime ModifiedAt,
+    string FilePath,
+    string Version,
+    IReadOnlyList<WikiHeadingOutlinePayload> Headings);
+
+public sealed record WikiHeadingOutlinePayload(
+    string Id,
+    int Level,
+    string Title,
+    IReadOnlyList<string> Breadcrumb,
+    string Preview);
+
+public sealed record WikiPagePatchPayload(
+    WikiPagePayload Page,
+    string Version);
 
 public sealed record WikiSearchPayload(IReadOnlyList<WikiSearchResultPayload> Pages);
 
