@@ -150,15 +150,19 @@ public class WebBoardTests
         Assert.Contains("https://unpkg.com/@knadh/oat@0.6.2/oat.min.css", html);
         Assert.Contains("https://unpkg.com/@knadh/oat@0.6.2/oat.min.js", html);
         Assert.Contains("class=\"board-list\"", html);
+        Assert.Contains("<details class=\"state-group\"", html);
+        Assert.Contains("<summary class=\"state-row\"", html);
         Assert.Contains("class=\"state-row\"", html);
+        Assert.Contains("class=\"state-tasks\"", html);
         Assert.Contains("class=\"task-row\"", html);
         Assert.Contains("dialog id=\"task-dialog\"", html);
         Assert.Contains("hx-target=\"#task-dialog\"", html);
         Assert.Contains("#task-dialog", html);
         Assert.Contains("overscroll-behavior: contain;", html);
         Assert.Contains("htmx:beforeSwap", html);
+        Assert.Contains("sessionStorage", html);
+        Assert.Contains("restoreStateGroups", html);
         Assert.DoesNotContain("class=\"state-section\"", html);
-        Assert.DoesNotContain("class=\"state-tasks\"", html);
         Assert.DoesNotContain("<select name=\"track\"", html);
         Assert.DoesNotContain("<select name=\"milestone\"", html);
         Assert.DoesNotContain("<select name=\"state\"", html);
@@ -832,13 +836,58 @@ public class WebBoardTests
         var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var html = BoardHtmlRenderer.RenderBoard(board);
 
+        Assert.Contains("<details class=\"state-group\" data-state-key=\"done\">", html);
+        Assert.Contains("<details class=\"state-group\" data-state-key=\"review\" open>", html);
+        Assert.Contains("<details class=\"state-group\" data-state-key=\"todo\" open>", html);
+        Assert.Contains("<summary class=\"state-row\" id=\"state-done\">", html);
+        Assert.Contains("<summary class=\"state-row\" id=\"state-review\">", html);
+        Assert.Contains("<summary class=\"state-row\" id=\"state-todo\">", html);
+        Assert.Contains("class=\"state-tasks\"", html);
         AssertBefore(html, "id=\"state-done\"", "Done task");
         AssertBefore(html, "Done task", "id=\"state-review\"");
         AssertBefore(html, "id=\"state-review\"", "Review task");
         AssertBefore(html, "Review task", "id=\"state-todo\"");
         AssertBefore(html, "id=\"state-todo\"", "Todo task");
         Assert.DoesNotContain("state-section", html);
-        Assert.DoesNotContain("state-tasks", html);
+    }
+
+    [Fact]
+    public async Task FilteredDoneBoardRendersDoneStateOpen()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config());
+        var task = TestData.Task("PM-0001", "Done task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "done");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery(State: "done")).Payload!;
+        var html = BoardHtmlRenderer.RenderBoard(board);
+
+        Assert.Contains("<details class=\"state-group\" data-state-key=\"done\" open>", html);
+        Assert.Contains("Done task", html);
+        Assert.DoesNotContain("data-state-key=\"review\"", html);
+        Assert.DoesNotContain("data-state-key=\"todo\"", html);
+    }
+
+    [Fact]
+    public async Task BoardStateGroupsEscapeStateHeadersAndKeepTasksVisible()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config();
+        config.TaskStates["review"] = "Review <state>";
+        var projectRoot = await workspace.CreateProject(config);
+        var task = TestData.Task("PM-0001", "Visible <task>");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "review");
+
+        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var html = BoardHtmlRenderer.RenderBoard(board);
+
+        AssertBefore(html, "Review &lt;state&gt;", "Visible &lt;task&gt;");
+        Assert.Contains("<span class=\"state-count\">1</span>", html);
+        Assert.Contains("class=\"task-row\"", html);
+        Assert.DoesNotContain("Review <state>", html);
+        Assert.DoesNotContain("Visible <task>", html);
     }
 
     [Fact]

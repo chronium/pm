@@ -266,14 +266,40 @@ main {
 }
 
 .state-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
   min-height: 34px;
   padding: 8px 12px;
   background: var(--muted);
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.state-row::-webkit-details-marker {
+  color: var(--muted-foreground);
+}
+
+.state-row::marker {
+  color: var(--muted-foreground);
+}
+
+.state-row-content {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 20px);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.state-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline-offset: -2px;
+}
+
+.state-group:last-child:not([open]) > .state-row,
+.state-group:last-child .state-tasks > :last-child {
+  border-bottom: 0;
 }
 
 .state-name {

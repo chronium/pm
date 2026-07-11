@@ -223,7 +223,7 @@ public static class BoardHtmlRenderer
         var rows = board.States
             .Where(state => string.IsNullOrWhiteSpace(board.Query.State) || state.Key == board.Query.State)
             .Reverse()
-            .Select(state => RenderStateRows(board, state))
+            .Select(state => RenderStateGroup(board, state))
             .ToList();
 
         var tasks = board.Tasks.Count == 0
@@ -588,7 +588,7 @@ public static class BoardHtmlRenderer
         }));
     }
 
-    private static string RenderStateRows(BoardData board, BoardOption state)
+    private static string RenderStateGroup(BoardData board, BoardOption state)
     {
         var tasks = board.Tasks
             .Where(task => task.State == state.Key)
@@ -600,9 +600,20 @@ public static class BoardHtmlRenderer
             .Replace("{{stateName}}", H(state.Name), StringComparison.Ordinal)
             .Replace("{{count}}", H(tasks.Count.ToString()), StringComparison.Ordinal);
 
-        return string.IsNullOrWhiteSpace(rows)
-            ? stateRow
-            : stateRow + Environment.NewLine + rows;
+        return Template("Board/StateGroup.html")
+            .Replace("{{stateKey}}", H(state.Key), StringComparison.Ordinal)
+            .Replace("{{open}}", ShouldOpenStateGroup(board, state) ? " open" : string.Empty,
+                StringComparison.Ordinal)
+            .Replace("{{stateRow}}", stateRow, StringComparison.Ordinal)
+            .Replace("{{tasks}}", rows, StringComparison.Ordinal);
+    }
+
+    private static bool ShouldOpenStateGroup(BoardData board, BoardOption state)
+    {
+        if (!string.IsNullOrWhiteSpace(board.Query.State))
+            return true;
+
+        return !string.Equals(state.Key, "done", StringComparison.Ordinal);
     }
 
     private static string RenderOptions(IReadOnlyList<BoardOption> options, string? selected)

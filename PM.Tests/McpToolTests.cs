@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol.Server;
 using PM.Application;
 using PM.Mcp;
 using PM.Project;
@@ -548,11 +550,11 @@ public class McpToolTests
         var outline = tools.OutlineWikiPage("architecture/rendering");
         var heading = Assert.Single(outline.Data!.Headings, item => item.Title == "Pipeline");
         var patched = tools.PatchWikiPage("architecture/rendering", outline.Data.Version, heading.Id,
-            "append_to_section", "New details.");
+            WikiPatchOperation.AppendToSection, "New details.");
         var stale = tools.PatchWikiPage("architecture/rendering", outline.Data.Version, heading.Id,
-            "append_to_section", "Too late.");
+            WikiPatchOperation.AppendToSection, "Too late.");
         var missingHeading = tools.PatchWikiPage("architecture/rendering", patched.Data!.Version, "h2-missing-1",
-            "append_to_section", "No target.");
+            WikiPatchOperation.AppendToSection, "No target.");
 
         Assert.True(outline.Success);
         Assert.Equal("architecture/rendering", outline.Data.Path);
@@ -569,6 +571,31 @@ public class McpToolTests
 
         Assert.Equal("stale_wiki_page", stale.ErrorCode);
         Assert.Equal("missing_wiki_heading", missingHeading.ErrorCode);
+    }
+
+    [Fact]
+    public void PatchWikiPageOperationSchemaAdvertisesAcceptedEnumValues()
+    {
+        var tools = CreateTools(new ProjectRoot());
+        var method = typeof(PmMcpTools).GetMethod(nameof(PmMcpTools.PatchWikiPage))!;
+        var tool = McpServerTool.Create(method, tools);
+        var schemaJson = JsonSerializer.Serialize(tool.ProtocolTool.InputSchema);
+        using var document = JsonDocument.Parse(schemaJson);
+        var root = document.RootElement;
+        var operation = root.GetProperty("properties").GetProperty("operation");
+
+        Assert.Equal("patch_wiki_page", tool.ProtocolTool.Name);
+        Assert.Contains("schema enum", tool.ProtocolTool.Description);
+        Assert.Equal(WikiPatchOperation.AppendToSection,
+            JsonSerializer.Deserialize<WikiPatchOperation>("\"append_to_section\""));
+        Assert.Equal([
+                "append_to_section",
+                "prepend_to_section",
+                "replace_section_body",
+                "insert_before_heading",
+                "insert_after_section",
+            ],
+            ResolveSchemaEnumValues(root, operation));
     }
 
     [Fact]
@@ -831,6 +858,39 @@ public class McpToolTests
             new BoardService(projectRoot),
             new WikiService(projectRoot),
             new ProjectValidationService(projectRoot));
+    }
+
+    private static List<string> ResolveSchemaEnumValues(JsonElement root, JsonElement schema)
+    {
+        if (schema.TryGetProperty("enum", out var enumValues))
+            return enumValues.EnumerateArray().Select(value => value.GetString() ?? "").ToList();
+
+        if (schema.TryGetProperty("$ref", out var reference))
+        {
+            const string definitionsPrefix = "#/$defs/";
+            var referenceValue = reference.GetString();
+            if (referenceValue?.StartsWith(definitionsPrefix, StringComparison.Ordinal) == true &&
+                root.TryGetProperty("$defs", out var definitions) &&
+                definitions.TryGetProperty(referenceValue[definitionsPrefix.Length..], out var definition))
+            {
+                return ResolveSchemaEnumValues(root, definition);
+            }
+        }
+
+        foreach (var keyword in new[] { "anyOf", "oneOf" })
+        {
+            if (!schema.TryGetProperty(keyword, out var alternatives))
+                continue;
+
+            foreach (var alternative in alternatives.EnumerateArray())
+            {
+                var values = ResolveSchemaEnumValues(root, alternative);
+                if (values.Count > 0)
+                    return values;
+            }
+        }
+
+        return [];
     }
 
     private sealed class RecordingNextIdService(

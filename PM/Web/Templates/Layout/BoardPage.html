@@ -11,11 +11,17 @@
 {{styles}}
   </style>
   <script>
+    let restoringStateGroups = false;
+
     document.addEventListener('htmx:beforeSwap', (event) => {
       if ((event.detail.target.id === 'task-dialog' || event.detail.target.id === 'settings') &&
           event.detail.xhr.status >= 400) {
         event.detail.shouldSwap = true;
         event.detail.isError = false;
+      }
+
+      if (event.detail.target.id === 'board') {
+        restoringStateGroups = true;
       }
     });
 
@@ -25,12 +31,62 @@
           !event.detail.target.querySelector('[data-close-dialog]')) {
         event.detail.target.showModal();
       }
+
+      if (event.detail.target.id === 'board') {
+        restoreStateGroups(event.detail.target);
+      }
     });
 
     document.addEventListener('click', (event) => {
       if (event.target.matches('[data-confirm-remove]')) {
         document.getElementById('remove-confirmation')?.removeAttribute('hidden');
       }
+    });
+
+    function restoreStateGroups(root = document) {
+      restoringStateGroups = true;
+      root.querySelectorAll('.state-group[data-state-key]').forEach((group) => {
+        const stored = readStateGroupPreference(group.dataset.stateKey);
+        if (stored !== null) {
+          group.open = stored === 'true';
+        }
+      });
+      setTimeout(() => {
+        restoringStateGroups = false;
+      }, 0);
+    }
+
+    function readStateGroupPreference(stateKey) {
+      try {
+        return sessionStorage.getItem(`pm.state.${stateKey}.open`);
+      } catch {
+        return null;
+      }
+    }
+
+    function writeStateGroupPreference(stateKey, open) {
+      try {
+        sessionStorage.setItem(`pm.state.${stateKey}.open`, open ? 'true' : 'false');
+      } catch {
+      }
+    }
+
+    function handleStateGroupToggle(event) {
+      if (restoringStateGroups) {
+        return;
+      }
+
+      const group = event.target.closest?.('.state-group[data-state-key]');
+      if (group) {
+        writeStateGroupPreference(group.dataset.stateKey, group.open);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      restoreStateGroups();
+      setTimeout(() => {
+        document.addEventListener('toggle', handleStateGroupToggle, true);
+      }, 0);
     });
   </script>
 </head>

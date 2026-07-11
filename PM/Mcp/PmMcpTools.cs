@@ -465,15 +465,16 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "patch_wiki_page", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Applies a guarded body-only wiki patch under or around a heading from outline_wiki_page.")]
+    [Description("Applies a guarded body-only wiki patch under or around a heading from outline_wiki_page. Operation values are exposed by the tool schema enum.")]
     public McpToolResponse<WikiPagePatchPayload> PatchWikiPage(
         string path,
         string version,
         string headingId,
-        string operation,
+        [Description("Patch operation. Accepted values are represented by the schema enum.")]
+        WikiPatchOperation operation,
         string markdown)
     {
-        var result = wikiService.PatchPageSection(path, version, headingId, operation, markdown);
+        var result = wikiService.PatchPageSection(path, version, headingId, ToOperationValue(operation), markdown);
         return result.Success
             ? McpToolResponse<WikiPagePatchPayload>.Ok($"Patched wiki page {result.Payload!.Page.Path}.",
                 new WikiPagePatchPayload(ToWikiPagePayload(result.Payload.Page), result.Payload.Version))
@@ -753,5 +754,18 @@ public sealed class PmMcpTools(
     private static string? NormalizeFilter(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string ToOperationValue(WikiPatchOperation operation)
+    {
+        return operation switch
+        {
+            WikiPatchOperation.AppendToSection => "append_to_section",
+            WikiPatchOperation.PrependToSection => "prepend_to_section",
+            WikiPatchOperation.ReplaceSectionBody => "replace_section_body",
+            WikiPatchOperation.InsertBeforeHeading => "insert_before_heading",
+            WikiPatchOperation.InsertAfterSection => "insert_after_section",
+            _ => string.Empty,
+        };
     }
 }
