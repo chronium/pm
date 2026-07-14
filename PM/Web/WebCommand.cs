@@ -43,7 +43,7 @@ public class WebCommand(
 
         var app = builder.Build();
         MapEndpoints(app, boardService, taskService, configService, wikiService, validationService);
-        app.MapApiV1(configService);
+        app.MapApiV1(projectRoot, configService, new ResourceRevisionService(projectRoot, boardService));
         app.MapOpenApi("/openapi/{documentName}.json");
 
         await app.StartAsync(cancellationToken);

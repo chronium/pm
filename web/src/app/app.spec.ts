@@ -24,7 +24,10 @@ describe('application shell', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl(url);
     fixture.detectChanges();
-    TestBed.inject(HttpTestingController).expectOne('/api/v1/project').flush({ name: projectName });
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/project').flush({
+      name: projectName,
+      revision: 'project-revision',
+    });
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, router };

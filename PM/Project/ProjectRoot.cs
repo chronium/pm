@@ -47,11 +47,35 @@ public class ProjectRoot : IProjectRoot
     public string StatesPath => Path.Combine(RootPath!, GlobalConfig.StatesDirName);
     public string WikiPath => Path.Combine(RootPath!, GlobalConfig.WikiDirName);
     public string TaskOrderPath => Path.Combine(RootPath!, GlobalConfig.TaskOrderFile);
+    public string ConfigPath => Path.Combine(RootPath!, GlobalConfig.PmConfigFile);
 
     public bool Exists { get; private set; }
     public string RootPath { get; private set; }
 
     public ProjectConfig? Config { get; private set; }
+
+    public bool TryReloadConfig()
+    {
+        if (!Exists || RootPath == null) return false;
+
+        try
+        {
+            var config = ProjectConfig.ReadConfig(this);
+            if (string.IsNullOrWhiteSpace(config.Name) ||
+                string.IsNullOrWhiteSpace(config.IdPrefix) ||
+                config.IdWidth <= 0 ||
+                config.TaskStates is not { Count: > 0 } ||
+                config.Tracks is not { Count: > 0 })
+                return false;
+
+            Config = config;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private static bool TryFindProjectRoot([MaybeNullWhen(false)] out string projectRoot)
     {

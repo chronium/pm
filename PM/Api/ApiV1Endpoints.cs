@@ -4,10 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.WebUtilities;
 using PM.Application;
+using PM.Project;
 
 namespace PM.Api;
 
-public sealed record ProjectResponse(string Name);
+public sealed record ProjectResponse(string Name, string Revision);
 
 public sealed class ApiProblemDetails : ProblemDetails
 {
@@ -21,27 +22,59 @@ public static class ApiV1Endpoints
 
     public static RouteGroupBuilder MapApiV1(
         this IEndpointRouteBuilder endpoints,
+        ProjectRoot projectRoot,
         ProjectConfigService configService,
+        ResourceRevisionService revisions,
         Action<RouteGroupBuilder>? configure = null)
     {
         var api = endpoints.MapGroup(Prefix)
+            .AddEndpointFilter((context, next) => ReloadProjectConfig(context, next, projectRoot))
             .AddEndpointFilter(WriteRequestFilter);
 
         api.MapGet("/project", (HttpRequest request) =>
             {
                 var result = configService.GetSettings();
-                return result.Success
-                    ? Results.Ok(new ProjectResponse(result.Payload!.ProjectName))
-                    : ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                if (!result.Success)
+                    return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+
+                var revisionResult = revisions.GetProjectConfigRevision();
+                if (!revisionResult.Success)
+                    return ApiResults.Failure(revisionResult.ErrorCode, revisionResult.Message, request.Path);
+
+                var revision = revisionResult.Payload!;
+                var notModified = ApiPreconditions.EvaluateIfNoneMatch(request, revision);
+                if (notModified != null) return notModified;
+
+                ApiPreconditions.SetETag(request.HttpContext.Response, revision);
+                return Results.Ok(new ProjectResponse(result.Payload!.ProjectName, revision));
             })
             .WithName("GetProject")
             .WithSummary("Get project metadata")
             .Produces<ProjectResponse>()
+            .WithRevisionedReadMetadata()
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
 
         configure?.Invoke(api);
         return api;
+    }
+
+    private static ValueTask<object?> ReloadProjectConfig(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next,
+        ProjectRoot projectRoot)
+    {
+        if (!projectRoot.Exists)
+            return Execute(next, context);
+        if (!projectRoot.TryReloadConfig())
+            return ValueTask.FromResult<object?>(ApiResults.Problem(
+                StatusCodes.Status400BadRequest,
+                "invalid_project",
+                "The project configuration is invalid.",
+                context.HttpContext.Request.Path));
+
+        return Execute(next, context);
     }
 
     private static async ValueTask<object?> WriteRequestFilter(
@@ -90,6 +123,80 @@ public static class ApiV1Endpoints
                 context.HttpContext.Request.Path);
         }
     }
+}
+
+public static class ApiPreconditions
+{
+    public static string FormatETag(string revision) => $"\"{revision}\"";
+
+    public static void SetETag(HttpResponse response, string revision) =>
+        response.Headers.ETag = FormatETag(revision);
+
+    public static IResult? EvaluateIfNoneMatch(HttpRequest request, string currentRevision)
+    {
+        if (!request.Headers.TryGetValue("If-None-Match", out var values)) return null;
+
+        foreach (var candidate in Parse(values))
+        {
+            if (candidate.Wildcard || string.Equals(candidate.Tag, currentRevision, StringComparison.Ordinal))
+            {
+                SetETag(request.HttpContext.Response, currentRevision);
+                return Results.StatusCode(StatusCodes.Status304NotModified);
+            }
+        }
+
+        return null;
+    }
+
+    public static IResult? RequireIfMatch(HttpRequest request, string currentRevision)
+    {
+        if (!request.Headers.TryGetValue("If-Match", out var values) ||
+            string.IsNullOrWhiteSpace(values.ToString()))
+            return ApiResults.Problem(
+                StatusCodes.Status428PreconditionRequired,
+                "precondition_required",
+                "An If-Match header is required.",
+                request.Path);
+
+        foreach (var candidate in Parse(values))
+        {
+            if (candidate.Wildcard ||
+                (!candidate.Weak && string.Equals(candidate.Tag, currentRevision, StringComparison.Ordinal)))
+                return null;
+        }
+
+        return ApiResults.Problem(
+            StatusCodes.Status412PreconditionFailed,
+            "precondition_failed",
+            "The resource has changed. Refetch it and retry the request.",
+            request.Path);
+    }
+
+    private static IEnumerable<EntityTag> Parse(IEnumerable<string?> headerValues)
+    {
+        foreach (var headerValue in headerValues)
+        {
+            if (headerValue == null) continue;
+            foreach (var rawPart in headerValue.Split(','))
+            {
+                var part = rawPart.Trim();
+                if (part == "*")
+                {
+                    yield return new EntityTag(true, false, null);
+                    continue;
+                }
+
+                var weak = part.StartsWith("W/", StringComparison.OrdinalIgnoreCase);
+                var tag = weak ? part[2..].TrimStart() : part;
+                if (tag.Length < 2 || tag[0] != '"' || tag[^1] != '"') continue;
+                var opaque = tag[1..^1];
+                if (opaque.Contains('"') || opaque.Any(character => char.IsControl(character))) continue;
+                yield return new EntityTag(false, weak, opaque);
+            }
+        }
+    }
+
+    private sealed record EntityTag(bool Wildcard, bool Weak, string? Tag);
 }
 
 public static class ApiResults

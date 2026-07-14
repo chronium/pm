@@ -28,7 +28,161 @@ public class ApiContractTests
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
-            Assert.Equal("{\"name\":\"Contract Project\"}", json);
+            var body = JsonDocument.Parse(json).RootElement;
+            var revision = body.GetProperty("revision").GetString();
+            Assert.Equal("Contract Project", body.GetProperty("name").GetString());
+            Assert.Matches("^[0-9a-f]{64}$", revision!);
+            Assert.Equal(ApiPreconditions.FormatETag(revision!), response.Headers.ETag?.Tag);
+        }
+    }
+
+    [Theory]
+    [InlineData("\"{revision}\"")]
+    [InlineData("W/\"{revision}\"")]
+    [InlineData("\"stale\", W/\"{revision}\"")]
+    [InlineData("*")]
+    public async Task ProjectConditionalGetReturnsEmptyNotModifiedResponse(string header)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var revision = new ResourceRevisionService(root, new BoardService(root))
+            .GetProjectConfigRevision().Payload!;
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/project");
+            request.Headers.TryAddWithoutValidation("If-None-Match", header.Replace("{revision}", revision));
+            var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.NotModified, response.StatusCode);
+            Assert.Equal(string.Empty, await response.Content.ReadAsStringAsync());
+            Assert.Equal(ApiPreconditions.FormatETag(revision), response.Headers.ETag?.Tag);
+        }
+    }
+
+    [Fact]
+    public async Task StaleProjectConditionalGetReturnsCurrentRepresentation()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/project");
+            request.Headers.TryAddWithoutValidation("If-None-Match", "\"stale\"");
+            var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectReloadsExternalConfigurationWithoutRestartingAndRetainsLastValidValue()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(name: "Before"));
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var before = await client.GetFromJsonAsync<ProjectResponse>("/api/v1/project");
+            var changed = TestData.Config(name: "After");
+            File.WriteAllText(root.ConfigPath, global::PM.YamlSerde.Serialize(changed));
+
+            var after = await client.GetFromJsonAsync<ProjectResponse>("/api/v1/project");
+            Assert.Equal("After", after!.Name);
+            Assert.NotEqual(before!.Revision, after.Revision);
+
+            File.WriteAllText(root.ConfigPath, "name: [unterminated");
+            var invalid = await client.GetAsync("/api/v1/project");
+            var problem = await invalid.Content.ReadFromJsonAsync<ApiProblemDetails>();
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            Assert.Equal("invalid_project", problem!.ErrorCode);
+            Assert.Equal("After", root.Config!.Name);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, HttpStatusCode.PreconditionRequired, "precondition_required", false)]
+    [InlineData("\"stale\"", HttpStatusCode.PreconditionFailed, "precondition_failed", false)]
+    [InlineData("malformed", HttpStatusCode.PreconditionFailed, "precondition_failed", false)]
+    [InlineData("W/\"current\"", HttpStatusCode.PreconditionFailed, "precondition_failed", false)]
+    [InlineData("\"current\"", HttpStatusCode.OK, null, true)]
+    [InlineData("\"stale\", \"current\"", HttpStatusCode.OK, null, true)]
+    [InlineData("*", HttpStatusCode.OK, null, true)]
+    public async Task MutationPreconditionsRunBeforeServiceCallback(
+        string? ifMatch,
+        HttpStatusCode expectedStatus,
+        string? expectedCode,
+        bool mutated)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var calls = 0;
+        var (app, client) = await CreateApiClient(root, api =>
+            api.MapPut("/revision-test", (HttpRequest request) =>
+            {
+                var failure = ApiPreconditions.RequireIfMatch(request, "current");
+                if (failure != null) return failure;
+                calls++;
+                ApiPreconditions.SetETag(request.HttpContext.Response, "next");
+                return Results.Ok(new { revision = "next" });
+            }).WithRevisionedMutationMetadata());
+        await using (app)
+        using (client)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Put, "/api/v1/revision-test")
+            {
+                Content = JsonContent.Create(new { value = true }),
+            };
+            request.Headers.Add(ApiV1Endpoints.ClientHeader, "test");
+            if (ifMatch != null)
+                request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
+
+            var response = await client.SendAsync(request);
+            Assert.Equal(expectedStatus, response.StatusCode);
+            Assert.Equal(mutated ? 1 : 0, calls);
+            if (expectedCode != null)
+            {
+                var problem = await response.Content.ReadFromJsonAsync<ApiProblemDetails>();
+                Assert.Equal(expectedCode, problem!.ErrorCode);
+                Assert.Equal((int)expectedStatus, problem.Status);
+                Assert.Equal($"https://pm.dev/problems/{expectedCode}", problem.Type);
+                Assert.Equal("/api/v1/revision-test", problem.Instance);
+                Assert.False(response.Headers.Contains("ETag"));
+            }
+            else
+            {
+                var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+                Assert.Equal("next", body.GetProperty("revision").GetString());
+                Assert.Equal("\"next\"", response.Headers.ETag?.Tag);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task OpenApiDocumentsRevisionedMutationPreconditions()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var (app, client) = await CreateApiClient(root, api =>
+            api.MapPut("/revision-test", () => Results.Ok(new { revision = "next" }))
+                .WithName("RevisionTest")
+                .Produces<object>()
+                .WithRevisionedMutationMetadata());
+        await using (app)
+        using (client)
+        {
+            var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json")).RootElement;
+            var operation = document.GetProperty("paths").GetProperty("/api/v1/revision-test").GetProperty("put");
+            var ifMatch = Assert.Single(operation.GetProperty("parameters").EnumerateArray());
+            Assert.Equal("If-Match", ifMatch.GetProperty("name").GetString());
+            Assert.True(ifMatch.GetProperty("required").GetBoolean());
+            Assert.True(operation.GetProperty("responses").TryGetProperty("412", out _));
+            Assert.True(operation.GetProperty("responses").TryGetProperty("428", out _));
+            Assert.True(operation.GetProperty("responses").GetProperty("200").GetProperty("headers")
+                .TryGetProperty("ETag", out _));
         }
     }
 
@@ -175,7 +329,14 @@ public class ApiContractTests
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.StartsWith("3.1.", document.GetProperty("openapi").GetString());
             Assert.True(paths.TryGetProperty("/api/v1/project", out var project));
-            Assert.True(project.TryGetProperty("get", out _));
+            Assert.True(project.TryGetProperty("get", out var get));
+            Assert.Contains(get.GetProperty("parameters").EnumerateArray(), parameter =>
+                parameter.GetProperty("name").GetString() == "If-None-Match" &&
+                parameter.GetProperty("in").GetString() == "header");
+            Assert.True(get.GetProperty("responses").TryGetProperty("304", out var notModified));
+            Assert.True(notModified.GetProperty("headers").TryGetProperty("ETag", out _));
+            Assert.True(get.GetProperty("responses").GetProperty("200").GetProperty("headers")
+                .TryGetProperty("ETag", out _));
             Assert.False(paths.TryGetProperty("/", out _));
             Assert.False(paths.TryGetProperty("/board", out _));
         }
@@ -196,7 +357,8 @@ public class ApiContractTests
         WebCommand.ConfigureApiServices(builder.Services);
         var app = builder.Build();
         var configService = new ProjectConfigService(projectRoot);
-        app.MapApiV1(configService, configure);
+        app.MapApiV1(projectRoot, configService,
+            new ResourceRevisionService(projectRoot, new BoardService(projectRoot)), configure);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapLegacy)
             app.MapGet("/board", () => Results.Content("legacy", "text/html"));

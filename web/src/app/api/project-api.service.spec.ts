@@ -18,7 +18,7 @@ describe('ProjectApiService', () => {
 
     const request = TestBed.inject(HttpTestingController).expectOne('/api/v1/project');
     expect(request.request.method).toBe('GET');
-    request.flush({ name: 'Typed Project' });
+    request.flush({ name: 'Typed Project', revision: 'project-revision' });
     await TestBed.tick();
 
     expect(service.projectName()).toBe('Typed Project');
