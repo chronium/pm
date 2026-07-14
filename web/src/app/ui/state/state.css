@@ -1,0 +1,35 @@
+:host {
+  display: block;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pm-space-2);
+  min-height: 96px;
+  padding: var(--pm-space-4);
+  border: 1px dashed var(--pm-border-subtle);
+  border-radius: var(--pm-radius-md);
+  color: var(--pm-text-muted);
+  text-align: center;
+}
+
+.state--error {
+  border-color: var(--pm-danger);
+  background: var(--pm-danger-soft);
+  color: var(--pm-danger);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--pm-border-strong);
+  border-top-color: var(--pm-accent);
+  border-radius: 50%;
+  animation: pm-spin 700ms linear infinite;
+}
+
+@keyframes pm-spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,26 @@
+pm-form-field .field {
+  display: grid;
+  gap: var(--pm-space-1);
+}
+
+pm-form-field label {
+  color: var(--pm-text-primary);
+  font-size: var(--pm-font-size-sm);
+  font-weight: 600;
+}
+
+pm-form-field [pmControl] {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px var(--pm-space-2);
+  border: 1px solid var(--pm-border-strong);
+  border-radius: var(--pm-radius-sm);
+  background: var(--pm-surface-raised);
+  color: var(--pm-text-primary);
+}
+
+pm-form-field [pmFieldMessage] {
+  margin: 0;
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}

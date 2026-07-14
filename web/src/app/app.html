@@ -1,0 +1,46 @@
+<header class="topbar">
+  <button
+    #menuButton
+    class="icon-button menu-button"
+    type="button"
+    aria-label="Toggle navigation"
+    aria-controls="pm-sidebar"
+    [attr.aria-expanded]="layout.mobileSidebarOpen()"
+    (click)="toggleNavigation()"
+  >
+    <ng-icon name="cssMenu" aria-hidden="true" />
+  </button>
+
+  <a class="brand" routerLink="/tasks" aria-label="PM home">PM</a>
+
+  <nav class="mode-navigation" aria-label="Workspace">
+    <a
+      routerLink="/tasks"
+      routerLinkActive="active"
+      #tasksLink="routerLinkActive"
+      [attr.aria-current]="tasksLink.isActive ? 'page' : null"
+    >Tasks</a>
+    <a
+      routerLink="/wiki"
+      routerLinkActive="active"
+      #wikiLink="routerLinkActive"
+      [attr.aria-current]="wikiLink.isActive ? 'page' : null"
+    >Wiki</a>
+  </nav>
+
+  <div class="search-slot" aria-hidden="true"></div>
+
+  <button
+    class="icon-button"
+    type="button"
+    [attr.aria-label]="theme.actionLabel()"
+    [title]="theme.actionLabel()"
+    (click)="theme.cycle()"
+  >
+    <ng-icon [name]="theme.iconName()" aria-hidden="true" />
+  </button>
+</header>
+
+<div class="app-route">
+  <router-outlet />
+</div>

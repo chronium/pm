@@ -7,6 +7,12 @@ riderModule.iml
 /next-id-worker/node_modules/
 /next-id-worker/.wrangler/
 
+/web/node_modules/
+/web/.angular/
+/web/dist/
+/web/coverage/
+/web/storybook-static/
+
 *.db*
 
 *.cast

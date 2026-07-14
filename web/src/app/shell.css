@@ -1,0 +1,119 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--pm-sidebar-width) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.sidebar {
+  min-width: 0;
+  padding: var(--pm-space-3) var(--pm-space-2);
+  border-right: 1px solid var(--pm-border-subtle);
+  background: var(--pm-surface-sidebar);
+}
+
+.sidebar-heading {
+  padding: var(--pm-space-1) var(--pm-space-2) var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar a {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--pm-space-2);
+  border-radius: var(--pm-radius-sm);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  text-decoration: none;
+}
+
+.sidebar a:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+.sidebar a.active {
+  background: var(--pm-accent-soft);
+  color: var(--pm-accent-strong);
+  font-weight: 600;
+}
+
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--pm-surface-canvas);
+}
+
+.backdrop {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .shell {
+    display: block;
+    position: relative;
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 50;
+    inset: var(--pm-topbar-height) auto 0 0;
+    width: min(var(--pm-sidebar-width), calc(100vw - 48px));
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition: transform var(--pm-motion-normal) var(--pm-ease-standard), visibility 0s var(--pm-motion-normal);
+  }
+
+  .drawer-open .sidebar {
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+
+  .backdrop {
+    position: fixed;
+    z-index: 40;
+    inset: var(--pm-topbar-height) 0 0;
+    display: block;
+    visibility: hidden;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    opacity: 0;
+    background: var(--pm-overlay-backdrop);
+    transition: opacity var(--pm-motion-normal) var(--pm-ease-standard), visibility 0s var(--pm-motion-normal);
+  }
+
+  .drawer-open .backdrop {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
+  }
+
+  .content {
+    height: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .backdrop {
+    transition-duration: 0.01ms;
+  }
+}

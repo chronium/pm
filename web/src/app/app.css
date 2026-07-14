@@ -1,0 +1,111 @@
+:host {
+  display: grid;
+  grid-template-rows: var(--pm-topbar-height) minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--pm-surface-canvas);
+  color: var(--pm-text-primary);
+}
+
+.topbar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--pm-space-2);
+  min-width: 0;
+  height: var(--pm-topbar-height);
+  padding: 0 var(--pm-space-3);
+  border-bottom: 1px solid var(--pm-border-subtle);
+  background: var(--pm-surface-raised);
+}
+
+.brand {
+  color: var(--pm-text-primary);
+  font-size: var(--pm-font-size-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.mode-navigation {
+  display: flex;
+  align-self: stretch;
+  margin-left: var(--pm-space-3);
+}
+
+.mode-navigation a {
+  display: grid;
+  place-items: center;
+  min-width: 56px;
+  padding: 0 var(--pm-space-3);
+  border-bottom: 2px solid transparent;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.mode-navigation a:hover {
+  color: var(--pm-text-primary);
+  background: var(--pm-surface-hover);
+}
+
+.mode-navigation a.active {
+  border-bottom-color: var(--pm-accent);
+  color: var(--pm-text-primary);
+}
+
+.search-slot {
+  flex: 1;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--pm-radius-sm);
+  background: transparent;
+  color: var(--pm-text-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+.icon-button ng-icon {
+  font-size: 18px;
+}
+
+.menu-button {
+  display: none;
+}
+
+.app-route {
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    padding-inline: var(--pm-space-2);
+  }
+
+  .menu-button {
+    display: inline-grid;
+  }
+
+  .mode-navigation {
+    margin-left: var(--pm-space-1);
+  }
+
+  .mode-navigation a {
+    min-width: 50px;
+    padding-inline: var(--pm-space-2);
+  }
+}

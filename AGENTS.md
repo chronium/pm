@@ -9,6 +9,8 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 
 ## Repository Workflow
 
+- Commit each completed PM task before beginning the next task. Keep the task implementation, tests, documentation, and associated `.pm` state update in the same commit; do not combine implementations for multiple task IDs in one commit.
+- Prefix every task commit subject with its task ID using the format `<TASK-ID>: <imperative summary>`, for example `PM-0048: Add Angular component Storybook`.
 - Restore .NET dependencies with elevated shell: `dotnet restore PM.slnx`.
 - Build the .NET solution: `dotnet build PM.slnx -m:1 --no-restore`.
 - Run .NET tests: `dotnet test PM.slnx -m:1 --no-restore`.
@@ -19,8 +21,17 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Worker dev server: `npm run dev` in `next-id-worker/`.
 - Worker deploy: `npm run deploy` in `next-id-worker/`.
 - Worker D1 migrations: `npm run migrate:local` or `npm run migrate:remote` in `next-id-worker/`.
+- Angular prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11.
+- Angular dependencies: run `socket npm install` in `web/`.
+- Angular dev server: run `npm start` in `web/`; it proxies `/api` to `http://127.0.0.1:51237`.
+- Angular strict build check: run `npm run check` in `web/`.
+- Angular tests: run `npm test` in `web/`, or `npm run test:watch` for interactive development.
+- Angular production build: run `npm run build` in `web/`.
+- Storybook component workshop: run `npm run storybook` in `web/`.
+- Storybook browser tests: run `npm run test:storybook` in `web/`; install its Chromium runtime with `socket npx playwright install chromium` when needed.
+- Storybook production build: run `npm run build-storybook` in `web/`.
 
-Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. No Playwright test command is configured in this repository. Use `playwright-cli` for ad hoc UI validation when available; if formal Playwright tests are added later, document their command before relying on it.
+Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. Normal .NET build and test commands do not install or build the Angular workspace. Storybook browser tests use Playwright through `npm run test:storybook`; no standalone Playwright end-to-end suite is configured. Use `playwright-cli` for ad hoc UI validation when available.
 
 No dedicated type-check, lint, or formatting commands are configured in this repository. Do not invent them. Before work is complete, run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; worker changes need `npm test` from `next-id-worker/`.
 
@@ -32,6 +43,7 @@ No dedicated type-check, lint, or formatting commands are configured in this rep
 - `PM/Application/` contains service-level behavior such as `TaskService`, `BoardService`, and `AppResult`. Put cross-command workflow logic here rather than in renderers or command handlers.
 - `PM/Web/` contains the local web board command, endpoint mapping, HTML rendering, and template loading.
 - `PM/Web/Templates/` contains embedded HTML fragments and `styles.css`. Templates are embedded by `PM.csproj`; keep template names stable and update renderer tests when changing markup.
+- `web/` contains the standalone Angular 22 replacement client. Keep it zoneless, strictly typed, routed, and independent from the normal .NET build until the release integration work explicitly changes that boundary.
 - `PM/Mcp/` contains MCP server host, tools, and response shapes.
 - `PM/Files/` contains file-system abstractions.
 - `PM.Tests/` contains xUnit tests and test helpers. Add tests near the behavior being changed, especially for rendered HTML and file mutation behavior.
@@ -44,7 +56,7 @@ Prefer extending established patterns over introducing new abstractions. Do not 
 
 ## UI Principles
 
-The web UI is a focused professional tool: server-rendered HTML fragments, htmx interactions, minimal JavaScript, and CSS variables in `PM/Web/Templates/styles.css`. Do not broadly restyle existing screens unless the task explicitly requires it.
+The existing .NET web UI is a focused professional tool built from server-rendered HTML fragments, htmx interactions, minimal JavaScript, and CSS variables in `PM/Web/Templates/styles.css`. The replacement client lives separately in `web/`. Do not broadly restyle existing screens unless the task explicitly requires it.
 
 Non-negotiables:
 

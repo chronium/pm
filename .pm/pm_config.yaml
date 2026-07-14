@@ -11,3 +11,6 @@ tracks:
   ISSUE: PM Tool Issues
 milestones:
   mcp-smoke: MCP Smoke Test
+  angular-web: Angular Web UI Migration
+milestonePriorities:
+  angular-web: high

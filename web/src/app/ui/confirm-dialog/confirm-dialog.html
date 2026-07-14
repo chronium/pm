@@ -1,0 +1,14 @@
+<dialog #dialog class="dialog" [attr.aria-labelledby]="headingId" (cancel)="handleNativeCancel($event)">
+  <div class="dialog-body">
+    <h2 [id]="headingId">{{ heading() }}</h2>
+    <p>{{ message() }}</p>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" class="pm-button pm-button--secondary" autofocus [disabled]="pending()" (click)="cancel()">
+      {{ cancelLabel() }}
+    </button>
+    <button type="button" class="pm-button pm-button--danger" [disabled]="pending()" (click)="confirm()">
+      {{ pending() ? 'Working…' : confirmLabel() }}
+    </button>
+  </div>
+</dialog>
