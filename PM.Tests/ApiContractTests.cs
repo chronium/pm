@@ -8,11 +8,12 @@ using Microsoft.AspNetCore.Http;
 using PM.Api;
 using PM.Application;
 using PM.Project;
+using PM.Tasks;
 using PM.Web;
 
 namespace PM.Tests;
 
-public class ApiContractTests
+public partial class ApiContractTests
 {
     [Fact]
     public async Task ProjectMetadataReturnsDirectCamelCaseJson()
@@ -348,7 +349,8 @@ public class ApiContractTests
     private static async Task<(WebApplication App, HttpClient Client)> CreateApiClient(
         ProjectRoot projectRoot,
         Action<Microsoft.AspNetCore.Routing.RouteGroupBuilder>? configure = null,
-        bool mapLegacy = false)
+        bool mapLegacy = false,
+        INextIdService? nextIdService = null)
     {
         var port = GetAvailablePort();
         var url = $"http://127.0.0.1:{port}";
@@ -357,8 +359,10 @@ public class ApiContractTests
         WebCommand.ConfigureApiServices(builder.Services);
         var app = builder.Build();
         var configService = new ProjectConfigService(projectRoot);
-        app.MapApiV1(projectRoot, configService,
-            new ResourceRevisionService(projectRoot, new BoardService(projectRoot)), configure);
+        var boardService = new BoardService(projectRoot);
+        app.MapApiV1(projectRoot, configService, boardService,
+            new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
+            new ResourceRevisionService(projectRoot, boardService), configure);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapLegacy)
             app.MapGet("/board", () => Results.Content("legacy", "text/html"));
@@ -372,5 +376,21 @@ public class ApiContractTests
         using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private sealed class ApiNextIdService(bool healthy = true) : INextIdService
+    {
+        private int _nextId;
+        public Task<int> GetNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default) => Task.FromResult(++_nextId);
+        public Task<int> PeekNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default) => Task.FromResult(_nextId + 1);
+        public Task<int?> PeekExistingNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default) => Task.FromResult<int?>(_nextId + 1);
+        public Task<ProjectRegistration> RegisterProject(ProjectRoot projectRoot,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ProjectRegistration("api-test", "recovery-test"));
+        public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default) =>
+            Task.FromResult(healthy);
     }
 }

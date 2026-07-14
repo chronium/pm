@@ -22,7 +22,9 @@ public static class ApiEndpointMetadataExtensions
         });
     }
 
-    public static RouteHandlerBuilder WithRevisionedMutationMetadata(this RouteHandlerBuilder builder)
+    public static RouteHandlerBuilder WithRevisionedMutationMetadata(
+        this RouteHandlerBuilder builder,
+        int responseStatusCode = StatusCodes.Status200OK)
     {
         builder
             .Produces<ApiProblemDetails>(StatusCodes.Status412PreconditionFailed, "application/problem+json")
@@ -34,10 +36,18 @@ public static class ApiEndpointMetadataExtensions
                 "If-Match",
                 "Required current strong resource ETag. Use * to match any current representation.",
                 required: true));
-            AddETagHeader(operation, StatusCodes.Status200OK);
+            if (responseStatusCode != StatusCodes.Status204NoContent)
+                AddETagHeader(operation, responseStatusCode);
             return Task.CompletedTask;
         });
     }
+
+    public static RouteHandlerBuilder WithResponseETagMetadata(this RouteHandlerBuilder builder, int statusCode) =>
+        builder.AddOpenApiOperationTransformer((operation, _, _) =>
+        {
+            AddETagHeader(operation, statusCode);
+            return Task.CompletedTask;
+        });
 
     private static OpenApiParameter HeaderParameter(string name, string description, bool required) => new()
     {

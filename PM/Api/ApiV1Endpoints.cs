@@ -24,6 +24,8 @@ public static class ApiV1Endpoints
         this IEndpointRouteBuilder endpoints,
         ProjectRoot projectRoot,
         ProjectConfigService configService,
+        BoardService boardService,
+        TaskService taskService,
         ResourceRevisionService revisions,
         Action<RouteGroupBuilder>? configure = null)
     {
@@ -55,6 +57,9 @@ public static class ApiV1Endpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+
+        api.MapBoardApi(boardService, revisions);
+        api.MapTaskApi(boardService, taskService, revisions);
 
         configure?.Invoke(api);
         return api;
@@ -96,7 +101,9 @@ public static class ApiV1Endpoints
                 $"A nonempty {ClientHeader} header is required.",
                 request.Path);
 
-        if (!request.HasJsonContentType())
+        var requiresJson = !HttpMethods.IsDelete(request.Method) ||
+            request.ContentLength is > 0 || request.Headers.ContainsKey("Transfer-Encoding");
+        if (requiresJson && !request.HasJsonContentType())
             return ApiResults.Problem(
                 StatusCodes.Status415UnsupportedMediaType,
                 "unsupported_media_type",

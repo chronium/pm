@@ -64,7 +64,11 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         if (!boardResult.Success)
             return AppResult<string>.Fail(boardResult.ErrorCode!, boardResult.Message!);
 
-        var board = boardResult.Payload!;
+        return GetBoardRevision(boardResult.Payload!);
+    }
+
+    public AppResult<string> GetBoardRevision(BoardData board)
+    {
         var canonical = new BoardRevisionDocument(
             board.ProjectName,
             NormalizeQuery(board.Query),

@@ -117,6 +117,37 @@ public partial class BoardService(ProjectRoot projectRoot)
             query));
     }
 
+    public AppResult<BoardTask> GetTask(string taskId, int descriptionPreviewLength = WebDescriptionPreviewLength)
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<BoardTask>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        var tasks = projectRoot.GetAllTasks();
+        var task = tasks
+            .FirstOrDefault(item => string.Equals(item.Id, taskId, StringComparison.Ordinal));
+        if (task == null)
+            return AppResult<BoardTask>.Fail("missing_task", $"Task with ID {taskId} not found.");
+        if (!projectRoot.TryGetState(task, out var state))
+            return AppResult<BoardTask>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
+
+        var tasksById = BuildTaskLookup(tasks);
+        var stateById = tasksById.Values.ToDictionary(
+            item => item.Id,
+            item => projectRoot.TryGetState(item, out var currentState) ? currentState : string.Empty,
+            StringComparer.Ordinal);
+        var priority = PriorityLevel.Resolve(projectRoot.Config, task);
+        return AppResult<BoardTask>.Ok(new BoardTask(
+            task,
+            projectRoot.ResolveTaskTrack(task),
+            task.Milestone,
+            priority.Priority,
+            priority.Source,
+            state,
+            BuildDependencyStatus(task, tasksById, stateById),
+            GetDescriptionPreview(task.Description, descriptionPreviewLength),
+            projectRoot.GetTaskFilePath(task.Id)));
+    }
+
     public AppResult<NextTaskResult> GetNextTask(
         NextTaskQuery query,
         int descriptionPreviewLength = CliDescriptionPreviewLength)
