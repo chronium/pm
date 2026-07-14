@@ -1,11 +1,15 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using PM.Api;
 using PM.Application;
 using PM.Project;
 using Spectre.Console;
@@ -35,9 +39,12 @@ public class WebCommand(
 
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
         builder.WebHost.UseUrls(url);
+        ConfigureApiServices(builder.Services);
 
         var app = builder.Build();
         MapEndpoints(app, boardService, taskService, configService, wikiService, validationService);
+        app.MapApiV1(configService);
+        app.MapOpenApi("/openapi/{documentName}.json");
 
         await app.StartAsync(cancellationToken);
         AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
@@ -68,6 +75,15 @@ public class WebCommand(
         }
 
         return 0;
+    }
+
+    public static void ConfigureApiServices(IServiceCollection services)
+    {
+        services.ConfigureHttpJsonOptions(options =>
+            options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+        services.AddOpenApi("v1", options =>
+            options.ShouldInclude = description =>
+                description.RelativePath?.StartsWith("api/v1", StringComparison.Ordinal) == true);
     }
 
     public static void MapEndpoints(

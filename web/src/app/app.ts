@@ -5,6 +5,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { LayoutService } from './core/layout.service';
 import { ThemeService } from './core/theme.service';
+import { ProjectApiService } from './api/project-api.service';
 
 @Component({
   selector: 'pm-root',
@@ -16,6 +17,7 @@ import { ThemeService } from './core/theme.service';
 export class App {
   protected readonly layout = inject(LayoutService);
   protected readonly theme = inject(ThemeService);
+  protected readonly projectApi = inject(ProjectApiService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
 
   protected toggleNavigation(): void {
