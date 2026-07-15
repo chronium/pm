@@ -58,8 +58,151 @@ public class WebBoardTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal($"http://127.0.0.1:{port}", openedUrl);
-        Assert.Contains($"Serving board at http://127.0.0.1:{port}", output);
+        Assert.Contains($"Serving legacy UI at http://127.0.0.1:{port}", output);
     }
+
+    [Theory]
+    [InlineData(true, null, true, "--open cannot be combined with --api")]
+    [InlineData(true, "legacy", false, "--ui cannot be combined with --api")]
+    [InlineData(false, "unknown", false, "Unknown UI mode 'unknown'")]
+    public async Task WebRejectsIncompatibleOrUnknownModesBeforeStarting(
+        bool api, string? ui, bool open, string expected)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = CreateWebCommand(projectRoot);
+
+        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
+        {
+            Api = api,
+            Ui = ui,
+            Open = open,
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains(expected, output);
+    }
+
+    [Fact]
+    public async Task AngularModeWithoutEmbeddedAssetsFailsBeforeStarting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var opened = false;
+        var command = new RecordingOpenWebCommand(
+            projectRoot,
+            new BoardService(projectRoot),
+            new TaskService(projectRoot, new RecordingNextIdService()),
+            new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot),
+            _ => opened = true);
+
+        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
+        {
+            Ui = "angular",
+            Open = true,
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Angular UI assets are not embedded", output);
+        Assert.False(opened);
+    }
+
+    [Fact]
+    public async Task AngularUiOpenFlagLaunchesCustomPortUrl()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var port = GetAvailablePort();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        string? openedUrl = null;
+        var command = new RecordingOpenWebCommand(
+            projectRoot,
+            new BoardService(projectRoot),
+            new TaskService(projectRoot, new RecordingNextIdService()),
+            new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot),
+            url =>
+            {
+                openedUrl = url;
+                cancellation.Cancel();
+            },
+            new AngularWebEndpointTests.MemoryAssetStore(new Dictionary<string, string>
+            {
+                ["index.html"] = "Angular",
+            }));
+
+        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
+        {
+            Port = port,
+            Ui = "angular",
+            Open = true,
+        }, cancellation.Token);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal($"http://127.0.0.1:{port}", openedUrl);
+        Assert.Contains($"Serving angular UI at http://127.0.0.1:{port}", output);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ApiModeUsesDefaultOrCustomPortAndMapsOnlyApiEndpoints(bool customPort)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var port = customPort ? GetAvailablePort() : 51237;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var command = CreateWebCommand(projectRoot);
+        var execution = ExecuteWebCommand(command, new WebCommand.Settings
+        {
+            Api = true,
+            Port = customPort ? port : null,
+        }, cancellation.Token);
+
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+        try
+        {
+            HttpResponseMessage? project = null;
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                try
+                {
+                    project = await client.GetAsync("/api/v1/project", cancellation.Token);
+                    break;
+                }
+                catch (HttpRequestException)
+                {
+                    await Task.Delay(25, cancellation.Token);
+                }
+            }
+
+            Assert.NotNull(project);
+            Assert.Equal(HttpStatusCode.OK, project.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/openapi/v1.json", cancellation.Token)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/", cancellation.Token)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/task/new", cancellation.Token)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/tasks/PM-0001", cancellation.Token)).StatusCode);
+        }
+        finally
+        {
+            cancellation.Cancel();
+        }
+
+        var (exitCode, output) = await execution;
+        Assert.Equal(0, exitCode);
+        Assert.Contains($"Serving API at http://127.0.0.1:{port}", output);
+    }
+
+    private static WebCommand CreateWebCommand(ProjectRoot projectRoot) => new(
+        projectRoot,
+        new BoardService(projectRoot),
+        new TaskService(projectRoot, new RecordingNextIdService()),
+        new ProjectConfigService(projectRoot),
+        new WikiService(projectRoot),
+        new ProjectValidationService(projectRoot));
 
     [Fact]
     public async Task BoardDataGroupsByMilestoneAndState()
@@ -1439,13 +1582,17 @@ public class WebBoardTests
         ProjectConfigService configService,
         WikiService wikiService,
         ProjectValidationService validationService,
-        Action<string> onOpen) : WebCommand(projectRoot, boardService, taskService, configService, wikiService,
+        Action<string> onOpen,
+        IAngularAssetStore? angularAssets = null) : WebCommand(projectRoot, boardService, taskService, configService, wikiService,
         validationService)
     {
         protected override void OpenBrowser(string url)
         {
             onOpen(url);
         }
+
+        protected override IAngularAssetStore CreateAngularAssetStore() =>
+            angularAssets ?? base.CreateAngularAssetStore();
     }
 
     private sealed class RecordingNextIdService(bool healthy = true) : INextIdService

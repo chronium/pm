@@ -39,7 +39,26 @@ socket npx playwright install chromium
 
 Storybook is a zoneless, development-only workshop and is not part of the .NET build. Reusable visual components should add or update collocated `*.stories.ts` coverage for their meaningful states. Routed containers and feature stores generally should not have stories; keep their behavior in unit or application-level tests instead.
 
-The development proxy forwards `/api` to `http://127.0.0.1:51237`. The Angular workspace is not invoked by the repository's normal .NET build or test commands.
+The development proxy forwards `/api` to `http://127.0.0.1:51237`. Start PM in API-only mode in another terminal for local development:
+
+```sh
+dotnet PM/bin/Debug/net10.0/PM.dll web --api
+cd web
+npm start
+```
+
+`pm web --api` serves only `/api/v1` and `/openapi/{documentName}.json`, does not open a browser, and accepts `--port` when a different proxy target is needed. The Angular workspace is not invoked by the repository's normal .NET build or test commands.
+
+The legacy server-rendered UI remains the temporary `pm web` default during migration. Select it explicitly with `pm web --ui legacy`, or serve a production Angular bundle with `pm web --ui angular`. Angular mode requires assets embedded into the running assembly:
+
+```sh
+cd web
+npm run build
+cd ..
+dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true
+```
+
+Embedding is opt-in; ordinary .NET builds ignore the local, uncommitted `web/dist` directory.
 
 The type-generation commands build PM without restoring packages, start a temporary loopback web host, read `/openapi/v1.json`, and always stop the host. Generated contracts are committed only under `src/app/api/generated/`; API clients remain handwritten.
 

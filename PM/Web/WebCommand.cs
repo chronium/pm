@@ -34,7 +34,23 @@ public class WebCommand(
             return 1;
         }
 
-        var port = settings.Port ?? GetAvailablePort();
+        var settingsError = ValidateSettings(settings);
+        if (settingsError != null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{settingsError.EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        var ui = settings.Ui ?? "legacy";
+        var angularAssets = CreateAngularAssetStore();
+        if (!settings.Api && ui == "angular" && !angularAssets.HasAssets)
+        {
+            AnsiConsole.MarkupLine(
+                "[red]Angular UI assets are not embedded. Build with [green]-p:EmbedAngularAssets=true[/] after running [green]npm run build[/] in web/.[/]");
+            return 1;
+        }
+
+        var port = settings.Port ?? (settings.Api ? 51237 : GetAvailablePort());
         var url = $"http://127.0.0.1:{port}";
 
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
@@ -42,19 +58,24 @@ public class WebCommand(
         ConfigureApiServices(builder.Services);
 
         var app = builder.Build();
-        MapEndpoints(app, boardService, taskService, configService, wikiService, validationService);
-        app.MapApiV1(projectRoot, configService, boardService, taskService,
-            new ResourceRevisionService(projectRoot, boardService));
-        app.MapOpenApi("/openapi/{documentName}.json");
+        MapApiEndpoints(app, projectRoot, configService, boardService, taskService);
+        if (!settings.Api)
+        {
+            if (ui == "legacy")
+                MapEndpoints(app, boardService, taskService, configService, wikiService, validationService);
+            else
+                app.MapAngularWeb(angularAssets);
+        }
 
         await app.StartAsync(cancellationToken);
-        AnsiConsole.MarkupLineInterpolated($"Serving board at [green]{url.EscapeMarkup()}[/]");
+        var subject = settings.Api ? "API" : $"{ui} UI";
+        AnsiConsole.MarkupLineInterpolated($"Serving {subject.EscapeMarkup()} at [green]{url.EscapeMarkup()}[/]");
         await using var cancellationRegistration = cancellationToken.Register(() =>
         {
             _ = Task.Run(() => app.StopAsync(CancellationToken.None));
         });
 
-        if (settings.Open)
+        if (!settings.Api && settings.Open)
         {
             try
             {
@@ -85,6 +106,18 @@ public class WebCommand(
         services.AddOpenApi("v1", options =>
             options.ShouldInclude = description =>
                 description.RelativePath?.StartsWith("api/v1", StringComparison.Ordinal) == true);
+    }
+
+    public static void MapApiEndpoints(
+        IEndpointRouteBuilder endpoints,
+        ProjectRoot projectRoot,
+        ProjectConfigService configService,
+        BoardService boardService,
+        TaskService taskService)
+    {
+        endpoints.MapApiV1(projectRoot, configService, boardService, taskService,
+            new ResourceRevisionService(projectRoot, boardService));
+        endpoints.MapOpenApi("/openapi/{documentName}.json");
     }
 
     public static void MapEndpoints(
@@ -635,6 +668,18 @@ public class WebCommand(
         OpenUrlInDefaultBrowser(url);
     }
 
+    protected virtual IAngularAssetStore CreateAngularAssetStore() => new EmbeddedAngularAssetStore();
+
+    private static string? ValidateSettings(Settings settings)
+    {
+        if (settings.Api && settings.Open) return "--open cannot be combined with --api.";
+        if (settings.Api && settings.Ui != null) return "--ui cannot be combined with --api.";
+        if (settings.Ui != null && settings.Ui is not ("legacy" or "angular"))
+            return $"Unknown UI mode '{settings.Ui}'. Expected legacy or angular.";
+        if (settings.Port is <= 0 or > 65535) return "--port must be between 1 and 65535.";
+        return null;
+    }
+
     private static void OpenUrlInDefaultBrowser(string url)
     {
         var startInfo = OperatingSystem.IsWindows()
@@ -664,5 +709,13 @@ public class WebCommand(
         [CommandOption("--open")]
         [Description("Open the board in the default browser after the server starts.")]
         public bool Open { get; init; }
+
+        [CommandOption("--api")]
+        [Description("Serve only the versioned API and OpenAPI document on loopback.")]
+        public bool Api { get; init; }
+
+        [CommandOption("--ui <MODE>")]
+        [Description("UI to serve: legacy or angular. Defaults to legacy.")]
+        public string? Ui { get; init; }
     }
 }

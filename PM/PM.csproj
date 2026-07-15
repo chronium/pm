@@ -5,6 +5,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <EmbedAngularAssets Condition="'$(EmbedAngularAssets)' == ''">false</EmbedAngularAssets>
     </PropertyGroup>
 
     <ItemGroup>
@@ -24,5 +25,17 @@
     <ItemGroup>
         <EmbeddedResource Include="Web/Templates/**/*"/>
     </ItemGroup>
+
+    <ItemGroup Condition="'$(EmbedAngularAssets)' == 'true'">
+        <EmbeddedResource Include="../web/dist/pm-web/browser/**/*">
+            <LogicalName>PM.AngularAssets/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <Target Name="RequireAngularAssets" BeforeTargets="PrepareForBuild"
+            Condition="'$(EmbedAngularAssets)' == 'true'">
+        <Error Condition="!Exists('../web/dist/pm-web/browser/index.html')"
+               Text="EmbedAngularAssets=true requires web/dist/pm-web/browser/index.html. Run 'npm run build' from web/ before publishing."/>
+    </Target>
 
 </Project>
