@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 
 import { TaskRoutePlaceholder } from './task-route-placeholder';
+import { TaskNavigationService } from './task-navigation.service';
 import { TasksBoard } from './tasks-board';
 import type { BoardResponse } from './tasks-board.store';
 
@@ -113,6 +114,11 @@ describe('TasksBoard', () => {
     expect([...element.querySelectorAll('.milestone-section h2')].some((item) => item.textContent?.includes('First milestone'))).toBe(false);
   });
 
+  it('publishes the unfiltered remaining-task count for the application header', async () => {
+    await render();
+    expect(TestBed.inject(TaskNavigationService).remainingCount()).toBe(1);
+  });
+
   it('uses native collapse controls, defaults done closed, and restores project-scoped session choices', async () => {
     sessionStorage.setItem('pm.tasks-board.v1.Atlas%20Project.second.todo.open', 'false');
     const { element } = await render();
@@ -131,7 +137,8 @@ describe('TasksBoard', () => {
     const link = element.querySelector<HTMLAnchorElement>('a[href="/tasks/PM-0002"]');
     expect(link).toBeTruthy();
     expect(link?.textContent).toContain('Priority: high');
-    expect(link?.textContent).toContain('Waiting: waiting on PM-0001');
+    expect(link?.textContent).toContain('Blocked');
+    expect(link?.textContent).not.toContain('waiting on PM-0001');
     expect(link?.textContent).toContain('A deliberately long task title');
     expect(link?.textContent).toContain('A useful and intentionally long description preview');
     link?.focus();
@@ -168,7 +175,7 @@ describe('TasksBoard', () => {
     const { element, router } = await render('/tasks/PM-0002?track=BUILD');
     expect(router.url).toBe('/tasks/PM-0002?track=BUILD');
     expect(element.querySelector('.task-list li.selected a[aria-current="true"]')?.textContent).toContain('PM-0002');
-    expect(element.querySelector('h1')?.textContent).toBe('Tasks');
+    expect(element.querySelector('h1.visually-hidden')?.textContent).toBe('Tasks');
     expect(element.querySelector<HTMLSelectElement>('select')?.value).toBe('BUILD');
   });
 });

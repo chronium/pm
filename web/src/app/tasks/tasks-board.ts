@@ -36,7 +36,6 @@ export class TasksBoard {
   }
 
   protected dependencyLabel(task: BoardTask): string {
-    if (task.dependencies.missing.length > 0) return `Missing: ${task.dependencies.missing.join(', ')}`;
-    return task.dependencies.ready ? 'Ready' : `Waiting: ${task.dependencies.summary}`;
+    return task.dependencies.ready ? 'Ready' : 'Blocked';
   }
 }

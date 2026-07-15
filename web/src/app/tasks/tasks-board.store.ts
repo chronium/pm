@@ -5,6 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 
 import type { components, operations } from '../api/generated/pm-api';
+import { TaskNavigationService } from './task-navigation.service';
 
 export type BoardResponse =
   operations['GetBoard']['responses'][200]['content']['application/json'];
@@ -17,6 +18,7 @@ export type BoardFilter = keyof BoardQuery;
 @Injectable()
 export class TasksBoardStore {
   private readonly router = inject(Router);
+  private readonly taskNavigation = inject(TaskNavigationService);
   private readonly retainedBoard = signal<BoardResponse | undefined>(undefined);
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -54,7 +56,11 @@ export class TasksBoardStore {
   constructor() {
     effect(() => {
       if (this.resource.hasValue()) {
-        this.retainedBoard.set(this.resource.value());
+        const board = this.resource.value();
+        this.retainedBoard.set(board);
+        if (Object.values(board.filters).every((value) => value === null)) {
+          this.taskNavigation.setRemainingCount(this.remainingTaskCount(board));
+        }
       }
     });
   }
@@ -84,6 +90,16 @@ export class TasksBoardStore {
 
   milestoneTaskCount(group: BoardMilestoneGroup): number {
     return group.states.reduce((total, state) => total + state.tasks.length, 0);
+  }
+
+  private remainingTaskCount(board: BoardResponse): number {
+    return board.milestoneGroups.reduce(
+      (total, milestone) => total + milestone.states.reduce(
+        (milestoneTotal, state) => milestoneTotal + (state.key === 'done' ? 0 : state.tasks.length),
+        0,
+      ),
+      0,
+    );
   }
 
   isGroupOpen(milestone: BoardMilestoneGroup, state: BoardStateGroup): boolean {

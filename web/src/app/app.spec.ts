@@ -6,6 +6,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { App } from './app';
 import { AppShell, routes } from './app.routes';
 import { LayoutService } from './core/layout.service';
+import { TaskNavigationService } from './tasks/task-navigation.service';
 
 describe('application shell', () => {
   beforeEach(async () => {
@@ -50,6 +51,15 @@ describe('application shell', () => {
   it('shows the loaded project name in the top bar', async () => {
     const { fixture } = await renderAt('/tasks', 'Project Atlas');
     expect(fixture.nativeElement.querySelector('.brand')?.textContent).toBe('Project Atlas');
+  });
+
+  it('shows the remaining task count in the Tasks mode header', async () => {
+    TestBed.inject(TaskNavigationService).setRemainingCount(8);
+    const { fixture } = await renderAt('/wiki');
+    const tasksLink = fixture.nativeElement.querySelector('.mode-navigation a[href="/tasks"]');
+    expect(tasksLink?.querySelector('span:first-child')?.textContent).toBe('Tasks');
+    expect(tasksLink?.querySelector('.mode-count')?.textContent).toBe('8 left');
+    expect(tasksLink?.querySelector('.mode-count')?.getAttribute('aria-label')).toBe('8 tasks left');
   });
 
   it('keeps PM as the loading and error fallback', async () => {

@@ -34,8 +34,10 @@
 }
 
 .mode-navigation a {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pm-space-1);
   min-width: 56px;
   padding: 0 var(--pm-space-3);
   border-bottom: 2px solid transparent;
@@ -43,6 +45,13 @@
   font-size: var(--pm-font-size-sm);
   font-weight: 550;
   text-decoration: none;
+}
+
+.mode-count {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
 .mode-navigation a:hover {
