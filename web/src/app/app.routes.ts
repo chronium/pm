@@ -17,22 +17,28 @@ export const routes: Routes = [
     path: 'tasks',
     component: TasksShell,
     data: { shell: AppShell.Tasks },
-    children: [{
-      path: '',
-      component: TasksBoard,
-      children: [
-        {
-          path: 'new',
-          loadComponent: () => import('./tasks/task-dialog/task-create-dialog').then((module) => module.TaskCreateDialog),
-          canDeactivate: [canLeaveDirtyDialog],
-        },
-        {
-          path: ':taskId',
-          loadComponent: () => import('./tasks/task-dialog/task-detail-dialog').then((module) => module.TaskDetailDialog),
-          canDeactivate: [canLeaveDirtyDialog],
-        },
-      ],
-    }],
+    children: [
+      {
+        path: 'settings',
+        loadComponent: () => import('./settings/settings-page').then((module) => module.SettingsPage),
+      },
+      {
+        path: '',
+        component: TasksBoard,
+        children: [
+          {
+            path: 'new',
+            loadComponent: () => import('./tasks/task-dialog/task-create-dialog').then((module) => module.TaskCreateDialog),
+            canDeactivate: [canLeaveDirtyDialog],
+          },
+          {
+            path: ':taskId',
+            loadComponent: () => import('./tasks/task-dialog/task-detail-dialog').then((module) => module.TaskDetailDialog),
+            canDeactivate: [canLeaveDirtyDialog],
+          },
+        ],
+      },
+    ],
   },
   {
     path: 'wiki',
@@ -40,5 +46,6 @@ export const routes: Routes = [
     data: { shell: AppShell.Wiki },
     children: [{ path: '', component: WikiIndex }],
   },
+  { path: 'settings', redirectTo: 'tasks/settings' },
   { path: '**', redirectTo: 'tasks' },
 ];

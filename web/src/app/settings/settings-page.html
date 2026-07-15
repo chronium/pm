@@ -1,0 +1,112 @@
+<div class="settings-page">
+  <header class="page-heading">
+    <div>
+      <h1>Project settings</h1>
+      @if (store.settings(); as settings) { <p>{{ settings.projectName }}</p> }
+    </div>
+    @if (store.refreshing()) { <span role="status">Refreshing…</span> }
+  </header>
+
+  @if (store.loading()) {
+    <pm-loading-state>Loading project settings…</pm-loading-state>
+  } @else if (store.settingsError() && !store.settings()) {
+    <pm-error-state>
+      <p>{{ store.settingsError() }}</p>
+      <button type="button" class="pm-button pm-button--secondary" (click)="store.reloadLatest()">Retry</button>
+    </pm-error-state>
+  } @else if (store.settings(); as settings) {
+    @if (store.stale()) {
+      <div class="stale-banner" role="alert">
+        <div><strong>These settings are out of date.</strong><span>{{ store.operationError()?.error?.message }}</span></div>
+        <button type="button" class="pm-button pm-button--primary" [disabled]="store.refreshing()" (click)="store.reloadLatest()">
+          {{ store.refreshing() ? 'Reloading…' : 'Reload latest' }}
+        </button>
+      </div>
+    }
+
+    <pm-project-health
+      [validation]="store.validation()"
+      [loading]="store.validationLoading()"
+      [refreshing]="store.validationRefreshing()"
+      [error]="store.validationError()"
+      (retry)="store.reloadValidation()"
+    />
+
+    <section class="settings-section" aria-labelledby="statuses-heading">
+      <div class="section-heading">
+        <div><h2 id="statuses-heading">Statuses</h2><p>Task workflow states, in display order.</p></div>
+        <button type="button" class="pm-button pm-button--secondary" [disabled]="store.pending() || store.stale() || adding() === 'status'" (click)="beginAdd('status')">Add status</button>
+      </div>
+      @if (adding() === 'status') {
+        <form class="settings-form create-form" (submit)="createOption($event, 'status')" novalidate>
+          <pm-form-field><label for="status-key">Key</label><input id="status-key" pmControl [formField]="optionCreateForm.key" autocomplete="off" autofocus />
+            @if (optionCreateForm.key().touched() && formError(optionCreateForm.key())) { <p pmFieldMessage class="field-error">{{ formError(optionCreateForm.key()) }}</p> }</pm-form-field>
+          <pm-form-field><label for="status-name">Name</label><input id="status-name" pmControl [formField]="optionCreateForm.name" autocomplete="off" />
+            @if (optionCreateForm.name().touched() && formError(optionCreateForm.name())) { <p pmFieldMessage class="field-error">{{ formError(optionCreateForm.name()) }}</p> }</pm-form-field>
+          <div class="form-actions"><button type="button" class="pm-button pm-button--ghost" [disabled]="store.pending()" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending() || !optionCreateForm().valid()">{{ pending('create', 'status', optionCreateModel().key.trim()) ? 'Adding…' : 'Add status' }}</button></div>
+          @if (store.errorFor('status', optionCreateModel().key.trim())) { <p class="row-error" role="alert">{{ store.errorFor('status', optionCreateModel().key.trim()) }}</p> }
+        </form>
+      }
+      <div class="settings-list" role="list">
+        @for (status of settings.statuses; track status.key) {
+          <div class="settings-row" role="listitem">
+            <code class="item-key">{{ status.key }}</code>
+            @if (editor()?.collection === 'status' && editor()?.key === status.key) {
+              <form class="inline-form" (submit)="saveEdit($event)" novalidate><pm-form-field><label class="visually-hidden" [for]="'status-name-' + $index">Status name</label><input [id]="'status-name-' + $index" pmControl [formField]="editForm.value" autofocus />
+                @if (editForm.value().touched() && formError(editForm.value())) { <p pmFieldMessage class="field-error">{{ formError(editForm.value()) }}</p> }</pm-form-field><div class="form-actions"><button type="button" class="pm-button pm-button--ghost" [disabled]="store.pending()" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending() || !editForm().valid()">{{ pending('rename', 'status', status.key) ? 'Saving…' : 'Save' }}</button></div></form>
+            } @else {
+              <span class="item-value">{{ status.name }}</span><div class="row-actions"><button type="button" class="icon-action" [disabled]="store.pending() || store.stale()" aria-label="Edit status name" title="Edit status name" (click)="beginEdit({ collection: 'status', key: status.key, field: 'name' }, status.name)"><ng-icon name="cssPen" aria-hidden="true" /></button><button type="button" class="icon-action danger-action" [disabled]="store.pending() || store.stale()" aria-label="Remove status" title="Remove status" (click)="requestRemoval('status', status.key, status.name)"><ng-icon name="cssTrash" aria-hidden="true" /></button></div>
+            }
+            @if (store.errorFor('status', status.key)) { <p class="row-error" role="alert">{{ store.errorFor('status', status.key) }}</p> }
+          </div>
+        } @empty { <p class="empty-list">No statuses are configured.</p> }
+      </div>
+    </section>
+
+    <section class="settings-section" aria-labelledby="milestones-heading">
+      <div class="section-heading"><div><h2 id="milestones-heading">Milestones</h2><p>Release groups and their inherited task priority.</p></div><button type="button" class="pm-button pm-button--secondary" [disabled]="store.pending() || store.stale() || adding() === 'milestone'" (click)="beginAdd('milestone')">Add milestone</button></div>
+      @if (adding() === 'milestone') {
+        <form class="settings-form milestone-create" (submit)="createMilestone($event)" novalidate>
+          <pm-form-field><label for="milestone-key">Key</label><input id="milestone-key" pmControl [formField]="milestoneCreateForm.key" autofocus />@if (milestoneCreateForm.key().touched() && formError(milestoneCreateForm.key())) { <p pmFieldMessage class="field-error">{{ formError(milestoneCreateForm.key()) }}</p> }</pm-form-field>
+          <pm-form-field><label for="milestone-title">Title</label><input id="milestone-title" pmControl [formField]="milestoneCreateForm.title" />@if (milestoneCreateForm.title().touched() && formError(milestoneCreateForm.title())) { <p pmFieldMessage class="field-error">{{ formError(milestoneCreateForm.title()) }}</p> }</pm-form-field>
+          <pm-form-field><label for="milestone-priority">Priority</label><select id="milestone-priority" pmControl [formField]="milestoneCreateForm.priority">@for (priority of settings.priorityOptions; track priority) { <option [value]="priority">{{ priority }}</option> }</select></pm-form-field>
+          <div class="form-actions"><button type="button" class="pm-button pm-button--ghost" [disabled]="store.pending()" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending() || !milestoneCreateForm().valid()">Add milestone</button></div>
+          @if (store.errorFor('milestone', milestoneCreateModel().key.trim())) { <p class="row-error" role="alert">{{ store.errorFor('milestone', milestoneCreateModel().key.trim()) }}</p> }
+        </form>
+      }
+      <div class="settings-list milestone-list" role="list">
+        @for (milestone of settings.milestones; track milestone.key) {
+          <div class="settings-row milestone-row" role="listitem">
+            <code class="item-key">{{ milestone.key }}</code>
+            @if (editor()?.collection === 'milestone' && editor()?.key === milestone.key && editor()?.field === 'title') {
+              <form class="inline-form" (submit)="saveEdit($event)" novalidate><pm-form-field><label class="visually-hidden" [for]="'milestone-title-' + $index">Milestone title</label><input [id]="'milestone-title-' + $index" pmControl [formField]="editForm.value" autofocus /></pm-form-field><div class="form-actions"><button type="button" class="pm-button pm-button--ghost" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending() || !editForm().valid()">Save</button></div></form>
+            } @else { <span class="item-value">{{ milestone.title }}</span> }
+            @if (editor()?.collection === 'milestone' && editor()?.key === milestone.key && editor()?.field === 'priority') {
+              <form class="priority-form" (submit)="saveEdit($event)"><label class="visually-hidden" [for]="'milestone-priority-' + $index">Milestone priority</label><select [id]="'milestone-priority-' + $index" pmControl [formField]="editForm.value" autofocus>@for (priority of settings.priorityOptions; track priority) { <option [value]="priority">{{ priority }}</option> }</select><button type="button" class="pm-button pm-button--ghost" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending()">Save</button></form>
+            } @else { <span class="priority-value">Priority: {{ milestone.priority }}</span> }
+            <div class="row-actions milestone-actions"><button type="button" class="icon-action" [disabled]="store.pending() || store.stale()" aria-label="Edit milestone title" title="Edit milestone title" (click)="beginEdit({ collection: 'milestone', key: milestone.key, field: 'title' }, milestone.title)"><ng-icon name="cssPen" aria-hidden="true" /></button><button type="button" class="pm-button pm-button--ghost priority-action" [disabled]="store.pending() || store.stale()" (click)="beginEdit({ collection: 'milestone', key: milestone.key, field: 'priority' }, milestone.priority)">Change priority</button><button type="button" class="icon-action danger-action" [disabled]="store.pending() || store.stale()" aria-label="Remove milestone" title="Remove milestone" (click)="requestRemoval('milestone', milestone.key, milestone.title)"><ng-icon name="cssTrash" aria-hidden="true" /></button></div>
+            @if (store.errorFor('milestone', milestone.key)) { <p class="row-error" role="alert">{{ store.errorFor('milestone', milestone.key) }}</p> }
+          </div>
+        } @empty { <p class="empty-list">No milestones are configured.</p> }
+      </div>
+    </section>
+
+    <section class="settings-section" aria-labelledby="tracks-heading">
+      <div class="section-heading"><div><h2 id="tracks-heading">Tracks</h2><p>Task ownership and work streams.</p></div><button type="button" class="pm-button pm-button--secondary" [disabled]="store.pending() || store.stale() || adding() === 'track'" (click)="beginAdd('track')">Add track</button></div>
+      @if (adding() === 'track') {
+        <form class="settings-form create-form" (submit)="createOption($event, 'track')" novalidate><pm-form-field><label for="track-key">Key</label><input id="track-key" pmControl [formField]="optionCreateForm.key" autofocus /></pm-form-field><pm-form-field><label for="track-name">Name</label><input id="track-name" pmControl [formField]="optionCreateForm.name" /></pm-form-field><div class="form-actions"><button type="button" class="pm-button pm-button--ghost" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending() || !optionCreateForm().valid()">Add track</button></div>@if (store.errorFor('track', optionCreateModel().key.trim())) { <p class="row-error" role="alert">{{ store.errorFor('track', optionCreateModel().key.trim()) }}</p> }</form>
+      }
+      <div class="settings-list" role="list">
+        @for (track of settings.tracks; track track.key) {
+          <div class="settings-row" role="listitem"><code class="item-key">{{ track.key }}</code>
+            @if (editor()?.collection === 'track' && editor()?.key === track.key) { <form class="inline-form" (submit)="saveEdit($event)" novalidate><pm-form-field><label class="visually-hidden" [for]="'track-name-' + $index">Track name</label><input [id]="'track-name-' + $index" pmControl [formField]="editForm.value" autofocus /></pm-form-field><div class="form-actions"><button type="button" class="pm-button pm-button--ghost" (click)="cancelAll()">Cancel</button><button type="submit" class="pm-button pm-button--primary" [disabled]="store.pending() || !editForm().valid()">Save</button></div></form>
+            } @else { <span class="item-value">{{ track.name }}</span><div class="row-actions"><button type="button" class="icon-action" [disabled]="store.pending() || store.stale()" aria-label="Edit track name" title="Edit track name" (click)="beginEdit({ collection: 'track', key: track.key, field: 'name' }, track.name)"><ng-icon name="cssPen" aria-hidden="true" /></button><button type="button" class="icon-action danger-action" [disabled]="store.pending() || store.stale()" aria-label="Remove track" title="Remove track" (click)="requestRemoval('track', track.key, track.name)"><ng-icon name="cssTrash" aria-hidden="true" /></button></div> }
+            @if (store.errorFor('track', track.key)) { <p class="row-error" role="alert">{{ store.errorFor('track', track.key) }}</p> }
+          </div>
+        } @empty { <p class="empty-list">No tracks are configured.</p> }
+      </div>
+    </section>
+  }
+</div>
+
+<pm-confirm-dialog [open]="!!removal()" [pending]="store.pending()" heading="Remove project setting" [message]="removal() ? 'Remove ' + collectionLabel(removal()!.collection) + ' “' + removal()!.label + '” (' + removal()!.key + ')? This action cannot be undone.' : ''" (confirmed)="confirmRemoval()" (cancelled)="removal.set(null)" (openChange)="$event || removal.set(null)" />

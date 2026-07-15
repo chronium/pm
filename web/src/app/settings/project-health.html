@@ -1,0 +1,43 @@
+<section class="settings-section health-section" aria-labelledby="project-health-heading" [attr.aria-busy]="loading() || refreshing()">
+  <div class="section-heading">
+    <div>
+      <h2 id="project-health-heading">Project health</h2>
+      <p>Configuration and project-file validation.</p>
+    </div>
+    @if (refreshing()) { <span class="quiet-status" role="status">Checking…</span> }
+  </div>
+
+  @if (loading()) {
+    <p class="health-loading" role="status">Checking project health…</p>
+  } @else if (error()) {
+    <div class="section-error" role="alert">
+      <span>{{ error() }}</span>
+      <button type="button" class="pm-button pm-button--secondary" (click)="retry.emit()">Retry</button>
+    </div>
+  } @else if (validation(); as result) {
+    @if (result.valid) {
+      <p class="health-valid"><span aria-hidden="true">✓</span> Project validation passed.</p>
+    } @else {
+      <p class="issue-summary">Project validation found {{ result.issues.length }} issue(s).</p>
+      <ul class="issue-list">
+        @for (issue of result.issues; track $index) {
+          <li>
+            <div class="issue-lead">
+              <span class="issue-severity">{{ issue.severity }}</span>
+              <code>{{ issue.code }}</code>
+            </div>
+            <p>{{ issue.message }}</p>
+            @if (issue.taskId || issue.wikiPath || issue.state || issue.path) {
+              <dl class="issue-context">
+                @if (issue.taskId) { <div><dt>Task</dt><dd>{{ issue.taskId }}</dd></div> }
+                @if (issue.wikiPath) { <div><dt>Wiki</dt><dd>{{ issue.wikiPath }}</dd></div> }
+                @if (issue.state) { <div><dt>State</dt><dd>{{ issue.state }}</dd></div> }
+                @if (issue.path) { <div><dt>Path</dt><dd>{{ issue.path }}</dd></div> }
+              </dl>
+            }
+          </li>
+        }
+      </ul>
+    }
+  }
+</section>

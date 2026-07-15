@@ -55,6 +55,12 @@ describe('application shell', () => {
         description: '', revision: 'task-revision', localMetadata: { filePath: '.pm/tasks/PM-0049.md' },
       }, { headers: { ETag: '"task-revision"' } });
     }
+    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/settings')) {
+      request.flush({ projectName, statuses: [], tracks: [], milestones: [], priorityOptions: ['none'], revision: 'settings-revision' });
+    }
+    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/validation')) {
+      request.flush({ valid: true, issues: [] });
+    }
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, router };
@@ -93,6 +99,7 @@ describe('application shell', () => {
     ['/', '/tasks', 'Tasks'],
     ['/tasks', '/tasks', 'Tasks'],
     ['/wiki', '/wiki', 'Wiki'],
+    ['/settings', '/tasks/settings', 'Project settings'],
     ['/not-a-route', '/tasks', 'Tasks'],
   ])('routes %s to the correct child shell', async (requested, expectedUrl, heading) => {
     const { fixture, router } = await renderAt(requested);
@@ -112,12 +119,21 @@ describe('application shell', () => {
     expect(fixture.nativeElement.querySelector('a[href="/wiki"][aria-current="page"]')).toBeTruthy();
   });
 
-  it('keeps the all-tasks navigation active on a nested task route', async () => {
+  it('keeps All tasks exact while a nested task remains in the board workspace', async () => {
     const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
     const allTasks = [...fixture.nativeElement.querySelectorAll('aside a')]
       .find((link: HTMLAnchorElement) => link.textContent?.trim() === 'All tasks');
-    expect(allTasks?.classList.contains('active')).toBe(true);
+    expect(allTasks?.classList.contains('active')).toBe(false);
     expect(fixture.nativeElement.querySelector('main h1')?.textContent).toBe('Tasks');
+  });
+
+  it('selects only Settings in the task sidebar on the settings route', async () => {
+    const { fixture } = await renderAt('/tasks/settings');
+    const allTasks = fixture.nativeElement.querySelector('aside a[href="/tasks"]');
+    const settingsLink = fixture.nativeElement.querySelector('aside a[href="/tasks/settings"]');
+    expect(allTasks?.classList.contains('active')).toBe(false);
+    expect(settingsLink?.classList.contains('active')).toBe(true);
+    expect(settingsLink?.querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('uses semantic navigation and hides decorative icons from assistive technology', async () => {

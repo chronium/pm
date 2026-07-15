@@ -11,6 +11,8 @@
 }
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: var(--pm-space-3) var(--pm-space-2);
   border-right: 1px solid var(--pm-border-subtle);
@@ -27,8 +29,20 @@
 }
 
 .sidebar nav {
-  display: grid;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 2px;
+}
+
+.sidebar .settings-link {
+  gap: var(--pm-space-2);
+  margin-top: auto;
+}
+
+.sidebar .settings-link ng-icon {
+  flex: 0 0 auto;
+  font-size: 18px;
 }
 
 .sidebar a {

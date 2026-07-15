@@ -2,8 +2,12 @@
   <aside id="pm-sidebar" class="sidebar" aria-label="Tasks navigation">
     <div class="sidebar-heading">Tasks</div>
     <nav aria-label="Task views">
-      <a routerLink="/tasks" routerLinkActive="active">All tasks</a>
+      <a routerLink="/tasks" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">All tasks</a>
       <a routerLink="/tasks/new" queryParamsHandling="preserve" (click)="taskNavigation.captureOrigin($event.currentTarget)">New task</a>
+      <a class="settings-link" routerLink="/tasks/settings" routerLinkActive="active">
+        <ng-icon name="cssOptions" aria-hidden="true" />
+        <span>Settings</span>
+      </a>
     </nav>
   </aside>
 
