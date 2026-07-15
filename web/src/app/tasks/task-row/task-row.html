@@ -1,0 +1,9 @@
+<a [routerLink]="[task().id]" queryParamsHandling="preserve" [attr.aria-current]="selected() ? 'true' : null">
+  <span class="task-identity"><span class="task-id">{{ task().id }}</span><span class="task-title">{{ task().title }}</span></span>
+  <span class="task-context"><span>{{ task().track }}</span><span aria-hidden="true">·</span><span>{{ task().milestone ?? 'Unassigned' }}</span></span>
+  <span class="task-badges">
+    <pm-badge [tone]="priorityTone(task().priority)" [title]="'Effective priority from ' + task().prioritySource">Priority: {{ task().priority }}</pm-badge>
+    <pm-badge class="dependency-badge" [tone]="dependencyTone(task())" [title]="task().dependencies.summary">{{ task().dependencies.ready ? 'Ready' : 'Blocked' }}</pm-badge>
+  </span>
+  @if (task().descriptionPreview) { <span class="task-preview">{{ task().descriptionPreview }}</span> }
+</a>

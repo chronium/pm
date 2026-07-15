@@ -14,6 +14,11 @@ export type BoardTask = components['schemas']['BoardTaskSummaryResponse'];
 export type BoardMilestoneGroup = components['schemas']['BoardMilestoneGroupResponse'];
 export type BoardStateGroup = components['schemas']['BoardStateGroupResponse'];
 export type BoardFilter = keyof BoardQuery;
+export interface StatusOpenIntent {
+  milestone: BoardMilestoneGroup;
+  state: BoardStateGroup;
+  open: boolean;
+}
 
 @Injectable()
 export class TasksBoardStore {
@@ -107,15 +112,13 @@ export class TasksBoardStore {
     return stored === null ? state.key !== 'done' : stored;
   }
 
-  rememberGroupOpen(
-    milestone: BoardMilestoneGroup,
-    state: BoardStateGroup,
-    event: Event,
-  ): void {
-    const details = event.currentTarget;
-    if (!(details instanceof HTMLDetailsElement)) return;
+  groupOpenStates(milestone: BoardMilestoneGroup): Readonly<Record<string, boolean>> {
+    return Object.fromEntries(milestone.states.map((state) => [state.key, this.isGroupOpen(milestone, state)]));
+  }
+
+  rememberGroupOpen({ milestone, state, open }: StatusOpenIntent): void {
     try {
-      sessionStorage.setItem(this.collapseKey(milestone, state), String(details.open));
+      sessionStorage.setItem(this.collapseKey(milestone, state), String(open));
     } catch {
       // The board remains usable when storage is disabled or unavailable.
     }

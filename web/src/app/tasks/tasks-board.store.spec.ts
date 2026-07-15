@@ -109,4 +109,22 @@ describe('TasksBoardStore', () => {
     await TestBed.tick();
     expect(store.error()).toBeNull();
   });
+
+  it('exposes group open-state data and persists typed collapse intent', async () => {
+    sessionStorage.clear();
+    const { store, http } = await createAt('/tasks');
+    const milestone = {
+      key: 'm1', name: 'Milestone One',
+      states: [
+        { key: 'todo', name: 'To do', tasks: [] },
+        { key: 'done', name: 'Done', tasks: [] },
+      ],
+    };
+    http.expectOne('/api/v1/board').flush({ ...emptyBoard, milestoneGroups: [milestone] });
+    await TestBed.tick();
+
+    expect(store.groupOpenStates(milestone)).toEqual({ todo: true, done: false });
+    store.rememberGroupOpen({ milestone, state: milestone.states[1]!, open: true });
+    expect(store.groupOpenStates(milestone)).toEqual({ todo: true, done: true });
+  });
 });

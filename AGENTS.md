@@ -44,6 +44,7 @@ No dedicated type-check, lint, or formatting commands are configured in this rep
 - `PM/Web/` contains the local web board command, endpoint mapping, HTML rendering, and template loading.
 - `PM/Web/Templates/` contains embedded HTML fragments and `styles.css`. Templates are embedded by `PM.csproj`; keep template names stable and update renderer tests when changing markup.
 - `web/` contains the standalone Angular 22 replacement client. Keep it zoneless, strictly typed, routed, and independent from the normal .NET build until the release integration work explicitly changes that boundary.
+- In Angular routed features, keep page components focused on coordinating data, routing, and page state. Extract repeated or independently meaningful regions into focused components with typed signal inputs and outputs; keep trivial one-off markup inline.
 - `PM/Mcp/` contains MCP server host, tools, and response shapes.
 - `PM/Files/` contains file-system abstractions.
 - `PM.Tests/` contains xUnit tests and test helpers. Add tests near the behavior being changed, especially for rendered HTML and file mutation behavior.

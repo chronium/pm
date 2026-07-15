@@ -1,0 +1,4 @@
+<summary><span>{{ state().name }}</span><span class="task-count" [attr.aria-label]="state().tasks.length + (state().tasks.length === 1 ? ' task' : ' tasks')">{{ state().tasks.length }}</span></summary>
+<ul class="task-list">
+  @for (task of state().tasks; track task.id) { <li pmTaskRow [task]="task" [selected]="selectedTaskId() === task.id"></li> }
+</ul>

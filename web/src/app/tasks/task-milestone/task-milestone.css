@@ -1,0 +1,2 @@
+:host { margin: 0; }
+h2 { margin: 0; padding: var(--pm-space-3) var(--pm-space-2) var(--pm-space-1); color: var(--pm-text-muted); font-size: var(--pm-font-size-sm); font-weight: 700; }
