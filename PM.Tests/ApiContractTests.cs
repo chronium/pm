@@ -362,7 +362,7 @@ public partial class ApiContractTests
         var boardService = new BoardService(projectRoot);
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
-            new ResourceRevisionService(projectRoot, boardService), configure);
+            new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapLegacy)
             app.MapGet("/board", () => Results.Content("legacy", "text/html"));

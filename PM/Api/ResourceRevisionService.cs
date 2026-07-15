@@ -35,9 +35,12 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
     {
         if (!projectRoot.Exists)
             return AppResult<string>.Fail("missing_project", "Project not found. Run pm init first.");
-        if (!projectRoot.TryReadWikiFile(path, out _, out _, out var markdown))
-            return AppResult<string>.Fail("missing_wiki_page", $"Wiki page {path} not found.");
+        if (!projectRoot.TryResolveWikiPath(path, out var normalizedPath, out var filePath))
+            return AppResult<string>.Fail("invalid_wiki_path", "Wiki page path is invalid.");
+        if (!File.Exists(filePath))
+            return AppResult<string>.Fail("missing_wiki_page", $"Wiki page {normalizedPath} not found.");
 
+        var markdown = File.ReadAllText(filePath);
         return AppResult<string>.Ok(Hash("wiki-page", markdown));
     }
 

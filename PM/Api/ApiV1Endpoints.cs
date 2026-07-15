@@ -27,6 +27,7 @@ public static class ApiV1Endpoints
         ProjectValidationService validationService,
         BoardService boardService,
         TaskService taskService,
+        WikiService wikiService,
         ResourceRevisionService revisions,
         Action<RouteGroupBuilder>? configure = null)
     {
@@ -61,6 +62,7 @@ public static class ApiV1Endpoints
 
         api.MapBoardApi(boardService, revisions);
         api.MapTaskApi(boardService, taskService, revisions);
+        api.MapWikiApi(wikiService, revisions);
         api.MapSettingsApi(configService, revisions);
         api.MapValidationApi(validationService);
 
