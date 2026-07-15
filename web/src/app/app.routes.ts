@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
-import { TasksIndex } from './tasks/tasks-index';
+import { TaskRoutePlaceholder } from './tasks/task-route-placeholder';
+import { TasksBoard } from './tasks/tasks-board';
 import { TasksShell } from './tasks/tasks-shell';
 import { WikiIndex } from './wiki/wiki-index';
 import { WikiShell } from './wiki/wiki-shell';
@@ -16,7 +17,11 @@ export const routes: Routes = [
     path: 'tasks',
     component: TasksShell,
     data: { shell: AppShell.Tasks },
-    children: [{ path: '', component: TasksIndex }],
+    children: [{
+      path: '',
+      component: TasksBoard,
+      children: [{ path: ':taskId', component: TaskRoutePlaceholder }],
+    }],
   },
   {
     path: 'wiki',

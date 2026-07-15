@@ -1,0 +1,123 @@
+<section class="tasks-workspace" aria-labelledby="tasks-heading">
+  <header class="workspace-heading">
+    <div>
+      <h1 id="tasks-heading">Tasks</h1>
+      @if (board.board(); as currentBoard) {
+        <p>{{ board.taskCount() }} {{ board.taskCount() === 1 ? 'task' : 'tasks' }}</p>
+      }
+    </div>
+    @if (board.refreshing()) {
+      <span class="refresh-status" role="status">Refreshing…</span>
+    }
+  </header>
+
+  @if (board.board(); as currentBoard) {
+    <form class="filter-toolbar" aria-label="Board filters" (submit)="$event.preventDefault()">
+      <label>
+        <span>Track</span>
+        <select #trackFilter [value]="board.filters().track ?? ''" (change)="board.setFilter('track', trackFilter.value)">
+          <option value="" [selected]="!board.filters().track">All tracks</option>
+          @for (track of currentBoard.tracks; track track.key) {
+            <option [value]="track.key" [selected]="board.filters().track === track.key">{{ track.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Milestone</span>
+        <select #milestoneFilter [value]="board.filters().milestone ?? ''" (change)="board.setFilter('milestone', milestoneFilter.value)">
+          <option value="" [selected]="!board.filters().milestone">All milestones</option>
+          @for (milestone of currentBoard.milestones; track milestone.key) {
+            <option [value]="milestone.key" [selected]="board.filters().milestone === milestone.key">{{ milestone.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Status</span>
+        <select #stateFilter [value]="board.filters().state ?? ''" (change)="board.setFilter('state', stateFilter.value)">
+          <option value="" [selected]="!board.filters().state">All statuses</option>
+          @for (state of currentBoard.states; track state.key) {
+            <option [value]="state.key" [selected]="board.filters().state === state.key">{{ state.name }}</option>
+          }
+        </select>
+      </label>
+      <button class="pm-button pm-button--ghost clear-filters" type="button" [disabled]="!board.hasFilters()" (click)="board.clearFilters()">Clear filters</button>
+    </form>
+  }
+
+  @if (board.error(); as error) {
+    <pm-error-state>
+      <div>
+        <strong>Could not load the task board</strong>
+        <span>{{ error }}</span>
+        <div class="state-actions">
+          <button class="pm-button pm-button--secondary" type="button" (click)="board.reload()">Retry</button>
+          @if (board.hasFilters()) {
+            <button class="pm-button pm-button--ghost" type="button" (click)="board.clearFilters()">Clear filters</button>
+          }
+        </div>
+      </div>
+    </pm-error-state>
+  }
+
+  @if (board.loading()) {
+    <pm-loading-state>Loading task board…</pm-loading-state>
+  } @else if (board.empty()) {
+    <pm-empty-state>
+      <div>
+        <strong>No tasks match these filters</strong>
+        <span>Try another filter combination or clear the active filters.</span>
+        @if (board.hasFilters()) {
+          <button class="pm-button pm-button--secondary" type="button" (click)="board.clearFilters()">Clear filters</button>
+        }
+      </div>
+    </pm-empty-state>
+  } @else if (board.board(); as currentBoard) {
+    <div class="board-sections" [attr.aria-busy]="board.refreshing()">
+      @for (milestone of currentBoard.milestoneGroups; track milestone.key ?? 'unassigned') {
+        @if (board.milestoneTaskCount(milestone) > 0) {
+          <section class="milestone-section" [attr.aria-labelledby]="'milestone-' + $index">
+            <h2 [id]="'milestone-' + $index">{{ milestone.name }}</h2>
+            <div class="status-groups">
+              @for (state of milestone.states; track state.key) {
+                @if (state.tasks.length > 0) {
+                  <details class="status-group" [open]="board.isGroupOpen(milestone, state)" (toggle)="board.rememberGroupOpen(milestone, state, $event)">
+                    <summary>
+                      <span>{{ state.name }}</span>
+                      <span class="task-count" [attr.aria-label]="state.tasks.length + (state.tasks.length === 1 ? ' task' : ' tasks')">{{ state.tasks.length }}</span>
+                    </summary>
+                    <ul class="task-list">
+                      @for (task of state.tasks; track task.id) {
+                        <li [class.selected]="board.selectedTaskId() === task.id">
+                          <a [routerLink]="[task.id]" queryParamsHandling="preserve" [attr.aria-current]="board.selectedTaskId() === task.id ? 'true' : null">
+                            <span class="task-identity">
+                              <span class="task-title">{{ task.title }}</span>
+                              <span class="task-id">{{ task.id }}</span>
+                            </span>
+                            <span class="task-context">
+                              <span>{{ task.track }}</span>
+                              <span aria-hidden="true">·</span>
+                              <span>{{ task.milestone ?? 'Unassigned' }}</span>
+                            </span>
+                            <span class="task-badges">
+                              <pm-badge [tone]="priorityTone(task.priority)" [title]="'Effective priority from ' + task.prioritySource">Priority: {{ task.priority }}</pm-badge>
+                              <pm-badge [tone]="dependencyTone(task)" [title]="task.dependencies.summary">{{ dependencyLabel(task) }}</pm-badge>
+                            </span>
+                            @if (task.descriptionPreview) {
+                              <span class="task-preview">{{ task.descriptionPreview }}</span>
+                            }
+                          </a>
+                        </li>
+                      }
+                    </ul>
+                  </details>
+                }
+              }
+            </div>
+          </section>
+        }
+      }
+    </div>
+  }
+</section>
+
+<router-outlet />

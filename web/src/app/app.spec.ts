@@ -28,6 +28,20 @@ describe('application shell', () => {
       name: projectName,
       revision: 'project-revision',
     });
+    const boardRequest = TestBed.inject(HttpTestingController).match(
+      (request) => request.url === '/api/v1/board',
+    );
+    for (const request of boardRequest) {
+      request.flush({
+        projectName,
+        filters: { track: null, milestone: null, state: null },
+        tracks: [],
+        milestones: [],
+        states: [],
+        milestoneGroups: [],
+        revision: 'board-revision',
+      });
+    }
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, router };
@@ -74,6 +88,14 @@ describe('application shell', () => {
     fixture.detectChanges();
     expect(layout.activeShell()).toBe(AppShell.Wiki);
     expect(fixture.nativeElement.querySelector('a[href="/wiki"][aria-current="page"]')).toBeTruthy();
+  });
+
+  it('keeps the all-tasks navigation active on a nested task route', async () => {
+    const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
+    const allTasks = [...fixture.nativeElement.querySelectorAll('aside a')]
+      .find((link: HTMLAnchorElement) => link.textContent?.trim() === 'All tasks');
+    expect(allTasks?.classList.contains('active')).toBe(true);
+    expect(fixture.nativeElement.querySelector('main h1')?.textContent).toBe('Tasks');
   });
 
   it('uses semantic navigation and hides decorative icons from assistive technology', async () => {
