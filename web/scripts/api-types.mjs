@@ -69,6 +69,7 @@ const port = await availablePort();
 const server = spawn('dotnet', [
   'PM/bin/Debug/net10.0/PM.dll',
   'web',
+  '--api',
   '--port',
   String(port),
 ], {

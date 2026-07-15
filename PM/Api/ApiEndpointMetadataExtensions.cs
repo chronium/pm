@@ -49,6 +49,17 @@ public static class ApiEndpointMetadataExtensions
             return Task.CompletedTask;
         });
 
+    public static RouteHandlerBuilder WithClientHeaderMetadata(this RouteHandlerBuilder builder) =>
+        builder.AddOpenApiOperationTransformer((operation, _, _) =>
+        {
+            operation.Parameters ??= [];
+            operation.Parameters.Add(HeaderParameter(
+                ApiV1Endpoints.ClientHeader,
+                "Identifies the API client performing the mutation.",
+                required: true));
+            return Task.CompletedTask;
+        });
+
     private static OpenApiParameter HeaderParameter(string name, string description, bool required) => new()
     {
         Name = name,

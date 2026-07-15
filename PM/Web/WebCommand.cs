@@ -58,7 +58,7 @@ public class WebCommand(
         ConfigureApiServices(builder.Services);
 
         var app = builder.Build();
-        MapApiEndpoints(app, projectRoot, configService, boardService, taskService);
+        MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService);
         if (!settings.Api)
         {
             if (ui == "legacy")
@@ -112,10 +112,11 @@ public class WebCommand(
         IEndpointRouteBuilder endpoints,
         ProjectRoot projectRoot,
         ProjectConfigService configService,
+        ProjectValidationService validationService,
         BoardService boardService,
         TaskService taskService)
     {
-        endpoints.MapApiV1(projectRoot, configService, boardService, taskService,
+        endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
             new ResourceRevisionService(projectRoot, boardService));
         endpoints.MapOpenApi("/openapi/{documentName}.json");
     }

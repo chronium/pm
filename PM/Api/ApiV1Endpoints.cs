@@ -24,6 +24,7 @@ public static class ApiV1Endpoints
         this IEndpointRouteBuilder endpoints,
         ProjectRoot projectRoot,
         ProjectConfigService configService,
+        ProjectValidationService validationService,
         BoardService boardService,
         TaskService taskService,
         ResourceRevisionService revisions,
@@ -60,6 +61,8 @@ public static class ApiV1Endpoints
 
         api.MapBoardApi(boardService, revisions);
         api.MapTaskApi(boardService, taskService, revisions);
+        api.MapSettingsApi(configService, revisions);
+        api.MapValidationApi(validationService);
 
         configure?.Invoke(api);
         return api;

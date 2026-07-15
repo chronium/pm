@@ -360,7 +360,7 @@ public partial class ApiContractTests
         var app = builder.Build();
         var configService = new ProjectConfigService(projectRoot);
         var boardService = new BoardService(projectRoot);
-        app.MapApiV1(projectRoot, configService, boardService,
+        app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
             new ResourceRevisionService(projectRoot, boardService), configure);
         app.MapOpenApi("/openapi/{documentName}.json");
