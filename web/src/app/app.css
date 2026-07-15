@@ -1,13 +1,16 @@
 :host {
   display: grid;
   grid-template-rows: var(--pm-topbar-height) minmax(0, 1fr);
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
   background: var(--pm-surface-canvas);
   color: var(--pm-text-primary);
 }
 
 .topbar {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -98,6 +101,7 @@
 .app-route {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 767px) {
