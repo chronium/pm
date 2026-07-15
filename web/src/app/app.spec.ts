@@ -43,6 +43,18 @@ describe('application shell', () => {
         revision: 'board-revision',
       });
     }
+    const taskRequests = TestBed.inject(HttpTestingController).match(
+      (request) => request.url.startsWith('/api/v1/tasks/'),
+    );
+    for (const request of taskRequests) {
+      request.flush({
+        id: 'PM-0049', title: 'Task details', track: 'PM', milestone: null,
+        priority: 'medium', prioritySource: 'track', prioritySelection: 'inherit', state: 'todo',
+        dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+        createdAt: '2026-07-15T00:00:00Z', modifiedAt: '2026-07-15T00:00:00Z',
+        description: '', revision: 'task-revision', localMetadata: { filePath: '.pm/tasks/PM-0049.md' },
+      }, { headers: { ETag: '"task-revision"' } });
+    }
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, router };

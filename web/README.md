@@ -1,6 +1,8 @@
 # PM Web
 
-`pm-web` is the standalone Angular 22 workspace for PM's replacement web client. This infrastructure slice intentionally contains only the routed root application; product routes and UI arrive in later milestones.
+`pm-web` is the standalone Angular 22 workspace for PM's replacement web client. It currently provides the mounted task board and routed task create/detail/edit dialogs, with the wiki and settings feature work continuing in later milestones.
+
+Task dialog URLs (`/tasks/new` and `/tasks/:taskId`) preserve active board query filters. Reads use the generated API contracts and strong ETags; edit, state, and removal mutations always send the current `If-Match` value. Task descriptions use the locally bundled EasyMDE editor and a shared sanitized Markdown renderer.
 
 ## Prerequisites
 

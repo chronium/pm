@@ -4,13 +4,15 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 
-import { TaskRoutePlaceholder } from './task-route-placeholder';
 import { TaskNavigationService } from './task-navigation.service';
 import { TasksBoard } from './tasks-board';
 import type { BoardResponse } from './tasks-board.store';
 
 @Component({ imports: [RouterOutlet], template: '<router-outlet />' })
 class RouterHost {}
+
+@Component({ template: '' })
+class NestedTaskHost {}
 
 const boardResponse: BoardResponse = {
   projectName: 'Atlas Project',
@@ -82,7 +84,7 @@ describe('TasksBoard', () => {
         provideRouter([{
           path: 'tasks',
           component: TasksBoard,
-          children: [{ path: ':taskId', component: TaskRoutePlaceholder }],
+          children: [{ path: ':taskId', component: NestedTaskHost }],
         }]),
         provideHttpClient(),
         provideHttpClientTesting(),

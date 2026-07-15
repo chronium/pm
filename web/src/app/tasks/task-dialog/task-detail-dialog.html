@@ -1,0 +1,27 @@
+<pm-task-dialog-shell [title]="detail.task()?.title ?? 'Task details'" [eyebrow]="detail.task()?.id ?? 'Task'" [pending]="pending()" (closeIntent)="close()">
+  @if (detail.loading()) { <pm-loading-state>Loading task…</pm-loading-state>
+  } @else if (detail.error(); as loadError) { <pm-error-state><div><strong>Could not load task</strong><span>{{ loadError }}</span><button type="button" class="pm-button pm-button--secondary" (click)="detail.reload()">Retry</button></div></pm-error-state>
+  } @else if (detail.task(); as task) {
+    @if (editing()) { <pm-task-edit-form [task]="task" [states]="board.board()?.states ?? []" [pending]="pending()" [stale]="stale()" [apiError]="error()" (submitted)="save($event)" (cancelled)="cancelEdit()" (reloadIntent)="reloadLatest()" />
+    } @else {
+      <article class="task-detail">
+        @if (error()) { <p class="detail-error" role="alert">{{ error() }}</p> }
+        @if (stale()) { <button type="button" class="pm-button pm-button--secondary" (click)="reloadLatest()">Reload latest</button> }
+        <pm-markdown-display [markdown]="task.description || '_No description provided._'" />
+        <dl class="task-metadata"><div><dt>ID</dt><dd>{{ task.id }}</dd></div><div><dt>Track</dt><dd>{{ task.track }}</dd></div><div><dt>Milestone</dt><dd>{{ task.milestone ?? 'None' }}</dd></div><div><dt>Status</dt><dd>{{ task.state }}</dd></div><div><dt>Priority</dt><dd>{{ task.priority }} <small>({{ task.prioritySource }})</small></dd></div><div><dt>Created</dt><dd><time [attr.datetime]="task.createdAt">{{ task.createdAt | date:'medium' }}</time></dd></div><div><dt>Updated</dt><dd><time [attr.datetime]="task.modifiedAt">{{ task.modifiedAt | date:'medium' }}</time></dd></div></dl>
+        <section class="dependencies" aria-labelledby="dependency-heading"><h3 id="dependency-heading">Dependencies</h3><p>{{ task.dependencies.summary }}</p>
+          @if (task.dependencies.dependsOn.length) {
+            <div class="dependency-list"><span>Depends on:</span>
+              @for (id of task.dependencies.dependsOn; track id) { <a [routerLink]="['/tasks', id]" queryParamsHandling="preserve">{{ id }}</a> }
+            </div>
+          }
+          @if (task.dependencies.waitingOn.length) { <p>Waiting on: {{ task.dependencies.waitingOn.join(', ') }}</p> }
+          @if (task.dependencies.missing.length) { <p>Missing: {{ task.dependencies.missing.join(', ') }}</p> }
+        </section>
+        <details class="file-path"><summary>Local file</summary><code>{{ task.localMetadata.filePath }}</code></details>
+        <div class="detail-actions"><label for="task-state">Move to</label><select id="task-state" [disabled]="pending() || stale()" (change)="changeState($any($event.target).value)">@for (state of board.board()?.states ?? []; track state.key) { <option [value]="state.key" [selected]="state.key === task.state">{{ state.name }}</option> }</select><span class="action-spacer"></span><button type="button" class="pm-button pm-button--ghost remove-action" [disabled]="pending()" (click)="confirmKind.set('remove')">Remove</button><button type="button" class="pm-button pm-button--primary" [disabled]="pending() || stale()" (click)="editing.set(true)">Edit</button></div>
+      </article>
+    }
+  }
+</pm-task-dialog-shell>
+<pm-confirm-dialog [open]="confirmKind() !== null" [pending]="pending()" [heading]="confirmKind() === 'remove' ? 'Remove this task?' : 'Discard task changes?'" [message]="confirmKind() === 'remove' ? 'This removes the task file and cannot be undone.' : 'Your unsaved task changes will be lost.'" [confirmLabel]="confirmKind() === 'remove' ? 'Remove task' : 'Discard changes'" (confirmed)="confirm()" (cancelled)="cancelConfirm()" />

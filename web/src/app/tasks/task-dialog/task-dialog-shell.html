@@ -1,0 +1,12 @@
+<dialog #dialog class="task-dialog" [attr.aria-labelledby]="headingId" (cancel)="cancel($event)">
+  <div class="task-dialog-frame" [attr.aria-busy]="pending()">
+    <header class="task-dialog-header">
+      <div>
+        <span class="task-dialog-eyebrow">{{ eyebrow() }}</span>
+        <h2 [id]="headingId">{{ title() }}</h2>
+      </div>
+      <button type="button" class="dialog-close" aria-label="Close task dialog" [disabled]="pending()" (click)="closeIntent.emit()">×</button>
+    </header>
+    <div class="task-dialog-scroll"><ng-content /></div>
+  </div>
+</dialog>

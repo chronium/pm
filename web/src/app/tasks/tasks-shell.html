@@ -3,6 +3,7 @@
     <div class="sidebar-heading">Tasks</div>
     <nav aria-label="Task views">
       <a routerLink="/tasks" routerLinkActive="active">All tasks</a>
+      <a routerLink="/tasks/new" queryParamsHandling="preserve" (click)="taskNavigation.captureOrigin($event.currentTarget)">New task</a>
     </nav>
   </aside>
 

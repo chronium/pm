@@ -1,0 +1,19 @@
+<form class="task-form" (submit)="submit($event)" novalidate>
+  <p class="readonly-context">{{ task().id }} · {{ task().track }} · {{ task().milestone ?? 'No milestone' }}</p>
+  @if (apiError()) { <p class="form-error" role="alert">{{ apiError() }}</p> }
+  <pm-form-field><label for="edit-task-title">Title</label><input id="edit-task-title" pmControl [formField]="taskForm.title" autocomplete="off" autofocus />
+    @if (taskForm.title().touched() && firstError(taskForm.title())) { <p pmFieldMessage class="field-error">{{ firstError(taskForm.title()) }}</p> }
+  </pm-form-field>
+  <div class="form-grid">
+    <pm-form-field><label for="edit-task-state">Status</label><select id="edit-task-state" pmControl [formField]="taskForm.state">@for (state of states(); track state.key) { <option [value]="state.key">{{ state.name }}</option> }</select></pm-form-field>
+    <pm-form-field><label for="edit-task-priority">Priority</label><select id="edit-task-priority" pmControl [formField]="taskForm.priority">
+      <option value="inherit">Inherit</option><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+    </select></pm-form-field>
+  </div>
+  <pm-form-field><label id="edit-task-description">Description</label><pm-markdown-editor pmControl [formField]="taskForm.description" label="Description" aria-labelledby="edit-task-description" /></pm-form-field>
+  <div class="form-actions">
+    @if (stale()) { <button type="button" class="pm-button pm-button--secondary" (click)="reloadIntent.emit()">Reload latest</button> }
+    <button type="button" class="pm-button pm-button--secondary" [disabled]="pending()" (click)="cancelled.emit()">Cancel</button>
+    <button type="submit" class="pm-button pm-button--primary" [disabled]="pending() || stale() || !taskForm().valid()">{{ pending() ? 'Saving…' : 'Save' }}</button>
+  </div>
+</form>

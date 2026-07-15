@@ -1,0 +1,9 @@
+:host { display: block; min-width: 0; }
+.markdown-body { overflow-wrap: anywhere; }
+.markdown-body :first-child { margin-top: 0; }
+.markdown-body :last-child { margin-bottom: 0; }
+.markdown-body pre { overflow: auto; padding: var(--pm-space-3); background: var(--pm-surface-sidebar); border-radius: var(--pm-radius-sm); }
+.markdown-body code { font-family: var(--pm-font-family-mono); }
+.markdown-body img { max-width: 100%; }
+.markdown-body a { color: var(--pm-accent-strong); }
+.markdown-body blockquote { margin-inline: 0; padding-left: var(--pm-space-3); border-left: 3px solid var(--pm-border-strong); color: var(--pm-text-muted); }

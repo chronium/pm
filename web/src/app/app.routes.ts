@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { TaskRoutePlaceholder } from './tasks/task-route-placeholder';
+import { canLeaveDirtyDialog } from './tasks/task-dialog/task-dialog.types';
 import { TasksBoard } from './tasks/tasks-board';
 import { TasksShell } from './tasks/tasks-shell';
 import { WikiIndex } from './wiki/wiki-index';
@@ -20,7 +20,18 @@ export const routes: Routes = [
     children: [{
       path: '',
       component: TasksBoard,
-      children: [{ path: ':taskId', component: TaskRoutePlaceholder }],
+      children: [
+        {
+          path: 'new',
+          loadComponent: () => import('./tasks/task-dialog/task-create-dialog').then((module) => module.TaskCreateDialog),
+          canDeactivate: [canLeaveDirtyDialog],
+        },
+        {
+          path: ':taskId',
+          loadComponent: () => import('./tasks/task-dialog/task-detail-dialog').then((module) => module.TaskDetailDialog),
+          canDeactivate: [canLeaveDirtyDialog],
+        },
+      ],
     }],
   },
   {

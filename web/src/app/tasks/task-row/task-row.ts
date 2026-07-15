@@ -1,8 +1,9 @@
-import { Component, input } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { PmBadge, type BadgeTone } from '../../ui/badge/badge';
 import type { BoardTask } from '../tasks-board.store';
+import { TaskNavigationService } from '../task-navigation.service';
 
 @Component({
   selector: 'li[pmTaskRow]',
@@ -12,8 +13,13 @@ import type { BoardTask } from '../tasks-board.store';
   host: { '[class.selected]': 'selected()' },
 })
 export class TaskRow {
+  private readonly navigation = inject(TaskNavigationService);
   readonly task = input.required<BoardTask>();
   readonly selected = input.required<boolean>();
+
+  protected captureOrigin(event: MouseEvent): void {
+    this.navigation.captureOrigin(event.currentTarget);
+  }
 
   protected priorityTone(priority: string): BadgeTone {
     switch (priority.toLowerCase()) {
