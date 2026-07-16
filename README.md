@@ -4,7 +4,7 @@ PM is a local project-management tool for software work. It stores project state
 
 ## Features
 
-- Task creation, editing, removal, listing, and movement between statuses.
+- Task creation, editing, removal, listing, structured search, and movement between statuses.
 - Project tracks, milestones, and configurable task statuses.
 - Local web UI for task boards, task dialogs, settings, and wiki pages.
 - MCP server support for integrating PM data with agent workflows.
@@ -35,6 +35,12 @@ List tasks:
 
 ```sh
 dotnet PM/bin/Debug/net10.0/PM.dll list
+```
+
+Search tasks with free text and composable metadata filters:
+
+```sh
+dotnet PM/bin/Debug/net10.0/PM.dll task search "render state:todo track:BUILD" --limit 20
 ```
 
 For Angular development, start the API-only host from inside an initialized PM project, then run the Angular development server in another terminal:

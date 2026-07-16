@@ -38,7 +38,11 @@
     >
   </nav>
 
-  <div class="search-slot" aria-hidden="true"></div>
+  @if (layout.activeShell() === AppShell.Tasks) {
+    <pm-task-search />
+  } @else {
+    <div class="search-slot" aria-hidden="true"></div>
+  }
 
   <button
     class="icon-button"

@@ -649,6 +649,55 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task TaskServiceSearchCombinesStructuredFiltersAndFreeText()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new() { ["PM"] = "Product", ["BUILD"] = "Build" },
+            milestones: new() { ["M1"] = "First", ["M2"] = "Second" }));
+        var matches = new[]
+        {
+            TestData.Task("BUILD-0002", "Render search", "First description", "BUILD", "M1"),
+            TestData.Task("BUILD-0001", "Render search", "Second description", "BUILD", "M2"),
+            TestData.Task("PM-0003", "Render search", "Wrong track", "PM", "M1"),
+            TestData.Task("BUILD-0004", "Other", "Wrong text", "BUILD", "M1"),
+        };
+        foreach (var task in matches) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(matches[0], "todo");
+        projectRoot.UpdateTaskState(matches[1], "review");
+        projectRoot.UpdateTaskState(matches[2], "todo");
+        projectRoot.UpdateTaskState(matches[3], "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var compact = service.SearchTasks("render track:build milestone:M1 milestone:m2 state: todo state:review");
+        var prefix = service.SearchTasks("id:build-000");
+        var context = service.SearchTasks("track:BUILD", 20, new TaskSearchContext(Milestone: "M1", State: "todo"));
+        var filtersOnly = service.SearchTasks("state:todo track:build");
+
+        Assert.Equal(["BUILD-0001", "BUILD-0002"], compact.Payload!.Select(item => item.Task.Id).Order());
+        Assert.Equal(["BUILD-0001", "BUILD-0002", "BUILD-0004"], prefix.Payload!.Select(item => item.Task.Id));
+        Assert.Equal(["BUILD-0002", "BUILD-0004"], context.Payload!.Select(item => item.Task.Id));
+        Assert.Equal(["BUILD-0002", "BUILD-0004"], filtersOnly.Payload!.Select(item => item.Task.Id));
+        Assert.All(filtersOnly.Payload!, item => Assert.Equal(item.DescriptionPreview, item.Snippet));
+        Assert.All(filtersOnly.Payload!, item => Assert.Equal(0, item.MatchCount));
+    }
+
+    [Fact]
+    public async Task TaskServiceSearchKeepsUnknownPrefixesAndRejectsMissingRecognizedValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Compatibility", "owner:alex");
+        projectRoot.WriteTask(task);
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        Assert.Equal("PM-0001", Assert.Single(service.SearchTasks("owner:alex").Payload!).Task.Id);
+        Assert.Equal("invalid_task_query", service.SearchTasks("state:").ErrorCode);
+        Assert.Equal("invalid_task_query", service.SearchTasks("state: track:PM").ErrorCode);
+        Assert.Equal("invalid_track", service.SearchTasks("id:PM", context: new TaskSearchContext("missing")).ErrorCode);
+    }
+
+    [Fact]
     public async Task NextTaskSelectsConfiguredStateOrderBeforeNewerLaterStatesAndFiltersByTrack()
     {
         using var workspace = new TempWorkingDirectory();

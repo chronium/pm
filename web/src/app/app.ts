@@ -7,15 +7,18 @@ import { LayoutService } from './core/layout.service';
 import { ThemeService } from './core/theme.service';
 import { ProjectApiService } from './api/project-api.service';
 import { TaskNavigationService } from './tasks/task-navigation.service';
+import { AppShell } from './app.routes';
+import { TaskSearch } from './tasks/task-search/task-search';
 
 @Component({
   selector: 'pm-root',
-  imports: [NgIcon, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch],
   providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
+  protected readonly AppShell = AppShell;
   protected readonly layout = inject(LayoutService);
   protected readonly theme = inject(ThemeService);
   protected readonly projectApi = inject(ProjectApiService);

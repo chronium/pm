@@ -24,12 +24,40 @@ public sealed record TaskResponse(
 public sealed record CreateTaskRequest(string Title, string Track, string? Milestone = null, string? Description = null);
 public sealed record UpdateTaskRequest(string Title, string State, string Description, string Priority);
 public sealed record UpdateTaskStateRequest(string State);
+public sealed record TaskSearchResultResponse(
+    string Id,
+    string Title,
+    string State,
+    string Track,
+    string? Milestone,
+    int MatchCount,
+    string Snippet);
 
 public static class TaskApiEndpoints
 {
     public static void MapTaskApi(this RouteGroupBuilder api, BoardService boardService,
         TaskService taskService, ResourceRevisionService revisions)
     {
+        api.MapGet("/tasks/search", (HttpRequest request, string query, int limit = 20,
+                string? track = null, string? milestone = null, string? state = null) =>
+            {
+                var result = taskService.SearchTasks(query, limit, new TaskSearchContext(track, milestone, state));
+                if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                return Results.Ok(result.Payload!.Select(item => new TaskSearchResultResponse(
+                    item.Task.Id,
+                    item.Task.Title,
+                    item.State,
+                    item.Track,
+                    item.Milestone,
+                    item.MatchCount,
+                    item.Snippet)).ToList());
+            })
+            .WithName("SearchTasks")
+            .WithSummary("Search tasks")
+            .Produces<IReadOnlyList<TaskSearchResultResponse>>()
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
+
         api.MapGet("/tasks/{id}", (HttpRequest request, string id) => ReadTask(request, id, boardService, revisions))
             .WithName("GetTask")
             .WithSummary("Get task details")

@@ -31,6 +31,33 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'light');
 });
 
+test('task search composes filters, preserves board context, and handles text and empty results', async ({
+  page,
+}) => {
+  await page.goto('/tasks?state=todo');
+  const search = page.getByRole('combobox', { name: 'Search tasks' });
+  const mobileSearch = page.getByRole('button', { name: 'Search tasks' });
+  if (await mobileSearch.isVisible()) await mobileSearch.click();
+  await search.fill('milestone:current track:E2E');
+  const result = page.getByRole('option').filter({ hasText: 'E2E-0001' });
+  await expect(result).toBeVisible();
+  await result.click();
+  await expect(page).toHaveURL(/\/tasks\/E2E-0001\?state=todo$/);
+  await page.getByRole('button', { name: 'Close task dialog' }).click();
+
+  if (await mobileSearch.isVisible()) await mobileSearch.click();
+  await search.fill('Fixture task 2');
+  await expect(page.getByRole('option').filter({ hasText: 'E2E-0002' })).toBeVisible();
+  await search.fill('definitely-no-such-task');
+  await expect(page.getByText('No matching tasks.')).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (!(await search.isVisible())) await mobileSearch.click();
+  await expect(search).toBeVisible();
+  await search.fill('id:E2E-0003');
+  await expect(page.getByRole('option').filter({ hasText: 'E2E-0003' })).toBeVisible();
+});
+
 test('creates, opens, edits, moves, conflicts, and removes a task', async ({ page }) => {
   await page.goto('/tasks/new');
   await page.getByLabel('Title').fill('Created in Playwright');

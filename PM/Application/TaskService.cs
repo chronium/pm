@@ -160,15 +160,25 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             null));
     }
 
-    public AppResult<IReadOnlyList<TaskSearchResult>> SearchTasks(string query, int limit = 20)
+    public AppResult<IReadOnlyList<TaskSearchResult>> SearchTasks(
+        string query,
+        int limit = 20,
+        TaskSearchContext? context = null)
     {
         if (!projectRoot.Exists)
             return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("missing_project", "Project not found. Run pm init first.");
 
-        if (string.IsNullOrWhiteSpace(query))
-            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_task_query", "Task search query is required.");
+        var parsedQuery = TaskSearchQueryParser.Parse(query);
+        if (!parsedQuery.Success)
+            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail(parsedQuery.ErrorCode!, parsedQuery.Message!);
 
-        var normalizedQuery = query.Trim();
+        context ??= new TaskSearchContext();
+        var normalizedContext = new TaskSearchContext(
+            NormalizeFilter(context.Track), NormalizeFilter(context.Milestone), NormalizeFilter(context.State));
+        var contextError = ValidateSearchContext(normalizedContext);
+        if (contextError != null) return contextError;
+
+        var search = parsedQuery.Payload!;
         limit = Math.Clamp(limit, 1, 100);
         var parsedTasks = new List<(TaskItem Task, string FilePath, string Markdown)>();
         foreach (var (filePath, markdown) in projectRoot.GetTaskMarkdownFiles())
@@ -195,10 +205,16 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         {
             var track = projectRoot.ResolveTaskTrack(task);
             var state = stateById.TryGetValue(task.Id, out var currentState) ? currentState : string.Empty;
+            if (!MatchesFilters(task, track, state, search, normalizedContext)) continue;
             var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
             var fields = BuildSearchFields(task, markdown, track, state, priority.Priority);
-            var matchCount = fields.Sum(field => CountMatches(field.Value, normalizedQuery));
-            if (matchCount == 0) continue;
+            var matchCount = search.HasFreeText
+                ? fields.Sum(field => CountMatches(field.Value, search.FreeText))
+                : 0;
+            if (search.HasFreeText && matchCount == 0) continue;
+
+            var descriptionPreview = BoardService.GetDescriptionPreview(
+                task.Description, BoardService.WebDescriptionPreviewLength);
 
             results.Add(new TaskSearchResult(
                 task,
@@ -208,18 +224,55 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
                 priority.Source,
                 state,
                 BoardService.BuildDependencyStatus(task, tasksById, stateById),
-                BoardService.GetDescriptionPreview(task.Description, BoardService.WebDescriptionPreviewLength),
+                descriptionPreview,
                 filePath,
                 matchCount,
-                BuildSnippet(fields, normalizedQuery)));
+                search.HasFreeText ? BuildSnippet(fields, search.FreeText) : descriptionPreview));
         }
 
-        return AppResult<IReadOnlyList<TaskSearchResult>>.Ok(results
-            .OrderByDescending(result => result.MatchCount)
-            .ThenBy(result => result.Task.Id, StringComparer.Ordinal)
+        var ordered = search.HasFreeText
+            ? results.OrderByDescending(result => result.MatchCount)
+                .ThenBy(result => result.Task.Id, StringComparer.Ordinal)
+            : results.OrderBy(result => result.Task.Id, StringComparer.Ordinal);
+        return AppResult<IReadOnlyList<TaskSearchResult>>.Ok(ordered
             .Take(limit)
             .ToList());
     }
+
+    private AppResult<IReadOnlyList<TaskSearchResult>>? ValidateSearchContext(TaskSearchContext context)
+    {
+        var config = projectRoot.Config!;
+        if (context.Track != null && !config.Tracks.ContainsKey(context.Track))
+            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_track", $"Track {context.Track} not found.");
+        if (context.Milestone != null && !config.Milestones.ContainsKey(context.Milestone))
+            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_milestone", $"Milestone {context.Milestone} not found.");
+        if (context.State != null && !config.TaskStates.ContainsKey(context.State))
+            return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_state", $"State {context.State} not found.");
+        return null;
+    }
+
+    private static bool MatchesFilters(TaskItem task, string track, string state, TaskSearchQuery query,
+        TaskSearchContext context)
+    {
+        return MatchesAny(query.States, state, false) &&
+               MatchesAny(query.Tracks, track, false) &&
+               MatchesAny(query.Milestones, task.Milestone ?? string.Empty, false) &&
+               MatchesAny(query.Ids, task.Id, true) &&
+               MatchesContext(context.State, state) &&
+               MatchesContext(context.Track, track) &&
+               MatchesContext(context.Milestone, task.Milestone ?? string.Empty);
+    }
+
+    private static bool MatchesAny(IReadOnlyList<string> values, string actual, bool prefix) =>
+        values.Count == 0 || values.Any(value => prefix
+            ? actual.StartsWith(value, StringComparison.OrdinalIgnoreCase)
+            : actual.Equals(value, StringComparison.OrdinalIgnoreCase));
+
+    private static bool MatchesContext(string? expected, string actual) =>
+        expected == null || actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
+
+    private static string? NormalizeFilter(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public AppResult MoveTask(string taskId, string targetState)
     {

@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search tasks */
+        get: operations["SearchTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{id}": {
         parameters: {
             query?: never;
@@ -418,6 +435,16 @@ export interface components {
             revision: string;
             localMetadata: components["schemas"]["TaskLocalMetadataResponse"];
         };
+        TaskSearchResultResponse: {
+            id: string;
+            title: string;
+            state: string;
+            track: string;
+            milestone: null | string;
+            /** Format: int32 */
+            matchCount: number | string;
+            snippet: string;
+        };
         UpdateTaskRequest: {
             title: string;
             state: string;
@@ -572,6 +599,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    SearchTasks: {
+        parameters: {
+            query: {
+                query: string;
+                limit?: number | string;
+                track?: string;
+                milestone?: string;
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSearchResultResponse"][];
+                };
             };
             /** @description Bad Request */
             400: {

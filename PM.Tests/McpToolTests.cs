@@ -363,6 +363,9 @@ public class McpToolTests
         Assert.True(result.MatchCount > 0);
         Assert.Contains("needle", result.Snippet, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("invalid_task_query", blank.ErrorCode);
+
+        var structured = tools.SearchTasks("state:review milestone:m1");
+        Assert.Equal("PM-0001", Assert.Single(structured.Data!.Tasks).Id);
     }
 
     [Fact]

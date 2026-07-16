@@ -260,6 +260,10 @@ public partial class ApiContractTests
             var paths = document.GetProperty("paths");
             Assert.True(paths.TryGetProperty("/api/v1/board", out _));
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}", out var task));
+            Assert.True(paths.TryGetProperty("/api/v1/tasks/search", out var search));
+            Assert.Contains(search.GetProperty("get").GetProperty("parameters").EnumerateArray(),
+                parameter => parameter.GetProperty("name").GetString() == "query" &&
+                             parameter.GetProperty("required").GetBoolean());
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}/state", out _));
             Assert.True(task.GetProperty("delete").GetProperty("responses").TryGetProperty("204", out var deleted));
             Assert.False(deleted.TryGetProperty("headers", out _));
@@ -271,6 +275,40 @@ public partial class ApiContractTests
                 .EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("priority", schemas.GetProperty("UpdateTaskRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
+        }
+    }
+
+    [Fact]
+    public async Task TaskSearchApiUsesStructuredQueryAndIntersectsBoardContext()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            tracks: new() { ["PM"] = "Product", ["BUILD"] = "Build" },
+            milestones: new() { ["M1"] = "First" }));
+        var visible = TestData.Task("BUILD-0001", "Needle <safe>", "Description & context", "BUILD", "M1");
+        var filtered = TestData.Task("PM-0002", "Needle other", "Other", "PM", "M1");
+        root.WriteTask(visible);
+        root.WriteTask(filtered);
+        root.UpdateTaskState(visible, "todo");
+        root.UpdateTaskState(filtered, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var response = await client.GetAsync(
+                "/api/v1/tasks/search?query=needle%20milestone%3AM1&track=BUILD&state=todo&limit=1");
+            var results = await response.Content.ReadFromJsonAsync<List<TaskSearchResultResponse>>();
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var result = Assert.Single(results!);
+            Assert.Equal("BUILD-0001", result.Id);
+            Assert.Equal("Needle <safe>", result.Title);
+            Assert.Contains("Needle", result.Snippet);
+            Assert.True(result.MatchCount > 0);
+
+            var invalid = await client.GetAsync("/api/v1/tasks/search?query=state%3A");
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            Assert.Equal("invalid_task_query",
+                (await invalid.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
         }
     }
 

@@ -665,6 +665,35 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskSearchRendersDenseResultsEmptyAndInvalidQueries()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(milestones: new() { ["M1"] = "First" }));
+        var task = TestData.Task("PM-0001", "Find [render]", "Useful <snippet>", milestone: "M1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "review");
+        var command = new TaskSearchCommand(new TaskService(projectRoot, new RecordingNextIdService()));
+
+        var found = await CaptureConsole(() => command.Execute(null!,
+            new TaskSearchCommand.Settings { Query = "state:review", Limit = 1 }, CancellationToken.None));
+        var empty = await CaptureConsole(() => command.Execute(null!,
+            new TaskSearchCommand.Settings { Query = "missing" }, CancellationToken.None));
+        var invalid = await CaptureConsole(() => command.Execute(null!,
+            new TaskSearchCommand.Settings { Query = "track:" }, CancellationToken.None));
+
+        Assert.Equal(0, found.ExitCode);
+        Assert.Contains("PM-0001", found.Output);
+        Assert.Contains("Find [render]", found.Output);
+        Assert.Contains("Useful <snippet>", found.Output);
+        Assert.Contains("review", found.Output);
+        Assert.Contains("M1", found.Output);
+        Assert.Equal(0, empty.ExitCode);
+        Assert.Contains("No matching tasks.", empty.Output);
+        Assert.Equal(1, invalid.ExitCode);
+        Assert.Contains("requires a value", invalid.Output);
+    }
+
+    [Fact]
     public async Task WikiShowRendersPageAndRejectsMissingPage()
     {
         using var workspace = new TempWorkingDirectory();

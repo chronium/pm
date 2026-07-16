@@ -33,6 +33,7 @@ public static class GlobalConfig
     public static string TaskEditCommandName => "edit";
     public static string TaskMetadataCommandName => "metadata";
     public static string TaskRemoveCommandName => "remove";
+    public static string TaskSearchCommandName => "search";
     public static string WikiBranchName => "wiki";
     public static string WikiListCommandName => "list";
     public static string WikiShowCommandName => "show";
