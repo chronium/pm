@@ -1,9 +1,10 @@
 :host {
-  position: relative;
+  position: absolute;
+  left: 50%;
   display: flex;
-  flex: 1;
   justify-content: center;
-  min-width: 120px;
+  width: min(42vw, 560px, calc(100vw - 548px));
+  transform: translateX(-50%);
 }
 
 .search {
@@ -56,6 +57,11 @@ input:focus {
 
 [role='option'] {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  align-items: start;
+  justify-content: stretch;
+  justify-items: start;
   width: 100%;
   gap: 2px;
   padding: var(--pm-space-2) var(--pm-space-3);
@@ -78,10 +84,12 @@ input:focus {
 }
 
 .option-primary {
+  width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: var(--pm-font-size-sm);
   font-weight: 600;
+  text-align: left;
 }
 
 .task-id {
@@ -96,6 +104,12 @@ input:focus {
 .search-state {
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-xs);
+}
+
+.option-secondary,
+.option-snippet {
+  width: 100%;
+  text-align: left;
 }
 
 .option-snippet {
@@ -128,8 +142,12 @@ input:focus {
 
 @media (max-width: 767px) {
   :host {
+    position: relative;
+    left: auto;
     flex: 0 0 auto;
+    width: auto;
     margin-left: auto;
+    transform: none;
   }
 
   .mobile-search-button {

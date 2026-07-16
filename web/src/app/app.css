@@ -71,6 +71,10 @@
   flex: 1;
 }
 
+.topbar > pm-task-search + .icon-button {
+  margin-left: auto;
+}
+
 .icon-button {
   display: inline-grid;
   place-items: center;
