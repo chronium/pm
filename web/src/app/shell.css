@@ -19,15 +19,6 @@
   background: var(--pm-surface-raised);
 }
 
-.sidebar-heading {
-  padding: var(--pm-space-1) var(--pm-space-2) var(--pm-space-2);
-  color: var(--pm-text-subtle);
-  font-size: var(--pm-font-size-xs);
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .sidebar nav {
   display: flex;
   flex: 1;

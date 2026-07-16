@@ -1,6 +1,5 @@
 <div class="shell" [class.drawer-open]="layout.mobileSidebarOpen()">
   <aside id="pm-sidebar" class="sidebar" aria-label="Wiki navigation">
-    <div class="sidebar-heading">Wiki</div>
     <nav class="wiki-primary-nav" aria-label="Wiki views">
       <a routerLink="/wiki" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="layout.closeMobileSidebar()">Wiki home</a>
       <a routerLink="/wiki/new" routerLinkActive="active" (click)="layout.closeMobileSidebar()">New page</a>
