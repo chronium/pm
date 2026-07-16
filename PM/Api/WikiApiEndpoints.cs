@@ -1,11 +1,18 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.OpenApi;
 using PM.Application;
 
 namespace PM.Api;
 
 public sealed record WikiPageSummaryResponse(string Path, string Title, DateTime ModifiedAt);
+public sealed record WikiSearchResultResponse(
+    string Path,
+    string Title,
+    DateTime ModifiedAt,
+    int MatchCount,
+    string Snippet);
 public sealed record WikiPageLocalMetadataResponse(string FilePath);
 public sealed record WikiPageResponse(
     string Path,
@@ -24,6 +31,38 @@ public static class WikiApiEndpoints
     public static void MapWikiApi(this RouteGroupBuilder api, WikiService wikiService,
         ResourceRevisionService revisions)
     {
+        api.MapGet("/wiki/search", (HttpRequest request, int limit = 20) =>
+            {
+                var query = request.Query["query"].ToString();
+                var result = wikiService.SearchPages(query, limit);
+                if (!result.Success)
+                    return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+
+                return Results.Ok(result.Payload!.Select(item => new WikiSearchResultResponse(
+                    item.Path,
+                    item.Title,
+                    BoardApiEndpoints.ToUtc(item.ModifiedAt),
+                    item.MatchCount,
+                    item.Snippet)).ToList());
+            })
+            .WithName("SearchWikiPages")
+            .WithSummary("Search wiki pages")
+            .AddOpenApiOperationTransformer((operation, _, _) =>
+            {
+                operation.Parameters ??= [];
+                operation.Parameters.Insert(0, new OpenApiParameter
+                {
+                    Name = "query",
+                    In = ParameterLocation.Query,
+                    Required = true,
+                    Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+                });
+                return Task.CompletedTask;
+            })
+            .Produces<IReadOnlyList<WikiSearchResultResponse>>()
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
+
         api.MapGet("/wiki/pages", (HttpRequest request) =>
             {
                 var result = wikiService.ListPages();

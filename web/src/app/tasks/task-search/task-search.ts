@@ -1,30 +1,18 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
-import {
-  Component,
-  DestroyRef,
-  ElementRef,
-  computed,
-  inject,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssClose, cssSearch } from '@ng-icons/css.gg';
 import { Router } from '@angular/router';
 import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
 
 import type { components } from '../../api/generated/pm-api';
+import { TopBarSearch, type TopBarSearchOption } from '../../shared/top-bar-search/top-bar-search';
 
 type TaskSearchResult = components['schemas']['TaskSearchResultResponse'];
 type SettingsResponse = components['schemas']['SettingsResponse'];
 type SearchField = 'state' | 'id' | 'track' | 'milestone';
 
-interface SearchOption {
-  id: string;
+interface SearchOption extends TopBarSearchOption {
   kind: 'pattern' | 'value' | 'result';
-  primary: string;
-  secondary: string;
   field?: SearchField;
   value?: string;
   result?: TaskSearchResult;
@@ -63,36 +51,39 @@ const patterns: SearchOption[] = [
 
 @Component({
   selector: 'pm-task-search',
-  imports: [NgIcon],
-  providers: [provideIcons({ cssClose, cssSearch })],
-  templateUrl: './task-search.html',
-  styleUrl: './task-search.css',
+  imports: [TopBarSearch],
+  template: `
+    <pm-top-bar-search
+      ariaLabel="Search tasks"
+      listboxLabel="Task search options"
+      placeholder="Search tasks"
+      emptyMessage="No matching tasks."
+      [(query)]="query"
+      [options]="options()"
+      [loading]="loading()"
+      [error]="error()"
+      (queryEdited)="onQueryEdited($event)"
+      (optionSelected)="accept($event)"
+    />
+  `,
 })
 export class TaskSearch {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly input = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  private readonly search = viewChild(TopBarSearch);
   private readonly requests = new Subject<string>();
   private readonly settings = signal<SettingsResponse | null>(null);
   private readonly resultOptions = signal<SearchOption[]>([]);
   private readonly suggestionOptions = signal<SearchOption[]>([]);
 
   protected readonly query = signal('');
-  protected readonly focused = signal(false);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly mobileExpanded = signal(false);
-  protected readonly activeIndex = signal(0);
   protected readonly options = computed(() => {
-    if (!this.query().trim()) return this.focused() ? patterns : [];
+    if (!this.query().trim()) return patterns;
     return this.suggestionOptions().length ? this.suggestionOptions() : this.resultOptions();
   });
-  protected readonly popupOpen = computed(
-    () =>
-      this.focused() &&
-      (this.options().length > 0 || this.loading() || !!this.error() || !!this.query().trim()),
-  );
 
   constructor() {
     this.http
@@ -123,96 +114,45 @@ export class TaskSearch {
         this.loading.set(false);
         this.error.set(error);
         this.resultOptions.set(results.map((result) => this.resultOption(result)));
-        this.ensureActiveIndex();
       });
   }
 
-  protected expandMobile(): void {
-    this.mobileExpanded.set(true);
-    setTimeout(() => this.input()?.nativeElement.focus());
-  }
-
-  protected close(): void {
-    this.focused.set(false);
-    this.mobileExpanded.set(false);
-    this.activeIndex.set(0);
-  }
-
-  protected onFocus(): void {
-    this.focused.set(true);
-    this.updateSuggestions();
-  }
-
-  protected onBlur(): void {
-    setTimeout(() => {
-      const host = this.input()?.nativeElement.closest('pm-task-search');
-      if (!host?.contains(document.activeElement)) this.close();
-    });
-  }
-
-  protected onInput(event: Event): void {
-    this.query.set((event.target as HTMLInputElement).value);
+  protected onQueryEdited(query: string): void {
     this.error.set(null);
     this.resultOptions.set([]);
-    this.activeIndex.set(0);
     this.updateSuggestions();
-    const query = this.completeQuery() ? this.query().trim() : '';
-    this.loading.set(!!query && this.suggestionOptions().length === 0);
-    this.requests.next(query);
+    const requestQuery = this.completeQuery() ? query.trim() : '';
+    this.loading.set(!!requestQuery && this.suggestionOptions().length === 0);
+    this.requests.next(requestQuery);
   }
 
-  protected onKeydown(event: KeyboardEvent): void {
-    const options = this.options();
-    if (event.key === 'ArrowDown' && options.length) {
-      event.preventDefault();
-      this.activeIndex.set((this.activeIndex() + 1) % options.length);
-    } else if (event.key === 'ArrowUp' && options.length) {
-      event.preventDefault();
-      this.activeIndex.set((this.activeIndex() - 1 + options.length) % options.length);
-    } else if (event.key === 'Enter' && options[this.activeIndex()]) {
-      event.preventDefault();
-      this.accept(options[this.activeIndex()]!);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      this.close();
-      this.input()?.nativeElement.blur();
-    }
-  }
-
-  protected accept(option: SearchOption): void {
+  protected accept(selected: TopBarSearchOption): void {
+    const option = this.options().find((candidate) => candidate.id === selected.id);
+    if (!option) return;
     if (option.kind === 'result') {
       void this.openTask(option.result!);
       return;
     }
-    const replacement =
-      option.kind === 'pattern' ? `${option.field}:` : `${option.field}:${option.value}`;
-    this.replaceActiveToken(replacement);
+    this.replaceActiveToken(
+      option.kind === 'pattern' ? `${option.field}:` : `${option.field}:${option.value}`,
+    );
   }
 
-  protected optionId(index: number): string {
-    return `task-search-option-${index}`;
-  }
-
-  private updateSuggestions(): void {
-    const active = this.activeField();
-    if (!active) {
-      this.suggestionOptions.set([]);
-      return;
-    }
-    const { field, value } = active;
-    if (field === 'id') {
+  private updateSuggestions(caret?: number): void {
+    const active = this.activeField(caret);
+    if (!active || active.field === 'id') {
       this.suggestionOptions.set([]);
       return;
     }
     const settings = this.settings();
     if (!settings) return;
     const configured =
-      field === 'state'
+      active.field === 'state'
         ? settings.statuses
-        : field === 'track'
+        : active.field === 'track'
           ? settings.tracks
           : settings.milestones;
-    const lowered = value.toLowerCase();
+    const lowered = active.value.toLowerCase();
     if (configured.some((item) => item.key.toLowerCase() === lowered)) {
       this.suggestionOptions.set([]);
       return;
@@ -221,23 +161,18 @@ export class TaskSearch {
       configured
         .filter((item) => item.key.toLowerCase().startsWith(lowered))
         .map((item) => ({
-          id: `value-${field}-${item.key}`,
+          id: `value-${active.field}-${item.key}`,
           kind: 'value' as const,
           primary: item.key,
           secondary: 'name' in item ? item.name : item.title,
-          field,
+          field: active.field,
           value: item.key,
         })),
     );
-    this.ensureActiveIndex();
   }
 
-  private activeField(): { field: SearchField; value: string } | null {
-    const input = this.input()?.nativeElement;
-    const caret =
-      input?.value === this.query()
-        ? (input.selectionStart ?? this.query().length)
-        : this.query().length;
+  private activeField(knownCaret?: number): { field: SearchField; value: string } | null {
+    const caret = knownCaret ?? this.search()?.caret() ?? this.query().length;
     const before = this.query().slice(0, caret);
     const match = before.match(/(?:^|\s)(state|id|track|milestone):\s*([^\s]*)$/i);
     return match ? { field: match[1]!.toLowerCase() as SearchField, value: match[2] ?? '' } : null;
@@ -245,13 +180,11 @@ export class TaskSearch {
 
   private completeQuery(): boolean {
     const value = this.query().trim();
-    if (!value) return false;
-    return !/(?:^|\s)(?:state|id|track|milestone):\s*$/i.test(value);
+    return !!value && !/(?:^|\s)(?:state|id|track|milestone):\s*$/i.test(value);
   }
 
   private replaceActiveToken(replacement: string): void {
-    const input = this.input()?.nativeElement;
-    const caret = input?.selectionStart ?? this.query().length;
+    const caret = this.search()?.caret() ?? this.query().length;
     const before = this.query().slice(0, caret);
     const fieldMatch = before.match(/(?:^|\s)(state|id|track|milestone):\s*[^\s]*$/i);
     const tokenMatch = before.match(/[^\s]*$/);
@@ -261,20 +194,15 @@ export class TaskSearch {
     const tokenEnd = this.query().slice(caret).search(/\s/);
     const end = tokenEnd < 0 ? this.query().length : caret + tokenEnd;
     const suffix = this.query().slice(end);
-    const separator = suffix && !/^\s/.test(suffix) ? ' ' : '';
-    const next = `${this.query().slice(0, start)}${replacement}${separator}${suffix}`;
+    const next = `${this.query().slice(0, start)}${replacement}${suffix && !/^\s/.test(suffix) ? ' ' : ''}${suffix}`;
     this.query.set(next);
     this.resultOptions.set([]);
-    this.activeIndex.set(0);
     queueMicrotask(() => {
-      const element = this.input()?.nativeElement;
-      const nextCaret = start + replacement.length;
-      element?.focus();
-      element?.setSelectionRange(nextCaret, nextCaret);
-      this.updateSuggestions();
-      const query = this.completeQuery() ? this.query().trim() : '';
-      this.loading.set(!!query && this.suggestionOptions().length === 0);
-      this.requests.next(query);
+      this.search()?.focusAt(start + replacement.length);
+      this.updateSuggestions(start + replacement.length);
+      const requestQuery = this.completeQuery() ? this.query().trim() : '';
+      this.loading.set(!!requestQuery && this.suggestionOptions().length === 0);
+      this.requests.next(requestQuery);
     });
   }
 
@@ -296,6 +224,8 @@ export class TaskSearch {
       secondary: [result.id, result.state, result.track, result.milestone]
         .filter(Boolean)
         .join(' · '),
+      leading: result.id,
+      snippet: result.snippet,
       result,
     };
   }
@@ -305,12 +235,8 @@ export class TaskSearch {
     this.query.set('');
     this.resultOptions.set([]);
     this.suggestionOptions.set([]);
-    this.close();
+    this.search()?.close();
     await this.router.navigate(['/tasks', result.id], { queryParams });
-  }
-
-  private ensureActiveIndex(): void {
-    if (this.activeIndex() >= this.options().length) this.activeIndex.set(0);
   }
 
   private readError(error: unknown): string {

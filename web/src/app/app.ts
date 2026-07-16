@@ -9,10 +9,11 @@ import { ProjectApiService } from './api/project-api.service';
 import { TaskNavigationService } from './tasks/task-navigation.service';
 import { AppShell } from './app.routes';
 import { TaskSearch } from './tasks/task-search/task-search';
+import { WikiSearch } from './wiki/wiki-search';
 
 @Component({
   selector: 'pm-root',
-  imports: [NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch],
+  imports: [NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch, WikiSearch],
   providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],
   templateUrl: './app.html',
   styleUrl: './app.css',

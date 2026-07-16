@@ -11,7 +11,6 @@
   position: relative;
   width: min(100%, 560px);
 }
-
 .search-icon {
   position: absolute;
   top: 50%;
@@ -22,7 +21,6 @@
   pointer-events: none;
   transform: translateY(-50%);
 }
-
 input {
   display: block;
   width: 100%;
@@ -36,13 +34,11 @@ input {
   font: inherit;
   font-size: var(--pm-font-size-sm);
 }
-
 input:focus {
   border-color: var(--pm-accent);
   outline: none;
   box-shadow: var(--pm-focus-ring);
 }
-
 .popover {
   position: absolute;
   top: calc(100% + var(--pm-space-2));
@@ -56,7 +52,6 @@ input:focus {
   background: var(--pm-surface-raised);
   box-shadow: var(--pm-overlay-elevation);
 }
-
 [role='option'] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -75,16 +70,13 @@ input:focus {
   text-align: left;
   cursor: pointer;
 }
-
 [role='option']:last-child {
   border-bottom: 0;
 }
-
 [role='option'].active,
 [role='option']:hover {
   background: var(--pm-surface-hover);
 }
-
 .option-primary {
   width: 100%;
   min-width: 0;
@@ -93,42 +85,35 @@ input:focus {
   font-weight: 600;
   text-align: left;
 }
-
-.task-id {
+.option-leading {
   margin-right: var(--pm-space-2);
   color: var(--pm-accent-strong);
   font-family: var(--pm-font-family-mono);
   font-size: var(--pm-font-size-xs);
 }
-
 .option-secondary,
 .option-snippet,
 .search-state {
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-xs);
 }
-
 .option-secondary,
 .option-snippet {
   width: 100%;
   text-align: left;
 }
-
 .option-snippet {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .search-state {
   margin: 0;
   padding: var(--pm-space-3);
 }
-
 .search-state.error {
   color: var(--pm-danger);
 }
-
 .mobile-search-button,
 .close-search {
   display: none;
@@ -151,15 +136,12 @@ input:focus {
     margin-left: auto;
     transform: none;
   }
-
   .mobile-search-button {
     display: grid;
   }
-
   .search {
     display: none;
   }
-
   .search.mobile-expanded {
     position: fixed;
     top: 0;
@@ -173,18 +155,15 @@ input:focus {
     border-bottom: 1px solid var(--pm-border-subtle);
     background: var(--pm-surface-raised);
   }
-
   .mobile-expanded .search-icon {
     left: var(--pm-space-4);
   }
-
   .close-search {
     position: absolute;
     top: 6px;
     right: var(--pm-space-2);
     display: grid;
   }
-
   .popover {
     top: calc(100% + 1px);
     right: var(--pm-space-2);

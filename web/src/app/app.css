@@ -67,11 +67,7 @@
   color: var(--pm-text-primary);
 }
 
-.search-slot {
-  flex: 1;
-}
-
-.topbar > pm-task-search + .icon-button {
+.topbar > :is(pm-task-search, pm-wiki-search) + .icon-button {
   margin-left: auto;
 }
 

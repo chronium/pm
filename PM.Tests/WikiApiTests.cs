@@ -10,6 +10,64 @@ namespace PM.Tests;
 public partial class ApiContractTests
 {
     [Fact]
+    public async Task WikiSearchReturnsRankedLimitedResultsWithoutLocalPaths()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        root.WriteWikiPage(Page("guides/rendering", "Rendering", "Render pipeline and render output"));
+        root.WriteWikiPage(Page("render-notes", "Notes", "A render checklist"));
+        root.WriteWikiPage(Page("unrelated", "Other", "Nothing relevant"));
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var response = await client.GetAsync("/api/v1/wiki/search?query=render&limit=1");
+            var results = await response.Content.ReadFromJsonAsync<List<WikiSearchResultResponse>>();
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var result = Assert.Single(results!);
+            Assert.Equal("guides/rendering", result.Path);
+            Assert.Equal("Rendering", result.Title);
+            Assert.True(result.MatchCount >= 4);
+            Assert.Contains("render", result.Snippet, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(DateTimeKind.Utc, result.ModifiedAt.Kind);
+
+            var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement[0];
+            Assert.False(json.TryGetProperty("filePath", out _));
+            Assert.Equal(new[] { "path", "title", "modifiedAt", "matchCount", "snippet" },
+                json.EnumerateObject().Select(property => property.Name));
+        }
+    }
+
+    [Fact]
+    public async Task WikiSearchReturnsStandardProblemsForMissingQueryAndInvalidMarkdown()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var absent = await client.GetAsync("/api/v1/wiki/search");
+            Assert.Equal(HttpStatusCode.BadRequest, absent.StatusCode);
+            Assert.Equal("application/problem+json", absent.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("invalid_wiki_query",
+                (await absent.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+
+            var missing = await client.GetAsync("/api/v1/wiki/search?query=%20");
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+            Assert.Equal("invalid_wiki_query",
+                (await missing.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+
+            await File.WriteAllTextAsync(Path.Combine(root.WikiPath, "broken.md"), "not front matter");
+            var invalid = await client.GetAsync("/api/v1/wiki/search?query=broken");
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            Assert.Equal("invalid_wiki_markdown",
+                (await invalid.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+        }
+    }
+
+    [Fact]
     public async Task WikiListReturnsOrderedFlatPagesWithoutSyntheticFolders()
     {
         using var workspace = new TempWorkingDirectory();
@@ -291,6 +349,14 @@ public partial class ApiContractTests
         {
             var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json")).RootElement;
             var paths = document.GetProperty("paths");
+            var search = paths.GetProperty("/api/v1/wiki/search").GetProperty("get");
+            Assert.Equal("SearchWikiPages", search.GetProperty("operationId").GetString());
+            Assert.Contains(search.GetProperty("parameters").EnumerateArray(), parameter =>
+                parameter.GetProperty("name").GetString() == "query" &&
+                parameter.GetProperty("required").GetBoolean());
+            Assert.Contains(search.GetProperty("parameters").EnumerateArray(), parameter =>
+                parameter.GetProperty("name").GetString() == "limit" &&
+                (!parameter.TryGetProperty("required", out var required) || !required.GetBoolean()));
             Assert.True(paths.TryGetProperty("/api/v1/wiki/pages", out var collection));
             Assert.Equal("ListWikiPages", collection.GetProperty("get").GetProperty("operationId").GetString());
             Assert.Equal("CreateWikiPage", collection.GetProperty("post").GetProperty("operationId").GetString());
@@ -319,6 +385,9 @@ public partial class ApiContractTests
                 .GetProperty("headers").TryGetProperty("ETag", out _));
 
             var schemas = document.GetProperty("components").GetProperty("schemas");
+            var searchSchema = schemas.GetProperty("WikiSearchResultResponse");
+            Assert.Contains("snippet", searchSchema.GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("path", schemas.GetProperty("CreateWikiPageRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
             Assert.DoesNotContain("body", schemas.GetProperty("CreateWikiPageRequest").GetProperty("required")

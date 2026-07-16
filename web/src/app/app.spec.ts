@@ -204,6 +204,17 @@ describe('application shell', () => {
     ).toBeTruthy();
   });
 
+  it('shows task search in task mode and wiki search in wiki mode', async () => {
+    const { fixture, router } = await renderAt('/tasks');
+    expect(fixture.nativeElement.querySelector('pm-task-search')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('pm-wiki-search')).toBeNull();
+
+    await router.navigateByUrl('/wiki');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('pm-task-search')).toBeNull();
+    expect(fixture.nativeElement.querySelector('pm-wiki-search')).toBeTruthy();
+  });
+
   it('keeps All tasks exact while a nested task remains in the board workspace', async () => {
     const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
     const allTasks = [...fixture.nativeElement.querySelectorAll('aside a')].find(

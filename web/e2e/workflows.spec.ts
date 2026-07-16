@@ -58,6 +58,20 @@ test('task search composes filters, preserves board context, and handles text an
   await expect(page.getByRole('option').filter({ hasText: 'E2E-0003' })).toBeVisible();
 });
 
+test('wiki search finds body content and opens a nested page', async ({ page }) => {
+  await page.goto('/wiki');
+  const search = page.getByRole('combobox', { name: 'Search wiki' });
+  const mobileSearch = page.getByRole('button', { name: 'Search wiki' });
+  if (await mobileSearch.isVisible()) await mobileSearch.click();
+  await search.fill('Local fixture content');
+  const result = page.getByRole('option').filter({ hasText: 'Wiki page 2' });
+  await expect(result).toBeVisible();
+  await result.click();
+  await expect(page).toHaveURL(/\/wiki\/guides\/section-1\/page-2$/);
+  await expect(page.getByRole('heading', { name: 'Wiki page 2' })).toBeVisible();
+  await expect(page.locator('pm-wiki-search input')).toHaveValue('');
+});
+
 test('creates, opens, edits, moves, conflicts, and removes a task', async ({ page }) => {
   await page.goto('/tasks/new');
   await page.getByLabel('Title').fill('Created in Playwright');

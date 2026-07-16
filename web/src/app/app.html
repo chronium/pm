@@ -40,8 +40,8 @@
 
   @if (layout.activeShell() === AppShell.Tasks) {
     <pm-task-search />
-  } @else {
-    <div class="search-slot" aria-hidden="true"></div>
+  } @else if (layout.activeShell() === AppShell.Wiki) {
+    <pm-wiki-search />
   }
 
   <button

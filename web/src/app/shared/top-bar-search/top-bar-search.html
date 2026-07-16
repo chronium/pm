@@ -1,7 +1,7 @@
 <button
   class="mobile-search-button"
   type="button"
-  aria-label="Search tasks"
+  [attr.aria-label]="ariaLabel()"
   (click)="expandMobile()"
 >
   <ng-icon name="cssSearch" aria-hidden="true" />
@@ -13,13 +13,13 @@
     #searchInput
     type="search"
     role="combobox"
-    aria-label="Search tasks"
+    [attr.aria-label]="ariaLabel()"
     aria-autocomplete="list"
-    [attr.aria-controls]="popupOpen() ? 'task-search-listbox' : null"
+    [attr.aria-controls]="popupOpen() ? listboxId : null"
     [attr.aria-expanded]="popupOpen()"
     [attr.aria-activedescendant]="options().length ? optionId(activeIndex()) : null"
     [value]="query()"
-    placeholder="Search tasks"
+    [placeholder]="placeholder()"
     autocomplete="off"
     (focus)="onFocus()"
     (blur)="onBlur()"
@@ -27,13 +27,18 @@
     (keydown)="onKeydown($event)"
   />
   @if (mobileExpanded()) {
-    <button class="close-search" type="button" aria-label="Close task search" (click)="close()">
+    <button
+      class="close-search"
+      type="button"
+      [attr.aria-label]="'Close ' + ariaLabel().toLowerCase()"
+      (click)="close()"
+    >
       <ng-icon name="cssClose" aria-hidden="true" />
     </button>
   }
 
   @if (popupOpen()) {
-    <div id="task-search-listbox" class="popover" role="listbox" aria-label="Task search options">
+    <div [id]="listboxId" class="popover" role="listbox" [attr.aria-label]="listboxLabel()">
       @if (loading()) {
         <div role="option" aria-disabled="true">
           <p class="search-state" role="status">Searching…</p>
@@ -52,23 +57,25 @@
             [class.active]="index === activeIndex()"
             (mouseenter)="activeIndex.set(index)"
             (mousedown)="$event.preventDefault()"
-            (click)="accept(option)"
+            (click)="select(option)"
           >
             <span class="option-primary">
-              @if (option.kind === 'result') {
-                <span class="task-id">{{ option.result!.id }}</span>
+              @if (option.leading) {
+                <span class="option-leading">{{ option.leading }}</span>
               }
               {{ option.primary }}
             </span>
-            <span class="option-secondary">{{ option.secondary }}</span>
-            @if (option.result?.snippet) {
-              <span class="option-snippet">{{ option.result!.snippet }}</span>
+            @if (option.secondary) {
+              <span class="option-secondary">{{ option.secondary }}</span>
+            }
+            @if (option.snippet) {
+              <span class="option-snippet">{{ option.snippet }}</span>
             }
           </button>
         }
       } @else {
         <div role="option" aria-disabled="true">
-          <p class="search-state" role="status">No matching tasks.</p>
+          <p class="search-state" role="status">{{ emptyMessage() }}</p>
         </div>
       }
     </div>
