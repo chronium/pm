@@ -31,7 +31,6 @@ import { WikiStore } from './wiki.store';
           <pm-wiki-breadcrumbs [path]="page.path" />
           <header class="wiki-reader-header"><div><p class="wiki-eyebrow"><code>{{ page.path }}</code></p><h1>{{ page.title }}</h1><p class="wiki-time">Updated <time [attr.datetime]="page.modifiedAt">{{ page.modifiedAt | date:'medium' }}</time></p></div><div class="wiki-actions"><a class="pm-button pm-button--secondary" [routerLink]="['/wiki/meta', ...page.path.split('/')]">Metadata</a><a class="pm-button pm-button--primary" [routerLink]="['/wiki/edit', ...page.path.split('/')]">Edit</a></div></header>
           <pm-markdown-display [markdown]="page.body" />
-          <details class="wiki-local-meta"><summary>Local file</summary><code>{{ page.localMetadata.filePath }}</code><dl><div><dt>Created</dt><dd>{{ page.createdAt | date:'medium' }}</dd></div><div><dt>Revision</dt><dd><code>{{ page.revision }}</code></dd></div></dl></details>
         </article>
       }
     </section>`,

@@ -65,7 +65,12 @@ describe('application shell', () => {
     const wikiPath = wikiSegments[0] === 'wiki' && wikiSegments.length > 1 && wikiSegments[1] !== 'new'
       ? wikiSegments.slice(wikiSegments[1] === 'edit' || wikiSegments[1] === 'meta' ? 2 : 1).join('/')
       : null;
-    const wikiPages = wikiPath ? [{ path: wikiPath, title: 'Guide', modifiedAt: '2026-07-15T00:00:00Z' }] : [];
+    const wikiPages = wikiPath ? [
+      { path: wikiPath, title: 'Guide', modifiedAt: '2026-07-15T00:00:00Z' },
+      ...wikiPath === 'architecture'
+        ? [{ path: 'architecture/child', title: 'Child page', modifiedAt: '2026-07-15T00:00:00Z' }]
+        : [],
+    ] : [];
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/wiki/pages')) {
       request.flush(wikiPages);
     }
@@ -118,6 +123,7 @@ describe('application shell', () => {
     ['/wiki', '/wiki', 'Wiki'],
     ['/wiki/new', '/wiki/new', 'New page'],
     ['/wiki/guides/start', '/wiki/guides/start', 'Guide'],
+    ['/wiki/architecture', '/wiki/architecture', 'Guide'],
     ['/wiki/edit/guides/start', '/wiki/edit/guides/start', 'Edit Guide'],
     ['/wiki/meta/guides/start', '/wiki/meta/guides/start', 'Metadata'],
     ['/settings', '/tasks/settings', 'Project settings'],
