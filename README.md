@@ -1,6 +1,6 @@
 # PM
 
-PM is a local project-management tool for software work. It stores project state in a `.pm/` directory, provides a .NET CLI for day-to-day changes, and includes a local server-rendered web board for dense task workflows.
+PM is a local project-management tool for software work. It stores project state in a `.pm/` directory, provides a .NET CLI for day-to-day changes, and includes a local Angular web board for dense task workflows.
 
 ## Features
 
@@ -37,12 +37,14 @@ List tasks:
 dotnet PM/bin/Debug/net10.0/PM.dll list
 ```
 
-Start the local web board from inside an initialized PM project. The legacy UI remains the temporary default during the Angular migration:
+Start the embedded Angular web board from inside an initialized PM project:
 
 ```sh
 dotnet PM/bin/Debug/net10.0/PM.dll web --port 51237
-dotnet PM/bin/Debug/net10.0/PM.dll web --ui legacy --open
+dotnet PM/bin/Debug/net10.0/PM.dll web --open
 ```
+
+`pm web` now means `pm web --ui angular`. A build without embedded Angular assets fails before binding and explains how to publish them; it never silently changes interfaces. During the stability release only, `pm web --ui legacy` explicitly starts the previous server-rendered interface.
 
 Run tests:
 
@@ -66,6 +68,8 @@ npm run build
 npm run storybook
 npm run test:storybook
 npm run build-storybook
+npm run e2e
+npm run frontend:validate
 ```
 
 `npm start` uses `proxy.conf.json` to forward `/api` requests to the local .NET web server at `http://127.0.0.1:51237`. Use `npm run test:watch` for interactive unit-test development. Any command that changes frontend dependencies or its lockfile must be run through Socket.
@@ -89,7 +93,9 @@ cd ..
 dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true
 ```
 
-The published application can then serve the embedded client with `pm web --ui angular`. Ordinary .NET builds and tests do not inspect `web/dist`, invoke Node, or include local frontend output.
+The published application then serves the embedded client with plain `pm web` (or the equivalent `pm web --ui angular`). Ordinary .NET builds and tests do not inspect `web/dist`, invoke Node, or include local frontend output.
+
+`npm run frontend:validate` is the complete local frontend gate: formatting, generated API types, strict and production builds, unit tests, Storybook tests/build, and desktop/mobile Chromium E2E against disposable small and large projects. `npm run release` is the complete release gate: it begins with `socket npm ci`, runs the frontend and .NET gates, publishes PM with embedded Angular assets under `artifacts/release/`, then runs the embedded-production smoke profile. Because `npm ci` cannot alter the reviewed lockfile, the runner lets Socket install that exact graph while Socket still reports its findings. E2E uses a temporary identity/config home and a loopback fake next-ID service; it does not access the deployed Worker or this repository's `.pm` project.
 
 Storybook runs as an isolated zoneless component workshop on port 6006. Its browser checks require Chromium, installed with `socket npx playwright install chromium`; reusable visual components should maintain collocated stories, while routed containers and feature stores generally should not add them.
 

@@ -48,7 +48,11 @@ public class WebBoardTests
             {
                 openedUrl = url;
                 cancellation.Cancel();
-            });
+            },
+            new AngularWebEndpointTests.MemoryAssetStore(new Dictionary<string, string>
+            {
+                ["index.html"] = "Angular",
+            }));
 
         var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
         {
@@ -58,7 +62,7 @@ public class WebBoardTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal($"http://127.0.0.1:{port}", openedUrl);
-        Assert.Contains($"Serving legacy UI at http://127.0.0.1:{port}", output);
+        Assert.Contains($"Serving angular UI at http://127.0.0.1:{port}", output);
     }
 
     [Theory]
@@ -84,7 +88,7 @@ public class WebBoardTests
     }
 
     [Fact]
-    public async Task AngularModeWithoutEmbeddedAssetsFailsBeforeStarting()
+    public async Task DefaultAngularModeWithoutEmbeddedAssetsFailsBeforeStarting()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
@@ -98,15 +102,38 @@ public class WebBoardTests
             new ProjectValidationService(projectRoot),
             _ => opened = true);
 
-        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
-        {
-            Ui = "angular",
-            Open = true,
-        });
+        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings { Open = true });
 
         Assert.Equal(1, exitCode);
         Assert.Contains("Angular UI assets are not embedded", output);
         Assert.False(opened);
+    }
+
+    [Fact]
+    public async Task ExplicitLegacyModeStillStartsWithoutAngularAssets()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var port = GetAvailablePort();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var command = new RecordingOpenWebCommand(
+            projectRoot,
+            new BoardService(projectRoot),
+            new TaskService(projectRoot, new RecordingNextIdService()),
+            new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot),
+            _ => cancellation.Cancel());
+
+        var (exitCode, output) = await ExecuteWebCommand(command, new WebCommand.Settings
+        {
+            Port = port,
+            Ui = "legacy",
+            Open = true,
+        }, cancellation.Token);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains($"Serving legacy UI at http://127.0.0.1:{port}", output);
     }
 
     [Fact]

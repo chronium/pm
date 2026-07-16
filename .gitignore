@@ -12,6 +12,9 @@ riderModule.iml
 /web/dist/
 /web/coverage/
 /web/storybook-static/
+/web/playwright-report/
+/web/test-results/
+/artifacts/
 
 *.db*
 

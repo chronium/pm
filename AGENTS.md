@@ -31,8 +31,12 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Storybook component workshop: run `npm run storybook` in `web/`.
 - Storybook browser tests: run `npm run test:storybook` in `web/`; install its Chromium runtime with `socket npx playwright install chromium` when needed.
 - Storybook production build: run `npm run build-storybook` in `web/`.
+- Angular E2E: run `npm run e2e` in `web/`; it uses isolated temporary projects and a loopback fake next-ID service.
+- Embedded Angular smoke: after release publish, run `npm run e2e:embedded` in `web/`.
+- Complete frontend gate: run `npm run frontend:validate` in `web/`.
+- Complete release gate: run `npm run release` in `web/`; it performs `socket npm ci`, all frontend and .NET validation, embedded publish, and production smoke tests.
 
-Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. Normal .NET build and test commands do not install or build the Angular workspace. Storybook browser tests use Playwright through `npm run test:storybook`; no standalone Playwright end-to-end suite is configured. Use `playwright-cli` for ad hoc UI validation when available.
+Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. Normal .NET build and test commands do not install or build the Angular workspace. Storybook browser tests use Playwright through `npm run test:storybook`; standalone application E2E uses `npm run e2e`. Use `playwright-cli` for ad hoc UI validation when available.
 
 No dedicated lint command is configured in this repository. Do not invent one. Before work is complete, format Angular changes and run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; Angular changes need `npm run format`, `npm run format:check`, and the relevant Angular validation commands; worker changes need `npm test` from `next-id-worker/`.
 

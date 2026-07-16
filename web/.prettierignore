@@ -3,5 +3,7 @@
 coverage/
 dist/
 node_modules/
-storybook-static/
+playwright-report/
 src/app/api/generated/
+storybook-static/
+test-results/

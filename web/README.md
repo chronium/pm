@@ -31,6 +31,10 @@ npm run test:storybook  # Headless Chromium interaction and accessibility checks
 npm run build-storybook # Static workshop build in ignored storybook-static/
 npm run api:types       # Regenerate TypeScript contracts from the runtime OpenAPI document
 npm run api:types:check # Fail when committed TypeScript contracts have drifted
+npm run e2e              # Desktop and mobile Chromium workflows with disposable projects
+npm run e2e:embedded     # Smoke-test the published embedded host
+npm run frontend:validate # Complete frontend quality gate
+npm run release           # Locked install, all gates, publish, and embedded smoke
 ```
 
 Install the Chromium binary used by Storybook's browser tests after installing dependencies:
@@ -51,7 +55,7 @@ npm start
 
 `pm web --api` serves only `/api/v1` and `/openapi/{documentName}.json`, does not open a browser, and accepts `--port` when a different proxy target is needed. The Angular workspace is not invoked by the repository's normal .NET build or test commands.
 
-The legacy server-rendered UI remains the temporary `pm web` default during migration. Select it explicitly with `pm web --ui legacy`, or serve a production Angular bundle with `pm web --ui angular`. Angular mode requires assets embedded into the running assembly:
+Angular is the default for both `pm web` and `pm web --ui angular`. It requires assets embedded into the running assembly and fails before binding when they are absent; it never falls back silently. The previous server-rendered interface remains available for one stability release through the explicit `pm web --ui legacy` escape hatch.
 
 ```sh
 cd web
@@ -61,6 +65,10 @@ dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true
 ```
 
 Embedding is opt-in; ordinary .NET builds ignore the local, uncommitted `web/dist` directory.
+
+Playwright starts either the API plus Angular dev server or the published embedded host, creates a disposable small or 180-task project, isolates identity storage, and uses a deterministic loopback next-ID service. All children and fixtures are cleaned up on success, failure, and interruption. The embedded profile also rejects browser requests to non-loopback hosts. Install Chromium with `socket npx playwright install chromium` before running browser gates.
+
+The release runner permits Socket to install reported risks only for `npm ci`'s immutable, reviewed lockfile graph; findings remain visible in the release log. Dependency changes still require an explicit `socket npm install` flow and lockfile review.
 
 The type-generation commands build PM without restoring packages, start a temporary loopback web host, read `/openapi/v1.json`, and always stop the host. Generated contracts are committed only under `src/app/api/generated/`; API clients remain handwritten.
 

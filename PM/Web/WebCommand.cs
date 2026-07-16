@@ -41,12 +41,12 @@ public class WebCommand(
             return 1;
         }
 
-        var ui = settings.Ui ?? "legacy";
+        var ui = settings.Ui ?? "angular";
         var angularAssets = CreateAngularAssetStore();
         if (!settings.Api && ui == "angular" && !angularAssets.HasAssets)
         {
             AnsiConsole.MarkupLine(
-                "[red]Angular UI assets are not embedded. Build with [green]-p:EmbedAngularAssets=true[/] after running [green]npm run build[/] in web/.[/]");
+                "[red]Angular UI assets are not embedded. Run [green]npm run build[/] in web/, then publish with [green]dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true[/]. Use [green]--ui legacy[/] only as a temporary fallback.[/]");
             return 1;
         }
 
@@ -717,7 +717,7 @@ public class WebCommand(
         public bool Api { get; init; }
 
         [CommandOption("--ui <MODE>")]
-        [Description("UI to serve: legacy or angular. Defaults to legacy.")]
+        [Description("UI to serve: angular (default) or legacy (temporary fallback).")]
         public string? Ui { get; init; }
     }
 }

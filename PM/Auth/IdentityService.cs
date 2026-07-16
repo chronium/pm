@@ -52,6 +52,9 @@ public sealed class IdentityService(IdentityServiceOptions? options = null) : II
 
     private static string GetDefaultIdentityPath()
     {
+        var overridePath = Environment.GetEnvironmentVariable("PM_IDENTITY_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath)) return Path.GetFullPath(overridePath);
+
         var appDirectory = OperatingSystem.IsWindows()
             ? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
             : OperatingSystem.IsMacOS()

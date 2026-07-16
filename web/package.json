@@ -14,7 +14,11 @@
     "test:watch": "ng test --watch",
     "storybook": "ng run pm-web:storybook",
     "build-storybook": "ng run pm-web:build-storybook",
-    "test:storybook": "vitest --config vitest.storybook.config.ts --project=storybook --run"
+    "test:storybook": "vitest --config vitest.storybook.config.ts --project=storybook --run",
+    "e2e": "node scripts/run-e2e.mjs",
+    "e2e:embedded": "node scripts/run-e2e.mjs embedded",
+    "frontend:validate": "npm run format:check && npm run api:types:check && npm run check && npm test && npm run test:storybook && npm run build-storybook && npm run build && npm run e2e",
+    "release": "node scripts/release.mjs"
   },
   "private": true,
   "packageManager": "npm@11.17.0",
@@ -45,6 +49,7 @@
     "@angular/cli": "^22.0.6",
     "@angular/compiler-cli": "^22.0.0",
     "@angular/platform-browser-dynamic": "22.0.6",
+    "@playwright/test": "1.61.1",
     "@storybook/addon-a11y": "10.5.0",
     "@storybook/addon-vitest": "10.5.0",
     "@storybook/angular-vite": "10.5.0",
