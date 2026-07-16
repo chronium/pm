@@ -1,4 +1,6 @@
 import { Component, computed, forwardRef, inject, input, OnDestroy, signal } from '@angular/core';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { cssChevronRight } from '@ng-icons/css.gg';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
 
@@ -7,7 +9,8 @@ import { WikiStore, type WikiTreeNode } from './wiki.store';
 
 @Component({
   selector: 'pm-wiki-tree',
-  imports: [RouterLink, forwardRef(() => WikiTree)],
+  imports: [NgIcon, RouterLink, forwardRef(() => WikiTree)],
+  providers: [provideIcons({ cssChevronRight })],
   template: `
     <ul class="wiki-tree-list">
       @for (node of nodes(); track node.path) {
@@ -16,7 +19,7 @@ import { WikiStore, type WikiTreeNode } from './wiki.store';
             @if (node.children.length) {
               <button type="button" class="wiki-tree-toggle" [attr.aria-expanded]="expanded(node.path)"
                 [attr.aria-label]="(expanded(node.path) ? 'Collapse ' : 'Expand ') + node.name"
-                (click)="toggle(node.path)"><span aria-hidden="true">{{ expanded(node.path) ? '▾' : '▸' }}</span></button>
+                (click)="toggle(node.path)"><ng-icon name="cssChevronRight" [class.expanded]="expanded(node.path)" aria-hidden="true" /></button>
             } @else { <span class="wiki-tree-spacer" aria-hidden="true"></span> }
             <a [routerLink]="['/wiki', ...node.path.split('/')]" [attr.aria-current]="active(node.path) ? 'page' : null"
               [class.active]="active(node.path)" (click)="layout.closeMobileSidebar()">{{ node.page?.title ?? node.name }}</a>
