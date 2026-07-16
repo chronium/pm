@@ -254,19 +254,38 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
     private static bool MatchesFilters(TaskItem task, string track, string state, TaskSearchQuery query,
         TaskSearchContext context)
     {
-        return MatchesAny(query.States, state, false) &&
-               MatchesAny(query.Tracks, track, false) &&
-               MatchesAny(query.Milestones, task.Milestone ?? string.Empty, false) &&
-               MatchesAny(query.Ids, task.Id, true) &&
+        return MatchesAny(query.States, state) &&
+               MatchesAny(query.Tracks, track) &&
+               MatchesAny(query.Milestones, task.Milestone ?? string.Empty) &&
+               MatchesAnyTaskId(query.Ids, task.Id) &&
                MatchesContext(context.State, state) &&
                MatchesContext(context.Track, track) &&
                MatchesContext(context.Milestone, task.Milestone ?? string.Empty);
     }
 
-    private static bool MatchesAny(IReadOnlyList<string> values, string actual, bool prefix) =>
-        values.Count == 0 || values.Any(value => prefix
-            ? actual.StartsWith(value, StringComparison.OrdinalIgnoreCase)
-            : actual.Equals(value, StringComparison.OrdinalIgnoreCase));
+    private static bool MatchesAny(IReadOnlyList<string> values, string actual) =>
+        values.Count == 0 || values.Any(value => actual.Equals(value, StringComparison.OrdinalIgnoreCase));
+
+    private static bool MatchesAnyTaskId(IReadOnlyList<string> values, string actual) =>
+        values.Count == 0 || values.Any(value => MatchesTaskId(value, actual));
+
+    private static bool MatchesTaskId(string value, string actual)
+    {
+        if (!value.All(char.IsDigit))
+            return actual.StartsWith(value, StringComparison.OrdinalIgnoreCase);
+
+        var suffixStart = actual.Length;
+        while (suffixStart > 0 && char.IsDigit(actual[suffixStart - 1])) suffixStart--;
+        if (suffixStart == actual.Length) return false;
+
+        return NormalizeTaskNumber(actual[suffixStart..]) == NormalizeTaskNumber(value);
+    }
+
+    private static string NormalizeTaskNumber(string value)
+    {
+        var normalized = value.TrimStart('0');
+        return normalized.Length == 0 ? "0" : normalized;
+    }
 
     private static bool MatchesContext(string? expected, string actual) =>
         expected == null || actual.Equals(expected, StringComparison.OrdinalIgnoreCase);

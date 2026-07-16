@@ -305,6 +305,10 @@ public partial class ApiContractTests
             Assert.Contains("Needle", result.Snippet);
             Assert.True(result.MatchCount > 0);
 
+            var numericId = await client.GetFromJsonAsync<List<TaskSearchResultResponse>>(
+                "/api/v1/tasks/search?query=id%3A%202");
+            Assert.Equal("PM-0002", Assert.Single(numericId!).Id);
+
             var invalid = await client.GetAsync("/api/v1/tasks/search?query=state%3A");
             Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
             Assert.Equal("invalid_task_query",

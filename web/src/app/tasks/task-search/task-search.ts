@@ -30,7 +30,7 @@ const patterns: SearchOption[] = [
     id: 'pattern-id',
     kind: 'pattern',
     primary: 'id:',
-    secondary: 'Match a task ID prefix',
+    secondary: 'Match a task ID prefix or number',
     field: 'id',
   },
   {

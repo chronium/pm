@@ -671,11 +671,13 @@ public class ApplicationServiceTests
 
         var compact = service.SearchTasks("render track:build milestone:M1 milestone:m2 state: todo state:review");
         var prefix = service.SearchTasks("id:build-000");
+        var numeric = service.SearchTasks("id: 2");
         var context = service.SearchTasks("track:BUILD", 20, new TaskSearchContext(Milestone: "M1", State: "todo"));
         var filtersOnly = service.SearchTasks("state:todo track:build");
 
         Assert.Equal(["BUILD-0001", "BUILD-0002"], compact.Payload!.Select(item => item.Task.Id).Order());
         Assert.Equal(["BUILD-0001", "BUILD-0002", "BUILD-0004"], prefix.Payload!.Select(item => item.Task.Id));
+        Assert.Equal("BUILD-0002", Assert.Single(numeric.Payload!).Task.Id);
         Assert.Equal(["BUILD-0002", "BUILD-0004"], context.Payload!.Select(item => item.Task.Id));
         Assert.Equal(["BUILD-0002", "BUILD-0004"], filtersOnly.Payload!.Select(item => item.Task.Id));
         Assert.All(filtersOnly.Payload!, item => Assert.Equal(item.DescriptionPreview, item.Snippet));
