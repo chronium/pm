@@ -1,5 +1,6 @@
-import { Component, forwardRef, inject, input } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Component, computed, forwardRef, inject, input, OnDestroy, signal } from '@angular/core';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { filter, Subscription } from 'rxjs';
 
 import { LayoutService } from '../core/layout.service';
 import { WikiStore, type WikiTreeNode } from './wiki.store';
@@ -26,14 +27,21 @@ import { WikiStore, type WikiTreeNode } from './wiki.store';
     </ul>`,
   styleUrl: './wiki.css',
 })
-export class WikiTree {
+export class WikiTree implements OnDestroy {
   readonly nodes = input.required<readonly WikiTreeNode[]>();
   protected readonly layout = inject(LayoutService);
   private readonly store = inject(WikiStore);
   private readonly router = inject(Router);
+  private readonly currentUrl = signal(this.router.currentNavigation()?.finalUrl?.toString() ?? this.router.url);
+  private readonly selectedPath = computed(() => this.pathFromUrl(this.currentUrl()));
+  private readonly navigationSubscription: Subscription = this.router.events.pipe(
+    filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+  ).subscribe(() => this.currentUrl.set(this.router.url));
 
-  protected expanded(path: string): boolean { return this.expandedPaths().has(path) || this.activePath().startsWith(`${path}/`); }
-  protected active(path: string): boolean { return this.activePath() === path; }
+  ngOnDestroy(): void { this.navigationSubscription.unsubscribe(); }
+
+  protected expanded(path: string): boolean { return this.expandedPaths().has(path) || this.selectedPath().startsWith(`${path}/`); }
+  protected active(path: string): boolean { return this.selectedPath() === path; }
   protected toggle(path: string): void {
     const paths = this.expandedPaths();
     paths.has(path) ? paths.delete(path) : paths.add(path);
@@ -47,8 +55,8 @@ export class WikiTree {
     } catch { return new Set(); }
   }
 
-  private activePath(): string {
-    const segments = this.router.parseUrl(this.router.url).root.children['primary']?.segments.map((segment) => segment.path) ?? [];
+  private pathFromUrl(url: string): string {
+    const segments = this.router.parseUrl(url).root.children['primary']?.segments.map((segment) => segment.path) ?? [];
     const rest = segments.slice(segments.indexOf('wiki') + 1);
     if (rest[0] === 'edit' || rest[0] === 'meta') rest.shift();
     return rest[0] === 'new' ? '' : rest.join('/');
