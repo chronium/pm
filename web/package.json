@@ -6,6 +6,8 @@
     "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build",
     "check": "ng build --configuration development",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "api:types": "node scripts/api-types.mjs",
     "api:types:check": "node scripts/api-types.mjs --check",
     "test": "ng test --watch=false",

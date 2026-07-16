@@ -19,13 +19,19 @@ export interface WikiApiError {
 }
 
 export function encodeWikiPath(path: string): string {
-  return path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  return path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
 }
 
 @Injectable({ providedIn: 'root' })
 export class WikiApiService {
   private readonly http = inject(HttpClient);
-  private readonly mutationOptions = { observe: 'response' as const, headers: { 'X-PM-Client': 'angular-web' } };
+  private readonly mutationOptions = {
+    observe: 'response' as const,
+    headers: { 'X-PM-Client': 'angular-web' },
+  };
 
   create(request: CreateWikiPageRequest) {
     return this.http.post<WikiPage>('/api/v1/wiki/pages', request, this.mutationOptions);
@@ -52,18 +58,33 @@ export class WikiApiService {
   }
 
   error(error: unknown, fallback: string): WikiApiError {
-    if (!(error instanceof HttpErrorResponse)) return { status: 0, message: fallback, conflict: false, duplicate: false };
+    if (!(error instanceof HttpErrorResponse))
+      return { status: 0, message: fallback, conflict: false, duplicate: false };
     const problem = this.isProblem(error.error) ? error.error : null;
-    const message = problem?.detail?.trim() || problem?.title?.trim()
-      || (error.status === 0 ? 'The wiki API could not be reached.' : `${fallback} (${error.status}).`);
-    return { status: error.status, message, conflict: error.status === 412, duplicate: error.status === 409 };
+    const message =
+      problem?.detail?.trim() ||
+      problem?.title?.trim() ||
+      (error.status === 0
+        ? 'The wiki API could not be reached.'
+        : `${fallback} (${error.status}).`);
+    return {
+      status: error.status,
+      message,
+      conflict: error.status === 412,
+      duplicate: error.status === 409,
+    };
   }
 
   private options(etag: string) {
-    return { ...this.mutationOptions, headers: { ...this.mutationOptions.headers, 'If-Match': etag } };
+    return {
+      ...this.mutationOptions,
+      headers: { ...this.mutationOptions.headers, 'If-Match': etag },
+    };
   }
 
   private isProblem(value: unknown): value is ApiProblemDetails {
-    return typeof value === 'object' && value !== null && ('errorCode' in value || 'title' in value);
+    return (
+      typeof value === 'object' && value !== null && ('errorCode' in value || 'title' in value)
+    );
   }
 }

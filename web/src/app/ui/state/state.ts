@@ -2,7 +2,8 @@ import { Component } from '@angular/core';
 
 @Component({
   selector: 'pm-loading-state',
-  template: '<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><ng-content /></div>',
+  template:
+    '<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><ng-content /></div>',
   styleUrl: './state.css',
 })
 export class PmLoadingState {}

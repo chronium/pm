@@ -9,15 +9,20 @@ import { WikiTree } from './wiki-tree';
 class EmptyRoute {}
 
 describe('WikiTree', () => {
-  beforeEach(() => TestBed.configureTestingModule({
-    imports: [WikiTree],
-    providers: [
-      provideRouter([{ path: 'wiki/:path', component: EmptyRoute }]),
-      { provide: WikiStore, useValue: { expansionKey: () => 'test.wiki.expanded' } },
-    ],
-  }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      imports: [WikiTree],
+      providers: [
+        provideRouter([{ path: 'wiki/:path', component: EmptyRoute }]),
+        { provide: WikiStore, useValue: { expansionKey: () => 'test.wiki.expanded' } },
+      ],
+    }),
+  );
 
-  afterEach(() => { sessionStorage.clear(); TestBed.resetTestingModule(); });
+  afterEach(() => {
+    sessionStorage.clear();
+    TestBed.resetTestingModule();
+  });
 
   it('moves the single active highlight when navigation changes', async () => {
     const nodes: WikiTreeNode[] = [leaf('first'), leaf('second')];
@@ -36,9 +41,16 @@ describe('WikiTree', () => {
 });
 
 function leaf(path: string): WikiTreeNode {
-  return { name: path, path, page: { path, title: path, modifiedAt: '2026-01-01T00:00:00Z' }, children: [] };
+  return {
+    name: path,
+    path,
+    page: { path, title: path, modifiedAt: '2026-01-01T00:00:00Z' },
+    children: [],
+  };
 }
 
 function activeLinks(root: HTMLElement): string[] {
-  return [...root.querySelectorAll<HTMLAnchorElement>('a.active')].map((link) => link.getAttribute('href')!);
+  return [...root.querySelectorAll<HTMLAnchorElement>('a.active')].map((link) =>
+    link.getAttribute('href')!,
+  );
 }

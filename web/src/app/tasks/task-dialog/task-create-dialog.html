@@ -1,14 +1,36 @@
-<pm-task-dialog-shell title="Create task" eyebrow="New task" [pending]="pending()" (closeIntent)="close()">
+<pm-task-dialog-shell
+  title="Create task"
+  eyebrow="New task"
+  [pending]="pending()"
+  (closeIntent)="close()"
+>
   @if (board.error(); as boardError) {
-    <div><p role="alert">Task options could not be loaded: {{ boardError }}</p><button type="button" class="pm-button pm-button--secondary" (click)="board.reload()">Retry</button></div>
+    <div>
+      <p role="alert">Task options could not be loaded: {{ boardError }}</p>
+      <button type="button" class="pm-button pm-button--secondary" (click)="board.reload()">
+        Retry
+      </button>
+    </div>
   } @else if (board.board(); as currentBoard) {
-    <pm-task-create-form [tracks]="currentBoard.tracks" [milestones]="currentBoard.milestones"
-      [initialTrack]="board.filters().track ?? null" [initialMilestone]="board.filters().milestone ?? null"
-      [pending]="pending()" [apiError]="error()" (submitted)="create($event)" (cancelled)="close()" />
+    <pm-task-create-form
+      [tracks]="currentBoard.tracks"
+      [milestones]="currentBoard.milestones"
+      [initialTrack]="board.filters().track ?? null"
+      [initialMilestone]="board.filters().milestone ?? null"
+      [pending]="pending()"
+      [apiError]="error()"
+      (submitted)="create($event)"
+      (cancelled)="close()"
+    />
   } @else {
     <p role="status">Loading task options…</p>
   }
 </pm-task-dialog-shell>
-<pm-confirm-dialog [open]="confirmOpen()" heading="Discard task draft?"
-  message="Your unsaved task changes will be lost." confirmLabel="Discard changes"
-  (confirmed)="discard()" (cancelled)="keepEditing()" />
+<pm-confirm-dialog
+  [open]="confirmOpen()"
+  heading="Discard task draft?"
+  message="Your unsaved task changes will be lost."
+  confirmLabel="Discard changes"
+  (confirmed)="discard()"
+  (cancelled)="keepEditing()"
+/>

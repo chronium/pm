@@ -19,7 +19,10 @@ export interface TaskApiError {
 @Injectable({ providedIn: 'root' })
 export class TaskApiService {
   private readonly http = inject(HttpClient);
-  private readonly mutationOptions = { observe: 'response' as const, headers: { 'X-PM-Client': 'angular-web' } };
+  private readonly mutationOptions = {
+    observe: 'response' as const,
+    headers: { 'X-PM-Client': 'angular-web' },
+  };
 
   create(request: CreateTaskRequest) {
     return this.http.post<TaskResponse>('/api/v1/tasks', request, this.mutationOptions);
@@ -47,11 +50,16 @@ export class TaskApiService {
   }
 
   error(error: unknown, fallback: string): TaskApiError {
-    if (!(error instanceof HttpErrorResponse)) return { status: 0, message: fallback, conflict: false };
+    if (!(error instanceof HttpErrorResponse))
+      return { status: 0, message: fallback, conflict: false };
     const body: unknown = error.error;
     const problem = this.isProblem(body) ? body : null;
-    const message = problem?.detail?.trim() || problem?.title?.trim()
-      || (error.status === 0 ? 'The task API could not be reached.' : `${fallback} (${error.status}).`);
+    const message =
+      problem?.detail?.trim() ||
+      problem?.title?.trim() ||
+      (error.status === 0
+        ? 'The task API could not be reached.'
+        : `${fallback} (${error.status}).`);
     return { status: error.status, message, conflict: error.status === 412 };
   }
 
@@ -74,15 +82,17 @@ export class TaskDetailResource {
   readonly taskId = signal('');
   private readonly retainedTask = signal<TaskResponse | null>(null);
   private readonly retainedEtag = signal('');
-  readonly resource = httpResource<TaskResponse>(() => this.taskId()
-    ? `/api/v1/tasks/${encodeURIComponent(this.taskId())}`
-    : undefined);
+  readonly resource = httpResource<TaskResponse>(() =>
+    this.taskId() ? `/api/v1/tasks/${encodeURIComponent(this.taskId())}` : undefined,
+  );
   readonly task = computed(() => this.retainedTask());
   readonly etag = computed(() => this.retainedEtag());
   readonly loading = computed(() => this.resource.isLoading() && !this.task());
-  readonly error = computed(() => this.resource.error()
-    ? this.api.error(this.resource.error(), 'The task could not be loaded.').message
-    : null);
+  readonly error = computed(() =>
+    this.resource.error()
+      ? this.api.error(this.resource.error(), 'The task could not be loaded.').message
+      : null,
+  );
 
   constructor() {
     effect(() => {

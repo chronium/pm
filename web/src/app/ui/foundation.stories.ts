@@ -9,7 +9,15 @@ import { PmEmptyState, PmErrorState, PmLoadingState } from './state/state';
 
 @Component({
   selector: 'pm-foundation-gallery',
-  imports: [PmBadge, PmButton, PmConfirmDialog, PmFormField, PmLoadingState, PmEmptyState, PmErrorState],
+  imports: [
+    PmBadge,
+    PmButton,
+    PmConfirmDialog,
+    PmFormField,
+    PmLoadingState,
+    PmEmptyState,
+    PmErrorState,
+  ],
   template: `
     <main class="gallery">
       <header>
@@ -58,7 +66,9 @@ import { PmEmptyState, PmErrorState, PmLoadingState } from './state/state';
           <button type="button" pmButton="primary">Create task</button>
           <button type="button" pmButton="secondary">Edit details</button>
           <button type="button" pmButton="ghost">Cancel</button>
-          <button type="button" pmButton="danger" (click)="dialogOpen.set(true)">Remove task</button>
+          <button type="button" pmButton="danger" (click)="dialogOpen.set(true)">
+            Remove task
+          </button>
         </div>
         <div class="row">
           <pm-badge tone="neutral">Backlog</pm-badge>
@@ -73,7 +83,12 @@ import { PmEmptyState, PmErrorState, PmLoadingState } from './state/state';
         <h2 id="field-heading">Form field</h2>
         <pm-form-field>
           <label for="gallery-task-title">Task title</label>
-          <input pmControl id="gallery-task-title" aria-describedby="gallery-task-hint" value="Add Storybook for Angular components" />
+          <input
+            pmControl
+            id="gallery-task-title"
+            aria-describedby="gallery-task-hint"
+            value="Add Storybook for Angular components"
+          />
           <p pmFieldMessage id="gallery-task-hint">Use a concise, action-oriented title.</p>
         </pm-form-field>
       </section>
@@ -97,34 +112,126 @@ import { PmEmptyState, PmErrorState, PmLoadingState } from './state/state';
     </main>
   `,
   styles: `
-    :host { display: block; }
-    .gallery { max-width: 1040px; margin: 0 auto; padding: var(--pm-space-6); }
-    header { margin-bottom: var(--pm-space-6); }
-    .eyebrow { margin: 0 0 var(--pm-space-1); color: var(--pm-accent-strong); font-size: var(--pm-font-size-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-    h1 { margin: 0; font-size: 1.5rem; line-height: 1.25; }
-    .intro { margin: var(--pm-space-2) 0 0; color: var(--pm-text-muted); }
-    section { padding: var(--pm-space-5) 0; border-top: 1px solid var(--pm-border-subtle); }
-    h2 { margin: 0 0 var(--pm-space-3); font-size: var(--pm-font-size-lg); }
-    .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--pm-space-2); }
-    .swatch { min-height: 88px; padding: var(--pm-space-3); border: 1px solid var(--pm-border-strong); border-radius: var(--pm-radius-md); color: var(--pm-text-primary); }
-    .swatch strong, .swatch code { display: block; }
-    .swatch code { margin-top: var(--pm-space-1); color: var(--pm-text-muted); font-size: var(--pm-font-size-xs); }
-    .type-samples { display: grid; gap: var(--pm-space-2); }
-    .type-samples p { margin: 0; }
-    .type-lg { font-size: var(--pm-font-size-lg); font-weight: 600; }
-    .type-md { font-size: var(--pm-font-size-md); }
-    .type-sm { color: var(--pm-text-muted); font-size: var(--pm-font-size-sm); }
-    code { font-family: var(--pm-font-family-mono); }
-    .spacing-scale { display: grid; gap: var(--pm-space-2); }
-    .spacing-item { display: flex; align-items: center; gap: var(--pm-space-3); min-height: 24px; }
-    .spacing-item span { display: block; height: 12px; min-width: 4px; background: var(--pm-accent); border-radius: var(--pm-radius-sm); }
-    .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pm-space-2); }
-    .row + .row { margin-top: var(--pm-space-3); }
-    pm-form-field { display: block; max-width: 520px; }
-    .state-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--pm-space-3); }
+    :host {
+      display: block;
+    }
+    .gallery {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: var(--pm-space-6);
+    }
+    header {
+      margin-bottom: var(--pm-space-6);
+    }
+    .eyebrow {
+      margin: 0 0 var(--pm-space-1);
+      color: var(--pm-accent-strong);
+      font-size: var(--pm-font-size-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      line-height: 1.25;
+    }
+    .intro {
+      margin: var(--pm-space-2) 0 0;
+      color: var(--pm-text-muted);
+    }
+    section {
+      padding: var(--pm-space-5) 0;
+      border-top: 1px solid var(--pm-border-subtle);
+    }
+    h2 {
+      margin: 0 0 var(--pm-space-3);
+      font-size: var(--pm-font-size-lg);
+    }
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: var(--pm-space-2);
+    }
+    .swatch {
+      min-height: 88px;
+      padding: var(--pm-space-3);
+      border: 1px solid var(--pm-border-strong);
+      border-radius: var(--pm-radius-md);
+      color: var(--pm-text-primary);
+    }
+    .swatch strong,
+    .swatch code {
+      display: block;
+    }
+    .swatch code {
+      margin-top: var(--pm-space-1);
+      color: var(--pm-text-muted);
+      font-size: var(--pm-font-size-xs);
+    }
+    .type-samples {
+      display: grid;
+      gap: var(--pm-space-2);
+    }
+    .type-samples p {
+      margin: 0;
+    }
+    .type-lg {
+      font-size: var(--pm-font-size-lg);
+      font-weight: 600;
+    }
+    .type-md {
+      font-size: var(--pm-font-size-md);
+    }
+    .type-sm {
+      color: var(--pm-text-muted);
+      font-size: var(--pm-font-size-sm);
+    }
+    code {
+      font-family: var(--pm-font-family-mono);
+    }
+    .spacing-scale {
+      display: grid;
+      gap: var(--pm-space-2);
+    }
+    .spacing-item {
+      display: flex;
+      align-items: center;
+      gap: var(--pm-space-3);
+      min-height: 24px;
+    }
+    .spacing-item span {
+      display: block;
+      height: 12px;
+      min-width: 4px;
+      background: var(--pm-accent);
+      border-radius: var(--pm-radius-sm);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--pm-space-2);
+    }
+    .row + .row {
+      margin-top: var(--pm-space-3);
+    }
+    pm-form-field {
+      display: block;
+      max-width: 520px;
+    }
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--pm-space-3);
+    }
     @media (max-width: 760px) {
-      .gallery { padding: var(--pm-space-4); }
-      .state-grid { grid-template-columns: 1fr; }
+      .gallery {
+        padding: var(--pm-space-4);
+      }
+      .state-grid {
+        grid-template-columns: 1fr;
+      }
     }
   `,
 })

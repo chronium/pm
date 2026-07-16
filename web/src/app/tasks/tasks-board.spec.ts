@@ -35,31 +35,57 @@ const boardResponse: BoardResponse = {
       key: 'second',
       name: 'Second milestone',
       states: [
-        { key: 'todo', name: 'To do', tasks: [{
-          id: 'PM-0002',
-          title: 'A deliberately long task title that remains available to assistive technology and wraps on narrow screens',
-          track: 'BUILD',
-          milestone: 'second',
-          priority: 'high',
-          prioritySource: 'milestone',
-          state: 'todo',
-          dependencies: { ready: false, dependsOn: ['PM-0001'], waitingOn: ['PM-0001'], missing: [], summary: 'waiting on PM-0001' },
-          descriptionPreview: 'A useful and intentionally long description preview for dense board scanning.',
-          modifiedAt: '2026-07-14T12:00:00Z',
-        }] },
+        {
+          key: 'todo',
+          name: 'To do',
+          tasks: [
+            {
+              id: 'PM-0002',
+              title:
+                'A deliberately long task title that remains available to assistive technology and wraps on narrow screens',
+              track: 'BUILD',
+              milestone: 'second',
+              priority: 'high',
+              prioritySource: 'milestone',
+              state: 'todo',
+              dependencies: {
+                ready: false,
+                dependsOn: ['PM-0001'],
+                waitingOn: ['PM-0001'],
+                missing: [],
+                summary: 'waiting on PM-0001',
+              },
+              descriptionPreview:
+                'A useful and intentionally long description preview for dense board scanning.',
+              modifiedAt: '2026-07-14T12:00:00Z',
+            },
+          ],
+        },
         { key: 'review', name: 'Review', tasks: [] },
-        { key: 'done', name: 'Done', tasks: [{
-          id: 'PM-0001',
-          title: 'Completed dependency',
-          track: 'PM',
-          milestone: 'second',
-          priority: 'low',
-          prioritySource: 'task',
-          state: 'done',
-          dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
-          descriptionPreview: '',
-          modifiedAt: '2026-07-13T12:00:00Z',
-        }] },
+        {
+          key: 'done',
+          name: 'Done',
+          tasks: [
+            {
+              id: 'PM-0001',
+              title: 'Completed dependency',
+              track: 'PM',
+              milestone: 'second',
+              priority: 'low',
+              prioritySource: 'task',
+              state: 'done',
+              dependencies: {
+                ready: true,
+                dependsOn: [],
+                waitingOn: [],
+                missing: [],
+                summary: 'ready',
+              },
+              descriptionPreview: '',
+              modifiedAt: '2026-07-13T12:00:00Z',
+            },
+          ],
+        },
       ],
     },
     {
@@ -81,11 +107,13 @@ describe('TasksBoard', () => {
     await TestBed.configureTestingModule({
       imports: [RouterHost],
       providers: [
-        provideRouter([{
-          path: 'tasks',
-          component: TasksBoard,
-          children: [{ path: ':taskId', component: NestedTaskHost }],
-        }]),
+        provideRouter([
+          {
+            path: 'tasks',
+            component: TasksBoard,
+            children: [{ path: ':taskId', component: NestedTaskHost }],
+          },
+        ]),
         provideHttpClient(),
         provideHttpClientTesting(),
       ],
@@ -102,7 +130,9 @@ describe('TasksBoard', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl(url);
     fixture.detectChanges();
-    TestBed.inject(HttpTestingController).expectOne((request) => request.url === '/api/v1/board').flush(response);
+    TestBed.inject(HttpTestingController)
+      .expectOne((request) => request.url === '/api/v1/board')
+      .flush(response);
     await fixture.whenStable();
     fixture.detectChanges();
     return { element: fixture.nativeElement as HTMLElement, fixture, router };
@@ -110,10 +140,24 @@ describe('TasksBoard', () => {
 
   it('renders server milestone/status order, counts, and hides empty groups and sections', async () => {
     const { element } = await render();
-    expect([...element.querySelectorAll('.milestone-section h2')].map((item) => item.textContent)).toEqual(['Second milestone']);
-    expect([...element.querySelectorAll('.status-group summary')].map((item) => item.textContent?.trim().replace(/\s+/g, ' '))).toEqual(['To do1', 'Done1']);
-    expect([...element.querySelectorAll('.status-group summary')].some((item) => item.textContent?.includes('Review'))).toBe(false);
-    expect([...element.querySelectorAll('.milestone-section h2')].some((item) => item.textContent?.includes('First milestone'))).toBe(false);
+    expect(
+      [...element.querySelectorAll('.milestone-section h2')].map((item) => item.textContent),
+    ).toEqual(['Second milestone']);
+    expect(
+      [...element.querySelectorAll('.status-group summary')].map((item) =>
+        item.textContent?.trim().replace(/\s+/g, ' '),
+      ),
+    ).toEqual(['To do1', 'Done1']);
+    expect(
+      [...element.querySelectorAll('.status-group summary')].some((item) =>
+        item.textContent?.includes('Review'),
+      ),
+    ).toBe(false);
+    expect(
+      [...element.querySelectorAll('.milestone-section h2')].some((item) =>
+        item.textContent?.includes('First milestone'),
+      ),
+    ).toBe(false);
   });
 
   it('publishes the unfiltered remaining-task count for the application header', async () => {
@@ -131,7 +175,9 @@ describe('TasksBoard', () => {
 
     groups[1]!.open = true;
     groups[1]!.dispatchEvent(new Event('toggle'));
-    expect(sessionStorage.getItem('pm.tasks-board.v1.Atlas%20Project.second.done.open')).toBe('true');
+    expect(sessionStorage.getItem('pm.tasks-board.v1.Atlas%20Project.second.done.open')).toBe(
+      'true',
+    );
   });
 
   it('renders semantic task links with textual priority and dependency meaning and long content', async () => {
@@ -145,7 +191,9 @@ describe('TasksBoard', () => {
     expect(link?.textContent).toContain('A useful and intentionally long description preview');
     link?.focus();
     expect(document.activeElement).toBe(link);
-    expect(element.querySelector('form[aria-label="Board filters"] label')?.textContent).toContain('Track');
+    expect(element.querySelector('form[aria-label="Board filters"] label')?.textContent).toContain(
+      'Track',
+    );
   });
 
   it('shows one board-level empty state and offers clear filters', async () => {
@@ -162,21 +210,33 @@ describe('TasksBoard', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Loading task board');
 
-    TestBed.inject(HttpTestingController).expectOne((request) => request.url === '/api/v1/board').flush(
-      { title: 'Invalid status', detail: 'State archived not found.', errorCode: 'invalid_state' },
-      { status: 400, statusText: 'Bad Request' },
-    );
+    TestBed.inject(HttpTestingController)
+      .expectOne((request) => request.url === '/api/v1/board')
+      .flush(
+        {
+          title: 'Invalid status',
+          detail: 'State archived not found.',
+          errorCode: 'invalid_state',
+        },
+        { status: 400, statusText: 'Bad Request' },
+      );
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('State archived not found.');
-    expect([...fixture.nativeElement.querySelectorAll('button')].map((button: HTMLButtonElement) => button.textContent?.trim())).toEqual(['Retry', 'Clear filters']);
+    expect(
+      [...fixture.nativeElement.querySelectorAll('button')].map((button: HTMLButtonElement) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(['Retry', 'Clear filters']);
   });
 
   it('keeps the board mounted, preserves filters, and visibly selects a nested task route', async () => {
     const { element, router } = await render('/tasks/PM-0002?track=BUILD');
     expect(router.url).toBe('/tasks/PM-0002?track=BUILD');
-    expect(element.querySelector('.task-list li.selected a[aria-current="true"]')?.textContent).toContain('PM-0002');
+    expect(
+      element.querySelector('.task-list li.selected a[aria-current="true"]')?.textContent,
+    ).toContain('PM-0002');
     expect(element.querySelector('h1.visually-hidden')?.textContent).toBe('Tasks');
     expect(element.querySelector<HTMLSelectElement>('select')?.value).toBe('BUILD');
   });

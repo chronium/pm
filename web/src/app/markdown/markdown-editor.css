@@ -1,12 +1,38 @@
-pm-markdown-editor { display: block; min-width: 0; }
-pm-markdown-editor > textarea { width: 100%; min-height: 180px; resize: vertical; }
-pm-markdown-editor .EasyMDEContainer { color: var(--pm-text-primary); }
+pm-markdown-editor {
+  display: block;
+  min-width: 0;
+}
+pm-markdown-editor > textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+}
+pm-markdown-editor .EasyMDEContainer {
+  color: var(--pm-text-primary);
+}
 pm-markdown-editor .CodeMirror,
 pm-markdown-editor .editor-toolbar,
-pm-markdown-editor .editor-preview { border-color: var(--pm-border-strong); background: var(--pm-surface-raised); color: var(--pm-text-primary); }
-pm-markdown-editor .CodeMirror { min-height: 180px; height: min(36vh, 320px); font-family: var(--pm-font-family-mono); }
-pm-markdown-editor .CodeMirror-scroll { min-height: 180px; }
-pm-markdown-editor .editor-toolbar button { color: var(--pm-text-primary) !important; }
+pm-markdown-editor .editor-preview {
+  border-color: var(--pm-border-strong);
+  background: var(--pm-surface-raised);
+  color: var(--pm-text-primary);
+}
+pm-markdown-editor .CodeMirror {
+  min-height: 180px;
+  height: min(36vh, 320px);
+  font-family: var(--pm-font-family-mono);
+}
+pm-markdown-editor .CodeMirror-scroll {
+  min-height: 180px;
+}
+pm-markdown-editor .editor-toolbar button {
+  color: var(--pm-text-primary) !important;
+}
 pm-markdown-editor .editor-toolbar button:hover,
-pm-markdown-editor .editor-toolbar button.active { border-color: var(--pm-border-strong); background: var(--pm-surface-hover); }
-pm-markdown-editor .editor-toolbar i.separator { border-color: var(--pm-border-subtle); }
+pm-markdown-editor .editor-toolbar button.active {
+  border-color: var(--pm-border-strong);
+  background: var(--pm-surface-hover);
+}
+pm-markdown-editor .editor-toolbar i.separator {
+  border-color: var(--pm-border-subtle);
+}

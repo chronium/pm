@@ -17,6 +17,7 @@ export class TaskStatusGroup {
   readonly openChange = output<boolean>();
 
   protected toggled(event: Event): void {
-    if (event.currentTarget instanceof HTMLDetailsElement) this.openChange.emit(event.currentTarget.open);
+    if (event.currentTarget instanceof HTMLDetailsElement)
+      this.openChange.emit(event.currentTarget.open);
   }
 }

@@ -5,11 +5,22 @@ import { TestBed } from '@angular/core/testing';
 import type { SettingsResponse, ValidationResponse } from './settings-api.service';
 import { SettingsStore } from './settings.store';
 
-const initial: SettingsResponse = { projectName: 'Atlas', statuses: [{ key: 'todo', name: 'To do' }], tracks: [{ key: 'PM', name: 'Product' }], milestones: [{ key: 'm1', title: 'First', priority: 'none' }], priorityOptions: ['none', 'high'], revision: 'r1' };
+const initial: SettingsResponse = {
+  projectName: 'Atlas',
+  statuses: [{ key: 'todo', name: 'To do' }],
+  tracks: [{ key: 'PM', name: 'Product' }],
+  milestones: [{ key: 'm1', title: 'First', priority: 'none' }],
+  priorityOptions: ['none', 'high'],
+  revision: 'r1',
+};
 const validation: ValidationResponse = { valid: true, issues: [] };
 
 describe('SettingsStore', () => {
-  beforeEach(() => TestBed.configureTestingModule({ providers: [SettingsStore, provideHttpClient(), provideHttpClientTesting()] }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      providers: [SettingsStore, provideHttpClient(), provideHttpClientTesting()],
+    }),
+  );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   async function load() {
@@ -50,7 +61,12 @@ describe('SettingsStore', () => {
     await Promise.resolve();
     const track = http.expectOne('/api/v1/settings/tracks/PM');
     expect(track.request.headers.get('If-Match')).toBe('"r2"');
-    track.flush({ ...initial, statuses: [{ key: 'todo', name: 'Ready' }], tracks: [{ key: 'PM', name: 'Planning' }], revision: 'r3' });
+    track.flush({
+      ...initial,
+      statuses: [{ key: 'todo', name: 'Ready' }],
+      tracks: [{ key: 'PM', name: 'Planning' }],
+      revision: 'r3',
+    });
     expect(await second).toBe(true);
     TestBed.flushEffects();
     http.expectOne('/api/v1/validation').flush(validation);
@@ -62,19 +78,23 @@ describe('SettingsStore', () => {
     const { store, http } = await load();
     const blocked = store.removeStatus('todo');
     await Promise.resolve();
-    http.expectOne('/api/v1/settings/statuses/todo').flush(
-      { title: 'In use', detail: 'Status todo is used by tasks.', errorCode: 'status_in_use' },
-      { status: 409, statusText: 'Conflict' },
-    );
+    http
+      .expectOne('/api/v1/settings/statuses/todo')
+      .flush(
+        { title: 'In use', detail: 'Status todo is used by tasks.', errorCode: 'status_in_use' },
+        { status: 409, statusText: 'Conflict' },
+      );
     expect(await blocked).toBe(false);
     expect(store.errorFor('status', 'todo')).toBe('Status todo is used by tasks.');
 
     const stale = store.renameStatus('todo', { name: 'Ready' });
     await Promise.resolve();
-    http.expectOne('/api/v1/settings/statuses/todo').flush(
-      { title: 'Stale', detail: 'Project settings changed.', errorCode: 'precondition_failed' },
-      { status: 412, statusText: 'Precondition Failed' },
-    );
+    http
+      .expectOne('/api/v1/settings/statuses/todo')
+      .flush(
+        { title: 'Stale', detail: 'Project settings changed.', errorCode: 'precondition_failed' },
+        { status: 412, statusText: 'Precondition Failed' },
+      );
     expect(await stale).toBe(false);
     expect(store.stale()).toBe(true);
     expect(await store.removeTrack('PM')).toBe(false);
@@ -94,7 +114,9 @@ describe('SettingsStore', () => {
     TestBed.flushEffects();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/v1/settings').flush(initial);
-    http.expectOne('/api/v1/validation').flush({ title: 'Unavailable' }, { status: 503, statusText: 'Unavailable' });
+    http
+      .expectOne('/api/v1/validation')
+      .flush({ title: 'Unavailable' }, { status: 503, statusText: 'Unavailable' });
     TestBed.flushEffects();
     await vi.waitFor(() => expect(store.settings()).toEqual(initial));
     expect(store.validationError()).toContain('Project health');

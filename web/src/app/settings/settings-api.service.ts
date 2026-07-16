@@ -27,31 +27,57 @@ export class SettingsApiService {
   private readonly http = inject(HttpClient);
 
   createStatus(request: CreateSettingsOptionRequest, revision: string) {
-    return this.http.post<SettingsResponse>('/api/v1/settings/statuses', request, this.options(revision));
+    return this.http.post<SettingsResponse>(
+      '/api/v1/settings/statuses',
+      request,
+      this.options(revision),
+    );
   }
 
   renameStatus(key: string, request: RenameSettingsOptionRequest, revision: string) {
-    return this.http.put<SettingsResponse>(this.optionUrl('statuses', key), request, this.options(revision));
+    return this.http.put<SettingsResponse>(
+      this.optionUrl('statuses', key),
+      request,
+      this.options(revision),
+    );
   }
 
   removeStatus(key: string, revision: string) {
-    return this.http.delete<SettingsResponse>(this.optionUrl('statuses', key), this.options(revision));
+    return this.http.delete<SettingsResponse>(
+      this.optionUrl('statuses', key),
+      this.options(revision),
+    );
   }
 
   createTrack(request: CreateSettingsOptionRequest, revision: string) {
-    return this.http.post<SettingsResponse>('/api/v1/settings/tracks', request, this.options(revision));
+    return this.http.post<SettingsResponse>(
+      '/api/v1/settings/tracks',
+      request,
+      this.options(revision),
+    );
   }
 
   renameTrack(key: string, request: RenameSettingsOptionRequest, revision: string) {
-    return this.http.put<SettingsResponse>(this.optionUrl('tracks', key), request, this.options(revision));
+    return this.http.put<SettingsResponse>(
+      this.optionUrl('tracks', key),
+      request,
+      this.options(revision),
+    );
   }
 
   removeTrack(key: string, revision: string) {
-    return this.http.delete<SettingsResponse>(this.optionUrl('tracks', key), this.options(revision));
+    return this.http.delete<SettingsResponse>(
+      this.optionUrl('tracks', key),
+      this.options(revision),
+    );
   }
 
   createMilestone(request: CreateMilestoneRequest, revision: string) {
-    return this.http.post<SettingsResponse>('/api/v1/settings/milestones', request, this.options(revision));
+    return this.http.post<SettingsResponse>(
+      '/api/v1/settings/milestones',
+      request,
+      this.options(revision),
+    );
   }
 
   renameMilestone(key: string, request: RenameMilestoneRequest, revision: string) {
@@ -59,7 +85,11 @@ export class SettingsApiService {
   }
 
   setMilestonePriority(key: string, request: SetMilestonePriorityRequest, revision: string) {
-    return this.http.put<SettingsResponse>(`${this.milestoneUrl(key)}/priority`, request, this.options(revision));
+    return this.http.put<SettingsResponse>(
+      `${this.milestoneUrl(key)}/priority`,
+      request,
+      this.options(revision),
+    );
   }
 
   removeMilestone(key: string, revision: string) {
@@ -71,9 +101,18 @@ export class SettingsApiService {
       return { status: 0, message: fallback, conflict: false, code: null };
     }
     const problem = this.isProblem(error.error) ? error.error : null;
-    const message = problem?.detail?.trim() || problem?.title?.trim()
-      || (error.status === 0 ? 'The settings API could not be reached.' : `${fallback} (${error.status}).`);
-    return { status: error.status, message, conflict: error.status === 412, code: problem?.errorCode ?? null };
+    const message =
+      problem?.detail?.trim() ||
+      problem?.title?.trim() ||
+      (error.status === 0
+        ? 'The settings API could not be reached.'
+        : `${fallback} (${error.status}).`);
+    return {
+      status: error.status,
+      message,
+      conflict: error.status === 412,
+      code: problem?.errorCode ?? null,
+    };
   }
 
   private options(revision: string) {

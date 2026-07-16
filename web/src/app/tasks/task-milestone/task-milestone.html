@@ -2,8 +2,14 @@
 <div class="status-groups">
   @for (state of milestone().states; track state.key) {
     @if (state.tasks.length > 0) {
-      <details pmTaskStatusGroup class="status-group" [state]="state" [selectedTaskId]="selectedTaskId()"
-        [open]="openStates()[state.key]" (openChange)="changed(state, $event)"></details>
+      <details
+        pmTaskStatusGroup
+        class="status-group"
+        [state]="state"
+        [selectedTaskId]="selectedTaskId()"
+        [open]="openStates()[state.key]"
+        (openChange)="changed(state, $event)"
+      ></details>
     }
   }
 </div>

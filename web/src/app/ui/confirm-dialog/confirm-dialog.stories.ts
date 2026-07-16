@@ -66,7 +66,8 @@ export const Pending: Story = {
 export const LongContent: Story = {
   args: {
     heading: 'Remove the task with a deliberately long title from the angular-web milestone?',
-    message: 'PM-0048 documents the component workshop, its browser checks, and the accessibility baseline used by future reusable visual components. Removing it also removes this context from the local project history.',
+    message:
+      'PM-0048 documents the component workshop, its browser checks, and the accessibility baseline used by future reusable visual components. Removing it also removes this context from the local project history.',
   },
   globals: { viewport: 'mobile' },
 };

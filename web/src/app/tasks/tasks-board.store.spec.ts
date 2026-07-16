@@ -17,14 +17,16 @@ const emptyBoard: BoardResponse = {
 };
 
 describe('TasksBoardStore', () => {
-  beforeEach(() => TestBed.configureTestingModule({
-    providers: [
-      TasksBoardStore,
-      provideRouter([{ path: 'tasks', children: [{ path: ':taskId', children: [] }] }]),
-      provideHttpClient(),
-      provideHttpClientTesting(),
-    ],
-  }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      providers: [
+        TasksBoardStore,
+        provideRouter([{ path: 'tasks', children: [{ path: ':taskId', children: [] }] }]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    }),
+  );
 
   afterEach(() => {
     TestBed.inject(HttpTestingController).verify();
@@ -96,7 +98,11 @@ describe('TasksBoardStore', () => {
     expect(store.refreshing()).toBe(true);
     expect(store.board()?.projectName).toBe('Atlas');
     http.expectOne('/api/v1/board').flush(
-      { title: 'Invalid filter', detail: 'State archived not found.', errorCode: 'invalid_state' },
+      {
+        title: 'Invalid filter',
+        detail: 'State archived not found.',
+        errorCode: 'invalid_state',
+      },
       { status: 400, statusText: 'Bad Request' },
     );
     await TestBed.tick();
@@ -114,7 +120,8 @@ describe('TasksBoardStore', () => {
     sessionStorage.clear();
     const { store, http } = await createAt('/tasks');
     const milestone = {
-      key: 'm1', name: 'Milestone One',
+      key: 'm1',
+      name: 'Milestone One',
       states: [
         { key: 'todo', name: 'To do', tasks: [] },
         { key: 'done', name: 'Done', tasks: [] },

@@ -29,20 +29,33 @@ export class SettingsStore {
   private readonly acceptedRevision = signal<string | null>(null);
   private readonly mutationCount = signal(0);
   private readonly activeOperation = signal<SettingsOperation | null>(null);
-  private readonly operationErrorState = signal<{ operation: SettingsOperation; error: SettingsApiError } | null>(null);
+  private readonly operationErrorState = signal<{
+    operation: SettingsOperation;
+    error: SettingsApiError;
+  } | null>(null);
   private mutationQueue: Promise<void> = Promise.resolve();
   private reloadRevision: string | null = null;
 
   readonly settingsResource = httpResource<SettingsResponse>(() => '/api/v1/settings');
   readonly validationResource = httpResource<ValidationResponse>(() => '/api/v1/validation');
   readonly settings = computed(() => this.retainedSettings());
-  readonly validation = computed(() => this.validationResource.hasValue() ? this.validationResource.value() : undefined);
+  readonly validation = computed(() =>
+    this.validationResource.hasValue() ? this.validationResource.value() : undefined,
+  );
   readonly loading = computed(() => this.settingsResource.isLoading() && !this.settings());
   readonly refreshing = computed(() => this.settingsResource.isLoading() && !!this.settings());
-  readonly settingsError = computed(() => this.readError(this.settingsResource.error(), 'Project settings could not be loaded.'));
-  readonly validationLoading = computed(() => this.validationResource.isLoading() && !this.validation());
-  readonly validationRefreshing = computed(() => this.validationResource.isLoading() && !!this.validation());
-  readonly validationError = computed(() => this.readError(this.validationResource.error(), 'Project health could not be loaded.'));
+  readonly settingsError = computed(() =>
+    this.readError(this.settingsResource.error(), 'Project settings could not be loaded.'),
+  );
+  readonly validationLoading = computed(
+    () => this.validationResource.isLoading() && !this.validation(),
+  );
+  readonly validationRefreshing = computed(
+    () => this.validationResource.isLoading() && !!this.validation(),
+  );
+  readonly validationError = computed(() =>
+    this.readError(this.validationResource.error(), 'Project health could not be loaded.'),
+  );
   readonly pending = computed(() => this.mutationCount() > 0);
   readonly operation = this.activeOperation.asReadonly();
   readonly operationError = this.operationErrorState.asReadonly();
@@ -64,44 +77,54 @@ export class SettingsStore {
   }
 
   createStatus(request: CreateSettingsOptionRequest) {
-    return this.enqueue({ kind: 'create', collection: 'status', key: request.key },
-      (revision) => this.api.createStatus(request, revision));
+    return this.enqueue({ kind: 'create', collection: 'status', key: request.key }, (revision) =>
+      this.api.createStatus(request, revision),
+    );
   }
   renameStatus(key: string, request: RenameSettingsOptionRequest) {
-    return this.enqueue({ kind: 'rename', collection: 'status', key },
-      (revision) => this.api.renameStatus(key, request, revision));
+    return this.enqueue({ kind: 'rename', collection: 'status', key }, (revision) =>
+      this.api.renameStatus(key, request, revision),
+    );
   }
   removeStatus(key: string) {
-    return this.enqueue({ kind: 'remove', collection: 'status', key },
-      (revision) => this.api.removeStatus(key, revision));
+    return this.enqueue({ kind: 'remove', collection: 'status', key }, (revision) =>
+      this.api.removeStatus(key, revision),
+    );
   }
   createTrack(request: CreateSettingsOptionRequest) {
-    return this.enqueue({ kind: 'create', collection: 'track', key: request.key },
-      (revision) => this.api.createTrack(request, revision));
+    return this.enqueue({ kind: 'create', collection: 'track', key: request.key }, (revision) =>
+      this.api.createTrack(request, revision),
+    );
   }
   renameTrack(key: string, request: RenameSettingsOptionRequest) {
-    return this.enqueue({ kind: 'rename', collection: 'track', key },
-      (revision) => this.api.renameTrack(key, request, revision));
+    return this.enqueue({ kind: 'rename', collection: 'track', key }, (revision) =>
+      this.api.renameTrack(key, request, revision),
+    );
   }
   removeTrack(key: string) {
-    return this.enqueue({ kind: 'remove', collection: 'track', key },
-      (revision) => this.api.removeTrack(key, revision));
+    return this.enqueue({ kind: 'remove', collection: 'track', key }, (revision) =>
+      this.api.removeTrack(key, revision),
+    );
   }
   createMilestone(request: CreateMilestoneRequest) {
-    return this.enqueue({ kind: 'create', collection: 'milestone', key: request.key },
-      (revision) => this.api.createMilestone(request, revision));
+    return this.enqueue({ kind: 'create', collection: 'milestone', key: request.key }, (revision) =>
+      this.api.createMilestone(request, revision),
+    );
   }
   renameMilestone(key: string, request: RenameMilestoneRequest) {
-    return this.enqueue({ kind: 'rename', collection: 'milestone', key },
-      (revision) => this.api.renameMilestone(key, request, revision));
+    return this.enqueue({ kind: 'rename', collection: 'milestone', key }, (revision) =>
+      this.api.renameMilestone(key, request, revision),
+    );
   }
   setMilestonePriority(key: string, request: SetMilestonePriorityRequest) {
-    return this.enqueue({ kind: 'priority', collection: 'milestone', key },
-      (revision) => this.api.setMilestonePriority(key, request, revision));
+    return this.enqueue({ kind: 'priority', collection: 'milestone', key }, (revision) =>
+      this.api.setMilestonePriority(key, request, revision),
+    );
   }
   removeMilestone(key: string) {
-    return this.enqueue({ kind: 'remove', collection: 'milestone', key },
-      (revision) => this.api.removeMilestone(key, revision));
+    return this.enqueue({ kind: 'remove', collection: 'milestone', key }, (revision) =>
+      this.api.removeMilestone(key, revision),
+    );
   }
 
   reloadLatest(): boolean {
@@ -110,19 +133,28 @@ export class SettingsStore {
     return this.settingsResource.reload();
   }
 
-  reloadValidation(): boolean { return this.validationResource.reload(); }
-  clearOperationError(): void { this.operationErrorState.set(null); }
+  reloadValidation(): boolean {
+    return this.validationResource.reload();
+  }
+  clearOperationError(): void {
+    this.operationErrorState.set(null);
+  }
 
   errorFor(collection: SettingsCollection, key: string | null): string | null {
     const current = this.operationError();
     return current?.operation.collection === collection && current.operation.key === key
-      ? current.error.message : null;
+      ? current.error.message
+      : null;
   }
 
   isPending(operation: SettingsOperation): boolean {
     const current = this.operation();
-    return !!current && current.kind === operation.kind
-      && current.collection === operation.collection && current.key === operation.key;
+    return (
+      !!current &&
+      current.kind === operation.kind &&
+      current.collection === operation.collection &&
+      current.key === operation.key
+    );
   }
 
   private enqueue(
@@ -154,10 +186,14 @@ export class SettingsStore {
         this.activeOperation.set(null);
       }
     };
-    const result = this.mutationQueue.then(execute, execute)
+    const result = this.mutationQueue
+      .then(execute, execute)
       .then(() => succeeded)
       .finally(() => this.mutationCount.update((count) => count - 1));
-    this.mutationQueue = result.then(() => undefined, () => undefined);
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   }
 

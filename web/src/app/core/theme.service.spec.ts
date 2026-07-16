@@ -10,9 +10,15 @@ describe('ThemeService', () => {
     values = {};
     storage = {
       getItem: vi.fn((key: string) => values[key] ?? null),
-      setItem: vi.fn((key: string, value: string) => { values[key] = value; }),
-      removeItem: vi.fn((key: string) => { delete values[key]; }),
-      clear: vi.fn(() => { values = {}; }),
+      setItem: vi.fn((key: string, value: string) => {
+        values[key] = value;
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete values[key];
+      }),
+      clear: vi.fn(() => {
+        values = {};
+      }),
     };
     Object.defineProperty(window, 'localStorage', { configurable: true, value: storage });
     document.documentElement.removeAttribute('data-theme');
@@ -62,11 +68,15 @@ describe('ThemeService', () => {
   });
 
   it('continues to work when reading or writing storage fails', () => {
-    const get = vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const get = vi.spyOn(storage, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
     const service = TestBed.inject(ThemeService);
     expect(service.preference()).toBe('system');
     get.mockRestore();
-    vi.spyOn(storage, 'setItem').mockImplementation(() => { throw new Error('full'); });
+    vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new Error('full');
+    });
     expect(() => service.cycle()).not.toThrow();
     expect(service.preference()).toBe('light');
     expect(document.documentElement.dataset['theme']).toBe('light');

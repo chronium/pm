@@ -14,7 +14,11 @@ describe('application shell', () => {
     document.documentElement.removeAttribute('data-theme-preference');
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter(routes, withComponentInputBinding()), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideRouter(routes, withComponentInputBinding()),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents();
   });
 
@@ -43,34 +47,70 @@ describe('application shell', () => {
         revision: 'board-revision',
       });
     }
-    const taskRequests = TestBed.inject(HttpTestingController).match(
-      (request) => request.url.startsWith('/api/v1/tasks/'),
+    const taskRequests = TestBed.inject(HttpTestingController).match((request) =>
+      request.url.startsWith('/api/v1/tasks/'),
     );
     for (const request of taskRequests) {
-      request.flush({
-        id: 'PM-0049', title: 'Task details', track: 'PM', milestone: null,
-        priority: 'medium', prioritySource: 'track', prioritySelection: 'inherit', state: 'todo',
-        dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
-        createdAt: '2026-07-15T00:00:00Z', modifiedAt: '2026-07-15T00:00:00Z',
-        description: '', revision: 'task-revision', localMetadata: { filePath: '.pm/tasks/PM-0049.md' },
-      }, { headers: { ETag: '"task-revision"' } });
+      request.flush(
+        {
+          id: 'PM-0049',
+          title: 'Task details',
+          track: 'PM',
+          milestone: null,
+          priority: 'medium',
+          prioritySource: 'track',
+          prioritySelection: 'inherit',
+          state: 'todo',
+          dependencies: {
+            ready: true,
+            dependsOn: [],
+            waitingOn: [],
+            missing: [],
+            summary: 'ready',
+          },
+          createdAt: '2026-07-15T00:00:00Z',
+          modifiedAt: '2026-07-15T00:00:00Z',
+          description: '',
+          revision: 'task-revision',
+          localMetadata: { filePath: '.pm/tasks/PM-0049.md' },
+        },
+        { headers: { ETag: '"task-revision"' } },
+      );
     }
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/settings')) {
-      request.flush({ projectName, statuses: [], tracks: [], milestones: [], priorityOptions: ['none'], revision: 'settings-revision' });
+      request.flush({
+        projectName,
+        statuses: [],
+        tracks: [],
+        milestones: [],
+        priorityOptions: ['none'],
+        revision: 'settings-revision',
+      });
     }
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/validation')) {
       request.flush({ valid: true, issues: [] });
     }
     const wikiSegments = url.split('?')[0]!.split('/').filter(Boolean);
-    const wikiPath = wikiSegments[0] === 'wiki' && wikiSegments.length > 1 && wikiSegments[1] !== 'new'
-      ? wikiSegments.slice(wikiSegments[1] === 'edit' || wikiSegments[1] === 'meta' ? 2 : 1).join('/')
-      : null;
-    const wikiPages = wikiPath ? [
-      { path: wikiPath, title: 'Guide', modifiedAt: '2026-07-15T00:00:00Z' },
-      ...wikiPath === 'architecture'
-        ? [{ path: 'architecture/child', title: 'Child page', modifiedAt: '2026-07-15T00:00:00Z' }]
-        : [],
-    ] : [];
+    const wikiPath =
+      wikiSegments[0] === 'wiki' && wikiSegments.length > 1 && wikiSegments[1] !== 'new'
+        ? wikiSegments
+            .slice(wikiSegments[1] === 'edit' || wikiSegments[1] === 'meta' ? 2 : 1)
+            .join('/')
+        : null;
+    const wikiPages = wikiPath
+      ? [
+          { path: wikiPath, title: 'Guide', modifiedAt: '2026-07-15T00:00:00Z' },
+          ...(wikiPath === 'architecture'
+            ? [
+                {
+                  path: 'architecture/child',
+                  title: 'Child page',
+                  modifiedAt: '2026-07-15T00:00:00Z',
+                },
+              ]
+            : []),
+        ]
+      : [];
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/wiki/pages')) {
       request.flush(wikiPages);
     }
@@ -80,8 +120,21 @@ describe('application shell', () => {
     await Promise.resolve();
     fixture.detectChanges();
     await Promise.resolve();
-    for (const request of TestBed.inject(HttpTestingController).match((request) => request.url.startsWith('/api/v1/wiki/pages/'))) {
-      request.flush({ path: wikiPath, title: 'Guide', createdAt: '2026-07-14T00:00:00Z', modifiedAt: '2026-07-15T00:00:00Z', body: '# Guide', revision: 'wiki-revision', localMetadata: { filePath: `.pm/wiki/${wikiPath}.md` } }, { headers: { ETag: '"wiki-revision"' } });
+    for (const request of TestBed.inject(HttpTestingController).match((request) =>
+      request.url.startsWith('/api/v1/wiki/pages/'),
+    )) {
+      request.flush(
+        {
+          path: wikiPath,
+          title: 'Guide',
+          createdAt: '2026-07-14T00:00:00Z',
+          modifiedAt: '2026-07-15T00:00:00Z',
+          body: '# Guide',
+          revision: 'wiki-revision',
+          localMetadata: { filePath: `.pm/wiki/${wikiPath}.md` },
+        },
+        { headers: { ETag: '"wiki-revision"' } },
+      );
     }
     await fixture.whenStable();
     fixture.detectChanges();
@@ -99,7 +152,9 @@ describe('application shell', () => {
     const tasksLink = fixture.nativeElement.querySelector('.mode-navigation a[href="/tasks"]');
     expect(tasksLink?.querySelector('span:first-child')?.textContent).toBe('Tasks');
     expect(tasksLink?.querySelector('.mode-count')?.textContent).toBe('8 left');
-    expect(tasksLink?.querySelector('.mode-count')?.getAttribute('aria-label')).toBe('8 tasks left');
+    expect(tasksLink?.querySelector('.mode-count')?.getAttribute('aria-label')).toBe(
+      '8 tasks left',
+    );
   });
 
   it('keeps PM as the loading and error fallback', async () => {
@@ -107,10 +162,9 @@ describe('application shell', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.brand')?.textContent).toBe('PM');
 
-    TestBed.inject(HttpTestingController).expectOne('/api/v1/project').flush(
-      { title: 'Unavailable' },
-      { status: 503, statusText: 'Service Unavailable' },
-    );
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/project')
+      .flush({ title: 'Unavailable' }, { status: 503, statusText: 'Service Unavailable' });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -138,18 +192,23 @@ describe('application shell', () => {
     const { fixture, router } = await renderAt('/tasks');
     const layout = TestBed.inject(LayoutService);
     expect(layout.activeShell()).toBe(AppShell.Tasks);
-    expect(fixture.nativeElement.querySelector('a[href="/tasks"][aria-current="page"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('a[href="/tasks"][aria-current="page"]'),
+    ).toBeTruthy();
 
     await router.navigateByUrl('/wiki');
     fixture.detectChanges();
     expect(layout.activeShell()).toBe(AppShell.Wiki);
-    expect(fixture.nativeElement.querySelector('a[href="/wiki"][aria-current="page"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('a[href="/wiki"][aria-current="page"]'),
+    ).toBeTruthy();
   });
 
   it('keeps All tasks exact while a nested task remains in the board workspace', async () => {
     const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
-    const allTasks = [...fixture.nativeElement.querySelectorAll('aside a')]
-      .find((link: HTMLAnchorElement) => link.textContent?.trim() === 'All tasks');
+    const allTasks = [...fixture.nativeElement.querySelectorAll('aside a')].find(
+      (link: HTMLAnchorElement) => link.textContent?.trim() === 'All tasks',
+    );
     expect(allTasks?.classList.contains('active')).toBe(false);
     expect(fixture.nativeElement.querySelector('main h1')?.textContent).toBe('Tasks');
   });
@@ -168,7 +227,11 @@ describe('application shell', () => {
     const element: HTMLElement = fixture.nativeElement;
     expect(element.querySelector('header nav[aria-label="Workspace"]')).toBeTruthy();
     expect(element.querySelector('aside[aria-label="Tasks navigation"]')).toBeTruthy();
-    expect([...element.querySelectorAll('ng-icon')].every((icon) => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(
+      [...element.querySelectorAll('ng-icon')].every(
+        (icon) => icon.getAttribute('aria-hidden') === 'true',
+      ),
+    ).toBe(true);
   });
 
   it('closes the mobile drawer with Escape and restores focus to its trigger', async () => {

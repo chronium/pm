@@ -50,7 +50,8 @@ export const Links: Story = {
 
 export const LongLabel: Story = {
   render: () => ({
-    template: '<button type="button" pmButton="primary">Create a task and continue editing all project details</button>',
+    template:
+      '<button type="button" pmButton="primary">Create a task and continue editing all project details</button>',
   }),
   globals: { viewport: 'mobile' },
 };

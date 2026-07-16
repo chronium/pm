@@ -24,6 +24,7 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Angular prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11.
 - Angular dependencies: run `socket npm install` in `web/`.
 - Angular dev server: run `npm start` in `web/`; it proxies `/api` to `http://127.0.0.1:51237`.
+- Angular formatting: run `npm run format` in `web/` before completing and committing any task that changes the Angular workspace, then verify it with `npm run format:check`.
 - Angular strict build check: run `npm run check` in `web/`.
 - Angular tests: run `npm test` in `web/`, or `npm run test:watch` for interactive development.
 - Angular production build: run `npm run build` in `web/`.
@@ -33,7 +34,7 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 
 Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. Normal .NET build and test commands do not install or build the Angular workspace. Storybook browser tests use Playwright through `npm run test:storybook`; no standalone Playwright end-to-end suite is configured. Use `playwright-cli` for ad hoc UI validation when available.
 
-No dedicated type-check, lint, or formatting commands are configured in this repository. Do not invent them. Before work is complete, run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; worker changes need `npm test` from `next-id-worker/`.
+No dedicated lint command is configured in this repository. Do not invent one. Before work is complete, format Angular changes and run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; Angular changes need `npm run format`, `npm run format:check`, and the relevant Angular validation commands; worker changes need `npm test` from `next-id-worker/`.
 
 ## Architecture
 

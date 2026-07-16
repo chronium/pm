@@ -5,12 +5,20 @@ import { TestBed } from '@angular/core/testing';
 import { SettingsApiService, type SettingsResponse } from './settings-api.service';
 
 const settings: SettingsResponse = {
-  projectName: 'Atlas', statuses: [{ key: 'todo', name: 'To do' }], tracks: [{ key: 'PM', name: 'Product' }],
-  milestones: [{ key: 'm one', title: 'First', priority: 'high' }], priorityOptions: ['none', 'high'], revision: 'revision-1',
+  projectName: 'Atlas',
+  statuses: [{ key: 'todo', name: 'To do' }],
+  tracks: [{ key: 'PM', name: 'Product' }],
+  milestones: [{ key: 'm one', title: 'First', priority: 'high' }],
+  priorityOptions: ['none', 'high'],
+  revision: 'revision-1',
 };
 
 describe('SettingsApiService', () => {
-  beforeEach(() => TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    }),
+  );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('uses typed payloads, encoded routes, client identity, and the exact strong settings ETag', () => {
@@ -21,7 +29,9 @@ describe('SettingsApiService', () => {
     api.createTrack({ key: 'WEB', name: 'Web' }, settings.revision).subscribe();
     api.renameTrack('BUILD/UI', { name: 'Interface' }, settings.revision).subscribe();
     api.removeTrack('OPS now', settings.revision).subscribe();
-    api.createMilestone({ key: 'm2', title: 'Second', priority: 'high' }, settings.revision).subscribe();
+    api
+      .createMilestone({ key: 'm2', title: 'Second', priority: 'high' }, settings.revision)
+      .subscribe();
     api.renameMilestone('m/one', { title: 'Launch' }, settings.revision).subscribe();
     api.setMilestonePriority('m one', { priority: 'none' }, settings.revision).subscribe();
     api.removeMilestone('m#old', settings.revision).subscribe();
@@ -52,9 +62,31 @@ describe('SettingsApiService', () => {
 
   it('maps structured service failures and stale conflicts', () => {
     const api = TestBed.inject(SettingsApiService);
-    expect(api.error(new HttpErrorResponse({ status: 409, error: { title: 'Blocked', detail: 'Status is in use.', errorCode: 'status_in_use' } }), 'Fallback'))
-      .toEqual({ status: 409, message: 'Status is in use.', conflict: false, code: 'status_in_use' });
-    expect(api.error(new HttpErrorResponse({ status: 412, error: { title: 'Stale', errorCode: 'precondition_failed' } }), 'Fallback').conflict).toBe(true);
-    expect(api.error(new HttpErrorResponse({ status: 0 }), 'Fallback').message).toContain('could not be reached');
+    expect(
+      api.error(
+        new HttpErrorResponse({
+          status: 409,
+          error: { title: 'Blocked', detail: 'Status is in use.', errorCode: 'status_in_use' },
+        }),
+        'Fallback',
+      ),
+    ).toEqual({
+      status: 409,
+      message: 'Status is in use.',
+      conflict: false,
+      code: 'status_in_use',
+    });
+    expect(
+      api.error(
+        new HttpErrorResponse({
+          status: 412,
+          error: { title: 'Stale', errorCode: 'precondition_failed' },
+        }),
+        'Fallback',
+      ).conflict,
+    ).toBe(true);
+    expect(api.error(new HttpErrorResponse({ status: 0 }), 'Fallback').message).toContain(
+      'could not be reached',
+    );
   });
 });

@@ -8,7 +8,12 @@ import type { TaskResponse, UpdateTaskRequest } from '../task-api.service';
 
 type BoardOption = components['schemas']['BoardOptionResponse'];
 
-@Component({ selector: 'pm-task-edit-form', imports: [FormField, MarkdownEditor, PmFormField], templateUrl: './task-edit-form.html', styleUrl: './task-form.css' })
+@Component({
+  selector: 'pm-task-edit-form',
+  imports: [FormField, MarkdownEditor, PmFormField],
+  templateUrl: './task-edit-form.html',
+  styleUrl: './task-form.css',
+})
 export class TaskEditForm {
   readonly task = input.required<TaskResponse>();
   readonly states = input.required<readonly BoardOption[]>();
@@ -20,11 +25,15 @@ export class TaskEditForm {
   readonly reloadIntent = output<void>();
   private readonly injector = inject(Injector);
   readonly model = signal({ title: '', state: '', priority: 'inherit', description: '' });
-  readonly taskForm = form(this.model, (task) => {
-    required(task.title, { message: 'Title is required.' });
-    required(task.state, { message: 'State is required.' });
-    required(task.priority, { message: 'Priority is required.' });
-  }, { injector: this.injector });
+  readonly taskForm = form(
+    this.model,
+    (task) => {
+      required(task.title, { message: 'Title is required.' });
+      required(task.state, { message: 'State is required.' });
+      required(task.priority, { message: 'Priority is required.' });
+    },
+    { injector: this.injector },
+  );
   private loadedRevision = '';
 
   constructor() {
@@ -32,17 +41,26 @@ export class TaskEditForm {
       const task = this.task();
       if (task.revision === this.loadedRevision) return;
       this.loadedRevision = task.revision;
-      this.model.set({ title: task.title, state: task.state, priority: task.prioritySelection, description: task.description });
+      this.model.set({
+        title: task.title,
+        state: task.state,
+        priority: task.prioritySelection,
+        description: task.description,
+      });
       this.taskForm().reset();
     });
   }
 
-  dirty(): boolean { return this.taskForm().dirty(); }
+  dirty(): boolean {
+    return this.taskForm().dirty();
+  }
   protected submit(event: Event): void {
     event.preventDefault();
     this.taskForm().markAsTouched();
     if (!this.taskForm().valid() || this.pending() || this.stale()) return;
     this.submitted.emit({ ...this.model(), title: this.model().title.trim() });
   }
-  protected firstError(field: { errors(): readonly { message?: string }[] }): string | null { return field.errors()[0]?.message ?? null; }
+  protected firstError(field: { errors(): readonly { message?: string }[] }): string | null {
+    return field.errors()[0]?.message ?? null;
+  }
 }

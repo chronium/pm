@@ -6,10 +6,17 @@
   }
 
   @if (board.board(); as currentBoard) {
-    <form pmTaskBoardFilters class="filter-toolbar" aria-label="Board filters"
-      [tracks]="currentBoard.tracks" [milestones]="currentBoard.milestones" [states]="currentBoard.states"
-      [filters]="board.filters()" (filterChange)="board.setFilter($event.filter, $event.value)"
-      (clearIntent)="board.clearFilters()"></form>
+    <form
+      pmTaskBoardFilters
+      class="filter-toolbar"
+      aria-label="Board filters"
+      [tracks]="currentBoard.tracks"
+      [milestones]="currentBoard.milestones"
+      [states]="currentBoard.states"
+      [filters]="board.filters()"
+      (filterChange)="board.setFilter($event.filter, $event.value)"
+      (clearIntent)="board.clearFilters()"
+    ></form>
   }
 
   @if (board.error(); as error) {
@@ -18,9 +25,13 @@
         <strong>Could not load the task board</strong>
         <span>{{ error }}</span>
         <div class="state-actions">
-          <button class="pm-button pm-button--secondary" type="button" (click)="board.reload()">Retry</button>
+          <button class="pm-button pm-button--secondary" type="button" (click)="board.reload()">
+            Retry
+          </button>
           @if (board.hasFilters()) {
-            <button class="pm-button pm-button--ghost" type="button" (click)="board.clearFilters()">Clear filters</button>
+            <button class="pm-button pm-button--ghost" type="button" (click)="board.clearFilters()">
+              Clear filters
+            </button>
           }
         </div>
       </div>
@@ -35,7 +46,13 @@
         <strong>No tasks match these filters</strong>
         <span>Try another filter combination or clear the active filters.</span>
         @if (board.hasFilters()) {
-          <button class="pm-button pm-button--secondary" type="button" (click)="board.clearFilters()">Clear filters</button>
+          <button
+            class="pm-button pm-button--secondary"
+            type="button"
+            (click)="board.clearFilters()"
+          >
+            Clear filters
+          </button>
         }
       </div>
     </pm-empty-state>
@@ -43,9 +60,16 @@
     <div class="board-sections" [attr.aria-busy]="board.refreshing()">
       @for (milestone of currentBoard.milestoneGroups; track milestone.key ?? 'unassigned') {
         @if (board.milestoneTaskCount(milestone) > 0) {
-          <section pmTaskMilestone class="milestone-section" [attr.aria-labelledby]="'milestone-' + $index"
-            [headingId]="'milestone-' + $index" [milestone]="milestone" [selectedTaskId]="board.selectedTaskId()"
-            [openStates]="board.groupOpenStates(milestone)" (statusOpenChange)="board.rememberGroupOpen($event)"></section>
+          <section
+            pmTaskMilestone
+            class="milestone-section"
+            [attr.aria-labelledby]="'milestone-' + $index"
+            [headingId]="'milestone-' + $index"
+            [milestone]="milestone"
+            [selectedTaskId]="board.selectedTaskId()"
+            [openStates]="board.groupOpenStates(milestone)"
+            (statusOpenChange)="board.rememberGroupOpen($event)"
+          ></section>
         }
       }
     </div>

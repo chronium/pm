@@ -1,21 +1,107 @@
-:host { display: block; }
-.settings-section { min-width: 0; padding: var(--pm-space-5) 0; border-bottom: 1px solid var(--pm-border-subtle); }
-.section-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--pm-space-3); margin-bottom: var(--pm-space-3); }
-h2 { margin: 0; font-size: 1rem; }
-.section-heading p, .health-loading, .issue-summary { margin: 2px 0 0; color: var(--pm-text-muted); font-size: var(--pm-font-size-sm); }
-.quiet-status { color: var(--pm-text-subtle); font-size: var(--pm-font-size-xs); }
-.health-valid { margin: 0; color: var(--pm-success); font-weight: 600; }
-.health-valid span { margin-right: var(--pm-space-1); }
-.section-error { display: flex; align-items: center; justify-content: space-between; gap: var(--pm-space-3); padding: var(--pm-space-2) 0; color: var(--pm-danger); }
-.issue-summary { margin-bottom: var(--pm-space-2); }
-.issue-list { margin: 0; padding: 0; list-style: none; }
-.issue-list li { min-width: 0; padding: var(--pm-space-3) 0; border-top: 1px solid var(--pm-border-subtle); }
-.issue-lead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--pm-space-2); }
-.issue-severity { color: var(--pm-danger); font-size: var(--pm-font-size-xs); font-weight: 700; text-transform: uppercase; }
-.issue-lead code { overflow-wrap: anywhere; color: var(--pm-text-muted); font-size: var(--pm-font-size-xs); }
-.issue-list p { margin: var(--pm-space-1) 0; overflow-wrap: anywhere; }
-.issue-context { display: flex; flex-wrap: wrap; gap: var(--pm-space-1) var(--pm-space-4); margin: var(--pm-space-2) 0 0; color: var(--pm-text-muted); font-size: var(--pm-font-size-xs); }
-.issue-context div { display: flex; min-width: 0; gap: var(--pm-space-1); }
-.issue-context dt { font-weight: 650; }
-.issue-context dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 540px) { .section-error { align-items: start; flex-direction: column; } }
+:host {
+  display: block;
+}
+.settings-section {
+  min-width: 0;
+  padding: var(--pm-space-5) 0;
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+.section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+  margin-bottom: var(--pm-space-3);
+}
+h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.section-heading p,
+.health-loading,
+.issue-summary {
+  margin: 2px 0 0;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+.quiet-status {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+.health-valid {
+  margin: 0;
+  color: var(--pm-success);
+  font-weight: 600;
+}
+.health-valid span {
+  margin-right: var(--pm-space-1);
+}
+.section-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+  padding: var(--pm-space-2) 0;
+  color: var(--pm-danger);
+}
+.issue-summary {
+  margin-bottom: var(--pm-space-2);
+}
+.issue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.issue-list li {
+  min-width: 0;
+  padding: var(--pm-space-3) 0;
+  border-top: 1px solid var(--pm-border-subtle);
+}
+.issue-lead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pm-space-2);
+}
+.issue-severity {
+  color: var(--pm-danger);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.issue-lead code {
+  overflow-wrap: anywhere;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-xs);
+}
+.issue-list p {
+  margin: var(--pm-space-1) 0;
+  overflow-wrap: anywhere;
+}
+.issue-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pm-space-1) var(--pm-space-4);
+  margin: var(--pm-space-2) 0 0;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-xs);
+}
+.issue-context div {
+  display: flex;
+  min-width: 0;
+  gap: var(--pm-space-1);
+}
+.issue-context dt {
+  font-weight: 650;
+}
+.issue-context dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 540px) {
+  .section-error {
+    align-items: start;
+    flex-direction: column;
+  }
+}

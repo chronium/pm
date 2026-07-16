@@ -23,10 +23,16 @@ export class TaskRow {
 
   protected priorityTone(priority: string): BadgeTone {
     switch (priority.toLowerCase()) {
-      case 'critical': case 'urgent': case 'high': return 'danger';
-      case 'medium': return 'warning';
-      case 'low': return 'neutral';
-      default: return 'accent';
+      case 'critical':
+      case 'urgent':
+      case 'high':
+        return 'danger';
+      case 'medium':
+        return 'warning';
+      case 'low':
+        return 'neutral';
+      default:
+        return 'accent';
     }
   }
 

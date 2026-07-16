@@ -34,8 +34,8 @@
   --pm-space-4: 16px;
   --pm-space-5: 24px;
   --pm-space-6: 32px;
-  --pm-font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --pm-font-family-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --pm-font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --pm-font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   --pm-font-size-xs: 0.75rem;
   --pm-font-size-sm: 0.8125rem;
   --pm-font-size-md: 0.875rem;
@@ -164,7 +164,9 @@ textarea {
   color: var(--pm-text-on-accent);
 }
 
-.pm-button--primary:hover { background: var(--pm-accent-hover); }
+.pm-button--primary:hover {
+  background: var(--pm-accent-hover);
+}
 
 .pm-button--secondary {
   border-color: var(--pm-border-strong);
@@ -173,7 +175,9 @@ textarea {
 }
 
 .pm-button--secondary:hover,
-.pm-button--ghost:hover { background: var(--pm-surface-hover); }
+.pm-button--ghost:hover {
+  background: var(--pm-surface-hover);
+}
 
 .pm-button--ghost {
   background: transparent;
@@ -186,7 +190,9 @@ textarea {
   color: var(--pm-text-on-accent);
 }
 
-.pm-button--danger:hover { background: var(--pm-danger-hover); }
+.pm-button--danger:hover {
+  background: var(--pm-danger-hover);
+}
 
 .pm-button:disabled,
 .pm-button[aria-disabled='true'] {

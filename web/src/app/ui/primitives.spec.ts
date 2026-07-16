@@ -55,7 +55,9 @@ describe('presentation primitives', () => {
     const fixture = TestBed.createComponent(PrimitiveHost);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button').classList).toContain('pm-button--primary');
-    expect(fixture.nativeElement.querySelector('pm-badge span').classList).toContain('badge--success');
+    expect(fixture.nativeElement.querySelector('pm-badge span').classList).toContain(
+      'badge--success',
+    );
   });
 
   it('preserves projected native labeling and state semantics', async () => {
@@ -92,7 +94,9 @@ describe('presentation primitives', () => {
     });
 
     it('supports controlled cancellation and disables actions while pending', () => {
-      const buttons = fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>;
+      const buttons = fixture.nativeElement.querySelectorAll(
+        'button',
+      ) as NodeListOf<HTMLButtonElement>;
       buttons[0].click();
       fixture.detectChanges();
       expect(fixture.componentInstance.cancellations).toBe(1);
@@ -102,7 +106,9 @@ describe('presentation primitives', () => {
       fixture = TestBed.createComponent(DialogHost);
       fixture.componentInstance.pending = true;
       fixture.detectChanges();
-      const pendingButtons = fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>;
+      const pendingButtons = fixture.nativeElement.querySelectorAll(
+        'button',
+      ) as NodeListOf<HTMLButtonElement>;
       expect(pendingButtons).toHaveLength(2);
       expect(pendingButtons[0].disabled).toBe(true);
       expect(pendingButtons[1].disabled).toBe(true);

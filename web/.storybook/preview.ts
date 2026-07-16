@@ -21,7 +21,8 @@ const preview: Preview = {
   },
   decorators: [
     (story, context) => {
-      document.documentElement.dataset['theme'] = context.globals['theme'] === 'dark' ? 'dark' : 'light';
+      document.documentElement.dataset['theme'] =
+        context.globals['theme'] === 'dark' ? 'dark' : 'light';
       return story();
     },
   ],

@@ -37,7 +37,7 @@ export class TaskCreateDialog implements DirtyDialogRoute, OnDestroy {
     if (this.pending()) return false;
     if (!this.form()?.dirty()) return true;
     this.confirmOpen.set(true);
-    return new Promise((resolve) => this.leaveResolver = resolve);
+    return new Promise((resolve) => (this.leaveResolver = resolve));
   }
 
   @HostListener('window:beforeunload', ['$event'])
@@ -57,7 +57,10 @@ export class TaskCreateDialog implements DirtyDialogRoute, OnDestroy {
       this.board.reload();
       this.allowLeave = true;
       this.transitioningToDetail = true;
-      await this.router.navigate(['/tasks', response.body!.id], { queryParamsHandling: 'preserve', replaceUrl: true });
+      await this.router.navigate(['/tasks', response.body!.id], {
+        queryParamsHandling: 'preserve',
+        replaceUrl: true,
+      });
     } catch (error) {
       this.error.set(this.api.error(error, 'The task could not be created.').message);
     } finally {

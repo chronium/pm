@@ -20,6 +20,8 @@ socket npm install
 
 ```sh
 npm start           # Development server with the /api proxy
+npm run format      # Format handwritten workspace files with Prettier
+npm run format:check # Verify formatting without changing files
 npm run check       # Strict development build
 npm test            # One non-watch Vitest run
 npm run test:watch  # Interactive Vitest watch mode

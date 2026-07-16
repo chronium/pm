@@ -7,7 +7,10 @@ import { MarkdownService } from './markdown.service';
 describe('Markdown components', () => {
   it('renders Markdown and removes unsafe markup without bypassing Angular sanitization', () => {
     const fixture = TestBed.createComponent(MarkdownDisplay);
-    fixture.componentRef.setInput('markdown', '# Safe\n<script>alert(1)</script><img src=x onerror=alert(2)>');
+    fixture.componentRef.setInput(
+      'markdown',
+      '# Safe\n<script>alert(1)</script><img src=x onerror=alert(2)>',
+    );
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('h1')?.textContent).toBe('Safe');
     expect(fixture.nativeElement.querySelector('script')).toBeNull();
@@ -31,7 +34,9 @@ describe('Markdown components', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     fixture.componentInstance.ngOnDestroy();
-    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).value).toBe('External update');
+    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).value).toBe(
+      'External update',
+    );
     fixture.destroy();
   });
 });

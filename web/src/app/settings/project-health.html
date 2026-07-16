@@ -1,10 +1,16 @@
-<section class="settings-section health-section" aria-labelledby="project-health-heading" [attr.aria-busy]="loading() || refreshing()">
+<section
+  class="settings-section health-section"
+  aria-labelledby="project-health-heading"
+  [attr.aria-busy]="loading() || refreshing()"
+>
   <div class="section-heading">
     <div>
       <h2 id="project-health-heading">Project health</h2>
       <p>Configuration and project-file validation.</p>
     </div>
-    @if (refreshing()) { <span class="quiet-status" role="status">Checking…</span> }
+    @if (refreshing()) {
+      <span class="quiet-status" role="status">Checking…</span>
+    }
   </div>
 
   @if (loading()) {
@@ -12,7 +18,9 @@
   } @else if (error()) {
     <div class="section-error" role="alert">
       <span>{{ error() }}</span>
-      <button type="button" class="pm-button pm-button--secondary" (click)="retry.emit()">Retry</button>
+      <button type="button" class="pm-button pm-button--secondary" (click)="retry.emit()">
+        Retry
+      </button>
     </div>
   } @else if (validation(); as result) {
     @if (result.valid) {
@@ -29,10 +37,30 @@
             <p>{{ issue.message }}</p>
             @if (issue.taskId || issue.wikiPath || issue.state || issue.path) {
               <dl class="issue-context">
-                @if (issue.taskId) { <div><dt>Task</dt><dd>{{ issue.taskId }}</dd></div> }
-                @if (issue.wikiPath) { <div><dt>Wiki</dt><dd>{{ issue.wikiPath }}</dd></div> }
-                @if (issue.state) { <div><dt>State</dt><dd>{{ issue.state }}</dd></div> }
-                @if (issue.path) { <div><dt>Path</dt><dd>{{ issue.path }}</dd></div> }
+                @if (issue.taskId) {
+                  <div>
+                    <dt>Task</dt>
+                    <dd>{{ issue.taskId }}</dd>
+                  </div>
+                }
+                @if (issue.wikiPath) {
+                  <div>
+                    <dt>Wiki</dt>
+                    <dd>{{ issue.wikiPath }}</dd>
+                  </div>
+                }
+                @if (issue.state) {
+                  <div>
+                    <dt>State</dt>
+                    <dd>{{ issue.state }}</dd>
+                  </div>
+                }
+                @if (issue.path) {
+                  <div>
+                    <dt>Path</dt>
+                    <dd>{{ issue.path }}</dd>
+                  </div>
+                }
               </dl>
             }
           </li>

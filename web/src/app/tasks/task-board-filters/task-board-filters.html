@@ -1,22 +1,53 @@
 <label>
   <span>Track</span>
-  <select #trackFilter [value]="filters().track ?? ''" (change)="change('track', trackFilter.value)">
+  <select
+    #trackFilter
+    [value]="filters().track ?? ''"
+    (change)="change('track', trackFilter.value)"
+  >
     <option value="" [selected]="!filters().track">All tracks</option>
-    @for (track of tracks(); track track.key) { <option [value]="track.key" [selected]="filters().track === track.key">{{ track.name }}</option> }
+    @for (track of tracks(); track track.key) {
+      <option [value]="track.key" [selected]="filters().track === track.key">
+        {{ track.name }}
+      </option>
+    }
   </select>
 </label>
 <label>
   <span>Milestone</span>
-  <select #milestoneFilter [value]="filters().milestone ?? ''" (change)="change('milestone', milestoneFilter.value)">
+  <select
+    #milestoneFilter
+    [value]="filters().milestone ?? ''"
+    (change)="change('milestone', milestoneFilter.value)"
+  >
     <option value="" [selected]="!filters().milestone">All milestones</option>
-    @for (milestone of milestones(); track milestone.key) { <option [value]="milestone.key" [selected]="filters().milestone === milestone.key">{{ milestone.name }}</option> }
+    @for (milestone of milestones(); track milestone.key) {
+      <option [value]="milestone.key" [selected]="filters().milestone === milestone.key">
+        {{ milestone.name }}
+      </option>
+    }
   </select>
 </label>
 <label>
   <span>Status</span>
-  <select #stateFilter [value]="filters().state ?? ''" (change)="change('state', stateFilter.value)">
+  <select
+    #stateFilter
+    [value]="filters().state ?? ''"
+    (change)="change('state', stateFilter.value)"
+  >
     <option value="" [selected]="!filters().state">All statuses</option>
-    @for (state of states(); track state.key) { <option [value]="state.key" [selected]="filters().state === state.key">{{ state.name }}</option> }
+    @for (state of states(); track state.key) {
+      <option [value]="state.key" [selected]="filters().state === state.key">
+        {{ state.name }}
+      </option>
+    }
   </select>
 </label>
-<button class="pm-button pm-button--ghost clear-filters" type="button" [disabled]="!filters().track && !filters().milestone && !filters().state" (click)="clearIntent.emit()">Clear filters</button>
+<button
+  class="pm-button pm-button--ghost clear-filters"
+  type="button"
+  [disabled]="!filters().track && !filters().milestone && !filters().state"
+  (click)="clearIntent.emit()"
+>
+  Clear filters
+</button>

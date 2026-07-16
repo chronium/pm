@@ -14,12 +14,23 @@ export abstract class WikiDirtyForm implements DirtyRoute {
     if (this.allowLeave || !this.dirty()) return true;
     if (this.busy()) return false;
     this.confirmDiscardOpen.set(true);
-    return new Promise((resolve) => this.leaveResolver = resolve);
+    return new Promise((resolve) => (this.leaveResolver = resolve));
   }
 
   @HostListener('window:beforeunload', ['$event'])
-  beforeUnload(event: BeforeUnloadEvent): void { if (this.dirty() && !this.allowLeave) event.preventDefault(); }
+  beforeUnload(event: BeforeUnloadEvent): void {
+    if (this.dirty() && !this.allowLeave) event.preventDefault();
+  }
 
-  protected discardChanges(): void { this.confirmDiscardOpen.set(false); this.allowLeave = true; this.leaveResolver?.(true); this.leaveResolver = null; }
-  protected keepEditing(): void { this.confirmDiscardOpen.set(false); this.leaveResolver?.(false); this.leaveResolver = null; }
+  protected discardChanges(): void {
+    this.confirmDiscardOpen.set(false);
+    this.allowLeave = true;
+    this.leaveResolver?.(true);
+    this.leaveResolver = null;
+  }
+  protected keepEditing(): void {
+    this.confirmDiscardOpen.set(false);
+    this.leaveResolver?.(false);
+    this.leaveResolver = null;
+  }
 }

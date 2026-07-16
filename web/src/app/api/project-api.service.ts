@@ -9,5 +9,7 @@ export type ProjectResponse =
 @Injectable({ providedIn: 'root' })
 export class ProjectApiService {
   readonly project = httpResource<ProjectResponse>(() => '/api/v1/project');
-  readonly projectName = computed(() => this.project.hasValue() ? this.project.value().name : 'PM');
+  readonly projectName = computed(() =>
+    this.project.hasValue() ? this.project.value().name : 'PM',
+  );
 }

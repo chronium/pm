@@ -5,9 +5,11 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ProjectApiService } from './project-api.service';
 
 describe('ProjectApiService', () => {
-  beforeEach(() => TestBed.configureTestingModule({
-    providers: [provideHttpClient(), provideHttpClientTesting()],
-  }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    }),
+  );
 
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 

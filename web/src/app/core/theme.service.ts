@@ -12,7 +12,9 @@ export class ThemeService {
   private readonly preferenceState = signal<ThemePreference>(this.readPreference());
 
   readonly preference = this.preferenceState.asReadonly();
-  readonly iconName = computed(() => ({ system: 'cssScreen', light: 'cssSun', dark: 'cssMoon' })[this.preference()]);
+  readonly iconName = computed(
+    () => ({ system: 'cssScreen', light: 'cssSun', dark: 'cssMoon' })[this.preference()],
+  );
   readonly actionLabel = computed(() => {
     const current = this.title(this.preference());
     const next = this.title(this.nextPreference());

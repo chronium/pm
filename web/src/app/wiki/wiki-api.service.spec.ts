@@ -9,10 +9,16 @@ describe('WikiApiService', () => {
   let http: HttpTestingController;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
-    api = TestBed.inject(WikiApiService); http = TestBed.inject(HttpTestingController);
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    api = TestBed.inject(WikiApiService);
+    http = TestBed.inject(HttpTestingController);
   });
-  afterEach(() => { http.verify(); TestBed.resetTestingModule(); });
+  afterEach(() => {
+    http.verify();
+    TestBed.resetTestingModule();
+  });
 
   it('encodes every path segment without flattening the hierarchy', () => {
     expect(encodeWikiPath('guides/C# & APIs/100%')).toBe('guides/C%23%20%26%20APIs/100%25');
@@ -21,7 +27,9 @@ describe('WikiApiService', () => {
 
   it('creates with the client header and adopts the response ETag', () => {
     let etag = '';
-    api.create({ path: 'guide', title: 'Guide', body: 'Body' }).subscribe((response) => etag = api.etag(response));
+    api
+      .create({ path: 'guide', title: 'Guide', body: 'Body' })
+      .subscribe((response) => (etag = api.etag(response)));
     const request = http.expectOne('/api/v1/wiki/pages');
     expect(request.request.method).toBe('POST');
     expect(request.request.headers.get('X-PM-Client')).toBe('angular-web');
@@ -30,10 +38,13 @@ describe('WikiApiService', () => {
   });
 
   it.each([
-    ['body', 'PUT'], ['metadata', 'PATCH'], ['delete', 'DELETE'],
+    ['body', 'PUT'],
+    ['metadata', 'PATCH'],
+    ['delete', 'DELETE'],
   ])('sends an exact strong If-Match for %s mutations', (kind, method) => {
     if (kind === 'body') api.updateBody('a/b', { body: 'new' }, '"exact"').subscribe();
-    else if (kind === 'metadata') api.updateMetadata('a/b', { path: 'c/d', title: 'D' }, '"exact"').subscribe();
+    else if (kind === 'metadata')
+      api.updateMetadata('a/b', { path: 'c/d', title: 'D' }, '"exact"').subscribe();
     else api.remove('a/b', '"exact"').subscribe();
     const request = http.expectOne('/api/v1/wiki/pages/a/b');
     expect(request.request.method).toBe(method);
@@ -43,13 +54,43 @@ describe('WikiApiService', () => {
   });
 
   it('maps Problem Details conflicts and duplicates into readable errors', () => {
-    const conflict = api.error(new HttpErrorResponse({ status: 412, error: { title: 'Conflict', detail: 'Reload the page.', errorCode: 'precondition_failed' } }), 'Failed');
-    const duplicate = api.error(new HttpErrorResponse({ status: 409, error: { title: 'Duplicate', errorCode: 'duplicate_wiki_page' } }), 'Failed');
-    expect(conflict).toEqual({ status: 412, message: 'Reload the page.', conflict: true, duplicate: false });
-    expect(duplicate).toEqual({ status: 409, message: 'Duplicate', conflict: false, duplicate: true });
+    const conflict = api.error(
+      new HttpErrorResponse({
+        status: 412,
+        error: { title: 'Conflict', detail: 'Reload the page.', errorCode: 'precondition_failed' },
+      }),
+      'Failed',
+    );
+    const duplicate = api.error(
+      new HttpErrorResponse({
+        status: 409,
+        error: { title: 'Duplicate', errorCode: 'duplicate_wiki_page' },
+      }),
+      'Failed',
+    );
+    expect(conflict).toEqual({
+      status: 412,
+      message: 'Reload the page.',
+      conflict: true,
+      duplicate: false,
+    });
+    expect(duplicate).toEqual({
+      status: 409,
+      message: 'Duplicate',
+      conflict: false,
+      duplicate: true,
+    });
   });
 });
 
 function page(path: string) {
-  return { path, title: 'Guide', createdAt: '2026-01-01T00:00:00Z', modifiedAt: '2026-01-02T00:00:00Z', body: 'Body', revision: 'revision-1', localMetadata: { filePath: `.pm/wiki/${path}.md` } };
+  return {
+    path,
+    title: 'Guide',
+    createdAt: '2026-01-01T00:00:00Z',
+    modifiedAt: '2026-01-02T00:00:00Z',
+    body: 'Body',
+    revision: 'revision-1',
+    localMetadata: { filePath: `.pm/wiki/${path}.md` },
+  };
 }

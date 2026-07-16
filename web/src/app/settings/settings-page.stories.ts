@@ -1,4 +1,10 @@
-import { HttpBackend, HttpErrorResponse, HttpRequest, HttpResponse, provideHttpClient } from '@angular/common/http';
+import {
+  HttpBackend,
+  HttpErrorResponse,
+  HttpRequest,
+  HttpResponse,
+  provideHttpClient,
+} from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { applicationConfig } from '@storybook/angular-vite';
@@ -10,28 +16,59 @@ import { SettingsPage } from './settings-page';
 
 const settings: SettingsResponse = {
   projectName: 'Atlas workspace',
-  statuses: [{ key: 'todo', name: 'To do' }, { key: 'review', name: 'Review' }, { key: 'done', name: 'Done' }],
-  milestones: [{ key: 'angular-web-with-a-long-key', title: 'Angular web replacement with a long title that demonstrates wrapping', priority: 'high' }],
-  tracks: [{ key: 'PM', name: 'Product management' }, { key: 'BUILD-AND-INTERFACE', name: 'Build and interface engineering' }],
-  priorityOptions: ['none', 'low', 'medium', 'high', 'urgent'], revision: 'story-r1',
+  statuses: [
+    { key: 'todo', name: 'To do' },
+    { key: 'review', name: 'Review' },
+    { key: 'done', name: 'Done' },
+  ],
+  milestones: [
+    {
+      key: 'angular-web-with-a-long-key',
+      title: 'Angular web replacement with a long title that demonstrates wrapping',
+      priority: 'high',
+    },
+  ],
+  tracks: [
+    { key: 'PM', name: 'Product management' },
+    { key: 'BUILD-AND-INTERFACE', name: 'Build and interface engineering' },
+  ],
+  priorityOptions: ['none', 'low', 'medium', 'high', 'urgent'],
+  revision: 'story-r1',
 };
 
 @Injectable()
 class SettingsStoryBackend extends HttpBackend {
   handle(request: HttpRequest<unknown>) {
-    if (request.url === '/api/v1/settings') return of(new HttpResponse({ status: 200, body: settings }));
-    if (request.url === '/api/v1/validation') return of(new HttpResponse({ status: 200, body: { valid: true, issues: [] } }));
+    if (request.url === '/api/v1/settings')
+      return of(new HttpResponse({ status: 200, body: settings }));
+    if (request.url === '/api/v1/validation')
+      return of(new HttpResponse({ status: 200, body: { valid: true, issues: [] } }));
     if ((request.body as { key?: string } | null)?.key === 'pending') return NEVER;
     if ((request.body as { key?: string } | null)?.key === 'duplicate') {
-      return throwError(() => new HttpErrorResponse({ status: 409, error: { title: 'Already exists', detail: 'That key is already configured.', errorCode: 'duplicate_key' } }));
+      return throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: {
+              title: 'Already exists',
+              detail: 'That key is already configured.',
+              errorCode: 'duplicate_key',
+            },
+          }),
+      );
     }
     return of(new HttpResponse({ status: 200, body: { ...settings, revision: 'story-r2' } }));
   }
 }
 
 const meta = {
-  title: 'Settings/Workspace', component: SettingsPage,
-  decorators: [applicationConfig({ providers: [provideHttpClient(), { provide: HttpBackend, useClass: SettingsStoryBackend }] })],
+  title: 'Settings/Workspace',
+  component: SettingsPage,
+  decorators: [
+    applicationConfig({
+      providers: [provideHttpClient(), { provide: HttpBackend, useClass: SettingsStoryBackend }],
+    }),
+  ],
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<SettingsPage>;
 export default meta;
@@ -49,7 +86,9 @@ export const Edit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Edit milestone title' }));
-    await expect(canvas.getByLabelText('Milestone title')).toHaveValue(settings.milestones[0]!.title);
+    await expect(canvas.getByLabelText('Milestone title')).toHaveValue(
+      settings.milestones[0]!.title,
+    );
   },
 };
 export const Pending: Story = {

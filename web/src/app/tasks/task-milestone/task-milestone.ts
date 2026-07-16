@@ -3,7 +3,12 @@ import { Component, input, output } from '@angular/core';
 import { TaskStatusGroup } from '../task-status-group/task-status-group';
 import type { BoardMilestoneGroup, BoardStateGroup, StatusOpenIntent } from '../tasks-board.store';
 
-@Component({ selector: 'section[pmTaskMilestone]', imports: [TaskStatusGroup], templateUrl: './task-milestone.html', styleUrl: './task-milestone.css' })
+@Component({
+  selector: 'section[pmTaskMilestone]',
+  imports: [TaskStatusGroup],
+  templateUrl: './task-milestone.html',
+  styleUrl: './task-milestone.css',
+})
 export class TaskMilestone {
   readonly milestone = input.required<BoardMilestoneGroup>();
   readonly headingId = input.required<string>();

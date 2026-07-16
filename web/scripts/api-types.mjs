@@ -33,7 +33,7 @@ function availablePort() {
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
-      server.close((error) => error ? reject(error) : resolvePort(port));
+      server.close((error) => (error ? reject(error) : resolvePort(port)));
     });
   });
 }
@@ -66,16 +66,14 @@ function stop(server) {
 
 await run('dotnet', ['build', 'PM.slnx', '-m:1', '--no-restore']);
 const port = await availablePort();
-const server = spawn('dotnet', [
-  'PM/bin/Debug/net10.0/PM.dll',
-  'web',
-  '--api',
-  '--port',
-  String(port),
-], {
-  cwd: repositoryRoot,
-  stdio: ['ignore', 'inherit', 'inherit'],
-});
+const server = spawn(
+  'dotnet',
+  ['PM/bin/Debug/net10.0/PM.dll', 'web', '--api', '--port', String(port)],
+  {
+    cwd: repositoryRoot,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  },
+);
 
 try {
   const schema = await fetchOpenApi(`http://127.0.0.1:${port}/openapi/v1.json`, server);

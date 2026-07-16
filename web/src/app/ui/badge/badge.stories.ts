@@ -28,7 +28,8 @@ export const Tones: Story = {
 
 export const LongContent: Story = {
   render: () => ({
-    template: '<pm-badge tone="warning">Waiting for architecture review from the platform team</pm-badge>',
+    template:
+      '<pm-badge tone="warning">Waiting for architecture review from the platform team</pm-badge>',
   }),
   globals: { viewport: 'mobile' },
 };

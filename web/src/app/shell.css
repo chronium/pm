@@ -83,7 +83,9 @@
     width: min(var(--pm-sidebar-width), calc(100vw - 48px));
     visibility: hidden;
     transform: translateX(-100%);
-    transition: transform var(--pm-motion-normal) var(--pm-ease-standard), visibility 0s var(--pm-motion-normal);
+    transition:
+      transform var(--pm-motion-normal) var(--pm-ease-standard),
+      visibility 0s var(--pm-motion-normal);
   }
 
   .drawer-open .sidebar {
@@ -103,7 +105,9 @@
     border-radius: 0;
     opacity: 0;
     background: var(--pm-overlay-backdrop);
-    transition: opacity var(--pm-motion-normal) var(--pm-ease-standard), visibility 0s var(--pm-motion-normal);
+    transition:
+      opacity var(--pm-motion-normal) var(--pm-ease-standard),
+      visibility 0s var(--pm-motion-normal);
   }
 
   .drawer-open .backdrop {

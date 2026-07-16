@@ -1,16 +1,56 @@
-:host { display: block; min-width: 0; }
-.markdown-body { overflow-wrap: anywhere; }
-.markdown-body :is(h1, h2, h3, h4, h5, h6) { margin: 1.5rem 0 0.5rem; line-height: 1.25; }
-.markdown-body h1 { font-size: clamp(1.35rem, 2vw, 1.75rem); }
-.markdown-body h2 { font-size: clamp(1.125rem, 1.7vw, 1.375rem); }
-.markdown-body h3 { font-size: clamp(1rem, 1.4vw, 1.125rem); }
-.markdown-body h4 { font-size: 1rem; }
-.markdown-body h5 { font-size: var(--pm-font-size-md); }
-.markdown-body h6 { font-size: var(--pm-font-size-sm); }
-.markdown-body :first-child { margin-top: 0; }
-.markdown-body :last-child { margin-bottom: 0; }
-.markdown-body pre { overflow: auto; padding: var(--pm-space-3); background: var(--pm-surface-sidebar); border-radius: var(--pm-radius-sm); }
-.markdown-body code { font-family: var(--pm-font-family-mono); }
-.markdown-body img { max-width: 100%; }
-.markdown-body a { color: var(--pm-accent-strong); }
-.markdown-body blockquote { margin-inline: 0; padding-left: var(--pm-space-3); border-left: 3px solid var(--pm-border-strong); color: var(--pm-text-muted); }
+:host {
+  display: block;
+  min-width: 0;
+}
+.markdown-body {
+  overflow-wrap: anywhere;
+}
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.5rem 0 0.5rem;
+  line-height: 1.25;
+}
+.markdown-body h1 {
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+}
+.markdown-body h2 {
+  font-size: clamp(1.125rem, 1.7vw, 1.375rem);
+}
+.markdown-body h3 {
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+}
+.markdown-body h4 {
+  font-size: 1rem;
+}
+.markdown-body h5 {
+  font-size: var(--pm-font-size-md);
+}
+.markdown-body h6 {
+  font-size: var(--pm-font-size-sm);
+}
+.markdown-body :first-child {
+  margin-top: 0;
+}
+.markdown-body :last-child {
+  margin-bottom: 0;
+}
+.markdown-body pre {
+  overflow: auto;
+  padding: var(--pm-space-3);
+  background: var(--pm-surface-sidebar);
+  border-radius: var(--pm-radius-sm);
+}
+.markdown-body code {
+  font-family: var(--pm-font-family-mono);
+}
+.markdown-body img {
+  max-width: 100%;
+}
+.markdown-body a {
+  color: var(--pm-accent-strong);
+}
+.markdown-body blockquote {
+  margin-inline: 0;
+  padding-left: var(--pm-space-3);
+  border-left: 3px solid var(--pm-border-strong);
+  color: var(--pm-text-muted);
+}

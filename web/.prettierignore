@@ -1,0 +1,7 @@
+.angular/
+.playwright-cli/
+coverage/
+dist/
+node_modules/
+storybook-static/
+src/app/api/generated/

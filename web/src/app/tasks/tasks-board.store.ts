@@ -7,8 +7,7 @@ import { filter, map } from 'rxjs';
 import type { components, operations } from '../api/generated/pm-api';
 import { TaskNavigationService } from './task-navigation.service';
 
-export type BoardResponse =
-  operations['GetBoard']['responses'][200]['content']['application/json'];
+export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
 export type BoardQuery = NonNullable<operations['GetBoard']['parameters']['query']>;
 export type BoardTask = components['schemas']['BoardTaskSummaryResponse'];
 export type BoardMilestoneGroup = components['schemas']['BoardMilestoneGroupResponse'];
@@ -34,9 +33,9 @@ export class TasksBoardStore {
   );
 
   readonly filters = computed<BoardQuery>(() => ({
-    ...this.queryValue('track') ? { track: this.queryValue('track')! } : {},
-    ...this.queryValue('milestone') ? { milestone: this.queryValue('milestone')! } : {},
-    ...this.queryValue('state') ? { state: this.queryValue('state')! } : {},
+    ...(this.queryValue('track') ? { track: this.queryValue('track')! } : {}),
+    ...(this.queryValue('milestone') ? { milestone: this.queryValue('milestone')! } : {}),
+    ...(this.queryValue('state') ? { state: this.queryValue('state')! } : {}),
   }));
 
   readonly resource = httpResource<BoardResponse>(() => ({
@@ -44,16 +43,20 @@ export class TasksBoardStore {
     params: this.filters(),
   }));
 
-  readonly board = computed(() => this.resource.hasValue()
-    ? this.resource.value()
-    : this.retainedBoard());
+  readonly board = computed(() =>
+    this.resource.hasValue() ? this.resource.value() : this.retainedBoard(),
+  );
   readonly loading = computed(() => this.resource.isLoading() && !this.board());
   readonly refreshing = computed(() => this.resource.isLoading() && !!this.board());
   readonly error = computed(() => this.readableError(this.resource.error()));
   readonly revision = computed(() => this.board()?.revision ?? null);
-  readonly taskCount = computed(() => this.board()?.milestoneGroups.reduce(
-    (boardTotal, milestone) => boardTotal + this.milestoneTaskCount(milestone), 0,
-  ) ?? 0);
+  readonly taskCount = computed(
+    () =>
+      this.board()?.milestoneGroups.reduce(
+        (boardTotal, milestone) => boardTotal + this.milestoneTaskCount(milestone),
+        0,
+      ) ?? 0,
+  );
   readonly empty = computed(() => !!this.board() && this.taskCount() === 0 && !this.loading());
   readonly selectedTaskId = computed(() => this.taskIdFromUrl());
   readonly hasFilters = computed(() => Object.keys(this.filters()).length > 0);
@@ -99,10 +102,13 @@ export class TasksBoardStore {
 
   private remainingTaskCount(board: BoardResponse): number {
     return board.milestoneGroups.reduce(
-      (total, milestone) => total + milestone.states.reduce(
-        (milestoneTotal, state) => milestoneTotal + (state.key === 'done' ? 0 : state.tasks.length),
-        0,
-      ),
+      (total, milestone) =>
+        total +
+        milestone.states.reduce(
+          (milestoneTotal, state) =>
+            milestoneTotal + (state.key === 'done' ? 0 : state.tasks.length),
+          0,
+        ),
       0,
     );
   }
@@ -113,7 +119,9 @@ export class TasksBoardStore {
   }
 
   groupOpenStates(milestone: BoardMilestoneGroup): Readonly<Record<string, boolean>> {
-    return Object.fromEntries(milestone.states.map((state) => [state.key, this.isGroupOpen(milestone, state)]));
+    return Object.fromEntries(
+      milestone.states.map((state) => [state.key, this.isGroupOpen(milestone, state)]),
+    );
   }
 
   rememberGroupOpen({ milestone, state, open }: StatusOpenIntent): void {
@@ -161,7 +169,9 @@ export class TasksBoardStore {
     if (error instanceof HttpErrorResponse) {
       const body: unknown = error.error;
       if (this.isProblemDetails(body)) {
-        return body.detail?.trim() || body.title?.trim() || `The board request failed (${error.status}).`;
+        return (
+          body.detail?.trim() || body.title?.trim() || `The board request failed (${error.status}).`
+        );
       }
       if (error.status === 0) return 'The board API could not be reached.';
       return `The board request failed (${error.status} ${error.statusText || 'Unknown error'}).`;

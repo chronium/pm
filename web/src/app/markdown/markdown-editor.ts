@@ -1,4 +1,16 @@
-import { AfterViewInit, Component, effect, ElementRef, input, model, OnDestroy, output, signal, viewChild, ViewEncapsulation } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  effect,
+  ElementRef,
+  input,
+  model,
+  OnDestroy,
+  output,
+  signal,
+  viewChild,
+  ViewEncapsulation,
+} from '@angular/core';
 import type { FormValueControl } from '@angular/forms/signals';
 import EasyMDE from 'easymde';
 
@@ -6,7 +18,8 @@ import { MarkdownService } from './markdown.service';
 
 @Component({
   selector: 'pm-markdown-editor',
-  template: '<textarea #textarea [disabled]="disabled()" [attr.aria-label]="label()" (input)="fallbackInput($event)" (blur)="touch.emit()"></textarea>',
+  template:
+    '<textarea #textarea [disabled]="disabled()" [attr.aria-label]="label()" (input)="fallbackInput($event)" (blur)="touch.emit()"></textarea>',
   styleUrl: './markdown-editor.css',
   encapsulation: ViewEncapsulation.None,
 })
@@ -56,8 +69,9 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
       editor.codemirror.getInputField().setAttribute('aria-label', this.label());
       const container = editor.codemirror.getWrapperElement().closest('.EasyMDEContainer');
       container?.setAttribute('aria-label', this.label());
-      container?.querySelectorAll<HTMLButtonElement>('.editor-toolbar button')
-        .forEach((button) => button.tabIndex = 0);
+      container
+        ?.querySelectorAll<HTMLButtonElement>('.editor-toolbar button')
+        .forEach((button) => (button.tabIndex = 0));
       this.updateDisabled(editor);
       const scroll = editor.codemirror.getScrollerElement();
       scroll.tabIndex = 0;
@@ -85,8 +99,10 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
   private updateDisabled(editor: EasyMDE): void {
     const disabled = this.disabled();
     editor.codemirror.setOption('readOnly', disabled ? 'nocursor' : false);
-    editor.codemirror.getWrapperElement().closest('.EasyMDEContainer')
+    editor.codemirror
+      .getWrapperElement()
+      .closest('.EasyMDEContainer')
       ?.querySelectorAll<HTMLButtonElement>('.editor-toolbar button')
-      .forEach((button) => button.disabled = disabled);
+      .forEach((button) => (button.disabled = disabled));
   }
 }

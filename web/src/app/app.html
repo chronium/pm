@@ -22,7 +22,9 @@
     >
       <span>Tasks</span>
       @if (taskNavigation.remainingCount(); as remainingCount) {
-        <span class="mode-count" [attr.aria-label]="remainingCount + ' tasks left'">{{ remainingCount }} left</span>
+        <span class="mode-count" [attr.aria-label]="remainingCount + ' tasks left'"
+          >{{ remainingCount }} left</span
+        >
       } @else if (taskNavigation.remainingCount() === 0) {
         <span class="mode-count" aria-label="No tasks left">0 left</span>
       }
@@ -32,7 +34,8 @@
       routerLinkActive="active"
       #wikiLink="routerLinkActive"
       [attr.aria-current]="wikiLink.isActive ? 'page' : null"
-    >Wiki</a>
+      >Wiki</a
+    >
   </nav>
 
   <div class="search-slot" aria-hidden="true"></div>

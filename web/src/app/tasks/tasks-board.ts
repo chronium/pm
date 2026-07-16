@@ -8,7 +8,14 @@ import { TasksBoardStore } from './tasks-board.store';
 
 @Component({
   selector: 'pm-tasks-board',
-  imports: [PmEmptyState, PmErrorState, PmLoadingState, RouterOutlet, TaskBoardFilters, TaskMilestone],
+  imports: [
+    PmEmptyState,
+    PmErrorState,
+    PmLoadingState,
+    RouterOutlet,
+    TaskBoardFilters,
+    TaskMilestone,
+  ],
   providers: [TasksBoardStore],
   templateUrl: './tasks-board.html',
   styleUrl: './tasks-board.css',

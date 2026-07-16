@@ -9,24 +9,47 @@ import { TaskStatusGroup } from './task-status-group/task-status-group';
 import type { BoardMilestoneGroup, BoardStateGroup, BoardTask } from './tasks-board.store';
 
 const readyTask: BoardTask = {
-  id: 'PM-0055', title: 'Decompose the Angular task board', track: 'PM', milestone: 'angular-web',
-  priority: 'high', prioritySource: 'milestone', state: 'todo',
-  dependencies: { ready: true, dependsOn: ['PM-0049'], waitingOn: [], missing: [], summary: 'ready' },
-  descriptionPreview: 'Keep a deliberately useful preview visible for dense scanning.', modifiedAt: '2026-07-15T07:48:04Z',
+  id: 'PM-0055',
+  title: 'Decompose the Angular task board',
+  track: 'PM',
+  milestone: 'angular-web',
+  priority: 'high',
+  prioritySource: 'milestone',
+  state: 'todo',
+  dependencies: {
+    ready: true,
+    dependsOn: ['PM-0049'],
+    waitingOn: [],
+    missing: [],
+    summary: 'ready',
+  },
+  descriptionPreview: 'Keep a deliberately useful preview visible for dense scanning.',
+  modifiedAt: '2026-07-15T07:48:04Z',
 };
 const blockedTask: BoardTask = {
-  ...readyTask, id: 'PM-0056', title: 'A very long blocked task title that remains fully available to assistive technology',
-  priority: 'critical', dependencies: { ready: false, dependsOn: ['PM-9999'], waitingOn: [], missing: ['PM-9999'], summary: 'missing PM-9999' },
+  ...readyTask,
+  id: 'PM-0056',
+  title: 'A very long blocked task title that remains fully available to assistive technology',
+  priority: 'critical',
+  dependencies: {
+    ready: false,
+    dependsOn: ['PM-9999'],
+    waitingOn: [],
+    missing: ['PM-9999'],
+    summary: 'missing PM-9999',
+  },
 };
 const todoState: BoardStateGroup = { key: 'todo', name: 'To do', tasks: [readyTask, blockedTask] };
 const milestone: BoardMilestoneGroup = {
-  key: 'angular-web', name: 'Angular web',
+  key: 'angular-web',
+  name: 'Angular web',
   states: [todoState, { key: 'review', name: 'Review', tasks: [] }],
 };
 
 @Component({
   imports: [TaskStatusGroup],
-  template: '<details pmTaskStatusGroup [state]="state" [selectedTaskId]="null" [open]="open" (openChange)="changes.push($event)"></details>',
+  template:
+    '<details pmTaskStatusGroup [state]="state" [selectedTaskId]="null" [open]="open" (openChange)="changes.push($event)"></details>',
 })
 class StatusGroupHost {
   readonly state = todoState;
@@ -49,7 +72,9 @@ describe('Task board components', () => {
     fixture.componentInstance.clearIntent.subscribe(() => clears++);
     fixture.detectChanges();
 
-    const selects = fixture.nativeElement.querySelectorAll('select') as NodeListOf<HTMLSelectElement>;
+    const selects = fixture.nativeElement.querySelectorAll(
+      'select',
+    ) as NodeListOf<HTMLSelectElement>;
     expect(selects[0]?.value).toBe('PM');
     selects[2]!.value = 'todo';
     selects[2]!.dispatchEvent(new Event('change'));
@@ -83,7 +108,9 @@ describe('Task board components', () => {
 
     const details = fixture.nativeElement.querySelector('details') as HTMLDetailsElement;
     expect(details.open).toBe(false);
-    expect(fixture.nativeElement.querySelector('.task-count')?.getAttribute('aria-label')).toBe('2 tasks');
+    expect(fixture.nativeElement.querySelector('.task-count')?.getAttribute('aria-label')).toBe(
+      '2 tasks',
+    );
     details.open = true;
     details.dispatchEvent(new Event('toggle'));
     expect(fixture.componentInstance.changes.at(-1)).toBe(true);

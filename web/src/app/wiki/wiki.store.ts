@@ -2,7 +2,12 @@ import { httpResource } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 
 import { ProjectApiService } from '../api/project-api.service';
-import { WikiApiService, type WikiMutationResponse, type WikiPage, type WikiPageSummary } from './wiki-api.service';
+import {
+  WikiApiService,
+  type WikiMutationResponse,
+  type WikiPage,
+  type WikiPageSummary,
+} from './wiki-api.service';
 
 export interface WikiTreeNode {
   name: string;
@@ -26,25 +31,37 @@ export class WikiStore {
   readonly selectedPath = signal('');
 
   readonly indexResource = httpResource<WikiPageSummary[]>(() => '/api/v1/wiki/pages');
-  readonly pageResource = httpResource<WikiPage>(() => this.selectedPath() ? this.api.pageUrl(this.selectedPath()) : undefined);
+  readonly pageResource = httpResource<WikiPage>(() =>
+    this.selectedPath() ? this.api.pageUrl(this.selectedPath()) : undefined,
+  );
   readonly pages = computed(() => this.retainedIndex());
   readonly indexLoading = computed(() => this.indexResource.isLoading() && !this.pages());
   readonly indexRefreshing = computed(() => this.indexResource.isLoading() && !!this.pages());
-  readonly indexError = computed(() => this.indexResource.error()
-    ? this.api.error(this.indexResource.error(), 'The wiki index could not be loaded.').message : null);
+  readonly indexError = computed(() =>
+    this.indexResource.error()
+      ? this.api.error(this.indexResource.error(), 'The wiki index could not be loaded.').message
+      : null,
+  );
   readonly page = computed(() => this.retainedPage());
   readonly etag = computed(() => this.retainedEtag());
   readonly pageLoading = computed(() => this.pageResource.isLoading() && !this.page());
-  readonly pageError = computed(() => this.pageResource.error()
-    ? this.api.error(this.pageResource.error(), 'The wiki page could not be loaded.').message : null);
+  readonly pageError = computed(() =>
+    this.pageResource.error()
+      ? this.api.error(this.pageResource.error(), 'The wiki page could not be loaded.').message
+      : null,
+  );
   readonly tree = computed(() => buildWikiTree(this.pages() ?? []));
 
   constructor() {
-    effect(() => { if (this.indexResource.hasValue()) this.retainedIndex.set(this.indexResource.value()); });
+    effect(() => {
+      if (this.indexResource.hasValue()) this.retainedIndex.set(this.indexResource.value());
+    });
     effect(() => {
       if (!this.pageResource.hasValue()) return;
       this.retainedPage.set(this.pageResource.value());
-      this.retainedEtag.set(this.pageResource.headers()?.get('ETag') ?? `"${this.pageResource.value().revision}"`);
+      this.retainedEtag.set(
+        this.pageResource.headers()?.get('ETag') ?? `"${this.pageResource.value().revision}"`,
+      );
     });
   }
 
@@ -56,9 +73,17 @@ export class WikiStore {
     }
   }
 
-  clearSelection(): void { this.selectedPath.set(''); this.retainedPage.set(null); this.retainedEtag.set(''); }
-  reloadPage(): boolean { return this.pageResource.reload(); }
-  reloadIndex(): boolean { return this.indexResource.reload(); }
+  clearSelection(): void {
+    this.selectedPath.set('');
+    this.retainedPage.set(null);
+    this.retainedEtag.set('');
+  }
+  reloadPage(): boolean {
+    return this.pageResource.reload();
+  }
+  reloadIndex(): boolean {
+    return this.indexResource.reload();
+  }
 
   resolve(path: string): WikiResolution {
     const pages = this.pages() ?? [];
@@ -83,21 +108,31 @@ export class WikiStore {
   }
 
   expansionKey(): string {
-    const name = this.project.project.hasValue() ? this.project.project.value().name : 'unknown-project';
+    const name = this.project.project.hasValue()
+      ? this.project.project.value().name
+      : 'unknown-project';
     return `pm.wiki-tree.v1.${encodeURIComponent(name)}.expanded`;
   }
 
   private upsertSummary(page: WikiPage, previousPath?: string): void {
-    const summary: WikiPageSummary = { path: page.path, title: page.title, modifiedAt: page.modifiedAt };
+    const summary: WikiPageSummary = {
+      path: page.path,
+      title: page.title,
+      modifiedAt: page.modifiedAt,
+    };
     this.retainedIndex.update((current) => {
-      const pages = (current ?? []).filter((item) => item.path !== page.path && item.path !== previousPath);
+      const pages = (current ?? []).filter(
+        (item) => item.path !== page.path && item.path !== previousPath,
+      );
       return [...pages, summary].sort(comparePages);
     });
   }
 }
 
 export function comparePages(a: WikiPageSummary, b: WikiPageSummary): number {
-  return a.path.localeCompare(b.path, undefined, { sensitivity: 'base' }) || a.path.localeCompare(b.path);
+  return (
+    a.path.localeCompare(b.path, undefined, { sensitivity: 'base' }) || a.path.localeCompare(b.path)
+  );
 }
 
 export function buildWikiTree(pages: readonly WikiPageSummary[]): WikiTreeNode[] {
@@ -108,13 +143,21 @@ export function buildWikiTree(pages: readonly WikiPageSummary[]): WikiTreeNode[]
     page.path.split('/').forEach((name, index, segments) => {
       path = path ? `${path}/${name}` : name;
       let node = nodes.find((item) => item.name === name);
-      if (!node) { node = { name, path, page: null, children: [] }; nodes.push(node); }
+      if (!node) {
+        node = { name, path, page: null, children: [] };
+        nodes.push(node);
+      }
       if (index === segments.length - 1) node.page = page;
       nodes = node.children;
     });
   }
-  const sort = (nodes: WikiTreeNode[]): WikiTreeNode[] => nodes
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.name.localeCompare(b.name))
-    .map((node) => ({ ...node, children: sort(node.children) }));
+  const sort = (nodes: WikiTreeNode[]): WikiTreeNode[] =>
+    nodes
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) ||
+          a.name.localeCompare(b.name),
+      )
+      .map((node) => ({ ...node, children: sort(node.children) }));
   return sort(roots);
 }
