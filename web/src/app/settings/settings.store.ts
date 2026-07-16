@@ -1,6 +1,7 @@
-import { HttpErrorResponse, httpResource } from '@angular/common/http';
-import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { HttpErrorResponse, HttpResponse, httpResource } from '@angular/common/http';
+import { computed, effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { firstValueFrom, type Observable } from 'rxjs';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 import {
   SettingsApiService,
@@ -25,8 +26,11 @@ export interface SettingsOperation {
 @Injectable()
 export class SettingsStore {
   private readonly api = inject(SettingsApiService);
+  private readonly polling = inject(PollingCoordinator);
   private readonly retainedSettings = signal<SettingsResponse | undefined>(undefined);
   private readonly acceptedRevision = signal<string | null>(null);
+  private readonly dirtyState = signal(false);
+  private readonly pendingExternalSettings = signal<SettingsResponse | null>(null);
   private readonly mutationCount = signal(0);
   private readonly activeOperation = signal<SettingsOperation | null>(null);
   private readonly operationErrorState = signal<{
@@ -61,18 +65,34 @@ export class SettingsStore {
   readonly operationError = this.operationErrorState.asReadonly();
   readonly stale = signal(false);
   readonly reloadGeneration = signal(0);
+  readonly pendingExternal = computed(() => this.pendingExternalSettings());
+  readonly pollSession = this.polling.create<SettingsResponse>({
+    target: () =>
+      this.settings() && this.acceptedRevision()
+        ? { url: '/api/v1/settings', etag: `"${this.acceptedRevision()}"` }
+        : null,
+    accept: (response) => this.acceptExternal(response),
+  });
+  readonly liveUpdateUnavailable = computed(() => this.pollSession.state() === 'retrying');
 
   constructor() {
     effect(() => {
       if (!this.settingsResource.hasValue()) return;
       const settings = this.settingsResource.value();
-      this.retainedSettings.set(settings);
-      this.acceptedRevision.set(settings.revision);
-      if (this.reloadRevision !== null && settings.revision !== this.reloadRevision) {
-        this.finishReload();
-      } else if (this.reloadRevision !== null && !this.settingsResource.isLoading()) {
-        this.finishReload();
-      }
+      untracked(() => {
+        this.acceptedRevision.set(settings.revision);
+        if (this.dirtyState() && this.retainedSettings()?.revision !== settings.revision) {
+          this.pendingExternalSettings.set(settings);
+        } else {
+          this.retainedSettings.set(settings);
+        }
+        if (this.reloadRevision !== null && settings.revision !== this.reloadRevision) {
+          this.finishReload();
+        } else if (this.reloadRevision !== null && !this.settingsResource.isLoading()) {
+          this.finishReload();
+        }
+        this.pollSession.start();
+      });
     });
   }
 
@@ -133,6 +153,30 @@ export class SettingsStore {
     return this.settingsResource.reload();
   }
 
+  setDirty(dirty: boolean): void {
+    this.dirtyState.set(dirty);
+  }
+
+  reviewLatest(): SettingsResponse | null {
+    const latest = this.pendingExternalSettings();
+    if (!latest) return null;
+    this.retainedSettings.set(latest);
+    this.pendingExternalSettings.set(null);
+    this.stale.set(true);
+    return latest;
+  }
+
+  keepLatest(): void {
+    this.pendingExternalSettings.set(null);
+    this.dirtyState.set(false);
+    this.stale.set(false);
+    this.operationErrorState.set(null);
+  }
+
+  fetchLatest(): void {
+    this.pollSession.restart(true);
+  }
+
   reloadValidation(): boolean {
     return this.validationResource.reload();
   }
@@ -175,13 +219,17 @@ export class SettingsStore {
         if (response.body) {
           this.retainedSettings.set(response.body);
           this.acceptedRevision.set(response.body.revision);
+          this.pendingExternalSettings.set(null);
         }
         succeeded = true;
         this.validationResource.reload();
       } catch (error) {
         const mapped = this.api.error(error, 'The settings change failed.');
         this.operationErrorState.set({ operation, error: mapped });
-        if (mapped.conflict) this.stale.set(true);
+        if (mapped.conflict) {
+          this.stale.set(true);
+          this.reloadLatest();
+        }
       } finally {
         this.activeOperation.set(null);
       }
@@ -199,9 +247,25 @@ export class SettingsStore {
 
   private finishReload(): void {
     this.reloadRevision = null;
-    this.stale.set(false);
-    this.operationErrorState.set(null);
-    this.reloadGeneration.update((value) => value + 1);
+    if (!this.pendingExternalSettings()) {
+      this.stale.set(false);
+      this.operationErrorState.set(null);
+      this.reloadGeneration.update((value) => value + 1);
+    }
+  }
+
+  private acceptExternal(response: HttpResponse<SettingsResponse>): void {
+    if (!response.body) return;
+    this.acceptedRevision.set(response.body.revision);
+    if (this.dirtyState()) {
+      this.pendingExternalSettings.set(response.body);
+      this.stale.set(true);
+    } else {
+      this.retainedSettings.set(response.body);
+      this.pendingExternalSettings.set(null);
+      this.stale.set(false);
+      this.validationResource.reload();
+    }
   }
 
   private readError(error: Error | undefined, fallback: string): string | null {

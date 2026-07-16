@@ -61,6 +61,14 @@ import { WikiStore } from './wiki.store';
           Try again
         </button></pm-error-state
       >
+    } @else if (store.unavailable()) {
+      <pm-error-state
+        ><h1>Page unavailable</h1>
+        <p>This page was removed or renamed outside this view.</p>
+        <a class="pm-button pm-button--secondary" routerLink="/wiki"
+          >Back to wiki</a
+        ></pm-error-state
+      >
     } @else if (store.page(); as page) {
       <article class="wiki-reader" [attr.aria-label]="page.title">
         <pm-wiki-breadcrumbs [path]="page.path" />

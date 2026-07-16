@@ -30,7 +30,12 @@ public static class WikiApiEndpoints
                 if (!result.Success)
                     return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
 
-                return Results.Ok(result.Payload!.Select(page => new WikiPageSummaryResponse(
+                var pages = result.Payload!;
+                var revision = revisions.GetWikiIndexRevision(pages);
+                var conditional = ApiPreconditions.EvaluateIfNoneMatch(request, revision);
+                if (conditional != null) return conditional;
+                ApiPreconditions.SetETag(request.HttpContext.Response, revision);
+                return Results.Ok(pages.Select(page => new WikiPageSummaryResponse(
                     page.Path,
                     page.Title,
                     BoardApiEndpoints.ToUtc(page.ModifiedAt))));
@@ -38,6 +43,7 @@ public static class WikiApiEndpoints
             .WithName("ListWikiPages")
             .WithSummary("List wiki pages")
             .Produces<IReadOnlyList<WikiPageSummaryResponse>>()
+            .WithRevisionedReadMetadata()
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json");
 

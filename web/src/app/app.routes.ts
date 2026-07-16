@@ -23,6 +23,7 @@ export const routes: Routes = [
         path: 'settings',
         loadComponent: () =>
           import('./settings/settings-page').then((module) => module.SettingsPage),
+        canDeactivate: [canLeaveDirtyRoute],
       },
       {
         path: '',

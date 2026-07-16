@@ -21,21 +21,17 @@
       </button>
     </pm-error-state>
   } @else if (store.settings(); as settings) {
-    @if (store.stale()) {
-      <div class="stale-banner" role="alert">
-        <div>
-          <strong>These settings are out of date.</strong
-          ><span>{{ store.operationError()?.error?.message }}</span>
-        </div>
-        <button
-          type="button"
-          class="pm-button pm-button--primary"
-          [disabled]="store.refreshing()"
-          (click)="store.reloadLatest()"
-        >
-          {{ store.refreshing() ? 'Reloading…' : 'Reload latest' }}
-        </button>
-      </div>
+    @if (conflictPhase(); as phase) {
+      <pm-external-change-banner
+        [phase]="phase"
+        heading="Project settings changed elsewhere."
+        (review)="reviewLatest()"
+        (restore)="restoreDraft()"
+        (keep)="keepLatest()"
+      />
+    }
+    @if (store.liveUpdateUnavailable()) {
+      <p class="live-update-status" role="status">Live updates unavailable; retrying</p>
     }
 
     <pm-project-health
@@ -103,7 +99,7 @@
             ><button
               type="submit"
               class="pm-button pm-button--primary"
-              [disabled]="store.pending() || !optionCreateForm().valid()"
+              [disabled]="store.pending() || store.stale() || !optionCreateForm().valid()"
             >
               {{
                 pending('create', 'status', optionCreateModel().key.trim())
@@ -148,7 +144,7 @@
                   ><button
                     type="submit"
                     class="pm-button pm-button--primary"
-                    [disabled]="store.pending() || !editForm().valid()"
+                    [disabled]="store.pending() || store.stale() || !editForm().valid()"
                   >
                     {{ pending('rename', 'status', status.key) ? 'Saving…' : 'Save' }}
                   </button>
@@ -240,7 +236,7 @@
             ><button
               type="submit"
               class="pm-button pm-button--primary"
-              [disabled]="store.pending() || !milestoneCreateForm().valid()"
+              [disabled]="store.pending() || store.stale() || !milestoneCreateForm().valid()"
             >
               Add milestone
             </button>
@@ -277,7 +273,7 @@
                   ><button
                     type="submit"
                     class="pm-button pm-button--primary"
-                    [disabled]="store.pending() || !editForm().valid()"
+                    [disabled]="store.pending() || store.stale() || !editForm().valid()"
                   >
                     Save
                   </button>
@@ -308,7 +304,7 @@
                 ><button
                   type="submit"
                   class="pm-button pm-button--primary"
-                  [disabled]="store.pending()"
+                  [disabled]="store.pending() || store.stale()"
                 >
                   Save
                 </button>
@@ -398,7 +394,7 @@
             ><button
               type="submit"
               class="pm-button pm-button--primary"
-              [disabled]="store.pending() || !optionCreateForm().valid()"
+              [disabled]="store.pending() || store.stale() || !optionCreateForm().valid()"
             >
               Add track
             </button>
@@ -430,7 +426,7 @@
                   ><button
                     type="submit"
                     class="pm-button pm-button--primary"
-                    [disabled]="store.pending() || !editForm().valid()"
+                    [disabled]="store.pending() || store.stale() || !editForm().valid()"
                   >
                     Save
                   </button>
@@ -473,7 +469,6 @@
     </section>
   }
 </div>
-
 <pm-confirm-dialog
   [open]="!!removal()"
   [pending]="store.pending()"
@@ -492,4 +487,12 @@
   (confirmed)="confirmRemoval()"
   (cancelled)="removal.set(null)"
   (openChange)="$event || removal.set(null)"
+/>
+<pm-confirm-dialog
+  [open]="confirmDiscardOpen()"
+  heading="Discard settings changes?"
+  message="Your unsaved settings draft will be lost."
+  confirmLabel="Discard changes"
+  (confirmed)="discardNavigation()"
+  (cancelled)="keepSettings()"
 />

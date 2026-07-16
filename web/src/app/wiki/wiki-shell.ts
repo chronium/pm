@@ -3,6 +3,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { LayoutService } from '../core/layout.service';
 import { WikiStore } from './wiki.store';
+import { PollingCoordinator } from '../core/polling-coordinator';
 import { WikiTree } from './wiki-tree';
 
 @Component({
@@ -10,7 +11,7 @@ import { WikiTree } from './wiki-tree';
   imports: [RouterLink, RouterLinkActive, RouterOutlet, WikiTree],
   templateUrl: './wiki-shell.html',
   styleUrls: ['../shell.css', './wiki.css'],
-  providers: [WikiStore],
+  providers: [WikiStore, PollingCoordinator],
 })
 export class WikiShell {
   protected readonly layout = inject(LayoutService);

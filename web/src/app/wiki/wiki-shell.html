@@ -30,6 +30,9 @@
   ></button>
 
   <main class="content" [attr.inert]="layout.mobileSidebarOpen() ? '' : null">
+    @if (store.liveUpdateUnavailable()) {
+      <p class="live-update-status" role="status">Live updates unavailable; retrying</p>
+    }
     <router-outlet />
   </main>
 </div>

@@ -54,6 +54,13 @@ export class TaskEditForm {
   dirty(): boolean {
     return this.taskForm().dirty();
   }
+  draft(): UpdateTaskRequest {
+    return { ...this.model() };
+  }
+  restoreDraft(draft: UpdateTaskRequest): void {
+    this.model.set({ ...draft });
+    this.taskForm().markAsDirty();
+  }
   protected submit(event: Event): void {
     event.preventDefault();
     this.taskForm().markAsTouched();

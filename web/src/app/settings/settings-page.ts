@@ -1,4 +1,4 @@
-import { Component, effect, inject, Injector, signal } from '@angular/core';
+import { Component, effect, HostListener, inject, Injector, signal } from '@angular/core';
 import { FormField, form, required } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { cssPen, cssTrash } from '@ng-icons/css.gg';
@@ -9,6 +9,9 @@ import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import { ProjectHealth } from './project-health';
 import type { SettingsCollection, SettingsOperation } from './settings.store';
 import { SettingsStore } from './settings.store';
+import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
+import type { DirtyRoute } from '../core/dirty-route';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 interface Editor {
   collection: SettingsCollection;
@@ -19,6 +22,13 @@ interface Removal {
   collection: SettingsCollection;
   key: string;
   label: string;
+}
+interface SettingsDraft {
+  adding: SettingsCollection | null;
+  editor: Editor | null;
+  option: { key: string; name: string };
+  milestone: { key: string; title: string; priority: string };
+  edit: { value: string };
 }
 
 @Component({
@@ -31,17 +41,23 @@ interface Removal {
     PmFormField,
     PmLoadingState,
     ProjectHealth,
+    ExternalChangeBanner,
   ],
-  providers: [SettingsStore, provideIcons({ cssPen, cssTrash })],
+  providers: [SettingsStore, PollingCoordinator, provideIcons({ cssPen, cssTrash })],
   templateUrl: './settings-page.html',
   styleUrl: './settings-page.css',
 })
-export class SettingsPage {
+export class SettingsPage implements DirtyRoute {
   protected readonly store = inject(SettingsStore);
   private readonly injector = inject(Injector);
   protected readonly adding = signal<SettingsCollection | null>(null);
   protected readonly editor = signal<Editor | null>(null);
   protected readonly removal = signal<Removal | null>(null);
+  protected readonly conflictPhase = signal<ExternalChangePhase | null>(null);
+  protected readonly confirmDiscardOpen = signal(false);
+  private draftSnapshot: SettingsDraft | null = null;
+  private leaveResolver: ((answer: boolean) => void) | null = null;
+  private allowLeave = false;
 
   protected readonly optionCreateModel = signal({ key: '', name: '' });
   protected readonly optionCreateForm = form(
@@ -77,6 +93,22 @@ export class SettingsPage {
       generation = next;
       this.cancelAll();
     });
+    effect(() => this.store.setDirty(this.dirty()));
+    effect(() => {
+      if (this.store.pendingExternal()) this.conflictPhase.set('pending');
+    });
+  }
+
+  canDeactivate(): boolean | Promise<boolean> {
+    if (this.allowLeave || !this.dirty()) return true;
+    if (this.store.pending()) return false;
+    this.confirmDiscardOpen.set(true);
+    return new Promise((resolve) => (this.leaveResolver = resolve));
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  beforeUnload(event: BeforeUnloadEvent): void {
+    if (this.dirty() && !this.allowLeave) event.preventDefault();
   }
 
   protected beginAdd(collection: SettingsCollection): void {
@@ -123,7 +155,10 @@ export class SettingsPage {
       collection === 'status'
         ? await this.store.createStatus(request)
         : await this.store.createTrack(request);
-    if (success) this.adding.set(null);
+    if (success) {
+      this.adding.set(null);
+      this.resolveConflictAfterSave();
+    }
   }
 
   protected async createMilestone(event: Event): Promise<void> {
@@ -139,6 +174,7 @@ export class SettingsPage {
       })
     ) {
       this.adding.set(null);
+      this.resolveConflictAfterSave();
     }
   }
 
@@ -157,7 +193,10 @@ export class SettingsPage {
       success = await this.store.renameMilestone(editor.key, { title: value });
     if (editor.collection === 'milestone' && editor.field === 'priority')
       success = await this.store.setMilestonePriority(editor.key, { priority: value });
-    if (success) this.editor.set(null);
+    if (success) {
+      this.editor.set(null);
+      this.resolveConflictAfterSave();
+    }
   }
 
   protected requestRemoval(collection: SettingsCollection, key: string, label: string): void {
@@ -190,5 +229,72 @@ export class SettingsPage {
 
   protected collectionLabel(collection: SettingsCollection): string {
     return collection === 'status' ? 'status' : collection;
+  }
+
+  protected reviewLatest(): void {
+    if (!this.store.pendingExternal()) return;
+    this.draftSnapshot = {
+      adding: this.adding(),
+      editor: this.editor(),
+      option: { ...this.optionCreateModel() },
+      milestone: { ...this.milestoneCreateModel() },
+      edit: { ...this.editModel() },
+    };
+    this.store.reviewLatest();
+    this.cancelAll();
+    this.conflictPhase.set('reviewing');
+  }
+
+  protected restoreDraft(): void {
+    const draft = this.draftSnapshot;
+    if (!draft) return;
+    this.adding.set(draft.adding);
+    this.editor.set(draft.editor);
+    this.optionCreateModel.set(draft.option);
+    this.milestoneCreateModel.set(draft.milestone);
+    this.editModel.set(draft.edit);
+    if (draft.adding === 'milestone') this.milestoneCreateForm().markAsDirty();
+    else if (draft.adding) this.optionCreateForm().markAsDirty();
+    if (draft.editor) this.editForm().markAsDirty();
+    this.store.stale.set(false);
+    this.conflictPhase.set('preserved');
+  }
+
+  protected keepLatest(): void {
+    this.draftSnapshot = null;
+    this.cancelAll();
+    this.store.keepLatest();
+    this.conflictPhase.set(null);
+  }
+
+  protected discardNavigation(): void {
+    this.confirmDiscardOpen.set(false);
+    this.allowLeave = true;
+    this.leaveResolver?.(true);
+    this.leaveResolver = null;
+  }
+
+  protected keepSettings(): void {
+    this.confirmDiscardOpen.set(false);
+    this.leaveResolver?.(false);
+    this.leaveResolver = null;
+  }
+
+  private dirty(): boolean {
+    return (
+      !!this.draftSnapshot ||
+      !!this.adding() ||
+      !!this.editor() ||
+      this.optionCreateForm().dirty() ||
+      this.milestoneCreateForm().dirty() ||
+      this.editForm().dirty()
+    );
+  }
+
+  private resolveConflictAfterSave(): void {
+    if (!this.draftSnapshot && !this.conflictPhase()) return;
+    this.draftSnapshot = null;
+    this.conflictPhase.set(null);
+    this.store.keepLatest();
   }
 }

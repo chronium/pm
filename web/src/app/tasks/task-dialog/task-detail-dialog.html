@@ -16,12 +16,30 @@
       </div></pm-error-state
     >
   } @else if (detail.task(); as task) {
+    @if (detail.liveUpdateUnavailable()) {
+      <p class="live-update-status" role="status">Live updates unavailable; retrying</p>
+    }
+    @if (detail.unavailable()) {
+      <pm-error-state
+        ><strong>Task unavailable</strong
+        ><span>This task was removed or renamed outside this view.</span></pm-error-state
+      >
+    }
+    @if (conflictPhase(); as phase) {
+      <pm-external-change-banner
+        [phase]="phase"
+        heading="This task changed elsewhere."
+        (review)="reviewLatest()"
+        (restore)="restoreDraft()"
+        (keep)="keepLatest()"
+      />
+    }
     @if (editing()) {
       <pm-task-edit-form
         [task]="task"
         [states]="board.board()?.states ?? []"
         [pending]="pending()"
-        [stale]="stale()"
+        [stale]="conflictBlocked()"
         [apiError]="error()"
         (submitted)="save($event)"
         (cancelled)="cancelEdit()"
@@ -100,7 +118,7 @@
           <label for="task-state">Move to</label
           ><select
             id="task-state"
-            [disabled]="pending() || stale()"
+            [disabled]="pending() || conflictBlocked()"
             (change)="changeState($any($event.target).value)"
           >
             @for (state of board.board()?.states ?? []; track state.key) {
@@ -112,14 +130,14 @@
           ><button
             type="button"
             class="pm-button pm-button--ghost remove-action"
-            [disabled]="pending()"
+            [disabled]="pending() || conflictBlocked()"
             (click)="confirmKind.set('remove')"
           >
             Remove</button
           ><button
             type="button"
             class="pm-button pm-button--primary"
-            [disabled]="pending() || stale()"
+            [disabled]="pending() || conflictBlocked()"
             (click)="editing.set(true)"
           >
             Edit

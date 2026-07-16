@@ -5,6 +5,7 @@ import { PmEmptyState, PmErrorState, PmLoadingState } from '../ui/state/state';
 import { TaskBoardFilters } from './task-board-filters/task-board-filters';
 import { TaskMilestone } from './task-milestone/task-milestone';
 import { TasksBoardStore } from './tasks-board.store';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 @Component({
   selector: 'pm-tasks-board',
@@ -16,7 +17,7 @@ import { TasksBoardStore } from './tasks-board.store';
     TaskBoardFilters,
     TaskMilestone,
   ],
-  providers: [TasksBoardStore],
+  providers: [TasksBoardStore, PollingCoordinator],
   templateUrl: './tasks-board.html',
   styleUrl: './tasks-board.css',
 })

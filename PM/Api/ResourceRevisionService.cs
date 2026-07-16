@@ -44,6 +44,18 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         return AppResult<string>.Ok(Hash("wiki-page", markdown));
     }
 
+    public string GetWikiIndexRevision(IReadOnlyList<WikiPageSummary> pages)
+    {
+        var canonical = pages
+            .OrderBy(page => page.Path, StringComparer.Ordinal)
+            .Select(page => new WikiIndexRevisionPage(
+                page.Path,
+                page.Title,
+                page.ModifiedAt.ToUniversalTime()))
+            .ToList();
+        return Hash("wiki-index", JsonSerializer.Serialize(canonical, CanonicalJsonOptions));
+    }
+
     public AppResult<string> GetProjectConfigRevision()
     {
         if (!projectRoot.Exists || projectRoot.RootPath == null)
@@ -164,4 +176,6 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         DateTime CreatedAt,
         DateTime ModifiedAt,
         string FilePath);
+
+    private sealed record WikiIndexRevisionPage(string Path, string Title, DateTime ModifiedAt);
 }

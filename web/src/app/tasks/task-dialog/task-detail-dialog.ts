@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import {
   Component,
+  computed,
   effect,
   HostListener,
   inject,
@@ -21,6 +22,7 @@ import { TasksBoardStore } from '../tasks-board.store';
 import { TaskDialogShell } from './task-dialog-shell';
 import type { DirtyDialogRoute } from './task-dialog.types';
 import { TaskEditForm } from './task-edit-form';
+import { ExternalChangeBanner, type ExternalChangePhase } from '../../core/external-change-banner';
 
 type ConfirmKind = 'discard' | 'remove' | null;
 
@@ -35,6 +37,7 @@ type ConfirmKind = 'discard' | 'remove' | null;
     RouterLink,
     TaskDialogShell,
     TaskEditForm,
+    ExternalChangeBanner,
   ],
   providers: [TaskDetailResource],
   templateUrl: './task-detail-dialog.html',
@@ -51,10 +54,19 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
   protected readonly editing = signal(false);
   protected readonly pending = signal(false);
   protected readonly stale = signal(false);
+  protected readonly conflictPhase = signal<ExternalChangePhase | null>(null);
+  protected readonly conflictBlocked = computed(
+    () =>
+      this.stale() ||
+      this.detail.unavailable() ||
+      this.conflictPhase() === 'pending' ||
+      this.conflictPhase() === 'reviewing',
+  );
   protected readonly error = signal<string | null>(null);
   protected readonly confirmKind = signal<ConfirmKind>(null);
   private leaveResolver: ((answer: boolean) => void) | null = null;
   private allowLeave = false;
+  private draftSnapshot: UpdateTaskRequest | null = null;
 
   private readonly routeTaskId = toSignal(this.route.paramMap, {
     initialValue: this.route.snapshot.paramMap,
@@ -62,6 +74,20 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
 
   constructor() {
     effect(() => this.detail.load(this.routeTaskId().get('taskId') ?? ''));
+    effect(() => {
+      const dirty = !!this.editForm()?.dirty() || !!this.draftSnapshot;
+      this.detail.setDirty(this.editing() && dirty);
+    });
+    effect(() => {
+      if (this.detail.pendingExternal()) {
+        this.conflictPhase.set('pending');
+        this.stale.set(true);
+      }
+      if (this.detail.unavailable()) {
+        this.stale.set(true);
+        this.board.refreshNow();
+      }
+    });
   }
   ngOnDestroy(): void {
     this.navigation.restoreFocus();
@@ -70,14 +96,15 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
   canDeactivate(): boolean | Promise<boolean> {
     if (this.allowLeave) return true;
     if (this.pending()) return false;
-    if (!this.editing() || !this.editForm()?.dirty()) return true;
+    if (!this.editing() || (!this.editForm()?.dirty() && !this.draftSnapshot)) return true;
     this.confirmKind.set('discard');
     return new Promise((resolve) => (this.leaveResolver = resolve));
   }
 
   @HostListener('window:beforeunload', ['$event'])
   beforeUnload(event: BeforeUnloadEvent): void {
-    if (this.editing() && this.editForm()?.dirty() && !this.allowLeave) event.preventDefault();
+    if (this.editing() && (this.editForm()?.dirty() || this.draftSnapshot) && !this.allowLeave)
+      event.preventDefault();
   }
   protected close(): void {
     void this.router.navigate(['/tasks'], { queryParamsHandling: 'preserve', replaceUrl: true });
@@ -92,6 +119,8 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
       this.confirmKind.set(null);
       this.editing.set(false);
       this.stale.set(false);
+      this.conflictPhase.set(null);
+      this.draftSnapshot = null;
       this.error.set(null);
       this.leaveResolver?.(true);
       this.leaveResolver = null;
@@ -114,14 +143,19 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
       this.board.reload();
       this.editing.set(false);
       this.stale.set(false);
+      this.conflictPhase.set(null);
+      this.draftSnapshot = null;
     } catch (error) {
       const failure = this.api.error(error, 'The task could not be saved.');
       this.error.set(
         failure.conflict
-          ? 'This task changed elsewhere. Reload latest before saving again.'
+          ? 'This task changed elsewhere. Review the latest version.'
           : failure.message,
       );
-      this.stale.set(failure.conflict);
+      if (failure.conflict) {
+        this.detail.setDirty(true);
+        this.detail.fetchLatest();
+      }
     } finally {
       this.pending.set(false);
     }
@@ -142,10 +176,10 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
       const failure = this.api.error(error, 'The task state could not be changed.');
       this.error.set(
         failure.conflict
-          ? 'This task changed elsewhere. Reload it before changing state.'
+          ? 'The requested state change was not applied; the latest task is loading.'
           : failure.message,
       );
-      this.stale.set(failure.conflict);
+      if (failure.conflict) this.detail.fetchLatest();
     } finally {
       this.pending.set(false);
     }
@@ -156,6 +190,29 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
     this.stale.set(false);
     this.error.set(null);
     this.detail.reload();
+  }
+  protected reviewLatest(): void {
+    const form = this.editForm();
+    if (!form || !this.detail.pendingExternal()) return;
+    this.draftSnapshot = form.draft();
+    this.detail.reviewLatest();
+    this.conflictPhase.set('reviewing');
+    this.stale.set(true);
+  }
+
+  protected restoreDraft(): void {
+    if (!this.draftSnapshot) return;
+    this.editForm()?.restoreDraft(this.draftSnapshot);
+    this.conflictPhase.set('preserved');
+    this.stale.set(false);
+  }
+
+  protected keepLatest(): void {
+    this.draftSnapshot = null;
+    this.detail.keepLatest();
+    this.conflictPhase.set(null);
+    this.stale.set(false);
+    this.error.set(null);
   }
   private async remove(): Promise<void> {
     const task = this.detail.task();
@@ -171,10 +228,10 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
       const failure = this.api.error(error, 'The task could not be removed.');
       this.error.set(
         failure.conflict
-          ? 'This task changed elsewhere. Reload it before removing.'
+          ? 'The task was not removed; the latest version is loading.'
           : failure.message,
       );
-      this.stale.set(failure.conflict);
+      if (failure.conflict) this.detail.fetchLatest();
     } finally {
       this.pending.set(false);
       this.confirmKind.set(null);

@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { SettingsResponse, ValidationResponse } from './settings-api.service';
 import { SettingsStore } from './settings.store';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 const initial: SettingsResponse = {
   projectName: 'Atlas',
@@ -18,7 +19,12 @@ const validation: ValidationResponse = { valid: true, issues: [] };
 describe('SettingsStore', () => {
   beforeEach(() =>
     TestBed.configureTestingModule({
-      providers: [SettingsStore, provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        SettingsStore,
+        PollingCoordinator,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }),
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());

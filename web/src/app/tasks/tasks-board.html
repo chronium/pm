@@ -4,6 +4,9 @@
   @if (board.refreshing()) {
     <span class="refresh-status" role="status">Refreshing…</span>
   }
+  @if (board.liveUpdateUnavailable()) {
+    <span class="refresh-status" role="status">Live updates unavailable; retrying</span>
+  }
 
   @if (board.board(); as currentBoard) {
     <form

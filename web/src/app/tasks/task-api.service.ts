@@ -1,5 +1,6 @@
 import { HttpClient, HttpErrorResponse, HttpResponse, httpResource } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 import type { components } from '../api/generated/pm-api';
 
@@ -79,9 +80,24 @@ export class TaskApiService {
 @Injectable()
 export class TaskDetailResource {
   private readonly api = inject(TaskApiService);
+  private readonly polling = inject(PollingCoordinator);
   readonly taskId = signal('');
   private readonly retainedTask = signal<TaskResponse | null>(null);
   private readonly retainedEtag = signal('');
+  private readonly dirtyState = signal(false);
+  private readonly pendingExternalTask = signal<TaskResponse | null>(null);
+  readonly unavailable = signal(false);
+  readonly pollSession = this.polling.create<TaskResponse>({
+    target: () =>
+      this.task() && this.etag()
+        ? { url: `/api/v1/tasks/${encodeURIComponent(this.taskId())}`, etag: this.etag() }
+        : null,
+    accept: (response) => this.acceptExternal(response),
+    missing: () => {
+      this.unavailable.set(true);
+      this.pendingExternalTask.set(null);
+    },
+  });
   readonly resource = httpResource<TaskResponse>(() =>
     this.taskId() ? `/api/v1/tasks/${encodeURIComponent(this.taskId())}` : undefined,
   );
@@ -93,12 +109,16 @@ export class TaskDetailResource {
       ? this.api.error(this.resource.error(), 'The task could not be loaded.').message
       : null,
   );
+  readonly pendingExternal = computed(() => this.pendingExternalTask());
+  readonly liveUpdateUnavailable = computed(() => this.pollSession.state() === 'retrying');
 
   constructor() {
     effect(() => {
       if (!this.resource.hasValue()) return;
       this.retainedTask.set(this.resource.value());
       this.retainedEtag.set(this.resource.headers()?.get('ETag') ?? '');
+      this.unavailable.set(false);
+      this.pollSession.start();
     });
   }
 
@@ -106,16 +126,50 @@ export class TaskDetailResource {
     if (this.taskId() !== id) {
       this.retainedTask.set(null);
       this.retainedEtag.set('');
+      this.pendingExternalTask.set(null);
+      this.unavailable.set(false);
     }
     this.taskId.set(id);
+    this.pollSession.restart(false);
   }
 
   accept(response: TaskMutationResponse): void {
     if (response.body) this.retainedTask.set(response.body);
     this.retainedEtag.set(this.api.etag(response));
+    this.pendingExternalTask.set(null);
+    this.unavailable.set(false);
+  }
+
+  setDirty(dirty: boolean): void {
+    this.dirtyState.set(dirty);
+  }
+
+  reviewLatest(): TaskResponse | null {
+    const latest = this.pendingExternalTask();
+    if (!latest) return null;
+    this.retainedTask.set(latest);
+    this.pendingExternalTask.set(null);
+    return latest;
+  }
+
+  keepLatest(): void {
+    this.pendingExternalTask.set(null);
+    this.dirtyState.set(false);
+  }
+
+  fetchLatest(): void {
+    this.pollSession.restart(true);
   }
 
   reload(): boolean {
     return this.resource.reload();
+  }
+
+  private acceptExternal(response: HttpResponse<TaskResponse>): void {
+    if (!response.body) return;
+    this.retainedEtag.set(response.headers.get('ETag') ?? `"${response.body.revision}"`);
+    this.unavailable.set(false);
+    if (this.dirtyState()) this.pendingExternalTask.set(response.body);
+    else this.retainedTask.set(response.body);
   }
 }

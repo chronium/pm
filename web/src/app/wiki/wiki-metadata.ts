@@ -10,6 +10,8 @@ import { WikiApiService } from './wiki-api.service';
 import { WikiBreadcrumbs } from './wiki-breadcrumbs';
 import { WikiDirtyForm } from './wiki-dirty-form';
 import { WikiStore } from './wiki.store';
+import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
+import type { UpdateWikiPageMetadataRequest } from './wiki-api.service';
 
 @Component({
   selector: 'pm-wiki-metadata',
@@ -21,6 +23,7 @@ import { WikiStore } from './wiki.store';
     PmLoadingState,
     RouterLink,
     WikiBreadcrumbs,
+    ExternalChangeBanner,
   ],
   template: ` <section class="wiki-page wiki-form-page">
       @if (store.pageLoading()) {
@@ -40,13 +43,22 @@ import { WikiStore } from './wiki.store';
           <h1>Metadata</h1>
         </header>
         @if (conflict()) {
-          <div class="wiki-conflict" role="alert">
-            <strong>This page changed elsewhere.</strong>
-            <p>Your changes are preserved. Reload the latest version before editing again.</p>
-            <button class="pm-button pm-button--secondary" type="button" (click)="reloadLatest()">
-              Reload latest
-            </button>
-          </div>
+          <pm-external-change-banner
+            [phase]="conflict()!"
+            heading="This page changed elsewhere."
+            (review)="reviewLatest()"
+            (restore)="restoreDraft()"
+            (keep)="keepLatest()"
+          />
+        }
+        @if (store.liveUpdateUnavailable()) {
+          <p class="live-update-status" role="status">Live updates unavailable; retrying</p>
+        }
+        @if (store.unavailable()) {
+          <p class="form-error" role="alert">
+            This page was removed or renamed elsewhere. Your changes are preserved, but they cannot
+            be saved here.
+          </p>
         }
         <form class="wiki-form" (submit)="submit($event)" novalidate>
           @if (error()) {
@@ -79,7 +91,13 @@ import { WikiStore } from './wiki.store';
             ><button
               class="pm-button pm-button--primary"
               type="submit"
-              [disabled]="pending() || conflict() || !pageForm().valid()"
+              [disabled]="
+                pending() ||
+                store.unavailable() ||
+                conflict() === 'pending' ||
+                conflict() === 'reviewing' ||
+                !pageForm().valid()
+              "
             >
               {{ pending() ? 'Saving…' : 'Save metadata' }}
             </button>
@@ -91,7 +109,7 @@ import { WikiStore } from './wiki.store';
           <button
             class="pm-button pm-button--danger"
             type="button"
-            [disabled]="pending() || conflict()"
+            [disabled]="pending() || store.unavailable() || !!conflict()"
             (click)="deleteOpen.set(true)"
           >
             Delete page
@@ -126,7 +144,7 @@ export class WikiMetadata extends WikiDirtyForm {
   private readonly injector = inject(Injector);
   protected readonly pending = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly conflict = signal(false);
+  protected readonly conflict = signal<ExternalChangePhase | null>(null);
   protected readonly deleteOpen = signal(false);
   readonly model = signal({ path: '', title: '' });
   readonly pageForm = form(
@@ -134,12 +152,13 @@ export class WikiMetadata extends WikiDirtyForm {
     (page) => {
       required(page.path, { message: 'Path is required.' });
       required(page.title, { message: 'Title is required.' });
-      disabled(page.path, () => this.conflict());
-      disabled(page.title, () => this.conflict());
+      disabled(page.path, () => this.conflict() === 'pending' || this.conflict() === 'reviewing');
+      disabled(page.title, () => this.conflict() === 'pending' || this.conflict() === 'reviewing');
     },
     { injector: this.injector },
   );
   private loadedRevision = '';
+  private draftSnapshot: UpdateWikiPageMetadataRequest | null = null;
 
   constructor() {
     super();
@@ -152,12 +171,16 @@ export class WikiMetadata extends WikiDirtyForm {
       this.loadedRevision = page.revision;
       this.model.set({ path: page.path, title: page.title });
       this.pageForm().reset();
-      this.conflict.set(false);
+      if (this.conflict() !== 'reviewing') this.conflict.set(null);
       this.error.set(null);
+    });
+    effect(() => this.store.setDirty(this.dirty()));
+    effect(() => {
+      if (this.store.pendingExternal()) this.conflict.set('pending');
     });
   }
   protected dirty(): boolean {
-    return this.pageForm().dirty();
+    return this.pageForm().dirty() || !!this.draftSnapshot;
   }
   protected busy(): boolean {
     return this.pending();
@@ -168,7 +191,14 @@ export class WikiMetadata extends WikiDirtyForm {
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
     this.pageForm().markAsTouched();
-    if (!this.pageForm().valid() || this.pending() || this.conflict()) return;
+    if (
+      !this.pageForm().valid() ||
+      this.pending() ||
+      this.conflict() === 'pending' ||
+      this.conflict() === 'reviewing' ||
+      this.store.unavailable()
+    )
+      return;
     const oldPath = this.wikiPath();
     this.pending.set(true);
     this.error.set(null);
@@ -188,7 +218,10 @@ export class WikiMetadata extends WikiDirtyForm {
     } catch (error) {
       const mapped = this.api.error(error, 'The wiki metadata could not be saved.');
       this.error.set(mapped.message);
-      this.conflict.set(mapped.conflict);
+      if (mapped.conflict) {
+        this.store.setDirty(true);
+        this.store.fetchLatest();
+      }
     } finally {
       this.pending.set(false);
     }
@@ -205,13 +238,32 @@ export class WikiMetadata extends WikiDirtyForm {
     } catch (error) {
       const mapped = this.api.error(error, 'The wiki page could not be deleted.');
       this.error.set(mapped.message);
-      this.conflict.set(mapped.conflict);
+      if (mapped.conflict) this.store.fetchLatest();
       this.deleteOpen.set(false);
     } finally {
       this.pending.set(false);
     }
   }
   protected reloadLatest(): void {
-    this.store.reloadPage();
+    this.store.fetchLatest();
+  }
+  protected reviewLatest(): void {
+    if (!this.store.pendingExternal()) return;
+    this.draftSnapshot = { ...this.model() };
+    this.store.reviewLatest();
+    this.conflict.set('reviewing');
+  }
+  protected restoreDraft(): void {
+    if (!this.draftSnapshot) return;
+    this.model.set({ ...this.draftSnapshot });
+    this.pageForm().markAsDirty();
+    this.conflict.set('preserved');
+  }
+  protected keepLatest(): void {
+    this.draftSnapshot = null;
+    this.store.keepLatest();
+    this.pageForm().reset();
+    this.conflict.set(null);
+    this.error.set(null);
   }
 }

@@ -25,6 +25,7 @@ public partial class ApiContractTests
             var pages = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.NotNull(response.Headers.ETag);
             Assert.Equal(new[] { "architecture/overview", "architecture/rendering/canvas", "z-last" },
                 pages.EnumerateArray().Select(page => page.GetProperty("path").GetString()));
             Assert.All(pages.EnumerateArray(), page =>
@@ -36,6 +37,37 @@ public partial class ApiContractTests
             });
             Assert.DoesNotContain(pages.EnumerateArray(), page =>
                 page.GetProperty("path").GetString() is "architecture" or "architecture/rendering");
+        }
+    }
+
+    [Fact]
+    public async Task WikiListRevisionIsDeterministicAndHonorsConditionalReads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        root.WriteWikiPage(Page("b", "Second", "Body"));
+        root.WriteWikiPage(Page("a", "First", "Body"));
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var first = await client.GetAsync("/api/v1/wiki/pages");
+            var firstTag = first.Headers.ETag?.Tag;
+            Assert.Matches("^\"[0-9a-f]{64}\"$", firstTag!);
+
+            using var matching = new HttpRequestMessage(HttpMethod.Get, "/api/v1/wiki/pages");
+            matching.Headers.TryAddWithoutValidation("If-None-Match", firstTag);
+            var unchanged = await client.SendAsync(matching);
+            Assert.Equal(HttpStatusCode.NotModified, unchanged.StatusCode);
+            Assert.Equal(firstTag, unchanged.Headers.ETag?.Tag);
+            Assert.Equal(string.Empty, await unchanged.Content.ReadAsStringAsync());
+
+            root.WriteWikiPage(Page("a", "Changed", "Body"));
+            using var stale = new HttpRequestMessage(HttpMethod.Get, "/api/v1/wiki/pages");
+            stale.Headers.TryAddWithoutValidation("If-None-Match", firstTag);
+            var changed = await client.SendAsync(stale);
+            Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+            Assert.NotEqual(firstTag, changed.Headers.ETag?.Tag);
         }
     }
 
@@ -277,6 +309,13 @@ public partial class ApiContractTests
             Assert.True(resource.GetProperty("get").GetProperty("responses").TryGetProperty("304", out _));
             Assert.True(resource.GetProperty("put").GetProperty("responses").TryGetProperty("428", out _));
             Assert.True(collection.GetProperty("post").GetProperty("responses").GetProperty("201")
+                .GetProperty("headers").TryGetProperty("ETag", out _));
+            var collectionGet = collection.GetProperty("get");
+            Assert.Contains(collectionGet.GetProperty("parameters").EnumerateArray(), parameter =>
+                parameter.GetProperty("name").GetString() == "If-None-Match");
+            Assert.True(collectionGet.GetProperty("responses").GetProperty("200")
+                .GetProperty("headers").TryGetProperty("ETag", out _));
+            Assert.True(collectionGet.GetProperty("responses").GetProperty("304")
                 .GetProperty("headers").TryGetProperty("ETag", out _));
 
             var schemas = document.GetProperty("components").GetProperty("schemas");

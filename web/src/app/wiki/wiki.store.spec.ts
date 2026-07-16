@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { buildWikiTree, comparePages, WikiStore } from './wiki.store';
 import type { WikiPageSummary } from './wiki-api.service';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 describe('wiki tree derivation', () => {
   const summary = (path: string, title = path): WikiPageSummary => ({
@@ -44,7 +45,7 @@ describe('wiki tree derivation', () => {
 describe('WikiStore retained state', () => {
   beforeEach(() =>
     TestBed.configureTestingModule({
-      providers: [WikiStore, provideHttpClient(), provideHttpClientTesting()],
+      providers: [WikiStore, PollingCoordinator, provideHttpClient(), provideHttpClientTesting()],
     }),
   );
   afterEach(() => {

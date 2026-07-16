@@ -869,7 +869,10 @@ export interface operations {
     ListWikiPages: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -878,11 +881,22 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["WikiPageSummaryResponse"][];
                 };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Bad Request */
             400: {

@@ -1,4 +1,4 @@
-import { HttpErrorResponse, httpResource } from '@angular/common/http';
+import { HttpErrorResponse, HttpParams, HttpResponse, httpResource } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -6,6 +6,7 @@ import { filter, map } from 'rxjs';
 
 import type { components, operations } from '../api/generated/pm-api';
 import { TaskNavigationService } from './task-navigation.service';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
 export type BoardQuery = NonNullable<operations['GetBoard']['parameters']['query']>;
@@ -23,7 +24,10 @@ export interface StatusOpenIntent {
 export class TasksBoardStore {
   private readonly router = inject(Router);
   private readonly taskNavigation = inject(TaskNavigationService);
+  private readonly polling = inject(PollingCoordinator);
   private readonly retainedBoard = signal<BoardResponse | undefined>(undefined);
+  private readonly retainedEtag = signal('');
+  private pollingActive = false;
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -60,16 +64,43 @@ export class TasksBoardStore {
   readonly empty = computed(() => !!this.board() && this.taskCount() === 0 && !this.loading());
   readonly selectedTaskId = computed(() => this.taskIdFromUrl());
   readonly hasFilters = computed(() => Object.keys(this.filters()).length > 0);
+  readonly pollStatus = this.polling.create<BoardResponse>({
+    target: () => {
+      const board = this.board();
+      if (!board) return null;
+      return {
+        url: '/api/v1/board',
+        etag: this.retainedEtag() || `"${board.revision}"`,
+        params: new HttpParams({ fromObject: this.filters() }),
+      };
+    },
+    accept: (response) => this.acceptPoll(response),
+  });
+  readonly liveUpdateUnavailable = computed(() => this.pollStatus.state() === 'retrying');
 
   constructor() {
     effect(() => {
       if (this.resource.hasValue()) {
         const board = this.resource.value();
         this.retainedBoard.set(board);
+        this.retainedEtag.set(this.resource.headers()?.get('ETag') ?? `"${board.revision}"`);
         if (Object.values(board.filters).every((value) => value === null)) {
           this.taskNavigation.setRemainingCount(this.remainingTaskCount(board));
         }
       }
+    });
+    effect(() => {
+      const active = this.boardRouteActive();
+      const ready = !!this.board();
+      const shouldPoll = active && ready;
+      if (shouldPoll === this.pollingActive) return;
+      this.pollingActive = shouldPoll;
+      if (shouldPoll) this.pollStatus.start(true);
+      else this.pollStatus.stop();
+    });
+    effect(() => {
+      this.filters();
+      this.pollStatus.restart(false);
     });
   }
 
@@ -94,6 +125,10 @@ export class TasksBoardStore {
 
   reload(): boolean {
     return this.resource.reload();
+  }
+
+  refreshNow(): void {
+    this.pollStatus.restart(true);
   }
 
   milestoneTaskCount(group: BoardMilestoneGroup): number {
@@ -144,6 +179,20 @@ export class TasksBoardStore {
     return tasksIndex >= 0 && segments.length > tasksIndex + 1
       ? segments[tasksIndex + 1]!.path
       : null;
+  }
+
+  private boardRouteActive(): boolean {
+    const id = this.taskIdFromUrl();
+    return id === null || id === 'new';
+  }
+
+  private acceptPoll(response: HttpResponse<BoardResponse>): void {
+    if (!response.body) return;
+    this.retainedBoard.set(response.body);
+    this.retainedEtag.set(response.headers.get('ETag') ?? `"${response.body.revision}"`);
+    if (Object.values(response.body.filters).every((value) => value === null)) {
+      this.taskNavigation.setRemainingCount(this.remainingTaskCount(response.body));
+    }
   }
 
   private collapseKey(milestone: BoardMilestoneGroup, state: BoardStateGroup): string {

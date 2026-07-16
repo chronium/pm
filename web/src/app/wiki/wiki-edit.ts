@@ -10,6 +10,8 @@ import { WikiApiService } from './wiki-api.service';
 import { WikiBreadcrumbs } from './wiki-breadcrumbs';
 import { WikiDirtyForm } from './wiki-dirty-form';
 import { WikiStore } from './wiki.store';
+import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
+import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
 
 @Component({
   selector: 'pm-wiki-edit',
@@ -21,6 +23,7 @@ import { WikiStore } from './wiki.store';
     PmLoadingState,
     RouterLink,
     WikiBreadcrumbs,
+    ExternalChangeBanner,
   ],
   template: ` <section class="wiki-page wiki-form-page">
       @if (store.pageLoading()) {
@@ -42,13 +45,22 @@ import { WikiStore } from './wiki.store';
           <h1>Edit {{ page.title }}</h1>
         </header>
         @if (conflict()) {
-          <div class="wiki-conflict" role="alert">
-            <strong>This page changed elsewhere.</strong>
-            <p>Your draft is preserved. Reload the latest version before editing again.</p>
-            <button class="pm-button pm-button--secondary" type="button" (click)="reloadLatest()">
-              Reload latest
-            </button>
-          </div>
+          <pm-external-change-banner
+            [phase]="conflict()!"
+            heading="This page changed elsewhere."
+            (review)="reviewLatest()"
+            (restore)="restoreDraft()"
+            (keep)="keepLatest()"
+          />
+        }
+        @if (store.liveUpdateUnavailable()) {
+          <p class="live-update-status" role="status">Live updates unavailable; retrying</p>
+        }
+        @if (store.unavailable()) {
+          <p class="form-error" role="alert">
+            This page was removed or renamed elsewhere. Your draft is preserved, but it cannot be
+            saved here.
+          </p>
         }
         <form class="wiki-form" (submit)="submit($event)">
           @if (error()) {
@@ -69,7 +81,12 @@ import { WikiStore } from './wiki.store';
             ><button
               class="pm-button pm-button--primary"
               type="submit"
-              [disabled]="pending() || conflict()"
+              [disabled]="
+                pending() ||
+                store.unavailable() ||
+                conflict() === 'pending' ||
+                conflict() === 'reviewing'
+              "
             >
               {{ pending() ? 'Saving…' : 'Save body' }}
             </button>
@@ -95,14 +112,19 @@ export class WikiEdit extends WikiDirtyForm {
   private readonly injector = inject(Injector);
   protected readonly pending = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly conflict = signal(false);
+  protected readonly conflict = signal<ExternalChangePhase | null>(null);
   readonly model = signal({ body: '' });
   readonly pageForm = form(
     this.model,
-    (page) => disabled(page.body, () => this.pending() || this.conflict()),
+    (page) =>
+      disabled(
+        page.body,
+        () => this.pending() || this.conflict() === 'pending' || this.conflict() === 'reviewing',
+      ),
     { injector: this.injector },
   );
   private loadedRevision = '';
+  private draftSnapshot: UpdateWikiPageBodyRequest | null = null;
 
   constructor() {
     super();
@@ -115,19 +137,30 @@ export class WikiEdit extends WikiDirtyForm {
       this.loadedRevision = page.revision;
       this.model.set({ body: page.body });
       this.pageForm().reset();
-      this.conflict.set(false);
+      if (this.conflict() !== 'reviewing') this.conflict.set(null);
       this.error.set(null);
+    });
+    effect(() => this.store.setDirty(this.dirty()));
+    effect(() => {
+      if (this.store.pendingExternal()) this.conflict.set('pending');
     });
   }
   protected dirty(): boolean {
-    return this.pageForm().dirty();
+    return this.pageForm().dirty() || !!this.draftSnapshot;
   }
   protected busy(): boolean {
     return this.pending();
   }
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
-    if (this.pending() || this.conflict() || !this.store.page()) return;
+    if (
+      this.pending() ||
+      this.conflict() === 'pending' ||
+      this.conflict() === 'reviewing' ||
+      !this.store.page() ||
+      this.store.unavailable()
+    )
+      return;
     this.pending.set(true);
     this.error.set(null);
     try {
@@ -142,12 +175,34 @@ export class WikiEdit extends WikiDirtyForm {
     } catch (error) {
       const mapped = this.api.error(error, 'The wiki body could not be saved.');
       this.error.set(mapped.message);
-      this.conflict.set(mapped.conflict);
+      if (mapped.conflict) {
+        this.store.setDirty(true);
+        this.store.fetchLatest();
+      }
     } finally {
       this.pending.set(false);
     }
   }
   protected reloadLatest(): void {
-    this.store.reloadPage();
+    this.store.fetchLatest();
+  }
+  protected reviewLatest(): void {
+    if (!this.store.pendingExternal()) return;
+    this.draftSnapshot = { body: this.model().body };
+    this.store.reviewLatest();
+    this.conflict.set('reviewing');
+  }
+  protected restoreDraft(): void {
+    if (!this.draftSnapshot) return;
+    this.model.set({ body: this.draftSnapshot.body });
+    this.pageForm().markAsDirty();
+    this.conflict.set('preserved');
+  }
+  protected keepLatest(): void {
+    this.draftSnapshot = null;
+    this.store.keepLatest();
+    this.pageForm().reset();
+    this.conflict.set(null);
+    this.error.set(null);
   }
 }

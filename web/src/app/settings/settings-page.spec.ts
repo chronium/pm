@@ -186,7 +186,7 @@ describe('SettingsPage', () => {
     );
   });
 
-  it('locks stale mutations and clears editors only after Reload latest succeeds', async () => {
+  it('fetches latest after 412 and supports review then draft restoration', async () => {
     const { fixture, element, http } = await render();
     (element.querySelector('button[aria-label="Edit status name"]') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -203,13 +203,9 @@ describe('SettingsPage', () => {
       },
       { status: 412, statusText: 'Precondition Failed' },
     );
-    await fixture.whenStable();
-    fixture.detectChanges();
-    expect(element.textContent).toContain('Reload latest');
-    expect((element.querySelector('.settings-row input') as HTMLInputElement).value).toBe('Ready');
-    (element.querySelector('.stale-banner button') as HTMLButtonElement).click();
-    fixture.detectChanges();
-    expect(element.querySelector('.settings-row input')).toBeTruthy();
+    await Promise.resolve();
+    await Promise.resolve();
+    TestBed.tick();
     http.expectOne('/api/v1/settings').flush({
       ...settings,
       statuses: [{ key: 'todo', name: 'Server value' }, settings.statuses[1]!],
@@ -217,7 +213,18 @@ describe('SettingsPage', () => {
     });
     await fixture.whenStable();
     fixture.detectChanges();
+    expect((element.querySelector('.settings-row input') as HTMLInputElement).value).toBe('Ready');
+    expect(element.textContent).toContain('Review latest');
+    (
+      element.querySelector('pm-external-change-banner .pm-button--primary') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
     expect(element.querySelector('.settings-row input')).toBeNull();
     expect(element.textContent).toContain('Server value');
+    (
+      element.querySelector('pm-external-change-banner .pm-button--secondary') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    expect((element.querySelector('.settings-row input') as HTMLInputElement).value).toBe('Ready');
   });
 });

@@ -5,6 +5,7 @@ import { provideRouter, Router } from '@angular/router';
 
 import type { BoardResponse } from './tasks-board.store';
 import { TasksBoardStore } from './tasks-board.store';
+import { PollingCoordinator } from '../core/polling-coordinator';
 
 const emptyBoard: BoardResponse = {
   projectName: 'Atlas',
@@ -21,6 +22,7 @@ describe('TasksBoardStore', () => {
     TestBed.configureTestingModule({
       providers: [
         TasksBoardStore,
+        PollingCoordinator,
         provideRouter([{ path: 'tasks', children: [{ path: ':taskId', children: [] }] }]),
         provideHttpClient(),
         provideHttpClientTesting(),
