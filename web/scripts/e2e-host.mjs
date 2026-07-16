@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { access, mkdir, rm } from 'node:fs/promises';
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +9,9 @@ import { configRoot, e2eRoot, projectRoot, resetFixture } from './e2e-fixture.mj
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(webRoot, '..');
 const mode = process.argv[2] ?? 'dev';
+const idPort = requiredPort('PM_E2E_ID_PORT');
+const apiPort = requiredPort('PM_E2E_API_PORT');
+const uiPort = requiredPort('PM_E2E_UI_PORT');
 const children = new Set();
 let stopping = false;
 
@@ -35,7 +38,7 @@ const idServer = createServer((request, response) => {
 });
 await new Promise((resolveReady, reject) => {
   idServer.once('error', reject);
-  idServer.listen(51238, '127.0.0.1', resolveReady);
+  idServer.listen(idPort, '127.0.0.1', resolveReady);
 });
 
 const env = {
@@ -50,14 +53,19 @@ if (mode === 'embedded') {
     process.env.PM_E2E_PUBLISHED_DLL ?? join(repositoryRoot, 'artifacts/release/PM.dll'),
   );
   await access(dll);
-  start('dotnet', [dll, 'web', '--port', '51239'], projectRoot, env);
+  start('dotnet', [dll, 'web', '--port', String(uiPort)], projectRoot, env);
 } else {
   const dll = join(repositoryRoot, 'PM/bin/Debug/net10.0/PM.dll');
   await access(dll);
-  start('dotnet', [dll, 'web', '--api'], projectRoot, env);
+  const proxyPath = join(e2eRoot, 'proxy.conf.json');
+  await writeFile(
+    proxyPath,
+    `${JSON.stringify({ '/api': { target: `http://127.0.0.1:${apiPort}`, secure: false } }, null, 2)}\n`,
+  );
+  start('dotnet', [dll, 'web', '--api', '--port', String(apiPort)], projectRoot, env);
   start(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['start', '--', '--host', '127.0.0.1', '--port', '4200'],
+    join(webRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'ng.cmd' : 'ng'),
+    ['serve', '--proxy-config', proxyPath, '--host', '127.0.0.1', '--port', String(uiPort)],
     webRoot,
     env,
   );
@@ -100,3 +108,11 @@ process.on('uncaughtException', (error) => {
   console.error(error);
   void stop(1);
 });
+
+function requiredPort(name) {
+  const port = Number(process.env[name]);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${name} must be set to an integer between 1 and 65535.`);
+  }
+  return port;
+}

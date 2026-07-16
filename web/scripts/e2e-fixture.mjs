@@ -6,6 +6,8 @@ if (!e2eRoot) throw new Error('PM_E2E_ROOT must be set by the Playwright configu
 
 export const projectRoot = join(e2eRoot, 'project');
 export const configRoot = join(e2eRoot, 'config');
+const idPort = process.env.PM_E2E_ID_PORT;
+if (!idPort) throw new Error('PM_E2E_ID_PORT must be set by the E2E runner.');
 
 const timestamp = '2026-01-01T00:00:00.0000000Z';
 
@@ -27,7 +29,7 @@ export async function resetFixture(size = 'small') {
     `name: Playwright Project
 idWidth: 4
 idPrefix: E2E
-nextIdServiceUrl: http://127.0.0.1:51238
+nextIdServiceUrl: http://127.0.0.1:${idPort}
 taskStates:
   todo: To Do
   in-progress: In Progress

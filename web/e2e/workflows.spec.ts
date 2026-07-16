@@ -96,6 +96,33 @@ test('shows settings validation and protects required configuration', async ({ p
   await page.goto('/tasks/settings');
   await expect(page.getByRole('heading', { name: 'Project settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Statuses' })).toBeVisible();
+
+  const expectInUseRemovalRejected = async (
+    heading: string,
+    key: string,
+    label: string,
+    kind: 'status' | 'track' | 'milestone',
+  ) => {
+    const section = page.locator('section').filter({
+      has: page.getByRole('heading', { name: heading }),
+    });
+    const row = section.getByRole('listitem').filter({
+      has: page.getByText(key, { exact: true }),
+    });
+    await row.getByRole('button', { name: `Remove ${kind}` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remove project setting' });
+    await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(row.getByRole('alert')).toContainText(
+      `${kind[0]!.toUpperCase()}${kind.slice(1)} ${key} is referenced by one or more tasks.`,
+    );
+    await expect(row.getByText(key, { exact: true })).toBeVisible();
+    await expect(row.getByText(label, { exact: true })).toBeVisible();
+  };
+
+  await expectInUseRemovalRejected('Statuses', 'todo', 'To Do', 'status');
+  await expectInUseRemovalRejected('Tracks', 'E2E', 'Product', 'track');
+  await expectInUseRemovalRejected('Milestones', 'current', 'Current Release', 'milestone');
+
   await page.getByRole('button', { name: 'Add status' }).click();
   await expect(page.getByRole('button', { name: 'Add status', exact: true }).last()).toBeDisabled();
   await page.getByLabel('Key').fill('review');

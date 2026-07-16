@@ -15,7 +15,8 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Build the .NET solution: `dotnet build PM.slnx -m:1 --no-restore`.
 - Run .NET tests: `dotnet test PM.slnx -m:1 --no-restore`.
 - In Codex/sandboxed sessions, run the CLI locally after build with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll <command>`.
-- In Codex/sandboxed sessions, start the web board from inside an initialized PM project with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll web --port 51237`.
+- In Codex/sandboxed sessions, start the development API from inside an initialized PM project with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll web --api --port 51237`, then run `npm start` in `web/`.
+- Run the embedded Angular board from the published release artifact with elevated shell: `dotnet artifacts/release/PM.dll web`; use `--ui legacy` only as the temporary fallback.
 - Worker dependencies: run `socket npm install` in `next-id-worker/` only when Node tooling needs local install state.
 - Worker tests: `npm test` in `next-id-worker/`.
 - Worker dev server: `npm run dev` in `next-id-worker/`.

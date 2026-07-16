@@ -64,11 +64,17 @@ cd ..
 dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true
 ```
 
-Embedding is opt-in; ordinary .NET builds ignore the local, uncommitted `web/dist` directory.
+Run the DLL from the selected publish output directory. The standard release gate writes it to `artifacts/release/`, so that artifact starts with:
 
-Playwright starts either the API plus Angular dev server or the published embedded host, creates a disposable small or 180-task project, isolates identity storage, and uses a deterministic loopback next-ID service. All children and fixtures are cleaned up on success, failure, and interruption. The embedded profile also rejects browser requests to non-loopback hosts. Install Chromium with `socket npx playwright install chromium` before running browser gates.
+```sh
+dotnet artifacts/release/PM.dll web
+```
 
-The release runner permits Socket to install reported risks only for `npm ci`'s immutable, reviewed lockfile graph; findings remain visible in the release log. Dependency changes still require an explicit `socket npm install` flow and lockfile review.
+Embedding is opt-in, and ordinary .NET builds ignore the local, uncommitted `web/dist` directory.
+
+Playwright starts either the API plus Angular dev server or the published embedded host, creates a disposable small or 180-task project, isolates identity storage, and uses dynamically assigned loopback ports plus a deterministic fake next-ID service. `PM_E2E_ID_PORT`, `PM_E2E_API_PORT`, and `PM_E2E_UI_PORT` can override those ports for troubleshooting. All children and fixtures are cleaned up on success, failure, and interruption. The embedded profile also rejects browser requests to non-loopback hosts. Install Chromium with `socket npx playwright install chromium` before running browser gates.
+
+Socket findings stop the release install. Any risk acceptance must be an explicit manual action outside the release script. Dependency changes still require an explicit `socket npm install` flow and lockfile review.
 
 The type-generation commands build PM without restoring packages, start a temporary loopback web host, read `/openapi/v1.json`, and always stop the host. Generated contracts are committed only under `src/app/api/generated/`; API clients remain handwritten.
 
