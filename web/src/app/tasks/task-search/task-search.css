@@ -24,8 +24,10 @@
 }
 
 input {
+  display: block;
   width: 100%;
   height: 30px;
+  margin: 0;
   padding: 0 var(--pm-space-3) 0 30px;
   border: 1px solid var(--pm-border-subtle);
   border-radius: var(--pm-radius-sm);
