@@ -1,9 +1,12 @@
 :host { display: block; }
 .wiki-tree-list { margin: 0; padding: 0; list-style: none; }
+.wiki-tree-list li { margin: 0; }
 .wiki-tree-list .wiki-tree-list { padding-left: var(--pm-space-3); }
-.wiki-tree-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; min-width: 0; }
-.wiki-tree-row a { min-width: 0; min-height: 30px; padding: 5px var(--pm-space-1); border-radius: var(--pm-radius-sm); color: var(--pm-text-muted); font-weight: 500; overflow: hidden; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
-.wiki-tree-row a:hover { background: var(--pm-surface-hover); color: var(--pm-text-primary); }
-.wiki-tree-row a.active { background: var(--pm-accent-soft); color: var(--pm-accent-strong); font-weight: 600; }
-.wiki-tree-toggle { display: grid; width: 24px; height: 28px; padding: 0; border: 0; border-radius: var(--pm-radius-sm); background: transparent; color: var(--pm-text-subtle); place-items: center; cursor: pointer; }
-.wiki-tree-toggle:hover { background: var(--pm-surface-hover); color: var(--pm-text-primary); }
+.wiki-tree-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; width: 100%; min-width: 0; border-radius: var(--pm-radius-sm); }
+.wiki-tree-row:hover { background: var(--pm-surface-hover); }
+.wiki-tree-row.active { background: var(--pm-accent-soft); }
+.wiki-tree-row a { min-width: 0; min-height: 28px; padding: 3px var(--pm-space-1); color: var(--pm-text-muted); font-weight: 500; overflow: hidden; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.wiki-tree-row:hover a { color: var(--pm-text-primary); }
+.wiki-tree-row a.active { color: var(--pm-accent-strong); font-weight: 600; }
+.wiki-tree-toggle { display: grid; width: 24px; height: 26px; padding: 0; border: 0; background: transparent; color: var(--pm-text-subtle); font-size: 1rem; line-height: 1; place-items: center; cursor: pointer; }
+.wiki-tree-toggle:hover { color: var(--pm-text-primary); }

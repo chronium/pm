@@ -12,7 +12,7 @@ import { WikiStore, type WikiTreeNode } from './wiki.store';
     <ul class="wiki-tree-list">
       @for (node of nodes(); track node.path) {
         <li>
-          <div class="wiki-tree-row">
+          <div class="wiki-tree-row" [class.active]="active(node.path)">
             @if (node.children.length) {
               <button type="button" class="wiki-tree-toggle" [attr.aria-expanded]="expanded(node.path)"
                 [attr.aria-label]="(expanded(node.path) ? 'Collapse ' : 'Expand ') + node.name"
