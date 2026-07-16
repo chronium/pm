@@ -25,7 +25,7 @@ import { WikiStore, type WikiTreeNode } from './wiki.store';
         </li>
       }
     </ul>`,
-  styleUrl: './wiki.css',
+  styleUrl: './wiki-tree.css',
 })
 export class WikiTree implements OnDestroy {
   readonly nodes = input.required<readonly WikiTreeNode[]>();

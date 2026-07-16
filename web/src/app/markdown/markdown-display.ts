@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, ViewEncapsulation } from '@angular/core';
 
 import { MarkdownService } from './markdown.service';
 
@@ -6,6 +6,7 @@ import { MarkdownService } from './markdown.service';
   selector: 'pm-markdown-display',
   template: '<div class="markdown-body" [innerHTML]="html()"></div>',
   styleUrl: './markdown.css',
+  encapsulation: ViewEncapsulation.None,
 })
 export class MarkdownDisplay {
   private readonly renderer = inject(MarkdownService);
