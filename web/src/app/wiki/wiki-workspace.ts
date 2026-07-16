@@ -27,9 +27,9 @@ import { WikiStore } from './wiki.store';
       } @else if (store.pageLoading()) { <pm-loading-state>Loading wiki page…</pm-loading-state> }
       @else if (store.pageError()) { <pm-error-state><h1>Page unavailable</h1><p>{{ store.pageError() }}</p><button class="pm-button pm-button--secondary" (click)="store.reloadPage()">Try again</button></pm-error-state> }
       @else if (store.page(); as page) {
-        <article class="wiki-reader">
+        <article class="wiki-reader" [attr.aria-label]="page.title">
           <pm-wiki-breadcrumbs [path]="page.path" />
-          <header class="wiki-reader-header"><div><p class="wiki-eyebrow"><code>{{ page.path }}</code></p><h1>{{ page.title }}</h1><p class="wiki-time">Updated <time [attr.datetime]="page.modifiedAt">{{ page.modifiedAt | date:'medium' }}</time></p></div><div class="wiki-actions"><a class="pm-button pm-button--secondary" [routerLink]="['/wiki/meta', ...page.path.split('/')]">Metadata</a><a class="pm-button pm-button--primary" [routerLink]="['/wiki/edit', ...page.path.split('/')]">Edit</a></div></header>
+          <header class="wiki-reader-header"><div><p class="wiki-eyebrow"><code>{{ page.path }}</code></p><p class="wiki-time">Updated <time [attr.datetime]="page.modifiedAt">{{ page.modifiedAt | date:'medium' }}</time></p></div><div class="wiki-actions"><a class="pm-button pm-button--secondary" [routerLink]="['/wiki/meta', ...page.path.split('/')]">Metadata</a><a class="pm-button pm-button--primary" [routerLink]="['/wiki/edit', ...page.path.split('/')]">Edit</a></div></header>
           <pm-markdown-display [markdown]="page.body" />
         </article>
       }
