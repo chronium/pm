@@ -1,7 +1,2 @@
-export interface DirtyDialogRoute {
-  canDeactivate(): boolean | Promise<boolean>;
-}
-
-export function canLeaveDirtyDialog(component: DirtyDialogRoute): boolean | Promise<boolean> {
-  return component.canDeactivate();
-}
+export { canLeaveDirtyRoute as canLeaveDirtyDialog } from '../../core/dirty-route';
+export type { DirtyRoute as DirtyDialogRoute } from '../../core/dirty-route';

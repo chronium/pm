@@ -1,9 +1,14 @@
 <div class="shell" [class.drawer-open]="layout.mobileSidebarOpen()">
   <aside id="pm-sidebar" class="sidebar" aria-label="Wiki navigation">
     <div class="sidebar-heading">Wiki</div>
-    <nav aria-label="Wiki views">
-      <a routerLink="/wiki" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">All pages</a>
+    <nav class="wiki-primary-nav" aria-label="Wiki views">
+      <a routerLink="/wiki" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="layout.closeMobileSidebar()">Wiki home</a>
+      <a routerLink="/wiki/new" routerLinkActive="active" (click)="layout.closeMobileSidebar()">New page</a>
     </nav>
+    <div class="wiki-tree-scroll" aria-label="Wiki pages">
+      @if (store.tree().length) { <pm-wiki-tree [nodes]="store.tree()" /> }
+      @else if (!store.indexLoading()) { <p class="wiki-tree-empty">No pages yet.</p> }
+    </div>
   </aside>
 
   <button

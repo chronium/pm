@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 
@@ -14,7 +14,7 @@ describe('application shell', () => {
     document.documentElement.removeAttribute('data-theme-preference');
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter(routes, withComponentInputBinding()), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
   });
 
@@ -61,6 +61,23 @@ describe('application shell', () => {
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/validation')) {
       request.flush({ valid: true, issues: [] });
     }
+    const wikiSegments = url.split('?')[0]!.split('/').filter(Boolean);
+    const wikiPath = wikiSegments[0] === 'wiki' && wikiSegments.length > 1 && wikiSegments[1] !== 'new'
+      ? wikiSegments.slice(wikiSegments[1] === 'edit' || wikiSegments[1] === 'meta' ? 2 : 1).join('/')
+      : null;
+    const wikiPages = wikiPath ? [{ path: wikiPath, title: 'Guide', modifiedAt: '2026-07-15T00:00:00Z' }] : [];
+    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/wiki/pages')) {
+      request.flush(wikiPages);
+    }
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await Promise.resolve();
+    for (const request of TestBed.inject(HttpTestingController).match((request) => request.url.startsWith('/api/v1/wiki/pages/'))) {
+      request.flush({ path: wikiPath, title: 'Guide', createdAt: '2026-07-14T00:00:00Z', modifiedAt: '2026-07-15T00:00:00Z', body: '# Guide', revision: 'wiki-revision', localMetadata: { filePath: `.pm/wiki/${wikiPath}.md` } }, { headers: { ETag: '"wiki-revision"' } });
+    }
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, router };
@@ -99,6 +116,10 @@ describe('application shell', () => {
     ['/', '/tasks', 'Tasks'],
     ['/tasks', '/tasks', 'Tasks'],
     ['/wiki', '/wiki', 'Wiki'],
+    ['/wiki/new', '/wiki/new', 'New page'],
+    ['/wiki/guides/start', '/wiki/guides/start', 'Guide'],
+    ['/wiki/edit/guides/start', '/wiki/edit/guides/start', 'Edit Guide'],
+    ['/wiki/meta/guides/start', '/wiki/meta/guides/start', 'Metadata'],
     ['/settings', '/tasks/settings', 'Project settings'],
     ['/not-a-route', '/tasks', 'Tasks'],
   ])('routes %s to the correct child shell', async (requested, expectedUrl, heading) => {

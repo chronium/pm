@@ -2,13 +2,17 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { LayoutService } from '../core/layout.service';
+import { WikiStore } from './wiki.store';
+import { WikiTree } from './wiki-tree';
 
 @Component({
   selector: 'pm-wiki-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, WikiTree],
   templateUrl: './wiki-shell.html',
-  styleUrl: '../shell.css',
+  styleUrls: ['../shell.css', './wiki.css'],
+  providers: [WikiStore],
 })
 export class WikiShell {
   protected readonly layout = inject(LayoutService);
+  protected readonly store = inject(WikiStore);
 }
