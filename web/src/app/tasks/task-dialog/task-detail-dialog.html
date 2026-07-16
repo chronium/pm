@@ -110,10 +110,6 @@
             <p>Missing: {{ task.dependencies.missing.join(', ') }}</p>
           }
         </section>
-        <details class="file-path">
-          <summary>Local file</summary>
-          <code>{{ task.localMetadata.filePath }}</code>
-        </details>
         <div class="detail-actions">
           <label for="task-state">Move to</label
           ><select

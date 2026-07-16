@@ -53,17 +53,6 @@
   margin-top: var(--pm-space-1);
   color: var(--pm-text-muted);
 }
-.file-path summary {
-  cursor: pointer;
-  color: var(--pm-text-muted);
-}
-.file-path code {
-  display: block;
-  margin-top: var(--pm-space-2);
-  overflow-wrap: anywhere;
-  font-family: var(--pm-font-family-mono);
-  font-size: var(--pm-font-size-xs);
-}
 .detail-actions {
   display: flex;
   align-items: center;
