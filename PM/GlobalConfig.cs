@@ -36,6 +36,7 @@ public static class GlobalConfig
     public static string TaskSearchCommandName => "search";
     public static string WikiBranchName => "wiki";
     public static string WikiListCommandName => "list";
+    public static string WikiSearchCommandName => "search";
     public static string WikiShowCommandName => "show";
     public static string WikiCreateCommandName => "create";
     public static string WikiEditCommandName => "edit";

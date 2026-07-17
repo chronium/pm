@@ -43,6 +43,12 @@ Search tasks with free text and composable metadata filters:
 dotnet PM/bin/Debug/net10.0/PM.dll task search "render state:todo track:BUILD" --limit 20
 ```
 
+Search wiki page titles, paths, and bodies:
+
+```sh
+dotnet PM/bin/Debug/net10.0/PM.dll wiki search "render pipeline" --limit 20
+```
+
 For Angular development, start the API-only host from inside an initialized PM project, then run the Angular development server in another terminal:
 
 ```sh

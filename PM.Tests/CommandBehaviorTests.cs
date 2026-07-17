@@ -665,6 +665,86 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task WikiSearchRendersNestedTitlePathAndBodyMatchesWithMetadataAndLimit()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("nested/body-hit", "Body page", "Needle appears twice: needle.");
+        service.CreatePage("nested/needle-path", "Path page", "No body match.");
+        service.CreatePage("nested/title-hit", "Needle title", "No body match.");
+        var command = new WikiSearchCommand(service);
+
+        var all = await CaptureConsole(() => command.Execute(null!,
+            new WikiSearchCommand.Settings { Query = "needle", Limit = 3 }, CancellationToken.None));
+        var limited = await CaptureConsole(() => command.Execute(null!,
+            new WikiSearchCommand.Settings { Query = "needle", Limit = 2 }, CancellationToken.None));
+
+        Assert.Equal(0, all.ExitCode);
+        Assert.Contains("nested/body-hit", all.Output);
+        Assert.Contains("nested/needle-path", all.Output);
+        Assert.Contains("nested/title-hit", all.Output);
+        Assert.Contains("Needle appears twice: needle.", all.Output);
+        Assert.Contains("Modified", all.Output);
+        Assert.Contains("Matches", all.Output);
+        Assert.Equal(0, limited.ExitCode);
+        Assert.Contains("nested/body-hit", limited.Output);
+        Assert.Contains("nested/needle-path", limited.Output);
+        Assert.DoesNotContain("nested/title-hit", limited.Output);
+    }
+
+    [Fact]
+    public async Task WikiSearchHandlesNoMatchesValidationInvalidMarkdownAndMissingProject()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new WikiSearchCommand(new WikiService(projectRoot));
+
+        var empty = await CaptureConsole(() => command.Execute(null!,
+            new WikiSearchCommand.Settings { Query = "missing" }, CancellationToken.None));
+        var blank = await CaptureConsole(() => command.Execute(null!,
+            new WikiSearchCommand.Settings { Query = " " }, CancellationToken.None));
+
+        Assert.Equal(0, empty.ExitCode);
+        Assert.Contains("No matching wiki pages.", empty.Output);
+        Assert.Equal(1, blank.ExitCode);
+        Assert.Contains("Wiki search query is required.", blank.Output);
+
+        File.WriteAllText(Path.Combine(projectRoot.WikiPath, "broken.md"), "not front matter");
+        var invalid = await CaptureConsole(() => command.Execute(null!,
+            new WikiSearchCommand.Settings { Query = "needle" }, CancellationToken.None));
+
+        Assert.Equal(1, invalid.ExitCode);
+        Assert.Contains("Wiki page broken markdown is invalid.", invalid.Output);
+
+        using var outsideWorkspace = new TempWorkingDirectory();
+        var outside = new WikiSearchCommand(new WikiService(new ProjectRoot()));
+        var missingProject = await CaptureConsole(() => outside.Execute(null!,
+            new WikiSearchCommand.Settings { Query = "needle" }, CancellationToken.None));
+
+        Assert.Equal(1, missingProject.ExitCode);
+        Assert.Contains("Project not found. Run pm init first.", missingProject.Output);
+    }
+
+    [Fact]
+    public async Task WikiSearchEscapesMarkupLikePageValues()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new WikiService(projectRoot);
+        service.CreatePage("docs/[needle]", "[Needle] <title>", "Needle [snippet] <body>");
+        var command = new WikiSearchCommand(service);
+
+        var result = await CaptureConsole(() => command.Execute(null!,
+            new WikiSearchCommand.Settings { Query = "needle" }, CancellationToken.None));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("docs/[needle]", result.Output);
+        Assert.Contains("[Needle] <title>", result.Output);
+        Assert.Contains("Needle [snippet] <body>", result.Output);
+    }
+
+    [Fact]
     public async Task TaskSearchRendersDenseResultsEmptyAndInvalidQueries()
     {
         using var workspace = new TempWorkingDirectory();

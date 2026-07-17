@@ -105,6 +105,7 @@ app.Configure(config =>
             wiki.SetDescription("Manage wiki pages within a project");
 
             wiki.AddCommand<WikiListCommand>(GlobalConfig.WikiListCommandName);
+            wiki.AddCommand<WikiSearchCommand>(GlobalConfig.WikiSearchCommandName);
             wiki.AddCommand<WikiShowCommand>(GlobalConfig.WikiShowCommandName);
             wiki.AddCommand<WikiCreateCommand>(GlobalConfig.WikiCreateCommandName);
             wiki.AddCommand<WikiEditCommand>(GlobalConfig.WikiEditCommandName);
