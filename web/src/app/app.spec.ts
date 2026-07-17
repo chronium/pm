@@ -47,6 +47,20 @@ describe('application shell', () => {
         revision: 'board-revision',
       });
     }
+    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/board/navigation')) {
+      request.flush({
+        remainingCount: 3,
+        tracks: [
+          { key: 'PM', name: 'Product', remainingCount: 2 },
+          { key: 'BUILD', name: 'Build', remainingCount: 1 },
+        ],
+        milestones: [
+          { key: 'm1', name: 'First milestone', remainingCount: 1 },
+          { key: 'empty', name: 'A very long empty milestone name', remainingCount: 0 },
+        ],
+        revision: 'navigation-revision',
+      });
+    }
     const taskRequests = TestBed.inject(HttpTestingController).match((request) =>
       request.url.startsWith('/api/v1/tasks/'),
     );
@@ -217,11 +231,29 @@ describe('application shell', () => {
 
   it('keeps All tasks exact while a nested task remains in the board workspace', async () => {
     const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
-    const allTasks = [...fixture.nativeElement.querySelectorAll('aside a')].find(
-      (link: HTMLAnchorElement) => link.textContent?.trim() === 'All tasks',
-    );
+    const allTasks = fixture.nativeElement.querySelector('aside a[href^="/tasks?"]');
     expect(allTasks?.classList.contains('active')).toBe(false);
     expect(fixture.nativeElement.querySelector('main h1')?.textContent).toBe('Tasks');
+  });
+
+  it('renders task scopes with counts and keeps nested filtered scopes active', async () => {
+    const { fixture } = await renderAt('/tasks/PM-0049?track=PM&state=todo&view=dense');
+    const product = [...fixture.nativeElement.querySelectorAll('aside a')].find(
+      (link: HTMLAnchorElement) => link.textContent?.includes('Product'),
+    );
+    expect(product?.classList.contains('active')).toBe(true);
+    expect(product?.getAttribute('aria-current')).toBe('page');
+    expect(product?.textContent.replace(/\s+/g, ' ').trim()).toBe('Product2');
+    expect(fixture.nativeElement.querySelectorAll('aside .scope-count')).toHaveLength(5);
+    const milestone = [...fixture.nativeElement.querySelectorAll('aside a')].find(
+      (link: HTMLAnchorElement) => link.textContent?.includes('First milestone'),
+    ) as HTMLAnchorElement;
+    const milestoneUrl = new URL(milestone.href);
+    expect(milestoneUrl.pathname).toBe('/tasks');
+    expect(milestoneUrl.searchParams.get('milestone')).toBe('m1');
+    expect(milestoneUrl.searchParams.get('track')).toBeNull();
+    expect(milestoneUrl.searchParams.get('state')).toBe('todo');
+    expect(milestoneUrl.searchParams.get('view')).toBe('dense');
   });
 
   it('selects only Settings in the task sidebar on the settings route', async () => {

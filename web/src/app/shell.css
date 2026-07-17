@@ -19,45 +19,6 @@
   background: var(--pm-surface-raised);
 }
 
-.sidebar nav {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sidebar .settings-link {
-  gap: var(--pm-space-2);
-  margin-top: auto;
-}
-
-.sidebar .settings-link ng-icon {
-  flex: 0 0 auto;
-  font-size: 18px;
-}
-
-.sidebar a {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 var(--pm-space-2);
-  border-radius: var(--pm-radius-sm);
-  color: var(--pm-text-muted);
-  font-size: var(--pm-font-size-sm);
-  text-decoration: none;
-}
-
-.sidebar a:hover {
-  background: var(--pm-surface-hover);
-  color: var(--pm-text-primary);
-}
-
-.sidebar a.active {
-  background: var(--pm-accent-soft);
-  color: var(--pm-accent-strong);
-  font-weight: 600;
-}
-
 .content {
   min-width: 0;
   min-height: 0;

@@ -1,0 +1,93 @@
+<nav aria-label="Task views">
+  <a
+    routerLink="/tasks"
+    [queryParams]="{ track: null, milestone: null }"
+    queryParamsHandling="merge"
+    [class.active]="allActive()"
+    [attr.aria-current]="allActive() ? 'page' : null"
+    (click)="select($event)"
+  >
+    <span class="link-label">All tasks</span>
+    @if (store.navigation(); as navigation) {
+      <span
+        class="scope-count"
+        [attr.aria-label]="navigation.remainingCount + ' remaining tasks'"
+        >{{ navigation.remainingCount }}</span
+      >
+    }
+  </a>
+  <a routerLink="/tasks/new" queryParamsHandling="preserve" (click)="select($event, true)"
+    >New task</a
+  >
+
+  <div class="scope-scroll" aria-live="polite">
+    @if (store.loading()) {
+      <p class="sidebar-message" role="status">Loading scopes…</p>
+    } @else if (store.error(); as error) {
+      <div class="sidebar-message" role="alert">
+        <span>{{ error }}</span>
+        <button type="button" class="sidebar-retry" (click)="store.reload()">Retry</button>
+      </div>
+    } @else if (store.navigation(); as navigation) {
+      <section aria-labelledby="milestones-navigation-heading">
+        <h2 id="milestones-navigation-heading">Milestones</h2>
+        @if (navigation.milestones.length === 0) {
+          <p class="sidebar-message">No milestones configured</p>
+        } @else {
+          @for (milestone of navigation.milestones; track milestone.key) {
+            <a
+              routerLink="/tasks"
+              [queryParams]="{ milestone: milestone.key, track: null }"
+              queryParamsHandling="merge"
+              [class.active]="activeMilestone() === milestone.key"
+              [attr.aria-current]="activeMilestone() === milestone.key ? 'page' : null"
+              (click)="select($event)"
+            >
+              <span class="link-label" [title]="milestone.name">{{ milestone.name }}</span>
+              <span
+                class="scope-count"
+                [attr.aria-label]="milestone.remainingCount + ' remaining tasks'"
+                >{{ milestone.remainingCount }}</span
+              >
+            </a>
+          }
+        }
+      </section>
+      <section aria-labelledby="tracks-navigation-heading">
+        <h2 id="tracks-navigation-heading">Tracks</h2>
+        @if (navigation.tracks.length === 0) {
+          <p class="sidebar-message">No tracks configured</p>
+        } @else {
+          @for (track of navigation.tracks; track track.key) {
+            <a
+              routerLink="/tasks"
+              [queryParams]="{ track: track.key, milestone: null }"
+              queryParamsHandling="merge"
+              [class.active]="activeTrack() === track.key"
+              [attr.aria-current]="activeTrack() === track.key ? 'page' : null"
+              (click)="select($event)"
+            >
+              <span class="link-label" [title]="track.name">{{ track.name }}</span>
+              <span
+                class="scope-count"
+                [attr.aria-label]="track.remainingCount + ' remaining tasks'"
+                >{{ track.remainingCount }}</span
+              >
+            </a>
+          }
+        }
+      </section>
+    }
+  </div>
+
+  <a
+    class="settings-link"
+    routerLink="/tasks/settings"
+    [class.active]="settingsActive()"
+    [attr.aria-current]="settingsActive() ? 'page' : null"
+    (click)="select($event)"
+  >
+    <ng-icon name="cssOptions" aria-hidden="true" />
+    <span>Settings</span>
+  </a>
+</nav>

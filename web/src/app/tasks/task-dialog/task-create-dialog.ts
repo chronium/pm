@@ -55,6 +55,7 @@ export class TaskCreateDialog implements DirtyDialogRoute, OnDestroy {
     try {
       const response = await firstValueFrom(this.api.create(request));
       this.board.reload();
+      this.navigation.requestNavigationRefresh();
       this.allowLeave = true;
       this.transitioningToDetail = true;
       await this.router.navigate(['/tasks', response.body!.id], {

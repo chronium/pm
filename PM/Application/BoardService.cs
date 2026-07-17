@@ -17,6 +17,14 @@ public sealed record BoardData(
 
 public sealed record BoardOption(string Key, string Name, string Priority = PriorityLevel.None);
 
+public sealed record BoardNavigationData(
+    int RemainingCount,
+    IReadOnlyList<BoardNavigationOption> Tracks,
+    IReadOnlyList<BoardNavigationOption> Milestones,
+    BoardData Board);
+
+public sealed record BoardNavigationOption(string Key, string Name, int RemainingCount);
+
 public sealed record BoardMilestoneGroup(string? Key, string Name, IReadOnlyList<BoardStateGroup> States);
 
 public sealed record BoardStateGroup(string Key, string Name, IReadOnlyList<BoardTask> Tasks);
@@ -115,6 +123,31 @@ public partial class BoardService(ProjectRoot projectRoot)
             entries,
             groups,
             query));
+    }
+
+    public AppResult<BoardNavigationData> GetNavigation()
+    {
+        var boardResult = GetBoard(new BoardQuery());
+        if (!boardResult.Success)
+            return AppResult<BoardNavigationData>.Fail(boardResult.ErrorCode!, boardResult.Message!);
+
+        var board = boardResult.Payload!;
+        var remaining = board.Tasks
+            .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+            .ToList();
+        return AppResult<BoardNavigationData>.Ok(new BoardNavigationData(
+            remaining.Count,
+            board.Tracks.Select(track => new BoardNavigationOption(
+                track.Key,
+                track.Name,
+                remaining.Count(task => string.Equals(task.Track, track.Key, StringComparison.Ordinal))))
+                .ToList(),
+            board.Milestones.Select(milestone => new BoardNavigationOption(
+                milestone.Key,
+                milestone.Name,
+                remaining.Count(task => string.Equals(task.Milestone, milestone.Key, StringComparison.Ordinal))))
+                .ToList(),
+            board));
     }
 
     public AppResult<BoardTask> GetTask(string taskId, int descriptionPreviewLength = WebDescriptionPreviewLength)

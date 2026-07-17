@@ -141,6 +141,7 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
       const response = await firstValueFrom(this.api.update(task.id, request, this.detail.etag()));
       this.detail.accept(response);
       this.board.reload();
+      this.navigation.requestNavigationRefresh();
       this.editing.set(false);
       this.stale.set(false);
       this.conflictPhase.set(null);
@@ -172,6 +173,7 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
       );
       this.detail.accept(response);
       this.board.reload();
+      this.navigation.requestNavigationRefresh();
     } catch (error) {
       const failure = this.api.error(error, 'The task state could not be changed.');
       this.error.set(
@@ -222,6 +224,7 @@ export class TaskDetailDialog implements DirtyDialogRoute, OnDestroy {
     try {
       await firstValueFrom(this.api.remove(task.id, this.detail.etag()));
       this.board.reload();
+      this.navigation.requestNavigationRefresh();
       this.allowLeave = true;
       await this.router.navigate(['/tasks'], { queryParamsHandling: 'preserve', replaceUrl: true });
     } catch (error) {

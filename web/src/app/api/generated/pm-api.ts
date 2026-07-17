@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/board/navigation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get task scope navigation */
+        get: operations["GetBoardNavigation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/board": {
         parameters: {
             query?: never;
@@ -342,6 +359,19 @@ export interface components {
             name: string;
             states: components["schemas"]["BoardStateGroupResponse"][];
         };
+        BoardNavigationOptionResponse: {
+            key: string;
+            name: string;
+            /** Format: int32 */
+            remainingCount: number | string;
+        };
+        BoardNavigationResponse: {
+            /** Format: int32 */
+            remainingCount: number | string;
+            tracks: components["schemas"]["BoardNavigationOptionResponse"][];
+            milestones: components["schemas"]["BoardNavigationOptionResponse"][];
+            revision: string;
+        };
         BoardOptionResponse: {
             key: string;
             name: string;
@@ -581,6 +611,58 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetBoardNavigation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardNavigationResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

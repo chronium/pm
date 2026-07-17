@@ -36,3 +36,7 @@ pm-empty-state {
   gap: var(--pm-space-2);
   margin-top: var(--pm-space-2);
 }
+
+.milestone-section + .milestone-section {
+  margin-top: var(--pm-space-2);
+}

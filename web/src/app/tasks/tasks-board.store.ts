@@ -5,7 +5,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 
 import type { components, operations } from '../api/generated/pm-api';
-import { TaskNavigationService } from './task-navigation.service';
 import { PollingCoordinator } from '../core/polling-coordinator';
 
 export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
@@ -23,7 +22,6 @@ export interface StatusOpenIntent {
 @Injectable()
 export class TasksBoardStore {
   private readonly router = inject(Router);
-  private readonly taskNavigation = inject(TaskNavigationService);
   private readonly polling = inject(PollingCoordinator);
   private readonly retainedBoard = signal<BoardResponse | undefined>(undefined);
   private readonly retainedEtag = signal('');
@@ -63,7 +61,8 @@ export class TasksBoardStore {
   );
   readonly empty = computed(() => !!this.board() && this.taskCount() === 0 && !this.loading());
   readonly selectedTaskId = computed(() => this.taskIdFromUrl());
-  readonly hasFilters = computed(() => Object.keys(this.filters()).length > 0);
+  readonly hasStatusFilter = computed(() => !!this.filters().state);
+  readonly hasScopeFilter = computed(() => !!this.filters().track || !!this.filters().milestone);
   readonly pollStatus = this.polling.create<BoardResponse>({
     target: () => {
       const board = this.board();
@@ -84,9 +83,6 @@ export class TasksBoardStore {
         const board = this.resource.value();
         this.retainedBoard.set(board);
         this.retainedEtag.set(this.resource.headers()?.get('ETag') ?? `"${board.revision}"`);
-        if (Object.values(board.filters).every((value) => value === null)) {
-          this.taskNavigation.setRemainingCount(this.remainingTaskCount(board));
-        }
       }
     });
     effect(() => {
@@ -123,6 +119,17 @@ export class TasksBoardStore {
     return this.router.navigateByUrl(tree);
   }
 
+  clearStatus(): Promise<boolean> {
+    return this.setFilter('state', null);
+  }
+
+  resetScope(): Promise<boolean> {
+    const tree = this.router.parseUrl(this.router.url);
+    delete tree.queryParams['track'];
+    delete tree.queryParams['milestone'];
+    return this.router.navigateByUrl(tree);
+  }
+
   reload(): boolean {
     return this.resource.reload();
   }
@@ -133,19 +140,6 @@ export class TasksBoardStore {
 
   milestoneTaskCount(group: BoardMilestoneGroup): number {
     return group.states.reduce((total, state) => total + state.tasks.length, 0);
-  }
-
-  private remainingTaskCount(board: BoardResponse): number {
-    return board.milestoneGroups.reduce(
-      (total, milestone) =>
-        total +
-        milestone.states.reduce(
-          (milestoneTotal, state) =>
-            milestoneTotal + (state.key === 'done' ? 0 : state.tasks.length),
-          0,
-        ),
-      0,
-    );
   }
 
   isGroupOpen(milestone: BoardMilestoneGroup, state: BoardStateGroup): boolean {
@@ -190,9 +184,6 @@ export class TasksBoardStore {
     if (!response.body) return;
     this.retainedBoard.set(response.body);
     this.retainedEtag.set(response.headers.get('ETag') ?? `"${response.body.revision}"`);
-    if (Object.values(response.body.filters).every((value) => value === null)) {
-      this.taskNavigation.setRemainingCount(this.remainingTaskCount(response.body));
-    }
   }
 
   private collapseKey(milestone: BoardMilestoneGroup, state: BoardStateGroup): string {

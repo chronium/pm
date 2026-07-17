@@ -62,10 +62,8 @@ describe('Task board components', () => {
 
   it('emits typed filter changes and clear intent while reflecting active filters', () => {
     const fixture = TestBed.createComponent(TaskBoardFilters);
-    fixture.componentRef.setInput('tracks', [{ key: 'PM', name: 'Product' }]);
-    fixture.componentRef.setInput('milestones', [{ key: 'angular-web', name: 'Angular web' }]);
     fixture.componentRef.setInput('states', [{ key: 'todo', name: 'To do' }]);
-    fixture.componentRef.setInput('filters', { track: 'PM' });
+    fixture.componentRef.setInput('filters', { state: 'todo' });
     const changes: unknown[] = [];
     let clears = 0;
     fixture.componentInstance.filterChange.subscribe((change) => changes.push(change));
@@ -75,9 +73,9 @@ describe('Task board components', () => {
     const selects = fixture.nativeElement.querySelectorAll(
       'select',
     ) as NodeListOf<HTMLSelectElement>;
-    expect(selects[0]?.value).toBe('PM');
-    selects[2]!.value = 'todo';
-    selects[2]!.dispatchEvent(new Event('change'));
+    expect(selects).toHaveLength(1);
+    selects[0]!.value = 'todo';
+    selects[0]!.dispatchEvent(new Event('change'));
     fixture.nativeElement.querySelector('button').click();
     expect(changes).toEqual([{ filter: 'state', value: 'todo' }]);
     expect(clears).toBe(1);

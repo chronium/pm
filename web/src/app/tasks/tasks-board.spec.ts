@@ -4,7 +4,6 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 
-import { TaskNavigationService } from './task-navigation.service';
 import { TasksBoard } from './tasks-board';
 import type { BoardResponse } from './tasks-board.store';
 
@@ -160,11 +159,6 @@ describe('TasksBoard', () => {
     ).toBe(false);
   });
 
-  it('publishes the unfiltered remaining-task count for the application header', async () => {
-    await render();
-    expect(TestBed.inject(TaskNavigationService).remainingCount()).toBe(1);
-  });
-
   it('uses native collapse controls, defaults done closed, and restores project-scoped session choices', async () => {
     sessionStorage.setItem('pm.tasks-board.v1.Atlas%20Project.second.todo.open', 'false');
     const { element } = await render();
@@ -192,8 +186,9 @@ describe('TasksBoard', () => {
     link?.focus();
     expect(document.activeElement).toBe(link);
     expect(element.querySelector('form[aria-label="Board filters"] label')?.textContent).toContain(
-      'Track',
+      'Status',
     );
+    expect(element.querySelectorAll('form[aria-label="Board filters"] select')).toHaveLength(1);
   });
 
   it('shows one board-level empty state and offers clear filters', async () => {
@@ -201,7 +196,11 @@ describe('TasksBoard', () => {
     const { element } = await render('/tasks?track=PM', response);
     expect(element.querySelectorAll('pm-empty-state')).toHaveLength(1);
     expect(element.textContent).toContain('No tasks match these filters');
-    expect(element.querySelector('button')?.textContent).toContain('Clear filters');
+    expect(
+      [...element.querySelectorAll('button')].some((button) =>
+        button.textContent?.includes('View whole project'),
+      ),
+    ).toBe(true);
   });
 
   it('shows initial loading and readable errors with retry and clear-filter actions', async () => {
@@ -228,7 +227,7 @@ describe('TasksBoard', () => {
       [...fixture.nativeElement.querySelectorAll('button')].map((button: HTMLButtonElement) =>
         button.textContent?.trim(),
       ),
-    ).toEqual(['Retry', 'Clear filters']);
+    ).toEqual(['Retry', 'Clear status']);
   });
 
   it('keeps the board mounted, preserves filters, and visibly selects a nested task route', async () => {
@@ -238,6 +237,6 @@ describe('TasksBoard', () => {
       element.querySelector('.task-list li.selected a[aria-current="true"]')?.textContent,
     ).toContain('PM-0002');
     expect(element.querySelector('h1.visually-hidden')?.textContent).toBe('Tasks');
-    expect(element.querySelector<HTMLSelectElement>('select')?.value).toBe('BUILD');
+    expect(element.querySelector<HTMLSelectElement>('select')?.value).toBe('');
   });
 });

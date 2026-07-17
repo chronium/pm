@@ -1,12 +1,12 @@
 import { Component, input, output } from '@angular/core';
 
 import type { components } from '../../api/generated/pm-api';
-import type { BoardFilter, BoardQuery } from '../tasks-board.store';
+import type { BoardQuery } from '../tasks-board.store';
 
 type BoardFilterOption = components['schemas']['BoardOptionResponse'];
 
 export interface BoardFilterChange {
-  filter: BoardFilter;
+  filter: 'state';
   value: string | null;
 }
 
@@ -17,14 +17,12 @@ export interface BoardFilterChange {
   host: { '(submit)': '$event.preventDefault()' },
 })
 export class TaskBoardFilters {
-  readonly tracks = input.required<BoardFilterOption[]>();
-  readonly milestones = input.required<BoardFilterOption[]>();
   readonly states = input.required<BoardFilterOption[]>();
   readonly filters = input.required<BoardQuery>();
   readonly filterChange = output<BoardFilterChange>();
   readonly clearIntent = output<void>();
 
-  protected change(filter: BoardFilter, value: string): void {
-    this.filterChange.emit({ filter, value: value.trim() || null });
+  protected change(value: string): void {
+    this.filterChange.emit({ filter: 'state', value: value.trim() || null });
   }
 }

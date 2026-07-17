@@ -1,0 +1,98 @@
+:host,
+nav {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+a {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--pm-space-2);
+  border-radius: var(--pm-radius-sm);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  text-decoration: none;
+}
+
+a:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+a.active {
+  background: var(--pm-accent-soft);
+  color: var(--pm-accent-strong);
+  font-weight: 600;
+}
+
+.link-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-count {
+  min-width: 2ch;
+  margin-left: var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  text-align: right;
+}
+
+a.active .scope-count {
+  color: inherit;
+}
+
+.scope-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+section {
+  margin-top: var(--pm-space-3);
+}
+
+h2 {
+  margin: 0;
+  padding: var(--pm-space-1) var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 600;
+}
+
+.sidebar-message {
+  display: grid;
+  gap: var(--pm-space-1);
+  margin: var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+
+.sidebar-retry {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pm-accent-strong);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.settings-link {
+  gap: var(--pm-space-2);
+  margin-top: auto;
+}
+
+.settings-link ng-icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+}

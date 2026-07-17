@@ -7,6 +7,12 @@ namespace PM.Api;
 
 public sealed record BoardFilterResponse(string? Track, string? Milestone, string? State);
 public sealed record BoardOptionResponse(string Key, string Name, string Priority);
+public sealed record BoardNavigationOptionResponse(string Key, string Name, int RemainingCount);
+public sealed record BoardNavigationResponse(
+    int RemainingCount,
+    IReadOnlyList<BoardNavigationOptionResponse> Tracks,
+    IReadOnlyList<BoardNavigationOptionResponse> Milestones,
+    string Revision);
 public sealed record DependencyStatusResponse(
     bool Ready,
     IReadOnlyList<string> DependsOn,
@@ -40,6 +46,32 @@ public static class BoardApiEndpoints
     public static void MapBoardApi(this RouteGroupBuilder api, BoardService boardService,
         ResourceRevisionService revisions)
     {
+        api.MapGet("/board/navigation", (HttpRequest request) =>
+            {
+                var result = boardService.GetNavigation();
+                if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+
+                var revisionResult = revisions.GetBoardRevision(result.Payload!.Board);
+                if (!revisionResult.Success)
+                    return ApiResults.Failure(revisionResult.ErrorCode, revisionResult.Message, request.Path);
+                var revision = revisionResult.Payload!;
+                var conditional = ApiPreconditions.EvaluateIfNoneMatch(request, revision);
+                if (conditional != null) return conditional;
+
+                ApiPreconditions.SetETag(request.HttpContext.Response, revision);
+                return Results.Ok(new BoardNavigationResponse(
+                    result.Payload.RemainingCount,
+                    result.Payload.Tracks.Select(ToNavigationOption).ToList(),
+                    result.Payload.Milestones.Select(ToNavigationOption).ToList(),
+                    revision));
+            })
+            .WithName("GetBoardNavigation")
+            .WithSummary("Get task scope navigation")
+            .Produces<BoardNavigationResponse>()
+            .WithRevisionedReadMetadata()
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
+
         api.MapGet("/board", (HttpRequest request, string? track, string? milestone, string? state) =>
             {
                 var query = new BoardQuery(Normalize(track), Normalize(milestone), Normalize(state));
@@ -96,6 +128,9 @@ public static class BoardApiEndpoints
 
     private static BoardOptionResponse ToOption(BoardOption option) =>
         new(option.Key, option.Name, option.Priority);
+
+    private static BoardNavigationOptionResponse ToNavigationOption(BoardNavigationOption option) =>
+        new(option.Key, option.Name, option.RemainingCount);
 
     internal static DateTime ToUtc(DateTime value) => value.Kind == DateTimeKind.Utc
         ? value

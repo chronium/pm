@@ -81,6 +81,38 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task BoardNavigationReturnsCountsAndSupportsConditionalReads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            tracks: new() { ["PM"] = "Product", ["EMPTY"] = "Empty" },
+            milestones: new() { ["m1"] = "First", ["empty"] = "Empty" }));
+        var assigned = TestData.Task("PM-0001", "Assigned", milestone: "m1");
+        var unassigned = TestData.Task("PM-0002", "Unassigned");
+        root.WriteTask(assigned);
+        root.WriteTask(unassigned);
+        root.UpdateTaskState(assigned, "todo");
+        root.UpdateTaskState(unassigned, "review");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var response = await client.GetAsync("/api/v1/board/navigation");
+            var navigation = await response.Content.ReadFromJsonAsync<BoardNavigationResponse>();
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(2, navigation!.RemainingCount);
+            Assert.Equal(0, navigation.Tracks.Single(option => option.Key == "EMPTY").RemainingCount);
+            Assert.Equal(1, navigation.Milestones.Single(option => option.Key == "m1").RemainingCount);
+            Assert.Equal(0, navigation.Milestones.Single(option => option.Key == "empty").RemainingCount);
+            Assert.Equal(ApiPreconditions.FormatETag(navigation.Revision), response.Headers.ETag?.Tag);
+
+            using var conditional = new HttpRequestMessage(HttpMethod.Get, "/api/v1/board/navigation");
+            conditional.Headers.TryAddWithoutValidation("If-None-Match", response.Headers.ETag?.Tag);
+            Assert.Equal(HttpStatusCode.NotModified, (await client.SendAsync(conditional)).StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task TaskDetailReturnsResolvedAndEditableMetadataAndSupportsConditionalRead()
     {
         using var workspace = new TempWorkingDirectory();
@@ -259,6 +291,7 @@ public partial class ApiContractTests
             var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json")).RootElement;
             var paths = document.GetProperty("paths");
             Assert.True(paths.TryGetProperty("/api/v1/board", out _));
+            Assert.True(paths.TryGetProperty("/api/v1/board/navigation", out _));
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}", out var task));
             Assert.True(paths.TryGetProperty("/api/v1/tasks/search", out var search));
             Assert.Contains(search.GetProperty("get").GetProperty("parameters").EnumerateArray(),
@@ -271,6 +304,8 @@ public partial class ApiContractTests
                 .GetProperty("responses").GetProperty("201");
             Assert.True(created.GetProperty("headers").TryGetProperty("ETag", out _));
             var schemas = document.GetProperty("components").GetProperty("schemas");
+            Assert.Contains("remainingCount", schemas.GetProperty("BoardNavigationResponse")
+                .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("title", schemas.GetProperty("CreateTaskRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("priority", schemas.GetProperty("UpdateTaskRequest").GetProperty("required")

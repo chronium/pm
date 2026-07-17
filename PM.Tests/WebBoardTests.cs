@@ -280,6 +280,30 @@ public class WebBoardTests
     }
 
     [Fact]
+    public async Task BoardNavigationCountsRemainingTasksAndPreservesConfiguredOptions()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Product", ["BUILD"] = "Build", ["EMPTY"] = "Empty" },
+            milestones: new Dictionary<string, string> { ["m2"] = "Second", ["m1"] = "First", ["empty"] = "Empty" }));
+        var build = TestData.Task("BUILD-0001", "Build", track: "BUILD", milestone: "m1");
+        var done = TestData.Task("PM-0001", "Done", track: "PM", milestone: "m2");
+        var unassigned = TestData.Task("PM-0002", "Unassigned", track: "PM");
+        foreach (var task in new[] { build, done, unassigned }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(build, "todo");
+        projectRoot.UpdateTaskState(done, "done");
+        projectRoot.UpdateTaskState(unassigned, "review");
+
+        var navigation = new BoardService(projectRoot).GetNavigation().Payload!;
+
+        Assert.Equal(2, navigation.RemainingCount);
+        Assert.Equal(new[] { "PM", "BUILD", "EMPTY" }, navigation.Tracks.Select(option => option.Key));
+        Assert.Equal(new[] { 1, 1, 0 }, navigation.Tracks.Select(option => option.RemainingCount));
+        Assert.Equal(new[] { "m2", "m1", "empty" }, navigation.Milestones.Select(option => option.Key));
+        Assert.Equal(new[] { 0, 1, 0 }, navigation.Milestones.Select(option => option.RemainingCount));
+    }
+
+    [Fact]
     public async Task LegacyTaskWithoutTrackUsesDefaultTrack()
     {
         using var workspace = new TempWorkingDirectory();

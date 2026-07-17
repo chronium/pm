@@ -13,12 +13,10 @@
       pmTaskBoardFilters
       class="filter-toolbar"
       aria-label="Board filters"
-      [tracks]="currentBoard.tracks"
-      [milestones]="currentBoard.milestones"
       [states]="currentBoard.states"
       [filters]="board.filters()"
       (filterChange)="board.setFilter($event.filter, $event.value)"
-      (clearIntent)="board.clearFilters()"
+      (clearIntent)="board.clearStatus()"
     ></form>
   }
 
@@ -31,9 +29,14 @@
           <button class="pm-button pm-button--secondary" type="button" (click)="board.reload()">
             Retry
           </button>
-          @if (board.hasFilters()) {
-            <button class="pm-button pm-button--ghost" type="button" (click)="board.clearFilters()">
-              Clear filters
+          @if (board.hasStatusFilter()) {
+            <button class="pm-button pm-button--ghost" type="button" (click)="board.clearStatus()">
+              Clear status
+            </button>
+          }
+          @if (board.hasScopeFilter()) {
+            <button class="pm-button pm-button--ghost" type="button" (click)="board.resetScope()">
+              View whole project
             </button>
           }
         </div>
@@ -47,14 +50,19 @@
     <pm-empty-state>
       <div>
         <strong>No tasks match these filters</strong>
-        <span>Try another filter combination or clear the active filters.</span>
-        @if (board.hasFilters()) {
+        <span>Try another status or scope.</span>
+        @if (board.hasStatusFilter()) {
           <button
             class="pm-button pm-button--secondary"
             type="button"
-            (click)="board.clearFilters()"
+            (click)="board.clearStatus()"
           >
-            Clear filters
+            Clear status
+          </button>
+        }
+        @if (board.hasScopeFilter()) {
+          <button class="pm-button pm-button--ghost" type="button" (click)="board.resetScope()">
+            View whole project
           </button>
         }
       </div>

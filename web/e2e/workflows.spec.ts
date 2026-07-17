@@ -13,10 +13,13 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByRole('heading', { name: 'Tasks' })).toBeAttached();
 
-  await page.getByLabel('Track').selectOption('OPS');
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('link', { name: /Operations/ }).click();
   await expect(page).toHaveURL(/track=OPS/);
   await expect(page.locator('[pmTaskRow]')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Clear filters' }).click();
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('link', { name: /All tasks/ }).click();
   await expect(page).not.toHaveURL(/track=/);
 
   await page.goto('/tasks/E2E-0001?state=todo');
