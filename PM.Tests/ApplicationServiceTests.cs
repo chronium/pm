@@ -700,6 +700,46 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task TaskServiceSearchScopesToSelectionAndSupportsProjectWideOverride()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new() { ["PM"] = "Product", ["BUILD"] = "Build" },
+            milestones: new() { ["M1"] = "First", ["M2"] = "Second" }));
+        var selected = TestData.Task("BUILD-0001", "Needle selected", track: "BUILD", milestone: "M1");
+        var otherMilestone = TestData.Task("BUILD-0002", "Needle other milestone", track: "BUILD", milestone: "M2");
+        var otherTrack = TestData.Task("PM-0003", "Needle other track", track: "PM", milestone: "M1");
+        foreach (var task in new[] { selected, otherMilestone, otherTrack }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(selected, "todo");
+        projectRoot.UpdateTaskState(otherMilestone, "review");
+        projectRoot.UpdateTaskState(otherTrack, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var context = new TaskSearchContext("BUILD", "M1", "todo");
+
+        Assert.Equal("BUILD-0001", Assert.Single(service.SearchTasks("needle", context: context).Payload!).Task.Id);
+        Assert.Equal("BUILD-0001", Assert.Single(service.SearchTasks("in: SELECTION", context: context).Payload!).Task.Id);
+        Assert.Equal(["BUILD-0001", "PM-0003"], service.SearchTasks("in:all state:todo", context: context)
+            .Payload!.Select(item => item.Task.Id));
+        Assert.Empty(service.SearchTasks("in:selection track:PM", context: context).Payload!);
+        Assert.Equal("PM-0003", Assert.Single(service.SearchTasks("in:all track:PM", context: context).Payload!).Task.Id);
+        Assert.Equal(3, service.SearchTasks("In:ALL", context: new TaskSearchContext("missing", "missing"))
+            .Payload!.Count);
+    }
+
+    [Theory]
+    [InlineData("in:")]
+    [InlineData("in: project")]
+    [InlineData("in:all in:selection")]
+    public async Task TaskServiceSearchRejectsInvalidScopePredicates(string query)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        Assert.Equal("invalid_task_query", service.SearchTasks(query).ErrorCode);
+    }
+
+    [Fact]
     public async Task NextTaskSelectsConfiguredStateOrderBeforeNewerLaterStatesAndFiltersByTrack()
     {
         using var workspace = new TempWorkingDirectory();

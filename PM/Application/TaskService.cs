@@ -175,7 +175,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         context ??= new TaskSearchContext();
         var normalizedContext = new TaskSearchContext(
             NormalizeFilter(context.Track), NormalizeFilter(context.Milestone), NormalizeFilter(context.State));
-        var contextError = ValidateSearchContext(normalizedContext);
+        var contextError = ValidateSearchContext(normalizedContext, parsedQuery.Payload!.Scope);
         if (contextError != null) return contextError;
 
         var search = parsedQuery.Payload!;
@@ -239,12 +239,13 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             .ToList());
     }
 
-    private AppResult<IReadOnlyList<TaskSearchResult>>? ValidateSearchContext(TaskSearchContext context)
+    private AppResult<IReadOnlyList<TaskSearchResult>>? ValidateSearchContext(TaskSearchContext context,
+        TaskSearchScope scope)
     {
         var config = projectRoot.Config!;
-        if (context.Track != null && !config.Tracks.ContainsKey(context.Track))
+        if (scope == TaskSearchScope.Selection && context.Track != null && !config.Tracks.ContainsKey(context.Track))
             return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_track", $"Track {context.Track} not found.");
-        if (context.Milestone != null && !config.Milestones.ContainsKey(context.Milestone))
+        if (scope == TaskSearchScope.Selection && context.Milestone != null && !config.Milestones.ContainsKey(context.Milestone))
             return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_milestone", $"Milestone {context.Milestone} not found.");
         if (context.State != null && !config.TaskStates.ContainsKey(context.State))
             return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_state", $"State {context.State} not found.");
@@ -259,8 +260,9 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
                MatchesAny(query.Milestones, task.Milestone ?? string.Empty) &&
                MatchesAnyTaskId(query.Ids, task.Id) &&
                MatchesContext(context.State, state) &&
-               MatchesContext(context.Track, track) &&
-               MatchesContext(context.Milestone, task.Milestone ?? string.Empty);
+               (query.Scope == TaskSearchScope.All ||
+                MatchesContext(context.Track, track) &&
+                MatchesContext(context.Milestone, task.Milestone ?? string.Empty));
     }
 
     private static bool MatchesAny(IReadOnlyList<string> values, string actual) =>

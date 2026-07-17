@@ -40,7 +40,7 @@ dotnet PM/bin/Debug/net10.0/PM.dll list
 Search tasks with free text and composable metadata filters:
 
 ```sh
-dotnet PM/bin/Debug/net10.0/PM.dll task search "render state:todo track:BUILD" --limit 20
+dotnet PM/bin/Debug/net10.0/PM.dll task search "render state:todo track:BUILD in:all" --limit 20
 ```
 
 Search wiki page titles, paths, and bodies:

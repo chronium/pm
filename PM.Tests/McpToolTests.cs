@@ -366,6 +366,7 @@ public class McpToolTests
 
         var structured = tools.SearchTasks("state:review milestone:m1");
         Assert.Equal("PM-0001", Assert.Single(structured.Data!.Tasks).Id);
+        Assert.Equal(3, tools.SearchTasks("in:all").Data!.Tasks.Count);
     }
 
     [Fact]

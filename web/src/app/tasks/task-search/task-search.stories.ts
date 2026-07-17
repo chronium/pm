@@ -90,6 +90,12 @@ export const Default: Story = {
 export const Suggestions: Story = {
   play: async ({ canvasElement }) => void (await search(canvasElement, 'state:')),
 };
+export const ScopeSuggestions: Story = {
+  play: async ({ canvasElement }) => void (await search(canvasElement, 'in:')),
+};
+export const ProjectWide: Story = {
+  play: async ({ canvasElement }) => void (await search(canvasElement, 'render in:all')),
+};
 export const Results: Story = {
   play: async ({ canvasElement }) => void (await search(canvasElement, 'render')),
 };

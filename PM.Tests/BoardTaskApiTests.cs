@@ -344,6 +344,10 @@ public partial class ApiContractTests
                 "/api/v1/tasks/search?query=id%3A%202");
             Assert.Equal("PM-0002", Assert.Single(numericId!).Id);
 
+            var projectWide = await client.GetFromJsonAsync<List<TaskSearchResultResponse>>(
+                "/api/v1/tasks/search?query=needle%20in%3Aall&track=BUILD");
+            Assert.Equal(["BUILD-0001", "PM-0002"], projectWide!.Select(item => item.Id));
+
             var invalid = await client.GetAsync("/api/v1/tasks/search?query=state%3A");
             Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
             Assert.Equal("invalid_task_query",

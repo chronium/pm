@@ -71,12 +71,15 @@ describe('TaskSearch', () => {
       [...element.querySelectorAll('[role="option"]')].map((option) => option.textContent),
     ).toEqual(
       expect.arrayContaining([
+        expect.stringContaining('in:'),
         expect.stringContaining('state:'),
         expect.stringContaining('milestone:'),
       ]),
     );
 
-    (element.querySelector('[role="option"]') as HTMLButtonElement).click();
+    [...element.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent?.includes('state:'))!
+      .click();
     await Promise.resolve();
     fixture.detectChanges();
     expect(input.value).toBe('state:');
@@ -86,9 +89,14 @@ describe('TaskSearch', () => {
     enter(element, 'milestone:M');
     fixture.detectChanges();
     expect(element.textContent).toContain('First milestone');
+
+    enter(element, 'in:');
+    fixture.detectChanges();
+    expect(element.textContent).toContain('selection');
+    expect(element.textContent).toContain('Whole project');
   });
 
-  it('debounces searches, forwards board filters, and cancels stale requests', async () => {
+  it('debounces searches, forwards sidebar scope but not legacy state, and cancels stale requests', async () => {
     const { fixture, element } = render();
     await TestBed.inject(Router).navigateByUrl('/tasks?track=BUILD&milestone=M1&state=todo');
     const input = enter(element, 'first');
@@ -98,7 +106,7 @@ describe('TaskSearch', () => {
     const first = http.expectOne((request) => request.url === '/api/v1/tasks/search');
     expect(first.request.params.get('track')).toBe('BUILD');
     expect(first.request.params.get('milestone')).toBe('M1');
-    expect(first.request.params.get('state')).toBe('todo');
+    expect(first.request.params.has('state')).toBe(false);
 
     enter(element, 'second');
     await debounce();
@@ -108,10 +116,32 @@ describe('TaskSearch', () => {
     expect(element.textContent).toContain('No matching tasks.');
   });
 
+  it('sends explicit selection and all predicates from scoped and whole-project routes', async () => {
+    const { element } = render();
+    const router = TestBed.inject(Router);
+    const http = TestBed.inject(HttpTestingController);
+    await router.navigateByUrl('/tasks?milestone=M1');
+    enter(element, 'in:selection state:todo');
+    await debounce();
+    const selected = http.expectOne((request) => request.url === '/api/v1/tasks/search');
+    expect(selected.request.params.get('query')).toBe('in:selection state:todo');
+    expect(selected.request.params.get('milestone')).toBe('M1');
+    selected.flush([]);
+
+    await router.navigateByUrl('/tasks');
+    enter(element, 'in:all');
+    await debounce();
+    const all = http.expectOne((request) => request.url === '/api/v1/tasks/search');
+    expect(all.request.params.get('query')).toBe('in:all');
+    expect(all.request.params.has('track')).toBe(false);
+    expect(all.request.params.has('milestone')).toBe(false);
+    all.flush([]);
+  });
+
   it('supports keyboard selection and opens a result without dropping query parameters', async () => {
     const { fixture, element } = render();
     const router = TestBed.inject(Router);
-    await router.navigateByUrl('/tasks?track=BUILD');
+    await router.navigateByUrl('/tasks?track=BUILD&state=todo&view=dense');
     const input = enter(element, 'render');
     input.focus();
     await debounce();
@@ -132,7 +162,7 @@ describe('TaskSearch', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(router.url).toBe('/tasks/BUILD-0001?track=BUILD');
+    expect(router.url).toBe('/tasks/BUILD-0001?track=BUILD&state=todo&view=dense');
     expect(input.value).toBe('');
   });
 

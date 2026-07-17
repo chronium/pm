@@ -9,7 +9,7 @@ import { TopBarSearch, type TopBarSearchOption } from '../../shared/top-bar-sear
 
 type TaskSearchResult = components['schemas']['TaskSearchResultResponse'];
 type SettingsResponse = components['schemas']['SettingsResponse'];
-type SearchField = 'state' | 'id' | 'track' | 'milestone';
+type SearchField = 'state' | 'id' | 'track' | 'milestone' | 'in';
 
 interface SearchOption extends TopBarSearchOption {
   kind: 'pattern' | 'value' | 'result';
@@ -19,6 +19,13 @@ interface SearchOption extends TopBarSearchOption {
 }
 
 const patterns: SearchOption[] = [
+  {
+    id: 'pattern-in',
+    kind: 'pattern',
+    primary: 'in:',
+    secondary: 'Search the sidebar selection or whole project',
+    field: 'in',
+  },
   {
     id: 'pattern-state',
     kind: 'pattern',
@@ -145,13 +152,14 @@ export class TaskSearch {
       return;
     }
     const settings = this.settings();
-    if (!settings) return;
+    if (!settings && active.field !== 'in') return;
     const configured =
-      active.field === 'state'
-        ? settings.statuses
-        : active.field === 'track'
-          ? settings.tracks
-          : settings.milestones;
+      active.field === 'in'
+        ? [
+            { key: 'selection', name: 'Current sidebar selection' },
+            { key: 'all', name: 'Whole project' },
+          ]
+        : this.configuredValues(active.field, settings!);
     const lowered = active.value.toLowerCase();
     if (configured.some((item) => item.key.toLowerCase() === lowered)) {
       this.suggestionOptions.set([]);
@@ -171,22 +179,30 @@ export class TaskSearch {
     );
   }
 
+  private configuredValues(field: Exclude<SearchField, 'id' | 'in'>, settings: SettingsResponse) {
+    return field === 'state'
+      ? settings.statuses
+      : field === 'track'
+        ? settings.tracks
+        : settings.milestones;
+  }
+
   private activeField(knownCaret?: number): { field: SearchField; value: string } | null {
     const caret = knownCaret ?? this.search()?.caret() ?? this.query().length;
     const before = this.query().slice(0, caret);
-    const match = before.match(/(?:^|\s)(state|id|track|milestone):\s*([^\s]*)$/i);
+    const match = before.match(/(?:^|\s)(state|id|track|milestone|in):\s*([^\s]*)$/i);
     return match ? { field: match[1]!.toLowerCase() as SearchField, value: match[2] ?? '' } : null;
   }
 
   private completeQuery(): boolean {
     const value = this.query().trim();
-    return !!value && !/(?:^|\s)(?:state|id|track|milestone):\s*$/i.test(value);
+    return !!value && !/(?:^|\s)(?:state|id|track|milestone|in):\s*$/i.test(value);
   }
 
   private replaceActiveToken(replacement: string): void {
     const caret = this.search()?.caret() ?? this.query().length;
     const before = this.query().slice(0, caret);
-    const fieldMatch = before.match(/(?:^|\s)(state|id|track|milestone):\s*[^\s]*$/i);
+    const fieldMatch = before.match(/(?:^|\s)(state|id|track|milestone|in):\s*[^\s]*$/i);
     const tokenMatch = before.match(/[^\s]*$/);
     const start = fieldMatch
       ? caret - fieldMatch[0].trimStart().length
@@ -209,7 +225,7 @@ export class TaskSearch {
   private searchParams(query: string): HttpParams {
     let params = new HttpParams().set('query', query).set('limit', 20);
     const current = this.router.parseUrl(this.router.url).queryParams;
-    for (const field of ['track', 'milestone', 'state'] as const) {
+    for (const field of ['track', 'milestone'] as const) {
       if (typeof current[field] === 'string' && current[field].trim())
         params = params.set(field, current[field]);
     }

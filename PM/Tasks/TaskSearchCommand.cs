@@ -50,7 +50,7 @@ public sealed class TaskSearchCommand(TaskService taskService) : Command<TaskSea
     public sealed class Settings : CommonSettings
     {
         [CommandArgument(0, "<query>")]
-        [Description("Full-text and structured task query")]
+        [Description("Full-text and structured task query (use in:all for project-wide search)")]
         public string Query { get; init; } = string.Empty;
 
         [CommandOption("--limit <COUNT>")]

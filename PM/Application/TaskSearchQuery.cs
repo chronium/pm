@@ -5,10 +5,19 @@ public sealed record TaskSearchQuery(
     IReadOnlyList<string> States,
     IReadOnlyList<string> Ids,
     IReadOnlyList<string> Tracks,
-    IReadOnlyList<string> Milestones)
+    IReadOnlyList<string> Milestones,
+    TaskSearchScope Scope,
+    bool HasScopePredicate)
 {
     public bool HasFreeText => !string.IsNullOrWhiteSpace(FreeText);
-    public bool HasFilters => States.Count > 0 || Ids.Count > 0 || Tracks.Count > 0 || Milestones.Count > 0;
+    public bool HasFilters => States.Count > 0 || Ids.Count > 0 || Tracks.Count > 0 || Milestones.Count > 0 ||
+                              HasScopePredicate;
+}
+
+public enum TaskSearchScope
+{
+    Selection,
+    All,
 }
 
 public sealed record TaskSearchContext(string? Track = null, string? Milestone = null, string? State = null);
@@ -16,7 +25,7 @@ public sealed record TaskSearchContext(string? Track = null, string? Milestone =
 public static class TaskSearchQueryParser
 {
     private static readonly HashSet<string> Fields =
-        new(["state", "id", "track", "milestone"], StringComparer.OrdinalIgnoreCase);
+        new(["state", "id", "track", "milestone", "in"], StringComparer.OrdinalIgnoreCase);
 
     public static AppResult<TaskSearchQuery> Parse(string query)
     {
@@ -27,6 +36,7 @@ public static class TaskSearchQueryParser
         var ids = new List<string>();
         var tracks = new List<string>();
         var milestones = new List<string>();
+        TaskSearchScope? scope = null;
         var freeText = new List<string>();
         var tokens = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
@@ -56,10 +66,21 @@ public static class TaskSearchQueryParser
                 case "id": ids.Add(value); break;
                 case "track": tracks.Add(value); break;
                 case "milestone": milestones.Add(value); break;
+                case "in":
+                    if (scope != null) return InvalidSingleValue(field);
+                    scope = value.ToLowerInvariant() switch
+                    {
+                        "selection" => TaskSearchScope.Selection,
+                        "all" => TaskSearchScope.All,
+                        _ => null,
+                    };
+                    if (scope == null) return InvalidScope(value);
+                    break;
             }
         }
 
-        var parsed = new TaskSearchQuery(string.Join(' ', freeText), states, ids, tracks, milestones);
+        var parsed = new TaskSearchQuery(string.Join(' ', freeText), states, ids, tracks, milestones,
+            scope ?? TaskSearchScope.Selection, scope != null);
         return parsed.HasFreeText || parsed.HasFilters
             ? AppResult<TaskSearchQuery>.Ok(parsed)
             : AppResult<TaskSearchQuery>.Fail("invalid_task_query", "Task search query is required.");
@@ -73,4 +94,11 @@ public static class TaskSearchQueryParser
 
     private static AppResult<TaskSearchQuery> Invalid(string field) =>
         AppResult<TaskSearchQuery>.Fail("invalid_task_query", $"Task search field {field}: requires a value.");
+
+    private static AppResult<TaskSearchQuery> InvalidSingleValue(string field) =>
+        AppResult<TaskSearchQuery>.Fail("invalid_task_query", $"Task search field {field}: may only be specified once.");
+
+    private static AppResult<TaskSearchQuery> InvalidScope(string value) =>
+        AppResult<TaskSearchQuery>.Fail("invalid_task_query",
+            $"Task search field in: does not support value {value}. Use selection or all.");
 }

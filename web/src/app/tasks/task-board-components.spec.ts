@@ -2,7 +2,6 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { TaskBoardFilters } from './task-board-filters/task-board-filters';
 import { TaskMilestone } from './task-milestone/task-milestone';
 import { TaskRow } from './task-row/task-row';
 import { TaskStatusGroup } from './task-status-group/task-status-group';
@@ -59,27 +58,6 @@ class StatusGroupHost {
 
 describe('Task board components', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter([])] }));
-
-  it('emits typed filter changes and clear intent while reflecting active filters', () => {
-    const fixture = TestBed.createComponent(TaskBoardFilters);
-    fixture.componentRef.setInput('states', [{ key: 'todo', name: 'To do' }]);
-    fixture.componentRef.setInput('filters', { state: 'todo' });
-    const changes: unknown[] = [];
-    let clears = 0;
-    fixture.componentInstance.filterChange.subscribe((change) => changes.push(change));
-    fixture.componentInstance.clearIntent.subscribe(() => clears++);
-    fixture.detectChanges();
-
-    const selects = fixture.nativeElement.querySelectorAll(
-      'select',
-    ) as NodeListOf<HTMLSelectElement>;
-    expect(selects).toHaveLength(1);
-    selects[0]!.value = 'todo';
-    selects[0]!.dispatchEvent(new Event('change'));
-    fixture.nativeElement.querySelector('button').click();
-    expect(changes).toEqual([{ filter: 'state', value: 'todo' }]);
-    expect(clears).toBe(1);
-  });
 
   it('suppresses empty statuses and emits milestone-scoped collapse intent', () => {
     const fixture = TestBed.createComponent(TaskMilestone);

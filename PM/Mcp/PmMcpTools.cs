@@ -96,7 +96,7 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "search_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown with case-insensitive matching.")]
+    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown with case-insensitive matching. Structured predicates include state:, id:, track:, milestone:, and in:selection or in:all.")]
     public McpToolResponse<TaskSearchPayload> SearchTasks(string query, int limit = 20)
     {
         var result = taskService.SearchTasks(query, limit);

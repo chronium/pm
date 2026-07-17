@@ -34,30 +34,33 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'light');
 });
 
-test('task search composes filters, preserves board context, and handles text and empty results', async ({
+test('task search follows sidebar scope, supports in:all, and preserves board context', async ({
   page,
 }) => {
-  await page.goto('/tasks?state=todo');
+  await page.goto('/tasks?track=OPS&state=todo');
+  await expect(page.locator('form[aria-label="Board filters"]')).toHaveCount(0);
   const search = page.getByRole('combobox', { name: 'Search tasks' });
   const mobileSearch = page.getByRole('button', { name: 'Search tasks' });
   if (await mobileSearch.isVisible()) await mobileSearch.click();
-  await search.fill('milestone:current track:E2E');
-  const result = page.getByRole('option').filter({ hasText: 'E2E-0001' });
+  await search.fill('Fixture task');
+  await expect(page.getByRole('option').filter({ hasText: 'E2E-0001' })).toHaveCount(0);
+  const result = page.getByRole('option').filter({ hasText: 'E2E-0003' });
   await expect(result).toBeVisible();
   await result.click();
-  await expect(page).toHaveURL(/\/tasks\/E2E-0001\?state=todo$/);
+  await expect(page).toHaveURL(/\/tasks\/E2E-0003\?track=OPS&state=todo$/);
   await page.getByRole('button', { name: 'Close task dialog' }).click();
+  await expect(page).toHaveURL(/\/tasks\?track=OPS&state=todo$/);
 
   if (await mobileSearch.isVisible()) await mobileSearch.click();
-  await search.fill('Fixture task 2');
+  await search.fill('Fixture task 2 in:all state:todo');
   await expect(page.getByRole('option').filter({ hasText: 'E2E-0002' })).toBeVisible();
   await search.fill('definitely-no-such-task');
   await expect(page.getByText('No matching tasks.')).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('form[aria-label="Board filters"]')).toHaveCount(0);
   if (!(await search.isVisible())) await mobileSearch.click();
-  await expect(search).toBeVisible();
-  await search.fill('id:E2E-0003');
+  await search.fill('id:E2E-0003 in:selection');
   await expect(page.getByRole('option').filter({ hasText: 'E2E-0003' })).toBeVisible();
 });
 

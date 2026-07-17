@@ -8,18 +8,6 @@
     <span class="refresh-status" role="status">Live updates unavailable; retrying</span>
   }
 
-  @if (board.board(); as currentBoard) {
-    <form
-      pmTaskBoardFilters
-      class="filter-toolbar"
-      aria-label="Board filters"
-      [states]="currentBoard.states"
-      [filters]="board.filters()"
-      (filterChange)="board.setFilter($event.filter, $event.value)"
-      (clearIntent)="board.clearStatus()"
-    ></form>
-  }
-
   @if (board.error(); as error) {
     <pm-error-state>
       <div>

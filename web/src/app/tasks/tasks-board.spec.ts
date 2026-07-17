@@ -185,10 +185,7 @@ describe('TasksBoard', () => {
     expect(link?.textContent).toContain('A useful and intentionally long description preview');
     link?.focus();
     expect(document.activeElement).toBe(link);
-    expect(element.querySelector('form[aria-label="Board filters"] label')?.textContent).toContain(
-      'Status',
-    );
-    expect(element.querySelectorAll('form[aria-label="Board filters"] select')).toHaveLength(1);
+    expect(element.querySelector('form[aria-label="Board filters"]')).toBeNull();
   });
 
   it('shows one board-level empty state and offers clear filters', async () => {
@@ -237,6 +234,6 @@ describe('TasksBoard', () => {
       element.querySelector('.task-list li.selected a[aria-current="true"]')?.textContent,
     ).toContain('PM-0002');
     expect(element.querySelector('h1.visually-hidden')?.textContent).toBe('Tasks');
-    expect(element.querySelector<HTMLSelectElement>('select')?.value).toBe('');
+    expect(element.querySelector('form[aria-label="Board filters"]')).toBeNull();
   });
 });
