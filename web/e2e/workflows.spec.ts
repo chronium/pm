@@ -25,7 +25,7 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await page.goto('/tasks/E2E-0001?state=todo');
   await expect(page).toHaveURL(/\/tasks\/E2E-0001\?state=todo$/);
   await expect(page.getByText('E2E-0001', { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Close task dialog' }).click();
+  await page.getByRole('button', { name: 'Back' }).click();
 
   const theme = page.getByRole('button', { name: /Theme:/ });
   await theme.click();
@@ -36,7 +36,7 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
 
 test('task search follows sidebar scope, supports in:all, and preserves board context', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto('/tasks?track=OPS&state=todo');
   await expect(page.locator('form[aria-label="Board filters"]')).toHaveCount(0);
   const search = page.getByRole('combobox', { name: 'Search tasks' });
@@ -47,8 +47,13 @@ test('task search follows sidebar scope, supports in:all, and preserves board co
   const result = page.getByRole('option').filter({ hasText: 'E2E-0003' });
   await expect(result).toBeVisible();
   await result.click();
-  await expect(page).toHaveURL(/\/tasks\/E2E-0003\?track=OPS&state=todo$/);
-  await page.getByRole('button', { name: 'Close task dialog' }).click();
+  const mobileProject = testInfo.project.name.includes('mobile');
+  await expect(page).toHaveURL(
+    mobileProject
+      ? /\/tasks\/E2E-0003\?track=OPS&state=todo$/
+      : /\/tasks\/dialog\/E2E-0003\?track=OPS&state=todo$/,
+  );
+  await page.getByRole('button', { name: mobileProject ? 'Back' : 'Close', exact: true }).click();
   await expect(page).toHaveURL(/\/tasks\?track=OPS&state=todo$/);
 
   if (await mobileSearch.isVisible()) await mobileSearch.click();
@@ -62,6 +67,29 @@ test('task search follows sidebar scope, supports in:all, and preserves board co
   if (!(await search.isVisible())) await mobileSearch.click();
   await search.fill('id:E2E-0003 in:selection');
   await expect(page.getByRole('option').filter({ hasText: 'E2E-0003' })).toBeVisible();
+});
+
+test('uses desktop overlays, fullscreen replacement, and mobile canonical pages', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'This test switches from desktop to mobile.');
+  await page.goto('/tasks?track=E2E');
+  await page.getByRole('link', { name: /E2E-0001/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/dialog\/E2E-0001\?track=E2E$/);
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Full screen' }).click();
+  await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/tasks\?track=E2E$/);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('link', { name: /E2E-0001/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const description = await page.locator('.description-section').boundingBox();
+  const metadata = await page.locator('.metadata-column').boundingBox();
+  expect(metadata!.y).toBeGreaterThan(description!.y);
 });
 
 test('wiki search finds body content and opens a nested page', async ({ page }) => {
@@ -81,53 +109,67 @@ test('wiki search finds body content and opens a nested page', async ({ page }) 
 test('creates, opens, edits, moves, conflicts, and removes a task', async ({ page }) => {
   await page.goto('/tasks/new');
   await page.getByLabel('Title').fill('Created in Playwright');
-  await page.getByRole('button', { name: 'Create task' }).click();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(page).toHaveURL(/\/tasks\/E2E-1000$/);
-  await expect(page.getByRole('heading', { name: 'Created in Playwright' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit task title' })).toHaveText(
+    'Created in Playwright',
+  );
 
-  await page.getByRole('button', { name: 'Edit' }).click();
-  await page.locator('#edit-task-title').fill('Edited in Playwright');
-  await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('heading', { name: 'Edited in Playwright' })).toBeVisible();
-  await page.locator('#task-state').selectOption('in-progress');
-  await expect(page.locator('#task-state')).toHaveValue('in-progress');
+  await page.getByRole('button', { name: 'Edit task title' }).click();
+  await page.locator('#workspace-title').fill('Edited in Playwright');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit task title' })).toHaveText(
+    'Edited in Playwright',
+  );
+  await page.getByRole('button', { name: 'Edit task status' }).click();
+  await page.locator('#workspace-status').selectOption('in-progress');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit task status' })).toContainText('In Progress');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
-  await page.locator('#edit-task-title').fill('Draft title');
-  await page.locator('#edit-task-track').selectOption('OPS');
+  await page.getByRole('button', { name: 'Edit task title' }).click();
+  await page.locator('#workspace-title').fill('Draft title');
+  await page.locator('.property-field').filter({ hasText: 'Track' }).getByRole('button').click();
+  await page.locator('#workspace-track').selectOption('OPS');
   const taskPath = join(projectRoot, '.pm', 'tasks', 'E2E-1000.md');
   const external = `${await readFile(taskPath, 'utf8')}\nExternal change.\n`;
   await writeFile(taskPath, external);
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('This task changed elsewhere.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Review latest' }).click();
   await page.getByRole('button', { name: 'Restore draft' }).click();
-  await expect(page.locator('#edit-task-track')).toHaveValue('OPS');
-  await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('heading', { name: 'Draft title' })).toBeVisible();
-  await expect(page.getByRole('dialog').getByText('OPS', { exact: true })).toBeVisible();
+  await expect(page.locator('#workspace-track')).toHaveValue('OPS');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit task title' })).toHaveText('Draft title');
+  await expect(page.getByRole('button', { name: 'Edit task track' })).toContainText('Operations');
 
-  await page.getByRole('button', { name: 'Remove' }).click();
-  await page.getByRole('button', { name: 'Remove task' }).click();
+  await page.locator('.remove-action').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove task' }).click();
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByText('Edited in Playwright')).toHaveCount(0);
 });
 
 test('editing placement refreshes a scoped board while keeping its dialog and scope', async ({
   page,
-}) => {
-  await page.goto('/tasks/E2E-0001?track=E2E&milestone=current');
-  await expect(page.getByRole('heading', { name: 'Fixture task 1' })).toBeVisible();
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name.includes('mobile'),
+    'Scoped board refresh is a desktop overlay flow.',
+  );
+  await page.goto('/tasks?track=E2E&milestone=current');
+  await page.getByRole('link', { name: /E2E-0001/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/dialog\/E2E-0001\?track=E2E&milestone=current$/);
+  await expect(page.getByRole('button', { name: 'Edit task title' })).toHaveText('Fixture task 1');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
-  await page.locator('#edit-task-track').selectOption('OPS');
-  await page.locator('#edit-task-milestone').selectOption('later');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Edit task track' }).click();
+  await page.locator('#workspace-track').selectOption('OPS');
+  await page.getByRole('button', { name: 'Edit task milestone' }).click();
+  await page.locator('#workspace-milestone').selectOption('later');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-  await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E&milestone=current$/);
-  await expect(page.getByRole('heading', { name: 'Fixture task 1' })).toBeVisible();
-  await expect(page.getByRole('dialog').getByText('OPS', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Close task dialog' }).click();
+  await expect(page).toHaveURL(/\/tasks\/dialog\/E2E-0001\?track=E2E&milestone=current$/);
+  await expect(page.getByRole('button', { name: 'Edit task title' })).toHaveText('Fixture task 1');
+  await expect(page.getByRole('button', { name: 'Edit task track' })).toContainText('Operations');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page).toHaveURL(/\/tasks\?track=E2E&milestone=current$/);
   await expect(page.getByText('Fixture task 1', { exact: true })).toHaveCount(0);
 });

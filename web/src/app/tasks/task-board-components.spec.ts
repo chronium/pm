@@ -100,7 +100,7 @@ describe('Task board components', () => {
     const link = readyFixture.nativeElement.querySelector('a') as HTMLAnchorElement;
     expect(readyFixture.nativeElement.classList.contains('selected')).toBe(true);
     expect(link.getAttribute('aria-current')).toBe('true');
-    expect(link.getAttribute('href')).toBe('/PM-0055');
+    expect(link.getAttribute('href')).toBe('/tasks/PM-0055');
     expect(link.textContent).toContain('PM-0055');
     expect(link.textContent).toContain('angular-web');
     expect(link.textContent).toContain('Priority: high');

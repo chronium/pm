@@ -110,7 +110,7 @@ describe('TasksBoard', () => {
           {
             path: 'tasks',
             component: TasksBoard,
-            children: [{ path: ':taskId', component: NestedTaskHost }],
+            children: [{ path: 'dialog/:taskId', component: NestedTaskHost }],
           },
         ]),
         provideHttpClient(),
@@ -228,8 +228,8 @@ describe('TasksBoard', () => {
   });
 
   it('keeps the board mounted, preserves filters, and visibly selects a nested task route', async () => {
-    const { element, router } = await render('/tasks/PM-0002?track=BUILD');
-    expect(router.url).toBe('/tasks/PM-0002?track=BUILD');
+    const { element, router } = await render('/tasks/dialog/PM-0002?track=BUILD');
+    expect(router.url).toBe('/tasks/dialog/PM-0002?track=BUILD');
     expect(
       element.querySelector('.task-list li.selected a[aria-current="true"]')?.textContent,
     ).toContain('PM-0002');

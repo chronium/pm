@@ -44,6 +44,15 @@ export class TaskSidebar {
     this.layout.closeMobileSidebar(false);
   }
 
+  protected openNew(event: MouseEvent): void {
+    this.layout.closeMobileSidebar(false);
+    this.navigation.openDialog(event, this.router, 'new');
+  }
+
+  protected newTaskHref(): string {
+    return this.navigation.canonicalHref(this.router, 'new');
+  }
+
   private path(): string {
     return `/${
       this.router

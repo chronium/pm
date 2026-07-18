@@ -1,0 +1,356 @@
+@if (options.loading() || (mode() === 'detail' && detail.loading())) {
+  <pm-loading-state>Loading task workspace…</pm-loading-state>
+} @else if (options.error(); as optionsError) {
+  <pm-error-state>
+    <div>
+      <strong>Could not load task options</strong><span>{{ optionsError }}</span>
+      <button type="button" class="pm-button pm-button--secondary" (click)="options.reload()">
+        Retry
+      </button>
+    </div>
+  </pm-error-state>
+} @else if (mode() === 'detail' && detail.error(); as loadError) {
+  <pm-error-state>
+    <div>
+      <strong>Could not load task</strong><span>{{ loadError }}</span>
+      <button type="button" class="pm-button pm-button--secondary" (click)="detail.reload()">
+        Retry
+      </button>
+    </div>
+  </pm-error-state>
+} @else if (options.options()) {
+  <form class="task-workspace" (submit)="$event.preventDefault(); save(false)" novalidate>
+    @if (detail.liveUpdateUnavailable()) {
+      <p class="workspace-notice" role="status">Live updates unavailable; retrying</p>
+    }
+    @if (detail.unavailable()) {
+      <pm-error-state>
+        <strong>Task unavailable</strong>
+        <span>This task was removed or renamed outside this view.</span>
+      </pm-error-state>
+    }
+    @if (conflictPhase(); as phase) {
+      <pm-external-change-banner
+        [phase]="phase"
+        heading="This task changed elsewhere."
+        (review)="reviewLatest()"
+        (restore)="restoreDraft()"
+        (keep)="keepLatest()"
+      />
+    }
+    @if (error()) {
+      <p class="workspace-error" role="alert">{{ error() }}</p>
+    }
+
+    <header class="workspace-header">
+      <div class="task-context-line">
+        <span class="task-id">{{ mode() === 'create' ? 'New task' : detail.task()?.id }}</span>
+        @if (mode() === 'create') {
+          <span class="context-value">{{ statusName() }}</span>
+        } @else if (activeField() === 'status') {
+          <label class="visually-hidden" for="workspace-status">Status</label>
+          <select
+            id="workspace-status"
+            pmControl
+            [formField]="workspaceForm.state"
+            aria-label="Task status"
+            autofocus
+            (blur)="activeField.set(null)"
+          >
+            @for (status of options.options()!.statuses; track status.key) {
+              <option [value]="status.key">{{ status.name }}</option>
+            }
+          </select>
+        } @else {
+          <button
+            type="button"
+            class="inline-value inline-status"
+            [disabled]="pending() || blocked()"
+            aria-label="Edit task status"
+            (click)="activate('status')"
+          >
+            {{ statusName() }}
+          </button>
+        }
+      </div>
+
+      <div class="title-row">
+        <div class="title-field">
+          @if (mode() === 'create' || activeField() === 'title') {
+            <label class="visually-hidden" for="workspace-title">Title</label>
+            <input
+              id="workspace-title"
+              class="title-input"
+              pmControl
+              [formField]="workspaceForm.title"
+              autocomplete="off"
+              placeholder="Task title"
+              autofocus
+              (blur)="mode() === 'detail' && activeField.set(null)"
+            />
+          } @else {
+            <button
+              type="button"
+              class="inline-value title-value"
+              [disabled]="pending() || blocked()"
+              aria-label="Edit task title"
+              (click)="activate('title')"
+            >
+              {{ model().title }}
+            </button>
+          }
+          @if (workspaceForm.title().touched() && firstError(workspaceForm.title())) {
+            <p class="field-error">{{ firstError(workspaceForm.title()) }}</p>
+          }
+        </div>
+
+        <div class="host-actions" aria-label="Task actions">
+          @if (dirty()) {
+            <button
+              type="button"
+              class="pm-button pm-button--primary"
+              [disabled]="pending() || blocked() || !workspaceForm().valid()"
+              (click)="save(false)"
+            >
+              {{
+                pending()
+                  ? mode() === 'create'
+                    ? 'Creating…'
+                    : 'Saving…'
+                  : mode() === 'create'
+                    ? 'Create'
+                    : 'Save'
+              }}
+            </button>
+            <button
+              type="button"
+              class="pm-button pm-button--secondary"
+              [disabled]="pending()"
+              (click)="cancel()"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="pm-button pm-button--secondary"
+              [disabled]="pending() || blocked() || !workspaceForm().valid()"
+              (click)="save(true)"
+            >
+              {{ mode() === 'create' ? 'Create and close' : 'Save and close' }}
+            </button>
+          } @else {
+            @if (presentation() === 'dialog') {
+              <button
+                type="button"
+                class="pm-button pm-button--ghost"
+                (click)="fullscreenIntent.emit()"
+              >
+                Full screen
+              </button>
+            }
+            <button type="button" class="pm-button pm-button--secondary" (click)="requestClose()">
+              {{ presentation() === 'dialog' ? 'Close' : 'Back' }}
+            </button>
+          }
+        </div>
+      </div>
+    </header>
+
+    <div class="property-row">
+      <div class="property-field">
+        <span class="property-label">Track</span>
+        @if (mode() === 'create' || activeField() === 'track') {
+          <label class="visually-hidden" for="workspace-track">Track</label>
+          <select
+            id="workspace-track"
+            pmControl
+            [formField]="workspaceForm.track"
+            (blur)="mode() === 'detail' && activeField.set(null)"
+          >
+            @for (track of options.options()!.tracks; track track.key) {
+              <option [value]="track.key">{{ track.name }}</option>
+            }
+          </select>
+        } @else {
+          <button
+            type="button"
+            class="inline-value"
+            aria-label="Edit task track"
+            [disabled]="pending() || blocked()"
+            (click)="activate('track')"
+          >
+            {{ trackName() }}
+          </button>
+        }
+        @if (firstError(workspaceForm.track())) {
+          <p class="field-error">{{ firstError(workspaceForm.track()) }}</p>
+        }
+      </div>
+      <div class="property-field">
+        <span class="property-label">Milestone</span>
+        @if (mode() === 'create' || activeField() === 'milestone') {
+          <label class="visually-hidden" for="workspace-milestone">Milestone</label>
+          <select
+            id="workspace-milestone"
+            pmControl
+            [formField]="workspaceForm.milestone"
+            (blur)="mode() === 'detail' && activeField.set(null)"
+          >
+            <option value="">No milestone</option>
+            @for (milestone of options.options()!.milestones; track milestone.key) {
+              <option [value]="milestone.key">{{ milestone.title }}</option>
+            }
+          </select>
+        } @else {
+          <button
+            type="button"
+            class="inline-value"
+            aria-label="Edit task milestone"
+            [disabled]="pending() || blocked()"
+            (click)="activate('milestone')"
+          >
+            {{ milestoneName() }}
+          </button>
+        }
+        @if (firstError(workspaceForm.milestone())) {
+          <p class="field-error">{{ firstError(workspaceForm.milestone()) }}</p>
+        }
+      </div>
+      <div class="property-field">
+        <span class="property-label">Priority</span>
+        @if (mode() === 'create') {
+          <span class="context-value">Inherited ({{ creationPriority() }})</span>
+        } @else if (activeField() === 'priority') {
+          <label class="visually-hidden" for="workspace-priority">Priority</label>
+          <select
+            id="workspace-priority"
+            pmControl
+            [formField]="workspaceForm.priority"
+            (blur)="activeField.set(null)"
+          >
+            <option value="inherit">Inherit</option>
+            @for (priority of options.options()!.priorityOptions; track priority) {
+              <option [value]="priority">{{ priority | titlecase }}</option>
+            }
+          </select>
+        } @else {
+          <button
+            type="button"
+            class="inline-value"
+            aria-label="Edit task priority"
+            [disabled]="pending() || blocked()"
+            (click)="activate('priority')"
+          >
+            {{ priorityName() }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <hr />
+
+    <div class="workspace-columns">
+      <section class="description-section" aria-labelledby="description-heading">
+        <div class="section-heading">
+          <h2 id="description-heading">Description</h2>
+          @if (mode() === 'detail' && activeField() !== 'description') {
+            <button
+              type="button"
+              class="icon-button"
+              aria-label="Edit task description"
+              title="Edit description"
+              [disabled]="pending() || blocked()"
+              (click)="activate('description')"
+            >
+              <ng-icon name="cssPen" aria-hidden="true" />
+            </button>
+          }
+        </div>
+        @if (mode() === 'create' || activeField() === 'description') {
+          <pm-markdown-editor
+            pmControl
+            [formField]="workspaceForm.description"
+            label="Description"
+            aria-labelledby="description-heading"
+          />
+        } @else {
+          <pm-markdown-display [markdown]="model().description || '_No description provided._'" />
+        }
+      </section>
+
+      <aside class="metadata-column" aria-label="Task metadata">
+        @if (mode() === 'detail' && detail.task(); as task) {
+          <section class="dependencies" aria-labelledby="dependencies-heading">
+            <h2 id="dependencies-heading">Dependencies</h2>
+            <p>{{ task.dependencies.summary }}</p>
+            @if (task.dependencies.dependsOn.length) {
+              <div class="dependency-list">
+                <span>Depends on</span>
+                @for (id of task.dependencies.dependsOn; track id) {
+                  <a
+                    [routerLink]="['/tasks', id]"
+                    queryParamsHandling="preserve"
+                    (click)="dependencyClick($event, id)"
+                    >{{ id }}</a
+                  >
+                }
+              </div>
+            }
+            @if (task.dependencies.waitingOn.length) {
+              <p>Waiting on: {{ task.dependencies.waitingOn.join(', ') }}</p>
+            }
+            @if (task.dependencies.missing.length) {
+              <p>Missing: {{ task.dependencies.missing.join(', ') }}</p>
+            }
+          </section>
+
+          <div class="metadata-spacer"></div>
+          <button
+            type="button"
+            class="remove-action"
+            [disabled]="pending() || blocked()"
+            (click)="confirmKind.set('remove')"
+          >
+            Remove task
+          </button>
+          <dl class="timestamps">
+            <div>
+              <dt>Created</dt>
+              <dd>
+                <time [attr.datetime]="task.createdAt">{{ task.createdAt | date: 'medium' }}</time>
+              </dd>
+            </div>
+            <div>
+              <dt>Modified</dt>
+              <dd>
+                <time [attr.datetime]="task.modifiedAt">{{
+                  task.modifiedAt | date: 'medium'
+                }}</time>
+              </dd>
+            </div>
+          </dl>
+        } @else {
+          <section class="creation-context" aria-labelledby="defaults-heading">
+            <h2 id="defaults-heading">Defaults</h2>
+            <p>Status: {{ statusName() }}</p>
+            <p>Priority: Inherited ({{ creationPriority() }})</p>
+          </section>
+        }
+      </aside>
+    </div>
+  </form>
+}
+
+<pm-confirm-dialog
+  [open]="confirmKind() !== null"
+  [pending]="pending()"
+  [heading]="confirmKind() === 'remove' ? 'Remove this task?' : 'Discard task changes?'"
+  [message]="
+    confirmKind() === 'remove'
+      ? 'This removes the task file and cannot be undone.'
+      : 'Your unsaved task changes will be lost.'
+  "
+  [confirmLabel]="confirmKind() === 'remove' ? 'Remove task' : 'Discard changes'"
+  (confirmed)="confirm()"
+  (cancelled)="cancelConfirm()"
+/>

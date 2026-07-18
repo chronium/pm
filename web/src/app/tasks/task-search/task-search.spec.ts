@@ -29,6 +29,7 @@ describe('TaskSearch', () => {
         provideRouter([
           { path: 'tasks', component: EmptyRoute },
           { path: 'tasks/:taskId', component: EmptyRoute },
+          { path: 'tasks/dialog/:taskId', component: EmptyRoute },
         ]),
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -162,7 +163,7 @@ describe('TaskSearch', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(router.url).toBe('/tasks/BUILD-0001?track=BUILD&state=todo&view=dense');
+    expect(router.url).toBe('/tasks/dialog/BUILD-0001?track=BUILD&state=todo&view=dense');
     expect(input.value).toBe('');
   });
 

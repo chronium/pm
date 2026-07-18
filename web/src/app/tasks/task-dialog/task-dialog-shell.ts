@@ -10,6 +10,7 @@ export class TaskDialogShell implements AfterViewInit {
   readonly title = input.required<string>();
   readonly eyebrow = input('Task');
   readonly pending = input(false);
+  readonly chrome = input(true);
   readonly closeIntent = output<void>();
   protected readonly headingId = `pm-task-dialog-${TaskDialogShell.nextId++}`;
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');

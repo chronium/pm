@@ -30,22 +30,38 @@ export const routes: Routes = [
         component: TasksBoard,
         children: [
           {
-            path: 'new',
+            path: 'dialog/new',
             loadComponent: () =>
-              import('./tasks/task-dialog/task-create-dialog').then(
-                (module) => module.TaskCreateDialog,
+              import('./tasks/task-workspace/task-dialog-host').then(
+                (module) => module.TaskDialogHost,
               ),
+            data: { mode: 'create' },
             canDeactivate: [canLeaveDirtyRoute],
           },
           {
-            path: ':taskId',
+            path: 'dialog/:taskId',
             loadComponent: () =>
-              import('./tasks/task-dialog/task-detail-dialog').then(
-                (module) => module.TaskDetailDialog,
+              import('./tasks/task-workspace/task-dialog-host').then(
+                (module) => module.TaskDialogHost,
               ),
+            data: { mode: 'detail' },
             canDeactivate: [canLeaveDirtyRoute],
           },
         ],
+      },
+      {
+        path: 'new',
+        loadComponent: () =>
+          import('./tasks/task-workspace/task-page-host').then((module) => module.TaskPageHost),
+        data: { mode: 'create' },
+        canDeactivate: [canLeaveDirtyRoute],
+      },
+      {
+        path: ':taskId',
+        loadComponent: () =>
+          import('./tasks/task-workspace/task-page-host').then((module) => module.TaskPageHost),
+        data: { mode: 'detail' },
+        canDeactivate: [canLeaveDirtyRoute],
       },
     ],
   },

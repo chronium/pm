@@ -6,6 +6,7 @@ import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switc
 
 import type { components } from '../../api/generated/pm-api';
 import { TopBarSearch, type TopBarSearchOption } from '../../shared/top-bar-search/top-bar-search';
+import { TaskNavigationService } from '../task-navigation.service';
 
 type TaskSearchResult = components['schemas']['TaskSearchResultResponse'];
 type SettingsResponse = components['schemas']['SettingsResponse'];
@@ -77,6 +78,7 @@ const patterns: SearchOption[] = [
 export class TaskSearch {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly navigation = inject(TaskNavigationService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly search = viewChild(TopBarSearch);
   private readonly requests = new Subject<string>();
@@ -247,12 +249,11 @@ export class TaskSearch {
   }
 
   private async openTask(result: TaskSearchResult): Promise<void> {
-    const queryParams = this.router.parseUrl(this.router.url).queryParams;
     this.query.set('');
     this.resultOptions.set([]);
     this.suggestionOptions.set([]);
     this.search()?.close();
-    await this.router.navigate(['/tasks', result.id], { queryParams });
+    await this.navigation.navigateToTask(this.router, result.id);
   }
 
   private readError(error: unknown): string {

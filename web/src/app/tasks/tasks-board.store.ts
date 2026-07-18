@@ -6,6 +6,7 @@ import { filter, map } from 'rxjs';
 
 import type { components, operations } from '../api/generated/pm-api';
 import { PollingCoordinator } from '../core/polling-coordinator';
+import { TaskNavigationService } from './task-navigation.service';
 
 export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
 export type BoardQuery = NonNullable<operations['GetBoard']['parameters']['query']>;
@@ -23,6 +24,7 @@ export interface StatusOpenIntent {
 export class TasksBoardStore {
   private readonly router = inject(Router);
   private readonly polling = inject(PollingCoordinator);
+  private readonly navigation = inject(TaskNavigationService);
   private readonly retainedBoard = signal<BoardResponse | undefined>(undefined);
   private readonly retainedEtag = signal('');
   private pollingActive = false;
@@ -98,6 +100,9 @@ export class TasksBoardStore {
       this.filters();
       this.pollStatus.restart(false);
     });
+    effect(() => {
+      if (this.navigation.refreshRequest() > 0) this.reload();
+    });
   }
 
   setFilter(filterName: BoardFilter, value: string | null): Promise<boolean> {
@@ -170,14 +175,21 @@ export class TasksBoardStore {
     const primary = this.router.parseUrl(this.currentUrl()).root.children['primary'];
     const segments = primary?.segments ?? [];
     const tasksIndex = segments.findIndex((segment) => segment.path === 'tasks');
-    return tasksIndex >= 0 && segments.length > tasksIndex + 1
-      ? segments[tasksIndex + 1]!.path
-      : null;
+    if (tasksIndex < 0 || segments.length <= tasksIndex + 1) return null;
+    const next = segments[tasksIndex + 1]!.path;
+    return next === 'dialog' ? (segments[tasksIndex + 2]?.path ?? null) : null;
   }
 
   private boardRouteActive(): boolean {
-    const id = this.taskIdFromUrl();
-    return id === null || id === 'new';
+    return this.currentPathSegments()[1] !== 'settings';
+  }
+
+  private currentPathSegments(): string[] {
+    return (
+      this.router
+        .parseUrl(this.currentUrl())
+        .root.children['primary']?.segments.map((segment) => segment.path) ?? []
+    );
   }
 
   private acceptPoll(response: HttpResponse<BoardResponse>): void {

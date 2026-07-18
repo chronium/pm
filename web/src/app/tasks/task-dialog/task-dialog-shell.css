@@ -2,7 +2,7 @@
   display: contents;
 }
 .task-dialog {
-  width: min(760px, calc(100vw - 32px));
+  width: min(1120px, calc(100vw - 32px));
   max-width: none;
   max-height: calc(100dvh - 32px);
   padding: 0;

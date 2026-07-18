@@ -242,7 +242,7 @@ describe('application shell', () => {
   });
 
   it('keeps All tasks exact while a nested task remains in the board workspace', async () => {
-    const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
+    const { fixture } = await renderAt('/tasks/dialog/PM-0049?track=PM');
     const allTasks = fixture.nativeElement.querySelector('aside a[href^="/tasks?"]');
     expect(allTasks?.classList.contains('active')).toBe(false);
     expect(fixture.nativeElement.querySelector('main h1')?.textContent).toBe('Tasks');

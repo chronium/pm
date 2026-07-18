@@ -16,9 +16,7 @@
       >
     }
   </a>
-  <a routerLink="/tasks/new" queryParamsHandling="preserve" (click)="select($event, true)"
-    >New task</a
-  >
+  <a [attr.href]="newTaskHref()" (click)="openNew($event)">New task</a>
 
   <div class="scope-scroll" aria-live="polite">
     @if (store.loading()) {

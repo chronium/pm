@@ -1,9 +1,4 @@
-<a
-  [routerLink]="[task().id]"
-  queryParamsHandling="preserve"
-  [attr.aria-current]="selected() ? 'true' : null"
-  (click)="captureOrigin($event)"
->
+<a [attr.href]="href()" [attr.aria-current]="selected() ? 'true' : null" (click)="open($event)">
   <span class="task-identity"
     ><span class="task-id">{{ task().id }}</span
     ><span class="task-title">{{ task().title }}</span></span
