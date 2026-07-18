@@ -24,10 +24,12 @@ import { TaskWorkspace } from './task-workspace';
   styles: `
     :host {
       display: block;
+      height: 100%;
       min-width: 0;
     }
     .task-page {
       width: 100%;
+      height: 100%;
       box-sizing: border-box;
       padding: var(--pm-space-5);
     }
