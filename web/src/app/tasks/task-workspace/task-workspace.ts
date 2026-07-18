@@ -13,7 +13,7 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssPen } from '@ng-icons/css.gg';
+import { cssClose, cssMaximize, cssPen } from '@ng-icons/css.gg';
 import { firstValueFrom } from 'rxjs';
 
 import { ExternalChangeBanner, type ExternalChangePhase } from '../../core/external-change-banner';
@@ -67,7 +67,7 @@ type ConfirmKind = 'discard' | 'remove' | null;
     RouterLink,
     TitleCasePipe,
   ],
-  providers: [TaskDetailResource, provideIcons({ cssPen })],
+  providers: [TaskDetailResource, provideIcons({ cssClose, cssMaximize, cssPen })],
   templateUrl: './task-workspace.html',
   styleUrl: './task-workspace.css',
 })

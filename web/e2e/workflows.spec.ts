@@ -53,7 +53,9 @@ test('task search follows sidebar scope, supports in:all, and preserves board co
       ? /\/tasks\/E2E-0003\?track=OPS&state=todo$/
       : /\/tasks\/dialog\/E2E-0003\?track=OPS&state=todo$/,
   );
-  await page.getByRole('button', { name: mobileProject ? 'Back' : 'Close', exact: true }).click();
+  await page
+    .getByRole('button', { name: mobileProject ? 'Back' : 'Close task dialog', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/tasks\?track=OPS&state=todo$/);
 
   if (await mobileSearch.isVisible()) await mobileSearch.click();
@@ -169,7 +171,7 @@ test('editing placement refreshes a scoped board while keeping its dialog and sc
   await expect(page).toHaveURL(/\/tasks\/dialog\/E2E-0001\?track=E2E&milestone=current$/);
   await expect(page.getByRole('button', { name: 'Edit task title' })).toHaveText('Fixture task 1');
   await expect(page.getByRole('button', { name: 'Edit task track' })).toContainText('Operations');
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Close task dialog', exact: true }).click();
   await expect(page).toHaveURL(/\/tasks\?track=E2E&milestone=current$/);
   await expect(page.getByText('Fixture task 1', { exact: true })).toHaveCount(0);
 });

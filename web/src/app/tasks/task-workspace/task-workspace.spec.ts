@@ -63,9 +63,9 @@ describe('TaskWorkspace', () => {
     TestBed.resetTestingModule();
   });
 
-  async function render(mode: 'detail' | 'create') {
+  async function render(mode: 'detail' | 'create', presentation: 'dialog' | 'page' = 'page') {
     const fixture = TestBed.createComponent(TaskWorkspace);
-    fixture.componentRef.setInput('presentation', 'page');
+    fixture.componentRef.setInput('presentation', presentation);
     fixture.componentRef.setInput('mode', mode);
     if (mode === 'detail') fixture.componentRef.setInput('taskId', task.id);
     fixture.detectChanges();
@@ -83,6 +83,16 @@ describe('TaskWorkspace', () => {
     element.value = value;
     element.dispatchEvent(new Event('input'));
   }
+
+  it('uses compact icon-only actions in dialog hosts', async () => {
+    const { element } = await render('detail', 'dialog');
+    const fullscreen = element.querySelector('[aria-label="Full screen"]') as HTMLButtonElement;
+    const close = element.querySelector('[aria-label="Close task dialog"]') as HTMLButtonElement;
+    expect(fullscreen.textContent?.trim()).toBe('');
+    expect(fullscreen.title).toBe('Open task in full screen');
+    expect(close.textContent?.trim()).toBe('');
+    expect(close.title).toBe('Close');
+  });
 
   it('uses configured display names and activates one stable inline field at a time', async () => {
     const { fixture, element } = await render('detail');

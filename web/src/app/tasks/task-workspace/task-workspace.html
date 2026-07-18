@@ -142,15 +142,27 @@
             @if (presentation() === 'dialog') {
               <button
                 type="button"
-                class="pm-button pm-button--ghost"
+                class="host-action-icon"
+                aria-label="Full screen"
+                title="Open task in full screen"
                 (click)="fullscreenIntent.emit()"
               >
-                Full screen
+                <ng-icon name="cssMaximize" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                class="host-action-icon"
+                aria-label="Close task dialog"
+                title="Close"
+                (click)="requestClose()"
+              >
+                <ng-icon name="cssClose" aria-hidden="true" />
+              </button>
+            } @else {
+              <button type="button" class="pm-button pm-button--secondary" (click)="requestClose()">
+                Back
               </button>
             }
-            <button type="button" class="pm-button pm-button--secondary" (click)="requestClose()">
-              {{ presentation() === 'dialog' ? 'Close' : 'Back' }}
-            </button>
           }
         </div>
       </div>
@@ -176,6 +188,7 @@
             type="button"
             class="inline-value"
             aria-label="Edit task track"
+            [title]="trackName()"
             [disabled]="pending() || blocked()"
             (click)="activate('track')"
           >
@@ -206,6 +219,7 @@
             type="button"
             class="inline-value"
             aria-label="Edit task milestone"
+            [title]="milestoneName()"
             [disabled]="pending() || blocked()"
             (click)="activate('milestone')"
           >
@@ -238,6 +252,7 @@
             type="button"
             class="inline-value"
             aria-label="Edit task priority"
+            [title]="priorityName()"
             [disabled]="pending() || blocked()"
             (click)="activate('priority')"
           >

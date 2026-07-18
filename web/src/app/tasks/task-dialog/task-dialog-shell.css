@@ -6,7 +6,8 @@
   max-width: none;
   max-height: calc(100dvh - 32px);
   padding: 0;
-  border: 1px solid var(--pm-border-strong);
+  border: 1px solid var(--pm-border-subtle);
+  outline: 0;
   border-radius: var(--pm-radius-md);
   background: var(--pm-surface-raised);
   color: var(--pm-text-primary);
