@@ -82,6 +82,8 @@ test('uses desktop overlays, fullscreen replacement, and mobile canonical pages'
   const scrollContainment = await page.evaluate(() => {
     const outer = document.querySelector<HTMLElement>('.task-dialog-scroll')!;
     const description = document.querySelector<HTMLElement>('.description-section')!;
+    const columns = document.querySelector<HTMLElement>('.workspace-columns')!;
+    const metadata = document.querySelector<HTMLElement>('.metadata-column')!;
     const actions = document.querySelector<HTMLElement>('.host-actions')!;
     const filler = document.createElement('div');
     filler.style.height = '2000px';
@@ -95,6 +97,9 @@ test('uses desktop overlays, fullscreen replacement, and mobile canonical pages'
       descriptionClientHeight: description.clientHeight,
       descriptionScrollHeight: description.scrollHeight,
       descriptionScrollTop: description.scrollTop,
+      columnGap: getComputedStyle(columns).columnGap,
+      descriptionRight: description.getBoundingClientRect().right,
+      metadataLeft: metadata.getBoundingClientRect().left,
       actionTop,
       actionTopAfterScroll: actions.getBoundingClientRect().top,
     };
@@ -107,6 +112,8 @@ test('uses desktop overlays, fullscreen replacement, and mobile canonical pages'
     scrollContainment.descriptionClientHeight,
   );
   expect(scrollContainment.descriptionScrollTop).toBeGreaterThan(0);
+  expect(scrollContainment.columnGap).toBe('0px');
+  expect(scrollContainment.metadataLeft).toBeCloseTo(scrollContainment.descriptionRight, 3);
   expect(scrollContainment.actionTopAfterScroll).toBe(scrollContainment.actionTop);
   await page.getByRole('button', { name: 'Full screen' }).click();
   await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E$/);
