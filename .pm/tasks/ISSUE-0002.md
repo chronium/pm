@@ -4,7 +4,7 @@ title: Sidebar scope navigation keeps a closed task URL
 track: ISSUE
 milestone: angular-web
 createdAt: 2026-07-18T15:43:45.4711300Z
-modifiedAt: 2026-07-18T15:43:45.4711300Z
+modifiedAt: 2026-07-18T16:39:00.0000000Z
 ---
 
 ## Bug
@@ -24,4 +24,4 @@ Sidebar scope navigation should navigate to `/tasks` with the selected track or 
 
 ## Notes
 
-The current task detail is a routed modal over the board; future full-page task routes remain out of scope. Fix the current sidebar navigation contract without assuming that future route design.
+Resolved by PM-0060. Canonical full-page task routes and internal board-overlay routes now have separate URL contracts, and Close or Back returns through a validated scoped board URL instead of retaining a stale task segment.
