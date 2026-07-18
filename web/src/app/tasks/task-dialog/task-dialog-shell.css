@@ -28,6 +28,9 @@
 .task-dialog-frame--plain {
   grid-template-rows: minmax(0, 1fr);
 }
+.task-dialog-frame--plain .task-dialog-scroll {
+  overflow: hidden;
+}
 .task-dialog-header {
   display: flex;
   align-items: flex-start;

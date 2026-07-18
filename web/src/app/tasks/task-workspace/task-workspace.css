@@ -1,6 +1,7 @@
 :host {
   display: block;
   height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 .visually-hidden {
@@ -207,7 +208,19 @@ hr {
 }
 .description-section,
 .metadata-column {
+  min-height: 0;
   min-width: 0;
+}
+:host([presentation='dialog']) .description-section {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+:host([presentation='dialog']) .description-section > .section-heading {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--pm-surface-raised);
 }
 .section-heading {
   display: flex;

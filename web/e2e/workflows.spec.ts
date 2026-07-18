@@ -79,6 +79,35 @@ test('uses desktop overlays, fullscreen replacement, and mobile canonical pages'
   await page.getByRole('link', { name: /E2E-0001/ }).click();
   await expect(page).toHaveURL(/\/tasks\/dialog\/E2E-0001\?track=E2E$/);
   await expect(page.getByRole('dialog')).toBeVisible();
+  const scrollContainment = await page.evaluate(() => {
+    const outer = document.querySelector<HTMLElement>('.task-dialog-scroll')!;
+    const description = document.querySelector<HTMLElement>('.description-section')!;
+    const actions = document.querySelector<HTMLElement>('.host-actions')!;
+    const filler = document.createElement('div');
+    filler.style.height = '2000px';
+    description.append(filler);
+    const actionTop = actions.getBoundingClientRect().top;
+    description.scrollTop = description.scrollHeight;
+    const result = {
+      outerClientHeight: outer.clientHeight,
+      outerScrollHeight: outer.scrollHeight,
+      outerScrollTop: outer.scrollTop,
+      descriptionClientHeight: description.clientHeight,
+      descriptionScrollHeight: description.scrollHeight,
+      descriptionScrollTop: description.scrollTop,
+      actionTop,
+      actionTopAfterScroll: actions.getBoundingClientRect().top,
+    };
+    filler.remove();
+    return result;
+  });
+  expect(scrollContainment.outerScrollHeight).toBe(scrollContainment.outerClientHeight);
+  expect(scrollContainment.outerScrollTop).toBe(0);
+  expect(scrollContainment.descriptionScrollHeight).toBeGreaterThan(
+    scrollContainment.descriptionClientHeight,
+  );
+  expect(scrollContainment.descriptionScrollTop).toBeGreaterThan(0);
+  expect(scrollContainment.actionTopAfterScroll).toBe(scrollContainment.actionTop);
   await page.getByRole('button', { name: 'Full screen' }).click();
   await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
