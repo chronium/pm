@@ -420,6 +420,82 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task StructuredTaskUpdateChangesPlacementAndMovesFinalOrderScope()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var task = TestData.Task("PM-0001", "Existing", "Old body", track: "PM");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), [task.Id]);
+        projectRoot.SetTaskOrder(new TaskOrderScope("BUILD", "done", "m1"), []);
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = service.UpdateTaskDetails(task.Id, "Updated", "done", "New body", "urgent",
+            new TaskPlacementUpdate("BUILD", "m1"));
+
+        Assert.True(result.Success);
+        var updated = result.Payload!;
+        Assert.Equal(task.Id, updated.Id);
+        Assert.Equal(task.CreatedAt, updated.CreatedAt);
+        Assert.Equal("BUILD", updated.Track);
+        Assert.Equal("m1", updated.Milestone);
+        Assert.Equal("urgent", updated.Priority);
+        Assert.True(updated.ModifiedAt > task.ModifiedAt);
+        Assert.Empty(projectRoot.GetTaskOrder(new TaskOrderScope("PM", "todo", null)));
+        Assert.Equal([task.Id], projectRoot.GetTaskOrder(new TaskOrderScope("BUILD", "done", "m1")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "done", $"{task.Id}.ref")));
+    }
+
+    [Fact]
+    public async Task StructuredTaskUpdatePreservesOrUnassignsPlacementExplicitly()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
+        var task = TestData.Task("PM-0001", "Existing", track: "PM", milestone: "m1");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var preserved = service.UpdateTaskDetails(task.Id, task.Title, "todo", task.Description);
+        Assert.Equal("PM", preserved.Payload!.Track);
+        Assert.Equal("m1", preserved.Payload.Milestone);
+
+        var unassigned = service.UpdateTaskDetails(task.Id, task.Title, "todo", task.Description,
+            placement: new TaskPlacementUpdate("PM", null));
+        Assert.True(unassigned.Success);
+        Assert.Null(unassigned.Payload!.Milestone);
+    }
+
+    [Theory]
+    [InlineData("", null, "invalid_track")]
+    [InlineData("missing", null, "invalid_track")]
+    [InlineData("PM", " ", "invalid_milestone")]
+    [InlineData("PM", "missing", "invalid_milestone")]
+    public async Task StructuredTaskUpdateValidatesPlacementBeforeMutation(
+        string track, string? milestone, string errorCode)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Existing", "Original");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var original = File.ReadAllText(projectRoot.GetTaskFilePath(task.Id));
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = service.UpdateTaskDetails(task.Id, "Changed", "done", "Changed", placement:
+            new TaskPlacementUpdate(track, milestone));
+
+        Assert.Equal(errorCode, result.ErrorCode);
+        Assert.Equal(original, File.ReadAllText(projectRoot.GetTaskFilePath(task.Id)));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", $"{task.Id}.ref")));
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "done", $"{task.Id}.ref")));
+    }
+
+    [Fact]
     public async Task PatchTaskMetadataUpdatesIndependentFieldsAndMaintainsOrderScopes()
     {
         using var workspace = new TempWorkingDirectory();

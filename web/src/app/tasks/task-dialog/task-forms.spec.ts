@@ -49,9 +49,13 @@ describe('task Signal Forms', () => {
     expect(fixture.componentInstance.dirty()).toBe(true);
   });
 
-  it('keeps track and milestone read-only while editing supported fields', async () => {
+  it('edits configured placement and submits an explicit unassigned milestone', async () => {
     const fixture = TestBed.createComponent(TaskEditForm);
     fixture.componentRef.setInput('task', task);
+    fixture.componentRef.setInput('tracks', options);
+    fixture.componentRef.setInput('milestones', [
+      { key: 'angular-web', name: 'Angular web', priority: 'high' },
+    ]);
     fixture.componentRef.setInput(
       'states',
       options.map((item, index) => ({ ...item, key: index ? 'done' : 'todo' })),
@@ -59,8 +63,17 @@ describe('task Signal Forms', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('PM · angular-web');
-    expect(fixture.nativeElement.querySelectorAll('select')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('select')).toHaveLength(4);
+    expect(fixture.componentInstance.model()).toMatchObject({
+      track: 'PM',
+      milestone: 'angular-web',
+    });
+    const milestone = fixture.nativeElement.querySelector(
+      '#edit-task-milestone',
+    ) as HTMLSelectElement;
+    milestone.value = '';
+    milestone.dispatchEvent(new Event('input'));
+    expect(fixture.componentInstance.draft().placement).toEqual({ track: 'PM', milestone: null });
     const title = fixture.nativeElement.querySelector('input') as HTMLInputElement;
     title.value = 'Changed';
     title.dispatchEvent(new Event('input'));
@@ -69,5 +82,32 @@ describe('task Signal Forms', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button[type="submit"]')?.disabled).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Reload latest');
+  });
+
+  it('blocks stale placement values until configured replacements are selected', async () => {
+    const fixture = TestBed.createComponent(TaskEditForm);
+    fixture.componentRef.setInput('task', { ...task, track: 'OLD', milestone: 'retired' });
+    fixture.componentRef.setInput('states', [{ key: 'todo', name: 'To do', priority: 'medium' }]);
+    fixture.componentRef.setInput('tracks', options);
+    fixture.componentRef.setInput('milestones', []);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.taskForm().valid()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('OLD (no longer configured)');
+    expect(fixture.nativeElement.textContent).toContain('retired (no longer configured)');
+    expect(fixture.nativeElement.textContent).toContain('Choose a configured track');
+    expect(fixture.nativeElement.textContent).toContain('Choose a configured milestone');
+
+    fixture.componentInstance.restoreDraft({
+      title: task.title,
+      state: task.state,
+      priority: task.prioritySelection,
+      description: task.description,
+      placement: { track: 'BUILD', milestone: null },
+    });
+    expect(fixture.componentInstance.taskForm().valid()).toBe(true);
+    expect(fixture.componentInstance.dirty()).toBe(true);
   });
 });

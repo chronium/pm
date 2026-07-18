@@ -94,19 +94,42 @@ test('creates, opens, edits, moves, conflicts, and removes a task', async ({ pag
 
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.locator('#edit-task-title').fill('Draft title');
+  await page.locator('#edit-task-track').selectOption('OPS');
   const taskPath = join(projectRoot, '.pm', 'tasks', 'E2E-1000.md');
   const external = `${await readFile(taskPath, 'utf8')}\nExternal change.\n`;
   await writeFile(taskPath, external);
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('This task changed elsewhere.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Review latest' }).click();
-  await page.getByRole('button', { name: /Keep latest/ }).click();
-  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Restore draft' }).click();
+  await expect(page.locator('#edit-task-track')).toHaveValue('OPS');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('heading', { name: 'Draft title' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('OPS', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Remove' }).click();
   await page.getByRole('button', { name: 'Remove task' }).click();
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByText('Edited in Playwright')).toHaveCount(0);
+});
+
+test('editing placement refreshes a scoped board while keeping its dialog and scope', async ({
+  page,
+}) => {
+  await page.goto('/tasks/E2E-0001?track=E2E&milestone=current');
+  await expect(page.getByRole('heading', { name: 'Fixture task 1' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.locator('#edit-task-track').selectOption('OPS');
+  await page.locator('#edit-task-milestone').selectOption('later');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E&milestone=current$/);
+  await expect(page.getByRole('heading', { name: 'Fixture task 1' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('OPS', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close task dialog' }).click();
+  await expect(page).toHaveURL(/\/tasks\?track=E2E&milestone=current$/);
+  await expect(page.getByText('Fixture task 1', { exact: true })).toHaveCount(0);
 });
 
 test('protects dirty navigation and supports wiki create, edit, rename, and delete', async ({

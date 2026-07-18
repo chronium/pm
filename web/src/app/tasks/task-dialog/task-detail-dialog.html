@@ -38,6 +38,8 @@
       <pm-task-edit-form
         [task]="task"
         [states]="board.board()?.states ?? []"
+        [tracks]="board.board()?.tracks ?? []"
+        [milestones]="board.board()?.milestones ?? []"
         [pending]="pending()"
         [stale]="conflictBlocked()"
         [apiError]="error()"

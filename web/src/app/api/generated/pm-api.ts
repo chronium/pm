@@ -464,6 +464,10 @@ export interface components {
         TaskLocalMetadataResponse: {
             filePath: string;
         };
+        TaskPlacementRequest: {
+            track: string;
+            milestone: null | string;
+        };
         TaskResponse: {
             id: string;
             title: string;
@@ -497,6 +501,7 @@ export interface components {
             state: string;
             description: string;
             priority: string;
+            placement?: null | components["schemas"]["TaskPlacementRequest"];
         };
         UpdateTaskStateRequest: {
             state: string;

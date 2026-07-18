@@ -53,7 +53,13 @@ describe('TaskApiService', () => {
     api
       .update(
         task.id,
-        { title: task.title, state: 'review', priority: 'high', description: task.description },
+        {
+          title: task.title,
+          state: 'review',
+          priority: 'high',
+          description: task.description,
+          placement: { track: 'PM', milestone: null },
+        },
         '"revision-1"',
       )
       .subscribe();
@@ -67,6 +73,7 @@ describe('TaskApiService', () => {
     expect(update.request.headers.get('If-Match')).toBe('"revision-1"');
     expect(state.request.headers.get('If-Match')).toBe('"revision-2"');
     expect(remove.request.headers.get('If-Match')).toBe('"revision-3"');
+    expect(update.request.body.placement).toEqual({ track: 'PM', milestone: null });
     expect(
       [update, state, remove].every((item) => item.request.headers.get('If-Match') !== '*'),
     ).toBe(true);

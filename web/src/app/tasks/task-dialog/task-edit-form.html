@@ -1,7 +1,5 @@
 <form class="task-form" (submit)="submit($event)" novalidate>
-  <p class="readonly-context">
-    {{ task().id }} · {{ task().track }} · {{ task().milestone ?? 'No milestone' }}
-  </p>
+  <p class="readonly-context">{{ task().id }}</p>
   @if (apiError()) {
     <p class="form-error" role="alert">{{ apiError() }}</p>
   }
@@ -38,6 +36,41 @@
         <option value="urgent">Urgent</option>
       </select></pm-form-field
     >
+  </div>
+  <div class="form-grid">
+    <pm-form-field
+      ><label for="edit-task-track">Track</label
+      ><select id="edit-task-track" pmControl [formField]="taskForm.track">
+        @if (!trackConfigured()) {
+          <option [value]="model().track" disabled>
+            {{ model().track }} (no longer configured)
+          </option>
+        }
+        @for (track of tracks(); track track.key) {
+          <option [value]="track.key">{{ track.name }}</option>
+        }
+      </select>
+      @if (firstError(taskForm.track())) {
+        <p pmFieldMessage class="field-error">{{ firstError(taskForm.track()) }}</p>
+      }
+    </pm-form-field>
+    <pm-form-field
+      ><label for="edit-task-milestone">Milestone</label
+      ><select id="edit-task-milestone" pmControl [formField]="taskForm.milestone">
+        <option value="">No milestone</option>
+        @if (!milestoneConfigured()) {
+          <option [value]="model().milestone" disabled>
+            {{ model().milestone }} (no longer configured)
+          </option>
+        }
+        @for (milestone of milestones(); track milestone.key) {
+          <option [value]="milestone.key">{{ milestone.name }}</option>
+        }
+      </select>
+      @if (firstError(taskForm.milestone())) {
+        <p pmFieldMessage class="field-error">{{ firstError(taskForm.milestone()) }}</p>
+      }
+    </pm-form-field>
   </div>
   <pm-form-field
     ><label id="edit-task-description">Description</label

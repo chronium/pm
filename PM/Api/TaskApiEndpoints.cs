@@ -22,7 +22,17 @@ public sealed record TaskResponse(
     string Revision,
     TaskLocalMetadataResponse LocalMetadata);
 public sealed record CreateTaskRequest(string Title, string Track, string? Milestone = null, string? Description = null);
-public sealed record UpdateTaskRequest(string Title, string State, string Description, string Priority);
+public sealed record TaskPlacementRequest
+{
+    public required string Track { get; init; }
+    public required string? Milestone { get; init; }
+}
+public sealed record UpdateTaskRequest(
+    string Title,
+    string State,
+    string Description,
+    string Priority,
+    TaskPlacementRequest? Placement = null);
 public sealed record UpdateTaskStateRequest(string State);
 public sealed record TaskSearchResultResponse(
     string Id,
@@ -100,10 +110,18 @@ public static class TaskApiEndpoints
                 if (!AcceptedPriorities.Contains(input.Priority.Trim()))
                     return DomainFailure("invalid_priority",
                         "Task priority must be inherit, none, low, medium, high, or urgent.", request);
+                if (input.Placement != null && string.IsNullOrWhiteSpace(input.Placement.Track))
+                    return DomainFailure("invalid_track", "Task track is required.", request);
+                if (input.Placement?.Milestone != null && string.IsNullOrWhiteSpace(input.Placement.Milestone))
+                    return DomainFailure("invalid_milestone", "Task milestone must be configured or null.", request);
 
                 var precondition = CheckPrecondition(request, id, revisions);
                 if (precondition != null) return precondition;
-                var result = taskService.UpdateTaskDetails(id, input.Title, input.State, input.Description, input.Priority);
+                var placement = input.Placement == null
+                    ? null
+                    : new TaskPlacementUpdate(input.Placement.Track, input.Placement.Milestone);
+                var result = taskService.UpdateTaskDetails(id, input.Title, input.State, input.Description,
+                    input.Priority, placement);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 return Refreshed(request, id, boardService, revisions);
             })

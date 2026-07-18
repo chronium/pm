@@ -4,6 +4,7 @@ using PM.Tasks;
 namespace PM.Application;
 
 public sealed record BulkTaskCreateInput(string Title, string? Description = null);
+public sealed record TaskPlacementUpdate(string Track, string? Milestone);
 
 public sealed record BulkCreatedTask(
     string Id,
@@ -574,7 +575,8 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         string title,
         string targetState,
         string description,
-        string? priority = null)
+        string? priority = null,
+        TaskPlacementUpdate? placement = null)
     {
         if (!projectRoot.Exists)
             return AppResult<TaskItem>.Fail("missing_project", "Project not found. Run pm init first.");
@@ -590,22 +592,45 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             return AppResult<TaskItem>.Fail("invalid_priority",
                 $"Task priority must be inherit or one of {string.Join(", ", PriorityLevel.Values)}.");
 
+        string? normalizedTrack = null;
+        string? normalizedMilestone = null;
+        if (placement != null)
+        {
+            normalizedTrack = placement.Track?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedTrack) ||
+                !projectRoot.Config.Tracks.ContainsKey(normalizedTrack))
+                return AppResult<TaskItem>.Fail("invalid_track", $"Track {normalizedTrack} not found.");
+
+            normalizedMilestone = string.IsNullOrWhiteSpace(placement.Milestone)
+                ? null
+                : placement.Milestone.Trim();
+            if (placement.Milestone != null && string.IsNullOrWhiteSpace(placement.Milestone))
+                return AppResult<TaskItem>.Fail("invalid_milestone", "Task milestone must be configured or null.");
+            if (normalizedMilestone != null && !projectRoot.Config.Milestones.ContainsKey(normalizedMilestone))
+                return AppResult<TaskItem>.Fail("invalid_milestone", $"Milestone {normalizedMilestone} not found.");
+        }
+
         if (!projectRoot.TryGetById(taskId, out var task))
             return AppResult<TaskItem>.Fail("missing_task", $"Task with ID {taskId} not found.");
 
-        if (!projectRoot.TryGetState(task, out _))
+        if (!projectRoot.TryGetState(task, out var currentState))
             return AppResult<TaskItem>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
 
         var updated = task with
         {
             Title = title.Trim(),
+            Track = placement == null ? task.Track : normalizedTrack!,
+            Milestone = placement == null ? task.Milestone : normalizedMilestone,
             Priority = priority == null ? task.Priority : normalizedPriority,
             ModifiedAt = DateTime.UtcNow,
             Description = description ?? string.Empty,
         };
 
+        projectRoot.MoveTaskOrderScope(task.Id,
+            new TaskOrderScope(projectRoot.ResolveTaskTrack(task), currentState, task.Milestone),
+            new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), currentState, updated.Milestone));
         projectRoot.WriteTask(updated);
-        projectRoot.UpdateTaskState(task, targetState);
+        projectRoot.UpdateTaskState(updated, targetState);
         return AppResult<TaskItem>.Ok(updated);
     }
 

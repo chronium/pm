@@ -207,6 +207,105 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task TaskUpdateSupportsOptionalAssignedAndUnassignedPlacement()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            tracks: new() { ["PM"] = "Product", ["BUILD"] = "Build" },
+            milestones: new() { ["m1"] = "First" }));
+        var task = TestData.Task("PM-0001", "Task", track: "PM", milestone: "m1");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var read = await client.GetAsync("/api/v1/tasks/PM-0001");
+            using var compatible = Mutation(HttpMethod.Put, "/api/v1/tasks/PM-0001",
+                JsonContent.Create(new { title = "Compatible", state = "todo", description = "Body", priority = "inherit" }),
+                read.Headers.ETag?.Tag);
+            var compatibleResponse = await client.SendAsync(compatible);
+            var preserved = await compatibleResponse.Content.ReadFromJsonAsync<TaskResponse>();
+            Assert.Equal("PM", preserved!.Track);
+            Assert.Equal("m1", preserved.Milestone);
+
+            using var assigned = Mutation(HttpMethod.Put, "/api/v1/tasks/PM-0001",
+                JsonContent.Create(new
+                {
+                    title = "Moved", state = "review", description = "Body", priority = "high",
+                    placement = new { track = "BUILD", milestone = "m1" }
+                }), compatibleResponse.Headers.ETag?.Tag);
+            var assignedResponse = await client.SendAsync(assigned);
+            var moved = await assignedResponse.Content.ReadFromJsonAsync<TaskResponse>();
+            Assert.Equal(HttpStatusCode.OK, assignedResponse.StatusCode);
+            Assert.Equal("BUILD", moved!.Track);
+            Assert.Equal("m1", moved.Milestone);
+            Assert.Equal("review", moved.State);
+
+            using var unassign = Mutation(HttpMethod.Put, "/api/v1/tasks/PM-0001",
+                JsonContent.Create(new
+                {
+                    title = "Moved", state = "review", description = "Body", priority = "high",
+                    placement = new { track = "BUILD", milestone = (string?)null }
+                }), assignedResponse.Headers.ETag?.Tag);
+            var unassignedResponse = await client.SendAsync(unassign);
+            var unassigned = await unassignedResponse.Content.ReadFromJsonAsync<TaskResponse>();
+            Assert.Equal(HttpStatusCode.OK, unassignedResponse.StatusCode);
+            Assert.Null(unassigned!.Milestone);
+            Assert.NotEqual(moved.Revision, unassigned.Revision);
+        }
+    }
+
+    [Theory]
+    [InlineData("{\"track\":\"missing\",\"milestone\":null}", "invalid_track")]
+    [InlineData("{\"track\":\"PM\",\"milestone\":\"missing\"}", "invalid_milestone")]
+    [InlineData("{\"track\":\" \",\"milestone\":null}", "invalid_track")]
+    public async Task TaskUpdateRejectsInvalidPlacement(string placementJson, string errorCode)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Task");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var read = await client.GetAsync("/api/v1/tasks/PM-0001");
+            var json = $$"""{"title":"Task","state":"todo","description":"","priority":"inherit","placement":{{placementJson}}}""";
+            using var update = Mutation(HttpMethod.Put, "/api/v1/tasks/PM-0001",
+                new StringContent(json, Encoding.UTF8, "application/json"), read.Headers.ETag?.Tag);
+            var response = await client.SendAsync(update);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal(errorCode, (await response.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+        }
+    }
+
+    [Theory]
+    [InlineData("{\"track\":\"PM\"}")]
+    [InlineData("{\"milestone\":null}")]
+    public async Task TaskUpdateRejectsIncompletePlacement(string placementJson)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Task");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var read = await client.GetAsync("/api/v1/tasks/PM-0001");
+            var json = $$"""{"title":"Task","state":"todo","description":"","priority":"inherit","placement":{{placementJson}}}""";
+            using var update = Mutation(HttpMethod.Put, "/api/v1/tasks/PM-0001",
+                new StringContent(json, Encoding.UTF8, "application/json"), read.Headers.ETag?.Tag);
+            var response = await client.SendAsync(update);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_json", (await response.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+        }
+    }
+
+    [Fact]
     public async Task TaskCreationMapsDomainValidationAndNextIdFailures()
     {
         using var workspace = new TempWorkingDirectory();
@@ -309,6 +408,10 @@ public partial class ApiContractTests
             Assert.Contains("title", schemas.GetProperty("CreateTaskRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("priority", schemas.GetProperty("UpdateTaskRequest").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("track", schemas.GetProperty("TaskPlacementRequest").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("milestone", schemas.GetProperty("TaskPlacementRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
         }
     }

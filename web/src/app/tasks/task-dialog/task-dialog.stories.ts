@@ -16,6 +16,14 @@ const states = [
   { key: 'todo', name: 'To do', priority: 'medium' },
   { key: 'done', name: 'Done', priority: 'low' },
 ];
+const milestones = [
+  { key: 'angular-web', name: 'Angular web migration', priority: 'high' },
+  {
+    key: 'long-label',
+    name: 'A milestone with a deliberately long label for layout checks',
+    priority: 'medium',
+  },
+];
 const task: TaskResponse = {
   id: 'PM-0050',
   title: 'Implement routed Angular task dialogs',
@@ -66,16 +74,43 @@ export const Read: Story = {
 };
 export const Edit: Story = {
   render: () => ({
-    props: { task, states },
+    props: { task, states, options, milestones },
     template:
-      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" /></pm-task-dialog-shell>',
+      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" [tracks]="options" [milestones]="milestones" /></pm-task-dialog-shell>',
   }),
 };
 export const EditConflict: Story = {
   render: () => ({
-    props: { task, states },
+    props: { task, states, options, milestones },
     template:
-      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" [stale]="true" apiError="This task changed elsewhere. Reload latest before saving again." /></pm-task-dialog-shell>',
+      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" [tracks]="options" [milestones]="milestones" [stale]="true" apiError="This task changed elsewhere. Reload latest before saving again." /></pm-task-dialog-shell>',
   }),
 };
+export const EditUnassigned: Story = {
+  render: () => ({
+    props: { task: { ...task, milestone: null }, states, options, milestones },
+    template:
+      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" [tracks]="options" [milestones]="milestones" /></pm-task-dialog-shell>',
+  }),
+};
+export const EditStalePlacement: Story = {
+  render: () => ({
+    props: {
+      task: { ...task, track: 'RETIRED', milestone: 'old-release' },
+      states,
+      options,
+      milestones,
+    },
+    template:
+      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" [tracks]="options" [milestones]="milestones" /></pm-task-dialog-shell>',
+  }),
+};
+export const EditLongLabels: Story = {
+  render: () => ({
+    props: { task: { ...task, milestone: 'long-label' }, states, options, milestones },
+    template:
+      '<pm-task-dialog-shell [title]="task.title" [eyebrow]="task.id"><pm-task-edit-form [task]="task" [states]="states" [tracks]="options" [milestones]="milestones" /></pm-task-dialog-shell>',
+  }),
+};
+export const EditMobile: Story = { ...Edit, globals: { viewport: 'mobile' } };
 export const ReadMobileDark: Story = { ...Read, globals: { viewport: 'mobile', theme: 'dark' } };
