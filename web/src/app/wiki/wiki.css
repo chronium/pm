@@ -4,9 +4,31 @@
 }
 
 .wiki-primary-nav {
+  display: flex;
   flex: 0 0 auto !important;
+  flex-direction: column;
+  gap: 2px;
   padding-bottom: var(--pm-space-2);
   border-bottom: 1px solid var(--pm-border-subtle);
+}
+.wiki-primary-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--pm-space-2);
+  border-radius: var(--pm-radius-sm);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  text-decoration: none;
+}
+.wiki-primary-nav a:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+.wiki-primary-nav a.active {
+  background: var(--pm-accent-soft);
+  color: var(--pm-accent-strong);
+  font-weight: 600;
 }
 .wiki-tree-scroll {
   flex: 1 1 0;

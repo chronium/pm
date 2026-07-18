@@ -229,6 +229,18 @@ describe('application shell', () => {
     expect(fixture.nativeElement.querySelector('pm-wiki-search')).toBeTruthy();
   });
 
+  it('renders wiki primary actions as stacked sidebar navigation', async () => {
+    const { fixture } = await renderAt('/wiki');
+    const nav = fixture.nativeElement.querySelector('.wiki-primary-nav') as HTMLElement;
+    const links = [...nav.querySelectorAll<HTMLAnchorElement>('a')];
+
+    expect(links.map((link) => link.textContent?.trim())).toEqual(['Wiki home', 'New page']);
+    expect(getComputedStyle(nav).flexDirection).toBe('column');
+    expect(links.map((link) => getComputedStyle(link).display)).toEqual(['flex', 'flex']);
+    expect(links.map((link) => getComputedStyle(link).minHeight)).toEqual(['32px', '32px']);
+    expect(links[0]?.classList.contains('active')).toBe(true);
+  });
+
   it('keeps All tasks exact while a nested task remains in the board workspace', async () => {
     const { fixture } = await renderAt('/tasks/PM-0049?track=PM');
     const allTasks = fixture.nativeElement.querySelector('aside a[href^="/tasks?"]');
