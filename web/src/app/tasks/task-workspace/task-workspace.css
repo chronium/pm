@@ -1,5 +1,6 @@
 :host {
   display: block;
+  height: 100%;
   min-width: 0;
 }
 .visually-hidden {
@@ -14,7 +15,9 @@
   border: 0;
 }
 .task-workspace {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-width: 0;
   gap: var(--pm-space-3);
 }
@@ -25,6 +28,7 @@
 .task-context-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   min-height: 30px;
   gap: var(--pm-space-2);
 }
@@ -45,10 +49,7 @@
   color: var(--pm-text-primary);
 }
 .title-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--pm-space-4);
+  display: block;
 }
 .title-field {
   min-width: 0;
@@ -104,6 +105,7 @@
 }
 .host-actions {
   display: flex;
+  margin-inline-start: auto;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: var(--pm-space-2);
@@ -169,9 +171,12 @@
   background: var(--pm-surface-raised);
   color: var(--pm-text-primary);
   font-size: var(--pm-font-size-md);
+  text-align: left;
   text-overflow: ellipsis;
 }
 .property-field .inline-value {
+  justify-content: flex-start;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -193,8 +198,10 @@ hr {
 }
 .workspace-columns {
   display: grid;
+  flex: 1;
   grid-template-columns: minmax(0, 3fr) minmax(210px, 1fr);
   align-items: stretch;
+  min-height: 0;
   min-width: 0;
   gap: var(--pm-space-5);
 }
@@ -317,11 +324,11 @@ h2 {
   }
 }
 @media (max-width: 767px) {
-  .title-row,
   .workspace-columns {
     grid-template-columns: minmax(0, 1fr);
   }
   .host-actions {
+    margin-inline-start: 0;
     justify-content: flex-start;
   }
   .property-row {

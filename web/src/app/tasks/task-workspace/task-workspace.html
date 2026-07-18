@@ -72,38 +72,6 @@
             {{ statusName() }}
           </button>
         }
-      </div>
-
-      <div class="title-row">
-        <div class="title-field">
-          @if (mode() === 'create' || activeField() === 'title') {
-            <label class="visually-hidden" for="workspace-title">Title</label>
-            <input
-              id="workspace-title"
-              class="title-input"
-              pmControl
-              [formField]="workspaceForm.title"
-              autocomplete="off"
-              placeholder="Task title"
-              autofocus
-              (blur)="mode() === 'detail' && activeField.set(null)"
-            />
-          } @else {
-            <button
-              type="button"
-              class="inline-value title-value"
-              [disabled]="pending() || blocked()"
-              aria-label="Edit task title"
-              (click)="activate('title')"
-            >
-              {{ model().title }}
-            </button>
-          }
-          @if (workspaceForm.title().touched() && firstError(workspaceForm.title())) {
-            <p class="field-error">{{ firstError(workspaceForm.title()) }}</p>
-          }
-        </div>
-
         <div class="host-actions" aria-label="Task actions">
           @if (dirty()) {
             <button
@@ -163,6 +131,37 @@
                 Back
               </button>
             }
+          }
+        </div>
+      </div>
+
+      <div class="title-row">
+        <div class="title-field">
+          @if (mode() === 'create' || activeField() === 'title') {
+            <label class="visually-hidden" for="workspace-title">Title</label>
+            <input
+              id="workspace-title"
+              class="title-input"
+              pmControl
+              [formField]="workspaceForm.title"
+              autocomplete="off"
+              placeholder="Task title"
+              autofocus
+              (blur)="mode() === 'detail' && activeField.set(null)"
+            />
+          } @else {
+            <button
+              type="button"
+              class="inline-value title-value"
+              [disabled]="pending() || blocked()"
+              aria-label="Edit task title"
+              (click)="activate('title')"
+            >
+              {{ model().title }}
+            </button>
+          }
+          @if (workspaceForm.title().touched() && firstError(workspaceForm.title())) {
+            <p class="field-error">{{ firstError(workspaceForm.title()) }}</p>
           }
         </div>
       </div>

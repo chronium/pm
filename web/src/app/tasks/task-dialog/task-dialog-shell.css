@@ -3,8 +3,9 @@
 }
 .task-dialog {
   width: min(1120px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 48px));
   max-width: none;
-  max-height: calc(100dvh - 32px);
+  max-height: min(760px, calc(100dvh - 48px));
   padding: 0;
   border: 1px solid var(--pm-border-subtle);
   outline: 0;
@@ -20,7 +21,12 @@
 .task-dialog-frame {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  max-height: calc(100dvh - 34px);
+  height: 100%;
+  max-height: none;
+  padding: 0;
+}
+.task-dialog-frame--plain {
+  grid-template-rows: minmax(0, 1fr);
 }
 .task-dialog-header {
   display: flex;
@@ -67,18 +73,20 @@ h2 {
   opacity: 0.5;
 }
 .task-dialog-scroll {
+  display: grid;
   min-height: 0;
-  padding: var(--pm-space-4);
+  padding: var(--pm-space-3);
   overflow: auto;
   overscroll-behavior: contain;
 }
 @media (max-width: 600px) {
   .task-dialog {
     width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
     max-height: calc(100dvh - 16px);
   }
   .task-dialog-frame {
-    max-height: calc(100dvh - 18px);
+    max-height: none;
   }
   .task-dialog-header,
   .task-dialog-scroll {

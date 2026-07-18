@@ -1,5 +1,9 @@
 <dialog #dialog class="task-dialog" [attr.aria-labelledby]="headingId" (cancel)="cancel($event)">
-  <div class="task-dialog-frame" [attr.aria-busy]="pending()">
+  <div
+    class="task-dialog-frame"
+    [class.task-dialog-frame--plain]="!chrome()"
+    [attr.aria-busy]="pending()"
+  >
     @if (chrome()) {
       <header class="task-dialog-header">
         <div>
