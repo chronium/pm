@@ -3,66 +3,70 @@ import { FormField, form, required } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
-import { MarkdownEditor } from '../markdown/markdown-editor';
 import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import { PmFormField } from '../ui/form-field/form-field';
 import { WikiApiService } from './wiki-api.service';
 import { WikiDirtyForm } from './wiki-dirty-form';
+import { WikiMarkdownWorkspace } from './wiki-markdown-workspace';
 import { WikiStore } from './wiki.store';
 
 @Component({
   selector: 'pm-wiki-create',
-  imports: [FormField, MarkdownEditor, PmConfirmDialog, PmFormField, RouterLink],
+  imports: [FormField, PmConfirmDialog, PmFormField, RouterLink, WikiMarkdownWorkspace],
   template: ` <section class="wiki-page wiki-form-page">
-      <header>
-        <p class="wiki-eyebrow">Wiki</p>
-        <h1>New page</h1>
-      </header>
-      <form class="wiki-form" (submit)="submit($event)" novalidate>
-        @if (error()) {
-          <p class="form-error" role="alert">{{ error() }}</p>
-        }
-        <pm-form-field
-          ><label for="wiki-path">Path</label
-          ><input
-            id="wiki-path"
-            pmControl
-            [formField]="pageForm.path"
-            autocomplete="off"
-            autofocus
-            placeholder="guides/getting-started"
-          />
-          @if (pageForm.path().touched() && firstError(pageForm.path())) {
-            <p pmFieldMessage class="field-error">{{ firstError(pageForm.path()) }}</p>
-          }
-          <p pmFieldMessage>Use slashes to organize pages.</p></pm-form-field
-        >
-        <pm-form-field
-          ><label for="wiki-title">Title</label
-          ><input id="wiki-title" pmControl [formField]="pageForm.title" autocomplete="off" />
-          @if (pageForm.title().touched() && firstError(pageForm.title())) {
-            <p pmFieldMessage class="field-error">{{ firstError(pageForm.title()) }}</p>
-          }
-        </pm-form-field>
-        <pm-form-field
-          ><label id="wiki-body-label">Body</label
-          ><pm-markdown-editor
-            pmControl
-            [formField]="pageForm.body"
-            label="Wiki page body"
-            aria-labelledby="wiki-body-label"
-          />
-          <p pmFieldMessage>Markdown supported.</p></pm-form-field
-        >
+      <header class="wiki-form-header">
+        <div>
+          <p class="wiki-eyebrow">Wiki</p>
+          <h1>New page</h1>
+        </div>
         <div class="wiki-form-actions">
           <a class="pm-button pm-button--secondary" routerLink="/wiki">Cancel</a
           ><button
             class="pm-button pm-button--primary"
             type="submit"
+            form="wiki-create-form"
             [disabled]="pending() || !pageForm().valid()"
           >
             {{ pending() ? 'Creating…' : 'Create page' }}
           </button>
+        </div>
+      </header>
+      <form id="wiki-create-form" class="wiki-form" (submit)="submit($event)" novalidate>
+        @if (error()) {
+          <p class="form-error" role="alert">{{ error() }}</p>
+        }
+        <div class="wiki-metadata-row">
+          <pm-form-field
+            ><label for="wiki-path">Path</label
+            ><input
+              id="wiki-path"
+              pmControl
+              [formField]="pageForm.path"
+              autocomplete="off"
+              autofocus
+              placeholder="guides/getting-started"
+            />
+            @if (pageForm.path().touched() && firstError(pageForm.path())) {
+              <p pmFieldMessage class="field-error">{{ firstError(pageForm.path()) }}</p>
+            }
+            <p pmFieldMessage>Use slashes to organize pages.</p></pm-form-field
+          >
+          <pm-form-field
+            ><label for="wiki-title">Title</label
+            ><input id="wiki-title" pmControl [formField]="pageForm.title" autocomplete="off" />
+            @if (pageForm.title().touched() && firstError(pageForm.title())) {
+              <p pmFieldMessage class="field-error">{{ firstError(pageForm.title()) }}</p>
+            }
+          </pm-form-field>
+        </div>
+        <div class="wiki-body-field">
+          <span id="wiki-body-label" class="wiki-body-label">Body</span>
+          <pm-wiki-markdown-workspace
+            pmControl
+            [formField]="pageForm.body"
+            label="Wiki page body"
+            aria-labelledby="wiki-body-label"
+          />
         </div>
       </form>
     </section>

@@ -38,9 +38,33 @@ import type { UpdateWikiPageMetadataRequest } from './wiki-api.service';
         >
       } @else if (store.page(); as page) {
         <pm-wiki-breadcrumbs [path]="page.path" />
-        <header>
-          <p class="wiki-eyebrow">Wiki page</p>
-          <h1>Metadata</h1>
+        <header class="wiki-form-header">
+          <div>
+            <p class="wiki-eyebrow">
+              <code>{{ page.path }}</code>
+            </p>
+            <h1>Metadata</h1>
+          </div>
+          <div class="wiki-form-actions">
+            <a
+              class="pm-button pm-button--secondary"
+              [routerLink]="['/wiki', ...page.path.split('/')]"
+              >Cancel</a
+            ><button
+              class="pm-button pm-button--primary"
+              type="submit"
+              form="wiki-metadata-form"
+              [disabled]="
+                pending() ||
+                store.unavailable() ||
+                conflict() === 'pending' ||
+                conflict() === 'reviewing' ||
+                !pageForm().valid()
+              "
+            >
+              {{ pending() ? 'Saving…' : 'Save metadata' }}
+            </button>
+          </div>
         </header>
         @if (conflict()) {
           <pm-external-change-banner
@@ -60,47 +84,35 @@ import type { UpdateWikiPageMetadataRequest } from './wiki-api.service';
             be saved here.
           </p>
         }
-        <form class="wiki-form" (submit)="submit($event)" novalidate>
+        <form id="wiki-metadata-form" class="wiki-form" (submit)="submit($event)" novalidate>
           @if (error()) {
             <p class="form-error" role="alert">{{ error() }}</p>
           }
-          <pm-form-field
-            ><label for="wiki-meta-path">Path</label
-            ><input id="wiki-meta-path" pmControl [formField]="pageForm.path" autocomplete="off" />
-            @if (pageForm.path().touched() && firstError(pageForm.path())) {
-              <p pmFieldMessage class="field-error">{{ firstError(pageForm.path()) }}</p>
-            }
-          </pm-form-field>
-          <pm-form-field
-            ><label for="wiki-meta-title">Title</label
-            ><input
-              id="wiki-meta-title"
-              pmControl
-              [formField]="pageForm.title"
-              autocomplete="off"
-            />
-            @if (pageForm.title().touched() && firstError(pageForm.title())) {
-              <p pmFieldMessage class="field-error">{{ firstError(pageForm.title()) }}</p>
-            }
-          </pm-form-field>
-          <div class="wiki-form-actions">
-            <a
-              class="pm-button pm-button--secondary"
-              [routerLink]="['/wiki', ...page.path.split('/')]"
-              >Cancel</a
-            ><button
-              class="pm-button pm-button--primary"
-              type="submit"
-              [disabled]="
-                pending() ||
-                store.unavailable() ||
-                conflict() === 'pending' ||
-                conflict() === 'reviewing' ||
-                !pageForm().valid()
-              "
-            >
-              {{ pending() ? 'Saving…' : 'Save metadata' }}
-            </button>
+          <div class="wiki-metadata-row">
+            <pm-form-field
+              ><label for="wiki-meta-path">Path</label
+              ><input
+                id="wiki-meta-path"
+                pmControl
+                [formField]="pageForm.path"
+                autocomplete="off"
+              />
+              @if (pageForm.path().touched() && firstError(pageForm.path())) {
+                <p pmFieldMessage class="field-error">{{ firstError(pageForm.path()) }}</p>
+              }
+            </pm-form-field>
+            <pm-form-field
+              ><label for="wiki-meta-title">Title</label
+              ><input
+                id="wiki-meta-title"
+                pmControl
+                [formField]="pageForm.title"
+                autocomplete="off"
+              />
+              @if (pageForm.title().touched() && firstError(pageForm.title())) {
+                <p pmFieldMessage class="field-error">{{ firstError(pageForm.title()) }}</p>
+              }
+            </pm-form-field>
           </div>
         </form>
         <section class="wiki-danger" aria-labelledby="wiki-delete-heading">

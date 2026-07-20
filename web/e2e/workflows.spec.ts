@@ -242,6 +242,63 @@ test('protects dirty navigation and supports wiki create, edit, rename, and dele
   await expect(page).toHaveURL(/\/wiki$/);
 });
 
+test('wiki Markdown workspace splits on desktop and preserves mobile pane state', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/wiki/edit/welcome');
+  const editor = page.getByRole('textbox', { name: 'Wiki page Markdown body' });
+  const markdown = Array.from(
+    { length: 36 },
+    (_, index) => `## Workspace section ${index + 1}\n\nScrollable preview content ${index + 1}.`,
+  ).join('\n\n');
+  await editor.fill(markdown);
+
+  const editorPane = page.locator('.wiki-workspace-editor');
+  const previewPane = page.locator('.wiki-workspace-preview');
+  const editorScroll = page.locator('.CodeMirror-scroll');
+  if (!testInfo.project.name.includes('mobile')) {
+    await expect(page.getByRole('heading', { name: 'Workspace section 36' })).toBeVisible();
+    const editorBox = await editorPane.boundingBox();
+    const previewBox = await previewPane.boundingBox();
+    expect(editorBox).not.toBeNull();
+    expect(previewBox).not.toBeNull();
+    expect(Math.abs(editorBox!.width - previewBox!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(editorBox!.height - previewBox!.height)).toBeLessThanOrEqual(1);
+    await editorScroll.evaluate((element) => (element.scrollTop = element.scrollHeight));
+    expect(await editorScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    expect(await previewPane.evaluate((element) => element.scrollTop)).toBe(0);
+    await previewPane.evaluate((element) => (element.scrollTop = element.scrollHeight));
+    expect(await previewPane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    expect(await editorScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(page.getByRole('button', { name: 'Preview' })).toHaveCount(0);
+    return;
+  }
+
+  const editorTab = page.getByRole('tab', { name: 'Editor' });
+  const previewTab = page.getByRole('tab', { name: 'Preview' });
+  await expect(editorTab).toHaveAttribute('aria-selected', 'true');
+  await editorScroll.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  const editorPosition = await editorScroll.evaluate((element) => element.scrollTop);
+  expect(editorPosition).toBeGreaterThan(0);
+  await editorTab.focus();
+  await editorTab.press('ArrowRight');
+  await expect(previewTab).toBeFocused();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'Workspace section 36' })).toBeVisible();
+  await previewPane.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  const previewPosition = await previewPane.evaluate((element) => element.scrollTop);
+  expect(previewPosition).toBeGreaterThan(0);
+  await editorTab.click();
+  await expect(page.locator('.CodeMirror-code')).toContainText('Workspace section 36');
+  await expect
+    .poll(() => editorScroll.evaluate((element) => element.scrollTop))
+    .toBe(editorPosition);
+  await previewTab.click();
+  await expect
+    .poll(() => previewPane.evaluate((element) => element.scrollTop))
+    .toBe(previewPosition);
+});
+
 test('shows settings validation and protects required configuration', async ({ page }) => {
   await page.goto('/tasks/settings');
   await expect(page.getByRole('heading', { name: 'Project settings' })).toBeVisible();

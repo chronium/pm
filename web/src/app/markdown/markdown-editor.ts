@@ -22,11 +22,13 @@ import { MarkdownService } from './markdown.service';
     '<textarea #textarea [disabled]="disabled()" [attr.aria-label]="label()" (input)="fallbackInput($event)" (blur)="touch.emit()"></textarea>',
   styleUrl: './markdown-editor.css',
   encapsulation: ViewEncapsulation.None,
+  host: { '[class.markdown-editor--external-preview]': 'externalPreview()' },
 })
 export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, OnDestroy {
   readonly value = model.required<string>();
   readonly disabled = input(false);
   readonly label = input('Markdown description');
+  readonly externalPreview = input(false);
   readonly touch = output<void>();
   private readonly textarea = viewChild<ElementRef<HTMLTextAreaElement>>('textarea');
   private readonly editor = signal<EasyMDE | null>(null);
@@ -52,7 +54,7 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
 
   ngAfterViewInit(): void {
     try {
-      const editor = new EasyMDE({
+      const options: EasyMDE.Options = {
         element: this.textarea()!.nativeElement,
         initialValue: this.value(),
         autofocus: false,
@@ -60,7 +62,24 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
         status: false,
         minHeight: '180px',
         previewRender: (markdown) => this.renderer.render(markdown),
-      });
+      };
+      if (this.externalPreview()) {
+        options.toolbar = [
+          'bold',
+          'italic',
+          'heading',
+          '|',
+          'quote',
+          'unordered-list',
+          'ordered-list',
+          '|',
+          'link',
+          'image',
+          '|',
+          'guide',
+        ];
+      }
+      const editor = new EasyMDE(options);
       this.editor.set(editor);
       editor.codemirror.on('change', () => {
         if (!this.syncing) this.value.set(this.editor()?.value() ?? '');

@@ -25,6 +25,36 @@ pm-markdown-editor .CodeMirror {
 pm-markdown-editor .CodeMirror-scroll {
   min-height: 180px;
 }
+pm-markdown-editor.markdown-editor--external-preview,
+pm-markdown-editor.markdown-editor--external-preview .EasyMDEContainer {
+  height: 100%;
+  min-height: 0;
+}
+pm-markdown-editor.markdown-editor--external-preview .EasyMDEContainer {
+  display: flex;
+  flex-direction: column;
+}
+pm-markdown-editor.markdown-editor--external-preview .CodeMirror {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+pm-markdown-editor.markdown-editor--external-preview .CodeMirror-scroll {
+  min-height: 0;
+}
+pm-markdown-editor.markdown-editor--external-preview .editor-toolbar {
+  flex: 0 0 auto;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  opacity: 1;
+}
+pm-markdown-editor.markdown-editor--external-preview > textarea {
+  height: 100%;
+  min-height: 0;
+  resize: none;
+}
 pm-markdown-editor .editor-toolbar button {
   color: var(--pm-text-primary) !important;
 }

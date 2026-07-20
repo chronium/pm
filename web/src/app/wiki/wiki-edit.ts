@@ -3,12 +3,12 @@ import { disabled, FormField, form } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
-import { MarkdownEditor } from '../markdown/markdown-editor';
 import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import { WikiApiService } from './wiki-api.service';
 import { WikiBreadcrumbs } from './wiki-breadcrumbs';
 import { WikiDirtyForm } from './wiki-dirty-form';
+import { WikiMarkdownWorkspace } from './wiki-markdown-workspace';
 import { WikiStore } from './wiki.store';
 import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
 import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
@@ -17,12 +17,12 @@ import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
   selector: 'pm-wiki-edit',
   imports: [
     FormField,
-    MarkdownEditor,
     PmConfirmDialog,
     PmErrorState,
     PmLoadingState,
     RouterLink,
     WikiBreadcrumbs,
+    WikiMarkdownWorkspace,
     ExternalChangeBanner,
   ],
   template: ` <section class="wiki-page wiki-form-page">
@@ -38,11 +38,32 @@ import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
         >
       } @else if (store.page(); as page) {
         <pm-wiki-breadcrumbs [path]="page.path" />
-        <header>
-          <p class="wiki-eyebrow">
-            <code>{{ page.path }}</code>
-          </p>
-          <h1>Edit {{ page.title }}</h1>
+        <header class="wiki-form-header">
+          <div>
+            <p class="wiki-eyebrow">
+              <code>{{ page.path }}</code>
+            </p>
+            <h1>Edit {{ page.title }}</h1>
+          </div>
+          <div class="wiki-form-actions">
+            <a
+              class="pm-button pm-button--secondary"
+              [routerLink]="['/wiki', ...page.path.split('/')]"
+              >Cancel</a
+            ><button
+              class="pm-button pm-button--primary"
+              type="submit"
+              form="wiki-edit-form"
+              [disabled]="
+                pending() ||
+                store.unavailable() ||
+                conflict() === 'pending' ||
+                conflict() === 'reviewing'
+              "
+            >
+              {{ pending() ? 'Saving…' : 'Save body' }}
+            </button>
+          </div>
         </header>
         @if (conflict()) {
           <pm-external-change-banner
@@ -62,34 +83,18 @@ import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
             saved here.
           </p>
         }
-        <form class="wiki-form" (submit)="submit($event)">
+        <form id="wiki-edit-form" class="wiki-form" (submit)="submit($event)">
           @if (error()) {
             <p class="form-error" role="alert">{{ error() }}</p>
           }
-          <label id="wiki-edit-body">Markdown body</label
-          ><pm-markdown-editor
-            pmControl
-            [formField]="pageForm.body"
-            label="Wiki page Markdown body"
-            aria-labelledby="wiki-edit-body"
-          />
-          <div class="wiki-form-actions">
-            <a
-              class="pm-button pm-button--secondary"
-              [routerLink]="['/wiki', ...page.path.split('/')]"
-              >Cancel</a
-            ><button
-              class="pm-button pm-button--primary"
-              type="submit"
-              [disabled]="
-                pending() ||
-                store.unavailable() ||
-                conflict() === 'pending' ||
-                conflict() === 'reviewing'
-              "
-            >
-              {{ pending() ? 'Saving…' : 'Save body' }}
-            </button>
+          <div class="wiki-body-field">
+            <span id="wiki-edit-body" class="wiki-body-label">Markdown body</span>
+            <pm-wiki-markdown-workspace
+              pmControl
+              [formField]="pageForm.body"
+              label="Wiki page Markdown body"
+              aria-labelledby="wiki-edit-body"
+            />
           </div>
         </form>
       }
