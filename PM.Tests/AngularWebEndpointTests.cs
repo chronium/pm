@@ -129,6 +129,7 @@ public class AngularWebEndpointTests
             StringComparer.Ordinal);
 
         public bool HasAssets => assets.ContainsKey("index.html");
+        public IReadOnlyCollection<string> Paths => assets.Keys.ToArray();
         public bool TryGet(string path, out AngularAsset asset) => assets.TryGetValue(path, out asset!);
     }
 }

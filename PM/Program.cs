@@ -8,6 +8,7 @@ using PM.Application;
 using PM.Auth;
 using PM.Mcp;
 using PM.Project;
+using PM.Site;
 using PM.Tasks;
 using PM.Web;
 using PM.Wiki;
@@ -39,6 +40,8 @@ serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<ProjectValidationService>();
+serviceProvider.AddSingleton<SiteSnapshotBuilder>();
+serviceProvider.AddSingleton<SiteExportService>();
 serviceProvider.AddSingleton<IEditorService, EditorService>();
 serviceProvider.AddSingleton<ISyntaxHighlighter>(new SyntaxHighlighter([
     new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),
@@ -117,6 +120,12 @@ app.Configure(config =>
 
     config.AddCommand<ListCommand>(GlobalConfig.ListCommandName);
     config.AddCommand<WebCommand>(GlobalConfig.WebCommandName);
+    config.AddBranch(GlobalConfig.SiteBranchName,
+        site =>
+        {
+            site.SetDescription("Build a read-only static project site");
+            site.AddCommand<SiteBuildCommand>(GlobalConfig.SiteBuildCommandName);
+        });
     config.AddCommand<DoctorCommand>(GlobalConfig.DoctorCommandName);
 });
 

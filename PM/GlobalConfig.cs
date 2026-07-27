@@ -62,4 +62,6 @@ public static class GlobalConfig
     public static string DoctorCommandName => "doctor";
     public static string McpCommandName => "mcp";
     public static string ClaimCommandName => "claim";
+    public static string SiteBranchName => "site";
+    public static string SiteBuildCommandName => "build";
 }

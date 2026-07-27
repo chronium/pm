@@ -7,6 +7,7 @@ public sealed record AngularAsset(byte[] Content);
 public interface IAngularAssetStore
 {
     bool HasAssets { get; }
+    IReadOnlyCollection<string> Paths { get; }
     bool TryGet(string path, out AngularAsset asset);
 }
 
@@ -27,6 +28,8 @@ public sealed class EmbeddedAngularAssetStore : IAngularAssetStore
     }
 
     public bool HasAssets => assets.ContainsKey("index.html");
+
+    public IReadOnlyCollection<string> Paths => assets.Keys.ToArray();
 
     public bool TryGet(string path, out AngularAsset asset) => assets.TryGetValue(path, out asset!);
 
