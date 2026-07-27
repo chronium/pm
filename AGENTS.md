@@ -9,6 +9,8 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 
 ## Repository Workflow
 
+- Use the PM MCP tools for normal PM project mutations whenever they are available, including creating, editing, moving, reordering, and removing tasks; changing task state or metadata; and updating PM wiki content.
+- Do not manually edit `.pm/tasks/`, `.pm/states/`, `.pm/task_order.yaml`, or `.pm/wiki/` during ordinary work. The MCP/application services maintain cross-file invariants such as task ordering. Direct edits are reserved for MCP-unavailable recovery, bootstrapping, or repairing the MCP implementation itself; after any direct edit, run `pm doctor` and resolve all reported inconsistencies before completing the work.
 - Commit each completed PM task before beginning the next task. Keep the task implementation, tests, documentation, and associated `.pm` state update in the same commit; do not combine implementations for multiple task IDs in one commit.
 - Prefix every task commit subject with its task ID using the format `<TASK-ID>: <imperative summary>`, for example `PM-0048: Add Angular component Storybook`.
 - Restore .NET dependencies with elevated shell: `dotnet restore PM.slnx`.
