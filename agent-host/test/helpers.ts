@@ -4,8 +4,8 @@ import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { computeSpecificationHash } from '../src/protocol/canonical-json.js';
-import { parseRunRequest } from '../src/protocol/validation.js';
-import type { RunRequest, RunState } from '../src/protocol/types.js';
+import { parseCapabilityManifest, parseRunRequest } from '../src/protocol/validation.js';
+import type { CapabilityManifest, RunRequest, RunState } from '../src/protocol/types.js';
 import type { RunStore } from '../src/persistence/run-store.js';
 import { canonicalSignedRequest, type SignedRequestValues } from '../src/auth/crypto.js';
 
@@ -13,11 +13,26 @@ const fixture = JSON.parse(
   readFileSync(join(process.cwd(), '..', 'contracts/agent-runs/v1/run-request.json'), 'utf8'),
 ) as unknown;
 
-export function createRequest(runId: string): RunRequest {
+export function createRequest(runId: string, runnerId?: string): RunRequest {
   const request = structuredClone(parseRunRequest(fixture));
   request.specification.runId = runId;
+  if (runnerId !== undefined) request.specification.runtime.runnerId = runnerId;
   request.specificationHash = computeSpecificationHash(request.specification);
   return request;
+}
+
+export function createCapabilityManifest(): CapabilityManifest {
+  const capabilities = JSON.parse(
+    readFileSync(
+      join(process.cwd(), '..', 'contracts/agent-runs/v1/runner-capabilities.json'),
+      'utf8',
+    ),
+  ) as Record<string, unknown>;
+  return parseCapabilityManifest({
+    displayName: capabilities['displayName'],
+    agentProviders: capabilities['agentProviders'],
+    runtimeProfiles: capabilities['runtimeProfiles'],
+  });
 }
 
 export function createTempDirectory(): { path: string; dispose: () => void } {

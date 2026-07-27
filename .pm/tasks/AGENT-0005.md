@@ -8,7 +8,7 @@ dependsOn:
 - AGENT-0003
 - AGENT-0004
 createdAt: 2026-07-27T06:57:00.8799510Z
-modifiedAt: 2026-07-27T06:57:21.3373270Z
+modifiedAt: 2026-07-27T10:46:18.6627070Z
 ---
 
 ## Goal
@@ -36,3 +36,7 @@ Expose the stable runner protocol through HTTPS commands, journal-backed reads, 
 
 - Test disconnect/reconnect, replay boundaries, duplicate starts, conflicting hashes, cancellation races, backpressure, and restart recovery.
 - Run runner formatting, strict checks, and tests.
+
+## Notes
+
+- 2026-07-27 10:46 UTC - Implemented the authenticated protocol 1.0 run command surface with idempotent submission, capability checks, active-run paging, inspection, cancellation, artifact metadata, paged history, and replayable SSE. Durable events are sanitized before persistence and published only after commit; streams include heartbeats, terminal closure, capacity limits, and backpressure disconnects. Added cancellation-race, restart/idempotency, reconnect, replay-boundary, capacity, backpressure, sanitization, and HTTPS integration coverage. Validation: `socket npm ci` reported no new risks; `npm run validate` passed 25 tests; `dotnet build PM.slnx -m:1 --no-restore` succeeded; `dotnet test PM.slnx -m:1 --no-restore` passed 337 tests; PM project validation passed.

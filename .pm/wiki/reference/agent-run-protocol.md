@@ -1,10 +1,10 @@
 ---
 title: Agent Run Protocol
 createdAt: 2026-07-27T09:18:00.7240920Z
-modifiedAt: 2026-07-27T09:18:00.7240920Z
+modifiedAt: 2026-07-27T10:46:42.2502110Z
 ---
 
-Agent run protocol 1.0 defines the durable contract between PM's control plane and a runner. The contract is transport-neutral: later tasks expose it over authenticated HTTPS and persist it in the TypeScript agent host.
+Agent run protocol 1.0 defines the durable contract between PM's control plane and a runner. The contract is transport-neutral and is exposed by the TypeScript agent host over authenticated HTTPS with durable event replay.
 
 The normative interoperability artifacts are the .NET contracts and validators in `PM.AgentRuns` together with the checked-in fixtures under `contracts/agent-runs/v1/`. This page explains their intended behavior.
 
@@ -56,6 +56,12 @@ Sequences are contiguous and monotonically increasing. The runner journals an ev
 
 Protocol 1.0 fixes the core envelope and state-transition payload. Later runtime and Codex integration tasks may add event types and payload fields without turning Codex's own protocol into PM's runner protocol.
 
+The HTTPS runner exposes paged history and replayable server-sent events using the same `afterSequence` cursor. The cursor is part of the signed path and query. Durable events are committed before live subscribers are notified; heartbeats and the terminal `stream-end` signal are transport-only and do not consume sequence numbers. Reconnecting clients deduplicate by run ID and sequence.
+
+Protocol 1.0 event types use the `run.*`, `runner.*`, `runtime.*`, `agent.*`, `command.*`, `mcp.*`, `validation.*`, and `artifact.*` namespaces. Summaries and payloads are stripped of unsafe terminal controls, common credentials are redacted, and depth and payload size are bounded before persistence.
+
+Run start is idempotent by run ID and canonical specification hash. Queued cancellation settles immediately; active cancellation is journaled first and settles after execution stops. Artifact routes expose validated metadata in this slice, with byte transfer deferred.
+
 ## Authority boundaries
 
 - The runner journal is authoritative for execution state, events, and artifacts after acceptance.
@@ -76,6 +82,6 @@ Model credentials are sensitive even inside a container. Authentication mode and
 
 ## Disconnects and retention
 
-The runner survives control-plane disconnects and service clients reconnect using the last durable sequence they observed. Accepted jobs must remain inspectable after runner restart once persistence is implemented.
+The runner survives control-plane disconnects and service clients reconnect using the last durable sequence they observed. Accepted jobs remain inspectable after runner restart through the durable runner journal.
 
 Retention is runner-owned policy. Artifact metadata crosses the protocol without exposing runner-local filesystem paths. Cleanup must not change the terminal result recorded in the journal.

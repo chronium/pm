@@ -50,6 +50,11 @@ const migrations = [
   CREATE INDEX runs_terminal_at_index ON runs(terminal_at);
   CREATE INDEX run_queue_run_id_index ON run_queue(run_id);
   `,
+  `
+  ALTER TABLE runs ADD COLUMN cancellation_requested_at TEXT;
+  CREATE INDEX runs_active_page_index ON runs(accepted_at, run_id)
+    WHERE terminal_at IS NULL;
+  `,
 ];
 
 export function applyMigrations(database: DatabaseSync): void {

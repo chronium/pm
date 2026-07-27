@@ -1,6 +1,6 @@
 # PM Agent Host
 
-`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It currently provides durable run state, authenticated HTTPS pairing and capability discovery, bounded scheduling seams, restart recovery, and retention. Codex, Docker execution, run submission, and event streaming are intentionally deferred.
+`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It provides durable run state, authenticated HTTPS pairing and capability discovery, idempotent run submission, replayable event streaming, bounded scheduling seams, restart recovery, and retention. Codex and Docker execution are intentionally deferred.
 
 The workspace uses Node 26 and TypeScript 7. Install only through Socket:
 
@@ -52,9 +52,15 @@ node dist/src/main.js serve \
 
 Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the paired PM identity is unavailable. Normal rotation and revocation are authenticated HTTPS operations.
 
+## Run transport
+
+The authenticated HTTPS surface accepts immutable run requests, inspects and pages active runs, journals cancellation, lists artifact metadata, pages event history, and streams replayable SSE events. See `contracts/agent-runs/v1/transport.md` for endpoints, status codes, signed cursors, event namespaces, and reconnect behavior.
+
+The current executable wires a queue-only execution controller. Accepted commands persist and survive disconnects or restart, but remain queued until later runtime and Codex driver tasks supply the actual processor. Artifact endpoints expose metadata only in this slice.
+
 ## Persistence and security
 
-`runner.sqlite` stores immutable runs, queue order, events, artifacts, and stable runner identity. `credentials.sqlite` separately stores the single authorized public identity, pairing challenge hashes, and expiring request nonces. Both databases live under the owner-only data root and use WAL, full synchronous writes, and versioned schemas.
+`runner.sqlite` stores immutable runs, queue order, cancellation intent, events, artifacts, and stable runner identity. Events are sanitized and committed before live subscribers are notified. `credentials.sqlite` separately stores the single authorized public identity, pairing challenge hashes, and expiring request nonces. Both databases live under the owner-only data root and use WAL, full synchronous writes, and versioned schemas.
 
 Routine logs are newline-delimited JSON with whitelisted operational fields. They omit specifications, repository paths, URLs, request paths, pairing codes, certificates, credentials, signatures, nonces, and arbitrary exception messages.
 

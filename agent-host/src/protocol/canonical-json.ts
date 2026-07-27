@@ -61,6 +61,10 @@ export function canonicalSpecification(specification: RunSpecification): string 
   });
 }
 
+export function canonicalRuntimeProfile(profile: RuntimeProfile): string {
+  return JSON.stringify(profileValue(profile, true));
+}
+
 export function computeSpecificationHash(specification: RunSpecification): string {
   return sha256(canonicalSpecification(specification));
 }

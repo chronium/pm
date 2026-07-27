@@ -8,6 +8,7 @@ import { certificateFingerprint, loadTlsMaterial } from './auth/tls.js';
 import { generatePairingCode, hashPairingCode } from './auth/crypto.js';
 import { CapabilityService, loadCapabilityManifest } from './capabilities.js';
 import { AgentHostServer } from './server.js';
+import { QueueOnlyExecutionController, RunCoordinator } from './run-coordinator.js';
 
 const retentionIntervalMilliseconds = 60 * 60 * 1000;
 const pairingLifetimeMilliseconds = 10 * 60 * 1000;
@@ -81,6 +82,12 @@ async function serve(config: HostConfig): Promise<void> {
       loadCapabilityManifest(config.capabilityManifestPath!),
       config.maxConcurrency,
     );
+    const runCoordinator = new RunCoordinator(
+      store,
+      capabilities,
+      config.queueCapacity,
+      new QueueOnlyExecutionController(),
+    );
     server = new AgentHostServer({
       listenAddress: config.listenAddress!,
       port: config.port,
@@ -88,6 +95,8 @@ async function serve(config: HostConfig): Promise<void> {
       runnerId: store.runnerId,
       credentials,
       capabilities,
+      runStore: store,
+      runCoordinator,
       logger,
     });
     await server.start();

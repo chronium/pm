@@ -99,6 +99,78 @@ test('scheduler fails a processor that returns without a terminal result', async
   }
 });
 
+test('scheduler settles requested active cancellation after the processor stops', async () => {
+  const temporary = createTempDirectory();
+  try {
+    const store = new RunStore(temporary.path);
+    store.acceptRun(createRequest('run-cancelled'), 4);
+    let started = false;
+    const scheduler = new RunScheduler(
+      store,
+      {
+        execute(_run, signal): Promise<void> {
+          started = true;
+          return new Promise((resolve) => signal.addEventListener('abort', () => resolve()));
+        },
+      },
+      1,
+    );
+    scheduler.start();
+    await waitUntil(() => started);
+
+    assert.equal(store.requestCancellation('run-cancelled').disposition, 'requested');
+    assert.equal(scheduler.cancel('run-cancelled'), true);
+    await scheduler.waitForIdle();
+
+    assert.equal(store.getRun('run-cancelled')?.state, 'cancelled');
+    assert.equal(
+      store.eventsAfter('run-cancelled').filter((event) => event.state === 'cancelled').length,
+      1,
+    );
+    await scheduler.stop();
+    store.close();
+  } finally {
+    temporary.dispose();
+  }
+});
+
+test('processor completion wins a cancellation race once the run is terminal', async () => {
+  const temporary = createTempDirectory();
+  try {
+    const store = new RunStore(temporary.path);
+    store.acceptRun(createRequest('run-completion-race'), 4);
+    let release: (() => void) | undefined;
+    const scheduler = new RunScheduler(
+      store,
+      {
+        async execute(run): Promise<void> {
+          await new Promise<void>((resolve) => (release = resolve));
+          completeRun(store, run.runId);
+        },
+      },
+      1,
+    );
+    scheduler.start();
+    await waitUntil(() => release !== undefined);
+
+    assert.equal(store.requestCancellation('run-completion-race').disposition, 'requested');
+    assert.equal(scheduler.cancel('run-completion-race'), true);
+    release?.();
+    await scheduler.waitForIdle();
+
+    assert.equal(store.getRun('run-completion-race')?.state, 'completed');
+    assert.equal(
+      store.eventsAfter('run-completion-race').filter((event) => event.state === 'cancelled')
+        .length,
+      0,
+    );
+    await scheduler.stop();
+    store.close();
+  } finally {
+    temporary.dispose();
+  }
+});
+
 test('runtime and agent driver fakes execute through the scheduler seam', async () => {
   const temporary = createTempDirectory();
   try {

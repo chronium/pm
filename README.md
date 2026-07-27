@@ -81,7 +81,7 @@ Agent conclusions and notes are advisory. Moving a task to its completed state r
 
 ## Agent Host Workspace
 
-The future Linux execution-plane service lives in `agent-host/`. It is a standalone TypeScript 7 workspace using Node 26 built-ins for SQLite, HTTPS, tests, cryptography, and process lifecycle. Its current foundation persists immutable protocol 1.0 runs and events, provides authenticated one-client pairing and capability discovery, supplies bounded scheduler and driver seams, recovers interrupted state, and prunes expired terminal runs; it does not yet execute Codex or Docker or accept run commands.
+The future Linux execution-plane service lives in `agent-host/`. It is a standalone TypeScript 7 workspace using Node 26 built-ins for SQLite, HTTPS, tests, cryptography, and process lifecycle. Its current foundation accepts immutable protocol 1.0 run commands, provides authenticated one-client pairing and capability discovery, journals cancellation and sanitized events before publication, exposes paged reads and replayable SSE, supplies bounded scheduler and driver seams, recovers interrupted state, and prunes expired terminal runs. It does not yet execute Codex or Docker, so the production controller deliberately leaves accepted runs queued.
 
 Install its locked development tooling through Socket and run its complete gate separately:
 

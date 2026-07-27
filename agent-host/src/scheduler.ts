@@ -36,7 +36,11 @@ export class DriverRunProcessor implements RunProcessor {
       if (runtime !== undefined) {
         const state = this.store.getRun(run.runId)?.state;
         const reason =
-          state === 'completed' ? 'completed' : state === 'cancelled' ? 'cancelled' : 'failed';
+          state === 'completed'
+            ? 'completed'
+            : state === 'cancelled' || signal.reason === 'client_requested'
+              ? 'cancelled'
+              : 'failed';
         await this.runtimeDriver.destroy(runtime, reason);
       }
     }
@@ -77,8 +81,15 @@ export class RunScheduler {
 
   async stop(): Promise<void> {
     this.stopping = true;
-    for (const active of this.active.values()) active.controller.abort();
+    for (const active of this.active.values()) active.controller.abort('runner_stopping');
     await Promise.allSettled([...this.active.values()].map((active) => active.promise));
+  }
+
+  cancel(runId: string): boolean {
+    const active = this.active.get(runId);
+    if (active === undefined) return false;
+    active.controller.abort('client_requested');
+    return true;
   }
 
   async waitForIdle(): Promise<void> {
@@ -118,20 +129,34 @@ export class RunScheduler {
     try {
       await this.processor.execute(run, signal);
       const current = this.store.getRun(run.runId);
-      if (current !== undefined && !isTerminal(current.state))
-        this.store.transition(run.runId, 'failed', 'Run processor ended before completion', {
-          previousState: current.state,
-          nextState: 'failed',
-          reason: 'run_processor_incomplete',
-        });
+      if (current !== undefined && !isTerminal(current.state)) {
+        const cancelled = this.store.isCancellationRequested(run.runId);
+        this.store.transition(
+          run.runId,
+          cancelled ? 'cancelled' : 'failed',
+          cancelled ? 'Run cancelled' : 'Run processor ended before completion',
+          {
+            previousState: current.state,
+            nextState: cancelled ? 'cancelled' : 'failed',
+            reason: cancelled ? 'client_requested' : 'run_processor_incomplete',
+          },
+        );
+      }
     } catch {
       const current = this.store.getRun(run.runId);
-      if (current !== undefined && !isTerminal(current.state))
-        this.store.transition(run.runId, 'failed', 'Run processor failed', {
-          previousState: current.state,
-          nextState: 'failed',
-          reason: 'run_processor_failed',
-        });
+      if (current !== undefined && !isTerminal(current.state)) {
+        const cancelled = this.store.isCancellationRequested(run.runId);
+        this.store.transition(
+          run.runId,
+          cancelled ? 'cancelled' : 'failed',
+          cancelled ? 'Run cancelled' : 'Run processor failed',
+          {
+            previousState: current.state,
+            nextState: cancelled ? 'cancelled' : 'failed',
+            reason: cancelled ? 'client_requested' : 'run_processor_failed',
+          },
+        );
+      }
     }
   }
 }

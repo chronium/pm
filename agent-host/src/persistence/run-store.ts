@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { activeRunStates, canTransition, isTerminal } from '../lifecycle.js';
 import { canonicalSpecification, fixedTimeHashEquals } from '../protocol/canonical-json.js';
+import { sanitizeEventDraft } from '../protocol/event-sanitizer.js';
 import { isRunState, parseRunRequest, validateArtifact } from '../protocol/validation.js';
 import type {
   RunArtifact,
@@ -23,6 +24,7 @@ export interface StoredRun {
   acceptedAt: string;
   updatedAt: string;
   terminalAt: string | null;
+  cancellationRequestedAt: string | null;
 }
 
 export type AcceptRunResult =
@@ -38,6 +40,9 @@ export interface EventDraft {
   data?: unknown;
 }
 
+const eventType =
+  /^(?:run|runner|runtime|agent|command|mcp|validation|artifact)\.[a-z0-9][a-z0-9._-]*$/;
+
 export interface RecoveryResult {
   queued: number;
   failed: number;
@@ -48,6 +53,30 @@ export interface ExpiredRun {
   artifactLocations: string[];
 }
 
+export interface ActiveRunCursor {
+  acceptedAt: string;
+  runId: string;
+}
+
+export interface ActiveRunPage {
+  runs: StoredRun[];
+  hasMore: boolean;
+  nextCursor: ActiveRunCursor | null;
+}
+
+export interface RunEventPage {
+  events: RunEvent[];
+  hasMore: boolean;
+  nextAfterSequence: number;
+}
+
+export type CancellationResult =
+  | { disposition: 'not_found' }
+  | { disposition: 'terminal'; run: StoredRun }
+  | { disposition: 'already_requested'; run: StoredRun }
+  | { disposition: 'cancelled'; run: StoredRun }
+  | { disposition: 'requested'; run: StoredRun };
+
 interface RunRow {
   run_id: string;
   specification_hash: string;
@@ -57,6 +86,7 @@ interface RunRow {
   accepted_at: string;
   updated_at: string;
   terminal_at: string | null;
+  cancellation_requested_at: string | null;
 }
 
 interface EventRow {
@@ -72,6 +102,8 @@ interface EventRow {
 export class RunStore {
   readonly runnerId: string;
   private readonly database: DatabaseSync;
+  private readonly eventListeners = new Set<(events: readonly RunEvent[]) => void>();
+  private transactionEvents: RunEvent[] | null = null;
 
   constructor(
     readonly dataRoot: string,
@@ -94,6 +126,11 @@ export class RunStore {
 
   close(): void {
     this.database.close();
+  }
+
+  subscribe(listener: (events: readonly RunEvent[]) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
   }
 
   acceptRun(request: RunRequest, queueCapacity: number): AcceptRunResult {
@@ -149,6 +186,42 @@ export class RunStore {
     return row === undefined ? undefined : toStoredRun(row);
   }
 
+  listActiveRuns(limit: number, cursor: ActiveRunCursor | null = null): ActiveRunPage {
+    validatePageLimit(limit);
+    const rows = (cursor === null
+      ? this.database
+          .prepare(
+            `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
+                      accepted_at, updated_at, terminal_at, cancellation_requested_at
+               FROM runs WHERE terminal_at IS NULL
+               ORDER BY accepted_at, run_id LIMIT ?`,
+          )
+          .all(limit + 1)
+      : this.database
+          .prepare(
+            `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
+                      accepted_at, updated_at, terminal_at, cancellation_requested_at
+               FROM runs WHERE terminal_at IS NULL
+                 AND (accepted_at > ? OR (accepted_at = ? AND run_id > ?))
+               ORDER BY accepted_at, run_id LIMIT ?`,
+          )
+          .all(
+            cursor.acceptedAt,
+            cursor.acceptedAt,
+            cursor.runId,
+            limit + 1,
+          )) as unknown as RunRow[];
+    const hasMore = rows.length > limit;
+    const runs = rows.slice(0, limit).map((row) => toStoredRun(row));
+    const last = runs.at(-1);
+    return {
+      runs,
+      hasMore,
+      nextCursor:
+        hasMore && last !== undefined ? { acceptedAt: last.acceptedAt, runId: last.runId } : null,
+    };
+  }
+
   queueDepth(): number {
     const row = this.database.prepare('SELECT COUNT(*) AS count FROM run_queue').get() as {
       count: number;
@@ -201,8 +274,7 @@ export class RunStore {
   }
 
   eventsAfter(runId: string, afterSequence = 0): RunEvent[] {
-    if (!Number.isSafeInteger(afterSequence) || afterSequence < 0)
-      throw new Error('Event replay sequence must be a non-negative integer.');
+    validateSequence(afterSequence);
     return (
       this.database
         .prepare(
@@ -211,6 +283,59 @@ export class RunStore {
         )
         .all(runId, afterSequence) as unknown as EventRow[]
     ).map(toRunEvent);
+  }
+
+  eventPage(runId: string, afterSequence: number, limit: number): RunEventPage {
+    validateSequence(afterSequence);
+    validatePageLimit(limit);
+    const rows = this.database
+      .prepare(
+        `SELECT run_id, sequence, timestamp, type, state, summary, data_json
+         FROM run_events WHERE run_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`,
+      )
+      .all(runId, afterSequence, limit + 1) as unknown as EventRow[];
+    const hasMore = rows.length > limit;
+    const events = rows.slice(0, limit).map(toRunEvent);
+    return {
+      events,
+      hasMore,
+      nextAfterSequence: events.at(-1)?.sequence ?? afterSequence,
+    };
+  }
+
+  requestCancellation(runId: string): CancellationResult {
+    return this.transaction(() => {
+      const current = this.getRun(runId);
+      if (current === undefined) return { disposition: 'not_found' };
+      if (isTerminal(current.state)) return { disposition: 'terminal', run: current };
+      if (current.cancellationRequestedAt !== null)
+        return { disposition: 'already_requested', run: current };
+
+      const timestamp = this.timestamp();
+      this.database
+        .prepare('UPDATE runs SET cancellation_requested_at = ?, updated_at = ? WHERE run_id = ?')
+        .run(timestamp, timestamp, runId);
+      this.appendEventInTransaction(runId, {
+        type: 'run.cancellation_requested',
+        state: current.state,
+        summary: 'Cancellation requested',
+        data: { reason: 'client_requested' },
+      });
+      if (current.state === 'accepted' || current.state === 'queued') {
+        this.transitionInTransaction(runId, 'cancelled', 'Run cancelled', {
+          previousState: current.state,
+          nextState: 'cancelled',
+          reason: 'client_requested',
+        });
+        return { disposition: 'cancelled', run: this.requireRun(runId) };
+      }
+      return { disposition: 'requested', run: this.requireRun(runId) };
+    });
+  }
+
+  isCancellationRequested(runId: string): boolean {
+    const run = this.getRun(runId);
+    return run !== undefined && run.cancellationRequestedAt !== null;
   }
 
   recover(): RecoveryResult {
@@ -267,6 +392,21 @@ export class RunStore {
       .run(runId, artifact.artifactId, JSON.stringify(artifact), relativeLocation);
   }
 
+  listArtifacts(runId: string): RunArtifact[] {
+    return (
+      this.database
+        .prepare('SELECT metadata_json FROM run_artifacts WHERE run_id = ? ORDER BY artifact_id')
+        .all(runId) as unknown as { metadata_json: string }[]
+    ).map((row) => parseStoredArtifact(row.metadata_json));
+  }
+
+  getArtifact(runId: string, artifactId: string): RunArtifact | undefined {
+    const row = this.database
+      .prepare('SELECT metadata_json FROM run_artifacts WHERE run_id = ? AND artifact_id = ?')
+      .get(runId, artifactId) as { metadata_json: string } | undefined;
+    return row === undefined ? undefined : parseStoredArtifact(row.metadata_json);
+  }
+
   expiredTerminalRuns(cutoff: Date): ExpiredRun[] {
     const rows = this.database
       .prepare(
@@ -320,14 +460,15 @@ export class RunStore {
 
   private appendEventInTransaction(runId: string, draft: EventDraft): RunEvent {
     const current = this.requireRun(runId);
+    const sanitized = sanitizeEventDraft(draft.type, draft.summary, draft.data ?? null);
     if (
-      draft.type.length === 0 ||
-      draft.type.length > 256 ||
-      !draft.type.includes('.') ||
-      draft.summary.length === 0 ||
-      draft.summary.length > 4096 ||
-      hasControlCharacters(draft.type) ||
-      hasControlCharacters(draft.summary) ||
+      sanitized.type.length === 0 ||
+      sanitized.type.length > 256 ||
+      !eventType.test(sanitized.type) ||
+      sanitized.summary.length === 0 ||
+      sanitized.summary.length > 4096 ||
+      hasControlCharacters(sanitized.type) ||
+      hasControlCharacters(sanitized.summary) ||
       (draft.state !== null && draft.state !== current.state)
     )
       throw new Error('Durable run event is invalid.');
@@ -338,10 +479,10 @@ export class RunStore {
       runId,
       sequence,
       timestamp,
-      type: draft.type,
+      type: sanitized.type,
       state: draft.state,
-      summary: draft.summary,
-      data: draft.data ?? null,
+      summary: sanitized.summary,
+      data: sanitized.data,
     };
     this.database
       .prepare(
@@ -360,6 +501,9 @@ export class RunStore {
     this.database
       .prepare('UPDATE runs SET last_event_sequence = ?, updated_at = ? WHERE run_id = ?')
       .run(sequence, timestamp, runId);
+    if (this.transactionEvents === null)
+      throw new Error('Durable events must be appended inside a transaction.');
+    this.transactionEvents.push(event);
     return event;
   }
 
@@ -379,7 +523,7 @@ export class RunStore {
     return this.database
       .prepare(
         `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
-                accepted_at, updated_at, terminal_at
+                accepted_at, updated_at, terminal_at, cancellation_requested_at
          FROM runs WHERE run_id = ?`,
       )
       .get(runId) as RunRow | undefined;
@@ -401,7 +545,7 @@ export class RunStore {
     const rows = this.database
       .prepare(
         `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
-                accepted_at, updated_at, terminal_at
+                accepted_at, updated_at, terminal_at, cancellation_requested_at
          FROM runs ORDER BY run_id`,
       )
       .all() as unknown as RunRow[];
@@ -409,13 +553,27 @@ export class RunStore {
   }
 
   private transaction<T>(operation: () => T): T {
+    if (this.transactionEvents !== null)
+      throw new Error('Nested runner transactions are not supported.');
+    this.transactionEvents = [];
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const result = operation();
       this.database.exec('COMMIT');
+      const events = this.transactionEvents;
+      this.transactionEvents = null;
+      if (events.length > 0)
+        for (const listener of this.eventListeners) {
+          try {
+            listener(events);
+          } catch {
+            // A committed journal entry cannot be rolled back because a stream notifier failed.
+          }
+        }
       return result;
     } catch (error) {
       this.database.exec('ROLLBACK');
+      this.transactionEvents = null;
       throw error;
     }
   }
@@ -444,6 +602,7 @@ function toStoredRun(row: RunRow, validateSpecification = false): StoredRun {
     acceptedAt: row.accepted_at,
     updatedAt: row.updated_at,
     terminalAt: row.terminal_at,
+    cancellationRequestedAt: row.cancellation_requested_at,
   };
 }
 
@@ -460,6 +619,22 @@ function toRunEvent(row: EventRow): RunEvent {
     summary: row.summary,
     data: row.data_json === null ? null : (JSON.parse(row.data_json) as unknown),
   };
+}
+
+function parseStoredArtifact(json: string): RunArtifact {
+  const artifact = JSON.parse(json) as RunArtifact;
+  validateArtifact(artifact);
+  return artifact;
+}
+
+function validateSequence(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new Error('Event replay sequence must be a non-negative integer.');
+}
+
+function validatePageLimit(value: number): void {
+  if (!Number.isSafeInteger(value) || value <= 0 || value > 500)
+    throw new Error('Page limit must be between 1 and 500.');
 }
 
 function validateArtifactLocation(runId: string, relativeLocation: string): void {
