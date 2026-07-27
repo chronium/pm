@@ -3,7 +3,15 @@ import {
   computeSpecificationHash,
   fixedTimeHashEquals,
 } from './canonical-json.js';
-import { runStates, type RunArtifact, type RunRequest, type RunState } from './types.js';
+import {
+  runStates,
+  type CapabilityManifest,
+  type ProviderCapability,
+  type RunArtifact,
+  type RunRequest,
+  type RunState,
+  type RuntimeProfile,
+} from './types.js';
 
 const runId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const sha256 = /^[0-9a-f]{64}$/;
@@ -111,6 +119,87 @@ export function parseRunRequest(value: unknown): RunRequest {
   return request;
 }
 
+export function parseCapabilityManifest(value: unknown): CapabilityManifest {
+  const root = record(value, 'Capability manifest');
+  const providers = array(root['agentProviders'], 'Agent providers').map(parseProviderCapability);
+  const runtimeProfiles = array(root['runtimeProfiles'], 'Runtime profiles').map((profile) =>
+    parseRuntimeProfile(profile),
+  );
+  if (
+    providers.length === 0 ||
+    providers.length > 32 ||
+    new Set(providers.map((provider) => provider.providerId)).size !== providers.length
+  )
+    invalid('Agent providers must be unique and contain between 1 and 32 entries.');
+  if (
+    runtimeProfiles.length === 0 ||
+    runtimeProfiles.length > 64 ||
+    new Set(runtimeProfiles.map((profile) => profile.profileId)).size !== runtimeProfiles.length
+  )
+    invalid('Runtime profiles must be unique and contain between 1 and 64 entries.');
+
+  return {
+    displayName: text(root['displayName'], 512, 'Runner display name'),
+    agentProviders: providers,
+    runtimeProfiles,
+  };
+}
+
+export function parseRuntimeProfile(value: unknown): RuntimeProfile {
+  const profile = record(value, 'Runtime profile');
+  const limits = record(profile['limits'], 'Runtime limits');
+  const output = record(profile['output'], 'Output policy');
+  const validation = array(profile['validation'], 'Validation steps').map((item) => {
+    const step = record(item, 'Validation step');
+    const argumentsValue = array(step['arguments'], 'Validation arguments').map((argument) =>
+      text(argument, 4096, 'Validation argument', true),
+    );
+    if (argumentsValue.length > 128) invalid('Validation steps support at most 128 arguments.');
+    return {
+      stepId: id(step['stepId'], 'Validation step ID'),
+      displayName: text(step['displayName'], 512, 'Validation display name'),
+      executable: text(step['executable'], 1024, 'Validation executable'),
+      arguments: argumentsValue,
+      workingDirectory: relativePath(step['workingDirectory']),
+      timeoutSeconds: positiveInteger(step['timeoutSeconds'], 'Validation timeout'),
+    };
+  });
+  if (
+    validation.length > 64 ||
+    new Set(validation.map((step) => step.stepId)).size !== validation.length
+  )
+    invalid('Validation steps must be unique and contain at most 64 entries.');
+  const outputMode = text(output['mode'], 32, 'Output mode');
+  if (outputMode !== 'patch') invalid('Protocol 1.0 supports patch output only.');
+  const result: RuntimeProfile = {
+    profileId: id(profile['profileId'], 'Runtime profile ID'),
+    revision: text(profile['revision'], 64, 'Runtime profile revision'),
+    imageReference: text(profile['imageReference'], 2048, 'Image reference'),
+    limits: {
+      cpuMillicores: positiveInteger(limits['cpuMillicores'], 'CPU limit'),
+      memoryBytes: positiveInteger(limits['memoryBytes'], 'Memory limit'),
+      pids: positiveInteger(limits['pids'], 'PID limit'),
+      diskBytes: positiveInteger(limits['diskBytes'], 'Disk limit'),
+      timeoutSeconds: positiveInteger(limits['timeoutSeconds'], 'Runtime timeout'),
+    },
+    networkProfileId: id(profile['networkProfileId'], 'Network profile'),
+    validation,
+    output: {
+      mode: 'patch',
+      maxPatchBytes: positiveInteger(output['maxPatchBytes'], 'Maximum patch size'),
+      includeEventLog: boolean(output['includeEventLog'], 'Include event log'),
+    },
+  };
+  if (!sha256.test(result.revision)) invalid('Runtime profile revision is invalid.');
+  const expected = computeProfileRevision(result);
+  if (!fixedTimeHashEquals(expected, result.revision))
+    throw new ProtocolValidationError(
+      'profile_revision_mismatch',
+      'Runtime profile revision does not match its canonical snapshot.',
+    );
+  return result;
+}
+
 function validateCanonicalHashes(request: RunRequest): void {
   const specification = request.specification;
   if (specification.protocolVersion !== '1.0')
@@ -134,6 +223,27 @@ function validateCanonicalHashes(request: RunRequest): void {
       'specification_hash_mismatch',
       'Specification hash does not match its canonical snapshot.',
     );
+}
+
+function parseProviderCapability(value: unknown): ProviderCapability {
+  const provider = record(value, 'Agent provider');
+  const modelIds = identifiers(provider['modelIds'], 'Model IDs');
+  const effortIds = identifiers(provider['effortIds'], 'Effort IDs');
+  const defaultModelId = optionalIdentifier(provider['defaultModelId'], 'Default model ID');
+  const defaultEffortId = optionalIdentifier(provider['defaultEffortId'], 'Default effort ID');
+  if (modelIds.length === 0 || effortIds.length === 0)
+    invalid('Agent providers require at least one model and effort.');
+  if (defaultModelId !== null && !modelIds.includes(defaultModelId))
+    invalid('Default model must be advertised by its provider.');
+  if (defaultEffortId !== null && !effortIds.includes(defaultEffortId))
+    invalid('Default effort must be advertised by its provider.');
+  return {
+    providerId: id(provider['providerId'], 'Agent provider'),
+    modelIds,
+    defaultModelId,
+    effortIds,
+    defaultEffortId,
+  };
 }
 
 export function isRunState(value: string): value is RunState {
@@ -183,6 +293,17 @@ function text(value: unknown, maximum: number, name: string, allowEmpty = false)
 
 function id(value: unknown, name: string): string {
   return text(value, 256, name);
+}
+
+function optionalIdentifier(value: unknown, name: string): string | null {
+  return value === null || value === undefined ? null : id(value, name);
+}
+
+function identifiers(value: unknown, name: string): string[] {
+  const result = array(value, name).map((item) => id(item, name));
+  if (result.length > 128 || new Set(result).size !== result.length)
+    invalid(`${name} must be unique and contain at most 128 entries.`);
+  return result;
 }
 
 function positiveInteger(value: unknown, name: string): number {

@@ -5,6 +5,8 @@ The .NET contracts, validators, canonical writers, and expected hashes are norma
 runner implementations must deserialize these files and produce the same profile revision and
 run specification hash before they can advertise protocol 1.0 compatibility.
 
+The authenticated HTTPS pairing and discovery boundary is defined in `transport.md`.
+
 `run-request.json` contains a complete immutable request. Its specification hash is calculated
 from the canonical specification object only; the `specificationHash` property is not part of
 the hashed content. Runtime profile revisions similarly exclude their own `revision` property.

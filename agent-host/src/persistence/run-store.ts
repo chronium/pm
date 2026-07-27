@@ -156,6 +156,19 @@ export class RunStore {
     return row.count;
   }
 
+  activeRunCount(): number {
+    const row = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM runs
+         WHERE state IN (
+           'preparing_workspace', 'starting_runtime', 'starting_agent',
+           'running', 'validating', 'collecting_artifacts'
+         )`,
+      )
+      .get() as { count: number };
+    return row.count;
+  }
+
   claimNextRun(): StoredRun | undefined {
     return this.transaction(() => {
       const row = this.database

@@ -4,16 +4,36 @@ import { parseHostConfig } from '../src/config.js';
 import { JsonLogger, type LogFields } from '../src/logging.js';
 
 test('host configuration uses defaults, environment, then CLI precedence', () => {
-  const defaults = parseHostConfig([], {});
+  const defaults = parseHostConfig(['--help'], {});
   assert.deepEqual(defaults.config, {
     dataRoot: '/var/lib/pm-runner',
     maxConcurrency: 1,
     queueCapacity: 32,
     retentionDays: 30,
+    listenAddress: null,
+    port: 7443,
+    tlsCertificatePath: null,
+    tlsKeyPath: null,
+    capabilityManifestPath: null,
   });
 
   const configured = parseHostConfig(
-    ['--data-root', '/cli/root', '--max-concurrency=3', '--retention-days', '0'],
+    [
+      'serve',
+      '--data-root',
+      '/cli/root',
+      '--max-concurrency=3',
+      '--retention-days',
+      '0',
+      '--listen-address',
+      '100.64.0.2',
+      '--tls-cert',
+      '/tls/cert.pem',
+      '--tls-key',
+      '/tls/key.pem',
+      '--capabilities',
+      '/runner/capabilities.json',
+    ],
     {
       PM_AGENT_HOST_DATA_ROOT: '/environment/root',
       PM_AGENT_HOST_MAX_CONCURRENCY: '2',
@@ -26,16 +46,43 @@ test('host configuration uses defaults, environment, then CLI precedence', () =>
     maxConcurrency: 3,
     queueCapacity: 64,
     retentionDays: 0,
+    listenAddress: '100.64.0.2',
+    port: 7443,
+    tlsCertificatePath: '/tls/cert.pem',
+    tlsKeyPath: '/tls/key.pem',
+    capabilityManifestPath: '/runner/capabilities.json',
   });
 });
 
 test('host configuration rejects repository-relative and invalid settings', () => {
-  assert.throws(() => parseHostConfig(['--data-root', '.'], {}), /must be absolute/);
-  assert.throws(() => parseHostConfig(['--max-concurrency', '0'], {}), /positive integer/);
-  assert.throws(() => parseHostConfig(['--retention-days', '-1'], {}), /non-negative integer/);
+  assert.throws(() => parseHostConfig(['serve', '--data-root', '.'], {}), /must be absolute/);
+  assert.throws(() => parseHostConfig(['serve', '--max-concurrency', '0'], {}), /positive integer/);
+  assert.throws(
+    () => parseHostConfig(['serve', '--retention-days', '-1'], {}),
+    /non-negative integer/,
+  );
   assert.throws(
     () => parseHostConfig(['--queue-capacity', '2', '--queue-capacity', '3'], {}),
     /only be specified once/,
+  );
+  assert.throws(() => parseHostConfig(['serve'], {}), /listen-address is required/);
+  assert.throws(
+    () =>
+      parseHostConfig(
+        [
+          'serve',
+          '--listen-address',
+          '0.0.0.0',
+          '--tls-cert',
+          '/cert',
+          '--tls-key',
+          '/key',
+          '--capabilities',
+          '/capabilities',
+        ],
+        {},
+      ),
+    /wildcard/,
   );
 });
 

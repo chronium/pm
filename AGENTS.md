@@ -31,6 +31,7 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Agent-host tests: run `npm test` in `agent-host/`.
 - Agent-host production build: run `npm run build` in `agent-host/`.
 - Complete agent-host gate: run `npm run validate` in `agent-host/`.
+- Agent-host HTTPS tests require OpenSSL and bind a temporary loopback port; run `npm run validate` from an elevated shell in Codex when the sandbox rejects the listener.
 - Angular prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11.
 - Angular dependencies: run `socket npm install` in `web/`.
 - Angular dev server: run `npm start` in `web/`; it proxies `/api` to `http://127.0.0.1:51237`.

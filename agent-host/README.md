@@ -1,46 +1,61 @@
 # PM Agent Host
 
-`pm-agent-host` is the persistent Linux execution-plane service for PM agent runs. This initial workspace provides protocol 1.0 validation, durable SQLite run state, replayable events, bounded scheduling primitives, restart recovery, retention, and driver interfaces.
+`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It currently provides durable run state, authenticated HTTPS pairing and capability discovery, bounded scheduling seams, restart recovery, and retention. Codex, Docker execution, run submission, and event streaming are intentionally deferred.
 
-It does not yet listen on a network interface or execute Codex, Docker, Git, or validation commands. The production entry point recovers state, prunes expired terminal runs, reports readiness, and leaves queued work untouched until later tasks install real transports and drivers.
-
-## Development
-
-Use Node 26 from the repository `.node-version`. Install the exact locked development toolchain through Socket:
+The workspace uses Node 26 and TypeScript 7. Install only through Socket:
 
 ```sh
-cd agent-host
 socket npm install
-npm run format
-npm run check
-npm test
-npm run build
+npm run validate
 ```
 
-`npm run validate` runs the non-mutating formatting check, strict TypeScript check, build, and Node test suite. CI installs the lockfile with `socket npm ci` before running it.
+Tests require OpenSSL to generate temporary loopback certificates.
 
-Run the idle host against a disposable absolute data root:
+## Configuration
+
+The host uses CLI options with matching `PM_AGENT_HOST_*` environment variables. It fails closed if `serve` is missing its listen address, certificate, key, or capability manifest.
+
+| Option              | Environment                       | Default                         |
+| ------------------- | --------------------------------- | ------------------------------- |
+| `--data-root`       | `PM_AGENT_HOST_DATA_ROOT`         | `/var/lib/pm-runner`            |
+| `--max-concurrency` | `PM_AGENT_HOST_MAX_CONCURRENCY`   | `1`                             |
+| `--queue-capacity`  | `PM_AGENT_HOST_QUEUE_CAPACITY`    | `32`                            |
+| `--retention-days`  | `PM_AGENT_HOST_RETENTION_DAYS`    | `30`; `0` disables pruning      |
+| `--listen-address`  | `PM_AGENT_HOST_LISTEN_ADDRESS`    | required for `serve`            |
+| `--port`            | `PM_AGENT_HOST_PORT`              | `7443`                          |
+| `--tls-cert`        | `PM_AGENT_HOST_TLS_CERT_PATH`     | required for `serve` and `pair` |
+| `--tls-key`         | `PM_AGENT_HOST_TLS_KEY_PATH`      | required for `serve`            |
+| `--capabilities`    | `PM_AGENT_HOST_CAPABILITIES_PATH` | required for `serve`            |
+
+The listen address must be an explicit non-wildcard IP. The operator provides the certificate and an owner-only private key, normally for a Tailscale or trusted private-network route. The capability manifest is host-owned and changes require restart; `capabilities.example.json` shows the validated shape.
+
+## Pairing and serving
+
+Initialize a one-use ten-minute pairing window locally:
 
 ```sh
-npm run build
-npm start -- --data-root /tmp/pm-agent-host
+node dist/src/main.js pair \
+  --data-root /var/lib/pm-runner \
+  --tls-cert /etc/pm-runner/tls.crt
 ```
 
-The service accepts these CLI settings, with matching `PM_AGENT_HOST_*` environment fallbacks and CLI precedence:
+The command prints the pairing code and TLS SHA-256 fingerprint once. Verify both in PM. Start the service with:
 
-| CLI                 | Environment                     | Default              |
-| ------------------- | ------------------------------- | -------------------- |
-| `--data-root`       | `PM_AGENT_HOST_DATA_ROOT`       | `/var/lib/pm-runner` |
-| `--max-concurrency` | `PM_AGENT_HOST_MAX_CONCURRENCY` | `1`                  |
-| `--queue-capacity`  | `PM_AGENT_HOST_QUEUE_CAPACITY`  | `32`                 |
-| `--retention-days`  | `PM_AGENT_HOST_RETENTION_DAYS`  | `30`                 |
+```sh
+node dist/src/main.js serve \
+  --data-root /var/lib/pm-runner \
+  --listen-address 100.64.0.2 \
+  --tls-cert /etc/pm-runner/tls.crt \
+  --tls-key /etc/pm-runner/tls.key \
+  --capabilities /etc/pm-runner/capabilities.json
+```
 
-The data root must be absolute and host-owned. Repository configuration never changes these settings. A retention value of `0` disables automatic pruning.
+Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the paired PM identity is unavailable. Normal rotation and revocation are authenticated HTTPS operations.
 
-## Persistence
+## Persistence and security
 
-The host stores `runner.sqlite` beneath the data root using WAL, foreign keys, full synchronous writes, and versioned migrations. It persists immutable run specifications, queue order, current state, monotonically sequenced events, artifact metadata and relative locations, and a stable generated runner ID.
+`runner.sqlite` stores immutable runs, queue order, events, artifacts, and stable runner identity. `credentials.sqlite` separately stores the single authorized public identity, pairing challenge hashes, and expiring request nonces. Both databases live under the owner-only data root and use WAL, full synchronous writes, and versioned schemas.
 
-Acceptance, initial events, and queue insertion are one transaction. Restart recovery preserves queued work and marks interrupted active work failed with a durable `runner_restarted` event. Terminal retention deletes only verified run-owned paths beneath the data root before removing database records.
+Routine logs are newline-delimited JSON with whitelisted operational fields. They omit specifications, repository paths, URLs, request paths, pairing codes, certificates, credentials, signatures, nonces, and arbitrary exception messages.
 
-Routine logs are newline-delimited JSON containing only whitelisted operational fields. Specifications, repository paths and remotes, credentials, arbitrary exception messages, and artifact contents are not logged.
+See `contracts/agent-runs/v1/transport.md` for the signed request and endpoint contract.

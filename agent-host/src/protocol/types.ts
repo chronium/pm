@@ -78,6 +78,33 @@ export interface ValidationStep {
   timeoutSeconds: number;
 }
 
+export interface ProviderCapability {
+  providerId: string;
+  modelIds: string[];
+  defaultModelId: string | null;
+  effortIds: string[];
+  defaultEffortId: string | null;
+}
+
+export interface CapabilityManifest {
+  displayName: string;
+  agentProviders: ProviderCapability[];
+  runtimeProfiles: RuntimeProfile[];
+}
+
+export interface RunnerCapabilities extends CapabilityManifest {
+  runnerId: string;
+  protocolVersions: string[];
+  operatingSystem: string;
+  architecture: string;
+  dockerAvailable: boolean;
+  capacity: {
+    maximumRuns: number;
+    activeRuns: number;
+    memoryBytes: number;
+  };
+}
+
 export interface RunEvent {
   protocolVersion: string;
   runId: string;
