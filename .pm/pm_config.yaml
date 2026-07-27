@@ -9,8 +9,12 @@ taskStates:
 tracks:
   PM: PM
   ISSUE: PM Tool Issues
+  AGENT: Agent execution and remote runners
 milestones:
   mcp-smoke: MCP Smoke Test
   angular-web: Angular Web UI Migration
+  agent-runs: Agent execution and remote runners
+  agent-runs-v2: Agent collaboration and Git delivery
 milestonePriorities:
   angular-web: high
+  agent-runs: urgent
