@@ -71,6 +71,29 @@ const idServer = createServer((request, response) => {
     response.writeHead(401).end();
     return;
   }
+  if (request.method === 'GET' && request.url === '/projects/playwright-project/members') {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        currentUserId: request.headers['pm-user-id'],
+        currentRole: 'admin',
+        members: [
+          {
+            userId: request.headers['pm-user-id'],
+            displayName: 'Playwright user',
+            publicKey: request.headers['pm-public-key'],
+            role: 'admin',
+          },
+        ],
+      }),
+    );
+    return;
+  }
+  if (request.method === 'GET' && request.url === '/projects/playwright-project/invitations') {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ invitations: [] }));
+    return;
+  }
   const match = request.url?.match(/\/tracks\/([^/]+)\/(nextid|peekid)$/);
   if (!match) {
     response.writeHead(404).end();

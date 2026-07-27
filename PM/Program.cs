@@ -12,6 +12,7 @@ using PM.Site;
 using PM.Tasks;
 using PM.Web;
 using PM.Wiki;
+using PM.Worker;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -30,7 +31,8 @@ if (args is [var command, ..] && string.Equals(command, GlobalConfig.McpCommandN
     return await McpServerHost.RunAsync(args[1..], cancellationTokenSource.Token);
 }
 
-serviceProvider.AddHttpClient<INextIdService, NextIdService>();
+serviceProvider.AddHttpClient<IPmWorkerClient, PmWorkerClient>();
+serviceProvider.AddSingleton<INextIdService, NextIdService>();
 
 serviceProvider.AddSingleton<IIdentityService, IdentityService>();
 serviceProvider.AddSingleton<ProjectRoot>();
@@ -40,6 +42,8 @@ serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<ProjectValidationService>();
+serviceProvider.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
+serviceProvider.AddSingleton<IProjectCommandPrompts, ProjectCommandPrompts>();
 serviceProvider.AddSingleton<SiteSnapshotBuilder>();
 serviceProvider.AddSingleton<SiteExportService>();
 serviceProvider.AddSingleton<IEditorService, EditorService>();
@@ -60,6 +64,19 @@ app.Configure(config =>
 
     config.AddCommand<InitCommand>(GlobalConfig.InitCommandName);
     config.AddCommand<ProjectClaimCommand>(GlobalConfig.ClaimCommandName);
+
+    config.AddBranch(GlobalConfig.ProjectBranchName, project =>
+    {
+        project.SetDescription("Inspect project identity and manage remote membership");
+        project.AddCommand<ProjectIdentityCommand>("identity");
+        project.AddCommand<ProjectMembersCommand>("members");
+        project.AddCommand<ProjectInvitationsCommand>("invitations");
+        project.AddCommand<ProjectInviteCommand>("invite");
+        project.AddCommand<ProjectJoinCommand>("join");
+        project.AddCommand<ProjectRevokeInvitationCommand>("revoke-invite");
+        project.AddCommand<ProjectSetRoleCommand>("set-role");
+        project.AddCommand<ProjectRemoveMemberCommand>("remove-member");
+    });
 
     config.AddBranch(GlobalConfig.TrackBranchName,
         track =>

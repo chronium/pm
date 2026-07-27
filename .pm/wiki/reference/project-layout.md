@@ -59,3 +59,5 @@ The signing identity is outside the repository:
 - Windows: `%APPDATA%\pm\identity.json`
 
 Set `PM_IDENTITY_PATH` to override that location. The identity file contains the private key and must not be committed.
+
+Project members and pending invitations live only in the hosted Worker database. Invitation secrets are transient: they are shown once at creation, never stored in `.pm/`, and never returned by list operations. Each machine generates or loads its own independent signing identity.

@@ -1,0 +1,242 @@
+<section class="settings-section members-section" aria-labelledby="members-heading">
+  <div class="section-heading">
+    <div>
+      <h2 id="members-heading">Project members</h2>
+      <p>Independent identities authorized for the hosted next-ID service.</p>
+    </div>
+    <div class="member-heading-actions">
+      <button type="button" class="pm-button pm-button--secondary" (click)="openJoin()">
+        Join with invitation
+      </button>
+      @if (admin()) {
+        <button type="button" class="pm-button pm-button--primary" (click)="openInvite()">
+          Invite member
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (identity(); as local) {
+    <div class="identity-summary">
+      <span>Local identity</span>
+      <strong>{{ local.displayName }}</strong>
+      <code>{{ local.userId }}</code>
+      <span class="fingerprint">SHA-256 {{ local.fingerprint }}</span>
+    </div>
+  }
+
+  @if (loading()) {
+    <pm-loading-state>Checking project authentication…</pm-loading-state>
+  } @else if (error() && !membership()) {
+    <pm-error-state>
+      <p>{{ error() }}</p>
+      <button type="button" class="pm-button pm-button--secondary" (click)="reload()">Retry</button>
+    </pm-error-state>
+  } @else if (membership(); as state) {
+    <p class="auth-health" [class.auth-health--ok]="state.authenticated" role="status">
+      {{
+        state.authenticated
+          ? 'Authenticated with the project service'
+          : 'Project authentication unavailable'
+      }}
+      <span>· {{ state.currentRole }}</span>
+      @if (refreshing()) {
+        <span>· Refreshing…</span>
+      }
+    </p>
+    @if (error()) {
+      <p class="member-error" role="alert">{{ error() }}</p>
+    }
+    <div class="member-list" role="list">
+      @for (member of state.members; track member.userId) {
+        <div class="member-row" role="listitem">
+          <div class="member-name">
+            <strong>{{ member.displayName }}</strong>
+            @if (member.isLocal) {
+              <span class="local-badge">This device</span>
+            }
+          </div>
+          <div class="member-identity">
+            <code>{{ member.userId }}</code>
+            <span title="Public-key fingerprint">{{ member.fingerprint }}</span>
+          </div>
+          <span class="role-badge">{{ member.role }}</span>
+          @if (admin()) {
+            <div class="member-actions">
+              <button type="button" class="pm-button pm-button--ghost" (click)="openRole(member)">
+                Change role
+              </button>
+              <button
+                type="button"
+                class="pm-button pm-button--ghost member-remove"
+                (click)="confirmation.set({ kind: 'remove', member })"
+              >
+                Remove
+              </button>
+            </div>
+          }
+        </div>
+      } @empty {
+        <p class="empty-list">No project members were returned.</p>
+      }
+    </div>
+
+    @if (admin()) {
+      <div class="pending-invitations">
+        <h3>Pending invitations</h3>
+        @for (invitation of invitations(); track invitation.invitationId) {
+          <div class="invitation-row">
+            <code>{{ invitation.invitationId }}</code>
+            <span>{{ invitation.role }}</span>
+            <span>Expires {{ expires(invitation.expiresAt) }}</span>
+            <button
+              type="button"
+              class="pm-button pm-button--ghost"
+              (click)="confirmation.set({ kind: 'revoke', invitation })"
+            >
+              Revoke
+            </button>
+          </div>
+        } @empty {
+          <p class="empty-list">No active invitations.</p>
+        }
+      </div>
+    }
+  }
+</section>
+
+<dialog
+  #membershipDialog
+  class="membership-dialog"
+  aria-labelledby="membership-dialog-heading"
+  (cancel)="closeDialog()"
+>
+  @if (mode() === 'invite') {
+    <form (submit)="createInvitation($event)">
+      <h2 id="membership-dialog-heading">Create project invitation</h2>
+      <p>The invitation is single-use and expires after 24 hours.</p>
+      <label for="invitation-role">Role</label>
+      <select
+        id="invitation-role"
+        [value]="invitationRole()"
+        (change)="invitationRole.set($any($event.target).value)"
+      >
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select>
+      @if (invitationRole() === 'admin') {
+        <p class="admin-warning" role="status">
+          Admin invitations grant membership management access.
+        </p>
+      }
+      @if (dialogError()) {
+        <p class="member-error" role="alert">{{ dialogError() }}</p>
+      }
+      <div class="dialog-actions">
+        <button
+          type="button"
+          class="pm-button pm-button--secondary"
+          [disabled]="pending()"
+          (click)="closeDialog()"
+        >
+          Cancel
+        </button>
+        <button type="submit" class="pm-button pm-button--primary" [disabled]="pending()">
+          {{ pending() ? 'Creating…' : 'Create invitation' }}
+        </button>
+      </div>
+    </form>
+  } @else if (mode() === 'secret') {
+    <div>
+      <h2 id="membership-dialog-heading">Invitation secret</h2>
+      <p>This secret will not be shown again. Send it through a secure channel.</p>
+      <code class="secret-value">{{ oneTimeSecret() }}</code>
+      <div class="dialog-actions">
+        <button type="button" class="pm-button pm-button--secondary" (click)="copySecret()">
+          Copy
+        </button>
+        <button type="button" class="pm-button pm-button--primary" (click)="closeDialog()">
+          I have saved it
+        </button>
+      </div>
+    </div>
+  } @else if (mode() === 'join') {
+    <form (submit)="acceptInvitation($event)">
+      <h2 id="membership-dialog-heading">Join this project</h2>
+      <p>Your local identity will be added; no private key is transferred.</p>
+      <label for="invitation-token">Invitation secret</label>
+      <input
+        id="invitation-token"
+        type="password"
+        autocomplete="off"
+        [value]="invitationToken()"
+        (input)="invitationToken.set($any($event.target).value)"
+        autofocus
+      />
+      @if (dialogError()) {
+        <p class="member-error" role="alert">{{ dialogError() }}</p>
+      }
+      <div class="dialog-actions">
+        <button
+          type="button"
+          class="pm-button pm-button--secondary"
+          [disabled]="pending()"
+          (click)="closeDialog()"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          class="pm-button pm-button--primary"
+          [disabled]="pending() || !invitationToken().trim()"
+        >
+          {{ pending() ? 'Joining…' : 'Join project' }}
+        </button>
+      </div>
+    </form>
+  } @else if (mode() === 'role' && selectedMember(); as member) {
+    <form (submit)="updateRole($event)">
+      <h2 id="membership-dialog-heading">Change member role</h2>
+      <p>{{ member.displayName }} · {{ member.userId }}</p>
+      <label for="member-role">Role</label>
+      <select
+        id="member-role"
+        [value]="selectedRole()"
+        (change)="selectedRole.set($any($event.target).value)"
+      >
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select>
+      @if (member.role === 'admin' && selectedRole() === 'user') {
+        <p class="admin-warning">Demoting an admin removes their membership-management access.</p>
+      }
+      @if (dialogError()) {
+        <p class="member-error" role="alert">{{ dialogError() }}</p>
+      }
+      <div class="dialog-actions">
+        <button
+          type="button"
+          class="pm-button pm-button--secondary"
+          [disabled]="pending()"
+          (click)="closeDialog()"
+        >
+          Cancel
+        </button>
+        <button type="submit" class="pm-button pm-button--primary" [disabled]="pending()">
+          {{ pending() ? 'Saving…' : 'Save role' }}
+        </button>
+      </div>
+    </form>
+  }
+</dialog>
+
+<pm-confirm-dialog
+  [open]="!!confirmation()"
+  [pending]="pending()"
+  [heading]="confirmationHeading()"
+  [message]="confirmationMessage()"
+  [confirmLabel]="confirmation()?.kind === 'revoke' ? 'Revoke invitation' : 'Remove member'"
+  (confirmed)="confirmMutation()"
+  (cancelled)="confirmation.set(null)"
+  (openChange)="$event || confirmation.set(null)"
+/>

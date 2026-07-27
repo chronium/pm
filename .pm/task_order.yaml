@@ -21,7 +21,7 @@ orders:
   taskIds:
   - AGENT-0013
 - track: PM
-  state: todo
+  state: done
   milestone: agent-runs
   taskIds:
   - PM-0067

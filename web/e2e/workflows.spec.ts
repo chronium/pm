@@ -302,6 +302,8 @@ test('wiki Markdown workspace splits on desktop and preserves mobile pane state'
 test('shows settings validation and protects required configuration', async ({ page }) => {
   await page.goto('/tasks/settings');
   await expect(page.getByRole('heading', { name: 'Project settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Project members' })).toBeVisible();
+  await expect(page.getByText('Authenticated with the project service')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Statuses' })).toBeVisible();
 
   const expectInUseRemovalRejected = async (

@@ -12,6 +12,8 @@ using Microsoft.Extensions.Hosting;
 using PM.Api;
 using PM.Application;
 using PM.Project;
+using PM.Auth;
+using PM.Worker;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -23,8 +25,21 @@ public class WebCommand(
     TaskService taskService,
     ProjectConfigService configService,
     WikiService wikiService,
-    ProjectValidationService validationService) : AsyncCommand<WebCommand.Settings>
+    ProjectValidationService validationService,
+    IProjectMembershipService membershipService) : AsyncCommand<WebCommand.Settings>
 {
+    public WebCommand(
+        ProjectRoot projectRoot,
+        BoardService boardService,
+        TaskService taskService,
+        ProjectConfigService configService,
+        WikiService wikiService,
+        ProjectValidationService validationService)
+        : this(projectRoot, boardService, taskService, configService, wikiService, validationService,
+            new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())))
+    {
+    }
+
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
@@ -58,7 +73,8 @@ public class WebCommand(
         ConfigureApiServices(builder.Services);
 
         var app = builder.Build();
-        MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService);
+        MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService,
+            membershipService);
         if (!settings.Api)
         {
             if (ui == "legacy")
@@ -115,10 +131,12 @@ public class WebCommand(
         ProjectValidationService validationService,
         BoardService boardService,
         TaskService taskService,
-        WikiService wikiService)
+        WikiService wikiService,
+        IProjectMembershipService? membershipService = null)
     {
         endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
-            wikiService, new ResourceRevisionService(projectRoot, boardService));
+            wikiService, new ResourceRevisionService(projectRoot, boardService),
+            membershipService: membershipService);
         endpoints.MapOpenApi("/openapi/{documentName}.json");
     }
 

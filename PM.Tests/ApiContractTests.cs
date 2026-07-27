@@ -343,6 +343,39 @@ public partial class ApiContractTests
         }
     }
 
+    [Fact]
+    public async Task MembershipApiMirrorsWorkerStateWithoutProjectRevisionPreconditions()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var membership = new ApiMembershipService();
+        var (app, client) = await CreateApiClient(root, membershipService: membership);
+        await using (app)
+        using (client)
+        {
+            var members = await client.GetFromJsonAsync<ProjectMembersResponse>("/api/v1/project/members");
+            Assert.Equal("admin", members!.CurrentRole);
+            Assert.True(Assert.Single(members.Members).IsLocal);
+
+            using var invitationRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/project/invitations")
+            {
+                Content = JsonContent.Create(new { role = "admin" }),
+            };
+            invitationRequest.Headers.Add(ApiV1Endpoints.ClientHeader, "api-test");
+            var invitationResponse = await client.SendAsync(invitationRequest);
+            var invitation = await invitationResponse.Content.ReadFromJsonAsync<CreatedProjectInvitationResponse>();
+            Assert.Equal("pmi_secret", invitation!.Token);
+            Assert.Equal("admin", membership.CreatedRole);
+            Assert.False(invitationRequest.Headers.Contains("If-Match"));
+
+            using var remove = new HttpRequestMessage(HttpMethod.Delete, "/api/v1/project/members/usr_2");
+            remove.Headers.Add(ApiV1Endpoints.ClientHeader, "api-test");
+            var removeResponse = await client.SendAsync(remove);
+            Assert.Equal(HttpStatusCode.NoContent, removeResponse.StatusCode);
+            Assert.False(remove.Headers.Contains("If-Match"));
+        }
+    }
+
     private static void AddMutationEndpoint(Microsoft.AspNetCore.Routing.RouteGroupBuilder api) =>
         api.MapPost("/test-mutation", () => Results.Ok(new { accepted = true }));
 
@@ -350,7 +383,8 @@ public partial class ApiContractTests
         ProjectRoot projectRoot,
         Action<Microsoft.AspNetCore.Routing.RouteGroupBuilder>? configure = null,
         bool mapLegacy = false,
-        INextIdService? nextIdService = null)
+        INextIdService? nextIdService = null,
+        IProjectMembershipService? membershipService = null)
     {
         var port = GetAvailablePort();
         var url = $"http://127.0.0.1:{port}";
@@ -362,7 +396,8 @@ public partial class ApiContractTests
         var boardService = new BoardService(projectRoot);
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
-            new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure);
+            new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,
+            membershipService);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapLegacy)
             app.MapGet("/board", () => Results.Content("legacy", "text/html"));
@@ -392,5 +427,37 @@ public partial class ApiContractTests
             Task.FromResult(new ProjectRegistration("api-test", "recovery-test"));
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default) =>
             Task.FromResult(healthy);
+    }
+
+    private sealed class ApiMembershipService : IProjectMembershipService
+    {
+        private static readonly ProjectMember Member = new(
+            "usr_1", "API user", "public-key", new string('a', 64), "admin", true);
+        private static readonly ProjectInvitation Invitation = new(
+            "pminv_1", "admin", "usr_1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(24));
+
+        public string? CreatedRole { get; private set; }
+        public AppResult<LocalIdentity> GetLocalIdentity() => AppResult<LocalIdentity>.Ok(
+            new LocalIdentity("usr_1", "API user", "public-key", new string('a', 64)));
+        public Task<AppResult<ProjectMembers>> ListMembers(CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<ProjectMembers>.Ok(
+                new ProjectMembers("project-1", "usr_1", "admin", true, [Member])));
+        public Task<AppResult<ProjectInvitations>> ListInvitations(CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<ProjectInvitations>.Ok(new ProjectInvitations([Invitation])));
+        public Task<AppResult<CreatedProjectInvitation>> CreateInvitation(string role,
+            CancellationToken cancellationToken = default)
+        {
+            CreatedRole = role;
+            return Task.FromResult(AppResult<CreatedProjectInvitation>.Ok(
+                new CreatedProjectInvitation(Invitation with { Role = role }, "pmi_secret")));
+        }
+        public Task<AppResult<ProjectMember>> AcceptInvitation(string token,
+            CancellationToken cancellationToken = default) => Task.FromResult(AppResult<ProjectMember>.Ok(Member));
+        public Task<AppResult> RevokeInvitation(string invitationId,
+            CancellationToken cancellationToken = default) => Task.FromResult(AppResult.Ok());
+        public Task<AppResult<ProjectMember>> UpdateMemberRole(string userId, string role,
+            CancellationToken cancellationToken = default) => Task.FromResult(AppResult<ProjectMember>.Ok(Member));
+        public Task<AppResult> RemoveMember(string userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult.Ok());
     }
 }

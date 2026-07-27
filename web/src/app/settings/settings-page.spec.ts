@@ -36,6 +36,19 @@ const validation: ValidationResponse = {
     },
   ],
 };
+const identity = {
+  userId: 'usr_local',
+  displayName: 'Chronium',
+  publicKey: 'public-key',
+  fingerprint: 'ab'.repeat(32),
+};
+const membership = {
+  projectId: 'project-1',
+  currentUserId: identity.userId,
+  currentRole: 'admin',
+  authenticated: true,
+  members: [{ ...identity, role: 'admin', isLocal: true }],
+};
 
 describe('SettingsPage', () => {
   beforeEach(async () =>
@@ -57,6 +70,11 @@ describe('SettingsPage', () => {
     http.expectOne('/api/v1/validation').flush(validation);
     await fixture.whenStable();
     fixture.detectChanges();
+    http.expectOne('/api/v1/project/identity').flush(identity);
+    http.expectOne('/api/v1/project/members').flush(membership);
+    http.expectOne('/api/v1/project/invitations').flush({ invitations: [] });
+    await fixture.whenStable();
+    fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement, http };
   }
 
@@ -64,7 +82,7 @@ describe('SettingsPage', () => {
     const { element } = await render();
     expect(
       [...element.querySelectorAll('section h2')].map((heading) => heading.textContent),
-    ).toEqual(['Project health', 'Statuses', 'Milestones', 'Tracks']);
+    ).toEqual(['Project health', 'Project members', 'Statuses', 'Milestones', 'Tracks']);
     expect(element.textContent).toContain('task_state_missing');
     expect(element.textContent).toContain('.pm/tasks/PM-0001.md');
     expect(element.textContent).toContain('A very long milestone title');
@@ -76,7 +94,11 @@ describe('SettingsPage', () => {
 
   it('validates create forms, cancels without mutation, and creates a status with retained input on failure', async () => {
     const { fixture, element, http } = await render();
-    (element.querySelector('.settings-section button') as HTMLButtonElement).click();
+    (
+      element.querySelector(
+        '.settings-section[aria-labelledby="statuses-heading"] button',
+      ) as HTMLButtonElement
+    ).click();
     fixture.detectChanges();
     const form = element.querySelector('form.create-form') as HTMLFormElement;
     form.dispatchEvent(new Event('submit'));
@@ -161,10 +183,11 @@ describe('SettingsPage', () => {
     const { fixture, element, http } = await render();
     (element.querySelector('button[aria-label="Remove status"]') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(element.querySelector('dialog')?.textContent).toContain('todo');
-    const confirm = element.querySelector(
-      'pm-confirm-dialog .pm-button--danger',
-    ) as HTMLButtonElement;
+    const removalDialog = [...element.querySelectorAll('pm-confirm-dialog')].find((dialog) =>
+      dialog.textContent?.includes('todo'),
+    )!;
+    expect(removalDialog.textContent).toContain('todo');
+    const confirm = removalDialog.querySelector('.pm-button--danger') as HTMLButtonElement;
     confirm.click();
     await Promise.resolve();
     fixture.detectChanges();

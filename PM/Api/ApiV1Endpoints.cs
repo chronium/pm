@@ -29,7 +29,8 @@ public static class ApiV1Endpoints
         TaskService taskService,
         WikiService wikiService,
         ResourceRevisionService revisions,
-        Action<RouteGroupBuilder>? configure = null)
+        Action<RouteGroupBuilder>? configure = null,
+        IProjectMembershipService? membershipService = null)
     {
         var api = endpoints.MapGroup(Prefix)
             .AddEndpointFilter((context, next) => ReloadProjectConfig(context, next, projectRoot))
@@ -65,6 +66,7 @@ public static class ApiV1Endpoints
         api.MapWikiApi(wikiService, revisions);
         api.MapSettingsApi(configService, revisions);
         api.MapValidationApi(validationService);
+        if (membershipService != null) api.MapProjectMembershipApi(membershipService);
 
         configure?.Invoke(api);
         return api;
@@ -225,13 +227,17 @@ public static class ApiResults
 
     public static int StatusFor(string errorCode)
     {
-        if (errorCode == "next_id_unavailable") return StatusCodes.Status503ServiceUnavailable;
+        if (errorCode is "next_id_unavailable" or "worker_unavailable") return StatusCodes.Status503ServiceUnavailable;
+        if (errorCode == "unauthorized") return StatusCodes.Status401Unauthorized;
+        if (errorCode == "admin_required") return StatusCodes.Status403Forbidden;
+        if (errorCode == "rate_limited") return StatusCodes.Status429TooManyRequests;
+        if (errorCode is "member_not_found" or "invitation_not_found") return StatusCodes.Status404NotFound;
         if (errorCode.StartsWith("missing_", StringComparison.Ordinal)) return StatusCodes.Status404NotFound;
         if (errorCode.StartsWith("invalid_", StringComparison.Ordinal)) return StatusCodes.Status400BadRequest;
         if (errorCode.StartsWith("duplicate_", StringComparison.Ordinal) ||
             errorCode.EndsWith("_in_use", StringComparison.Ordinal) ||
             errorCode is "project_exists" or "last_status" or "last_track" or "stale_wiki_page" or
-                "changed_task_id" or "status_directory_not_empty")
+                "changed_task_id" or "status_directory_not_empty" or "final_admin")
             return StatusCodes.Status409Conflict;
 
         return StatusCodes.Status500InternalServerError;

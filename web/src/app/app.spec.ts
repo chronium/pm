@@ -104,6 +104,32 @@ describe('application shell', () => {
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/validation')) {
       request.flush({ valid: true, issues: [] });
     }
+    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/project/identity')) {
+      request.flush({
+        userId: 'usr_local',
+        displayName: 'Local user',
+        publicKey: 'public-key',
+        fingerprint: 'ab'.repeat(32),
+      });
+    }
+    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/project/members')) {
+      request.flush({
+        projectId: 'project-1',
+        currentUserId: 'usr_local',
+        currentRole: 'user',
+        authenticated: true,
+        members: [
+          {
+            userId: 'usr_local',
+            displayName: 'Local user',
+            publicKey: 'public-key',
+            fingerprint: 'ab'.repeat(32),
+            role: 'user',
+            isLocal: true,
+          },
+        ],
+      });
+    }
     const wikiSegments = url.split('?')[0]!.split('/').filter(Boolean);
     const wikiPath =
       wikiSegments[0] === 'wiki' && wikiSegments.length > 1 && wikiSegments[1] !== 'new'

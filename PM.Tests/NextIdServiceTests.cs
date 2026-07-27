@@ -2,6 +2,7 @@ using System.Net;
 using PM.Auth;
 using PM.Project;
 using PM.Tasks;
+using PM.Worker;
 
 namespace PM.Tests;
 
@@ -94,7 +95,7 @@ public class NextIdServiceTests
     {
         var identityPath = Path.Combine(workspace.Path, "identity.json");
         var identityService = new IdentityService(new IdentityServiceOptions { IdentityPath = identityPath });
-        return new NextIdService(new HttpClient(handler), identityService);
+        return new NextIdService(new PmWorkerClient(new HttpClient(handler)), identityService);
     }
 
     private static void AssertSigned(HttpRequestMessage request)

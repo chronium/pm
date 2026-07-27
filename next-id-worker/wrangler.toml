@@ -6,3 +6,9 @@ compatibility_date = "2026-07-03"
 binding = "DB"
 database_name = "pm-next-id"
 database_id = "8a955f7f-68fb-40d9-9120-1a4a210636ee"
+
+[[unsafe.bindings]]
+name = "INVITATION_ACCEPT_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }

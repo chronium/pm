@@ -18,6 +18,23 @@ pm init
 
 The default next-ID service registers the project and may display a one-time recovery key. Save that key outside the repository. The public project identifier is written under `.pm/`; the local signing identity is stored in the operating system user configuration.
 
+## Add another project member
+
+An admin can create a 24-hour invitation. The secret is shown once and should be sent through a secure channel:
+
+```sh
+pm project invite --role user
+```
+
+On another machine, clone the repository and accept the invitation without copying an identity file. `join` reads redirected input when available and otherwise uses a hidden prompt, so the secret does not need to appear in shell history:
+
+```sh
+pm project join
+pm project members
+```
+
+Use `pm project identity` to inspect the local shareable user ID, public key, and SHA-256 fingerprint. Admin invitations, role changes, invitation revocation, and member removal are available under the same `pm project` branch. The final admin cannot be demoted or removed.
+
 ## Create and inspect work
 
 ```sh

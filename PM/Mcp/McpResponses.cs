@@ -34,6 +34,34 @@ public sealed record OptionPayload(string Key, string Name);
 
 public sealed record MilestonePayload(string Key, string Name, string Priority);
 
+public sealed record LocalIdentityPayload(string UserId, string DisplayName, string PublicKey, string Fingerprint);
+
+public sealed record ProjectMemberPayload(
+    string UserId,
+    string DisplayName,
+    string PublicKey,
+    string Fingerprint,
+    string Role,
+    bool IsLocal);
+
+public sealed record ProjectMembersPayload(
+    string ProjectId,
+    string CurrentUserId,
+    string CurrentRole,
+    bool Authenticated,
+    IReadOnlyList<ProjectMemberPayload> Members);
+
+public sealed record ProjectInvitationPayload(
+    string InvitationId,
+    string Role,
+    string CreatedByUserId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt);
+
+public sealed record ProjectInvitationsPayload(IReadOnlyList<ProjectInvitationPayload> Invitations);
+
+public sealed record CreatedProjectInvitationPayload(ProjectInvitationPayload Invitation, string Token);
+
 public sealed record TaskListPayload(IReadOnlyList<TaskSummaryPayload> Tasks);
 
 public sealed record TaskSearchPayload(IReadOnlyList<TaskSearchResultPayload> Tasks);

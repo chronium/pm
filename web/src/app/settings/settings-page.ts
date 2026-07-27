@@ -7,6 +7,7 @@ import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import { PmFormField } from '../ui/form-field/form-field';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import { ProjectHealth } from './project-health';
+import { ProjectMembers } from './project-members';
 import type { SettingsCollection, SettingsOperation } from './settings.store';
 import { SettingsStore } from './settings.store';
 import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
@@ -41,6 +42,7 @@ interface SettingsDraft {
     PmFormField,
     PmLoadingState,
     ProjectHealth,
+    ProjectMembers,
     ExternalChangeBanner,
   ],
   providers: [SettingsStore, PollingCoordinator, provideIcons({ cssPen, cssTrash })],

@@ -851,7 +851,32 @@ public class McpToolTests
         }
     }
 
-    private static PmMcpTools CreateTools(ProjectRoot projectRoot, INextIdService? nextIdService = null)
+    [Fact]
+    public async Task MembershipToolsPreserveSecretBoundaryAndStructuredFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var membership = new RecordingMembershipService();
+        var tools = CreateTools(projectRoot, membershipService: membership);
+
+        var identity = tools.GetLocalIdentity();
+        var members = await tools.ListProjectMembers();
+        var invitations = await tools.ListProjectInvitations();
+        var created = await tools.CreateProjectInvitation();
+        var denied = await tools.UpdateProjectMemberRole("usr_2", "admin");
+
+        Assert.True(identity.Success);
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(identity.Data), StringComparison.OrdinalIgnoreCase);
+        Assert.True(members.Success);
+        Assert.True(invitations.Success);
+        Assert.DoesNotContain("pmi_secret", JsonSerializer.Serialize(invitations.Data));
+        Assert.Equal("pmi_secret", created.Data!.Token);
+        Assert.False(denied.Success);
+        Assert.Equal("admin_required", denied.ErrorCode);
+    }
+
+    private static PmMcpTools CreateTools(ProjectRoot projectRoot, INextIdService? nextIdService = null,
+        IProjectMembershipService? membershipService = null)
     {
         nextIdService ??= new RecordingNextIdService();
         return new PmMcpTools(
@@ -861,7 +886,8 @@ public class McpToolTests
             new ProjectConfigService(projectRoot),
             new BoardService(projectRoot),
             new WikiService(projectRoot),
-            new ProjectValidationService(projectRoot));
+            new ProjectValidationService(projectRoot),
+            membershipService);
     }
 
     private static List<string> ResolveSchemaEnumValues(JsonElement root, JsonElement schema)
@@ -943,5 +969,41 @@ public class McpToolTests
             HealthyCalls++;
             return Task.FromResult(healthy);
         }
+    }
+
+    private sealed class RecordingMembershipService : IProjectMembershipService
+    {
+        private static readonly ProjectMember Member = new(
+            "usr_1", "Local", "public-key", new string('a', 64), "admin", true);
+        private static readonly ProjectInvitation Invitation = new(
+            "pminv_1", "user", "usr_1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(24));
+
+        public AppResult<LocalIdentity> GetLocalIdentity() => AppResult<LocalIdentity>.Ok(
+            new LocalIdentity("usr_1", "Local", "public-key", new string('a', 64)));
+
+        public Task<AppResult<ProjectMembers>> ListMembers(CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<ProjectMembers>.Ok(
+                new ProjectMembers("project-1", "usr_1", "admin", true, [Member])));
+
+        public Task<AppResult<ProjectInvitations>> ListInvitations(CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<ProjectInvitations>.Ok(new ProjectInvitations([Invitation])));
+
+        public Task<AppResult<CreatedProjectInvitation>> CreateInvitation(string role,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<CreatedProjectInvitation>.Ok(
+                new CreatedProjectInvitation(Invitation, "pmi_secret")));
+
+        public Task<AppResult<ProjectMember>> AcceptInvitation(string token,
+            CancellationToken cancellationToken = default) => Task.FromResult(AppResult<ProjectMember>.Ok(Member));
+
+        public Task<AppResult> RevokeInvitation(string invitationId,
+            CancellationToken cancellationToken = default) => Task.FromResult(AppResult.Ok());
+
+        public Task<AppResult<ProjectMember>> UpdateMemberRole(string userId, string role,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<ProjectMember>.Fail("admin_required", "Admin access required."));
+
+        public Task<AppResult> RemoveMember(string userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult.Ok());
     }
 }

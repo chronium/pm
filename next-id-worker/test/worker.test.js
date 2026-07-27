@@ -175,6 +175,100 @@ test("malformed track routes are not found", async () => {
   assert.equal(response.status, 404);
 });
 
+test("members can list members but only admins can manage invitations", async () => {
+  const db = new FakeD1();
+  const admin = await createProject(db, "project-1");
+  const user = await createIdentity("user-2");
+  db.members.set(memberKey("project-1", user.userId), member("project-1", user, "User", "user"));
+
+  const listed = await json(db, user, "GET", "/projects/project-1/members");
+  assert.equal(listed.currentUserId, "user-2");
+  assert.equal(listed.currentRole, "user");
+  assert.equal(listed.members.length, 2);
+
+  const denied = await signedJson(db, user, "POST", "/projects/project-1/invitations", { role: "user" });
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.json()).errorCode, "admin_required");
+  assert.equal((await signedJson(db, admin, "POST", "/projects/project-1/invitations", { role: "invalid" })).status, 400);
+});
+
+test("invitations store only hashes, expire after 24 hours, and list without secrets", async () => {
+  const db = new FakeD1();
+  const admin = await createProject(db, "project-1");
+  const response = await signedJson(db, admin, "POST", "/projects/project-1/invitations", { role: "admin" });
+  assert.equal(response.status, 201);
+  const created = await response.json();
+  assert.match(created.token, /^pmi_[A-Za-z0-9_-]{43}$/);
+  assert.equal(created.invitation.role, "admin");
+  assert.equal(Date.parse(created.invitation.expiresAt) - Date.parse(created.invitation.createdAt), 86_400_000);
+
+  const stored = [...db.invitations.values()][0];
+  assert.notEqual(stored.token_hash, created.token);
+  assert.equal(stored.token_hash, await sha256Hex(new TextEncoder().encode(created.token)));
+  const listed = await json(db, admin, "GET", "/projects/project-1/invitations");
+  assert.equal(listed.invitations.length, 1);
+  assert.equal(JSON.stringify(listed).includes("token"), false);
+});
+
+test("invitation acceptance is signed, single-use, cross-project safe, and idempotent for one identity", async () => {
+  const db = new FakeD1();
+  const admin = await createProject(db, "project-1");
+  await createProject(db, "project-2");
+  const created = await (await signedJson(db, admin, "POST", "/projects/project-1/invitations", { role: "user" })).json();
+  const joining = await createIdentity("joining-user");
+  const payload = { token: created.token, userId: joining.userId, displayName: "Linux user", publicKey: joining.publicKey };
+
+  assert.equal((await signedJson(db, joining, "POST", "/projects/project-2/invitations/accept", payload)).status, 400);
+  const accepted = await signedJson(db, joining, "POST", "/projects/project-1/invitations/accept", payload);
+  assert.equal(accepted.status, 200);
+  assert.equal((await accepted.json()).member.role, "user");
+  assert.equal((await signedJson(db, joining, "POST", "/projects/project-1/invitations/accept", payload)).status, 200);
+
+  const other = await createIdentity("other-user");
+  const replay = await signedJson(db, other, "POST", "/projects/project-1/invitations/accept", {
+    ...payload, userId: other.userId, publicKey: other.publicKey,
+  });
+  assert.equal(replay.status, 400);
+  assert.equal((await replay.json()).errorCode, "invalid_invitation");
+});
+
+test("revoked and expired invitations cannot be accepted", async () => {
+  const db = new FakeD1();
+  const admin = await createProject(db, "project-1");
+  const created = await (await signedJson(db, admin, "POST", "/projects/project-1/invitations", { role: "user" })).json();
+  assert.equal((await signedJson(db, admin, "DELETE", `/projects/project-1/invitations/${created.invitation.invitationId}`)).status, 204);
+  const joining = await createIdentity("joining-user");
+  const payload = { token: created.token, userId: joining.userId, displayName: "Joiner", publicKey: joining.publicKey };
+  assert.equal((await signedJson(db, joining, "POST", "/projects/project-1/invitations/accept", payload)).status, 400);
+
+  const expired = await (await signedJson(db, admin, "POST", "/projects/project-1/invitations", { role: "user" })).json();
+  db.invitations.get(expired.invitation.invitationId).expires_at = Math.floor(Date.now() / 1000) - 1;
+  assert.equal((await signedJson(db, joining, "POST", "/projects/project-1/invitations/accept", { ...payload, token: expired.token })).status, 400);
+});
+
+test("role updates and removals protect the final admin", async () => {
+  const db = new FakeD1();
+  const admin = await createProject(db, "project-1");
+  assert.equal((await signedJson(db, admin, "PATCH", `/projects/project-1/members/${admin.userId}`, { role: "user" })).status, 409);
+  assert.equal((await signedJson(db, admin, "DELETE", `/projects/project-1/members/${admin.userId}`)).status, 409);
+
+  const second = await createIdentity("admin-2");
+  db.members.set(memberKey("project-1", second.userId), member("project-1", second, "Second", "admin"));
+  assert.equal((await signedJson(db, admin, "PATCH", `/projects/project-1/members/${second.userId}`, { role: "user" })).status, 200);
+  assert.equal((await signedJson(db, admin, "DELETE", `/projects/project-1/members/${second.userId}`)).status, 204);
+});
+
+test("invitation acceptance is rate limited per project and source", async () => {
+  const db = new FakeD1();
+  const joining = await createIdentity("joining-user");
+  const limiter = { limit: async () => ({ success: false }) };
+  const response = await signedJson(db, joining, "POST", "/projects/project-1/invitations/accept", {
+    token: "pmi_invalid", userId: joining.userId, displayName: "Joiner", publicKey: joining.publicKey,
+  }, { env: { INVITATION_ACCEPT_RATE_LIMITER: limiter } });
+  assert.equal(response.status, 429);
+  assert.equal((await response.json()).errorCode, "rate_limited");
+});
+
 async function createProject(db, projectId) {
   const identity = await createIdentity();
   const response = await signedJson(db, identity, "POST", "/projects", {
@@ -217,11 +311,11 @@ async function signedJson(db, identity, method, path, body, options = {}) {
       "PM-Signature": base64UrlEncode(new Uint8Array(signature)),
       "PM-Public-Key": identity.publicKey,
     },
-  });
+  }, options.env);
 }
 
-function request(db, method, path, init = {}) {
-  return handleRequest(new Request(`https://next-id.test${path}`, { method, ...init }), { DB: db });
+function request(db, method, path, init = {}, env = {}) {
+  return handleRequest(new Request(`https://next-id.test${path}`, { method, ...init }), { DB: db, ...env });
 }
 
 async function createIdentity(userId = "user-1") {
@@ -250,6 +344,7 @@ class FakeD1 {
   nonces = new Set();
   counters = new Map();
   legacyCounters = new Map();
+  invitations = new Map();
 
   prepare(sql) {
     return new FakeStatement(this, sql);
@@ -313,6 +408,24 @@ class FakeStatement {
       return { results: [] };
     }
 
+    if (this.#sql.includes("SELECT user_id, display_name, public_key, role")) {
+      const [projectId] = this.#bindings;
+      return { results: [...this.#db.members.values()]
+        .filter(value => value.project_id === projectId)
+        .sort((left, right) => left.display_name.localeCompare(right.display_name)) };
+    }
+
+    if (this.#sql.includes("INSERT INTO project_members") && this.#sql.includes("FROM project_invitations")) {
+      const [projectId, tokenHash, userId, displayName, publicKey] = this.#bindings;
+      const invitation = [...this.#db.invitations.values()].find(value =>
+        value.project_id === projectId && value.token_hash === tokenHash &&
+        value.consumed_by_user_id === userId && value.revoked_at == null);
+      const key = memberKey(projectId, userId);
+      if (invitation && !this.#db.members.has(key))
+        this.#db.members.set(key, { project_id: projectId, user_id: userId, display_name: displayName, public_key: publicKey, role: invitation.role });
+      return { results: [] };
+    }
+
     if (this.#sql.includes("INSERT INTO project_members")) {
       const [projectId, userId, displayName, publicKey, role] = this.#bindings;
       const key = memberKey(projectId, userId);
@@ -338,6 +451,65 @@ class FakeStatement {
       if (this.#db.nonces.has(key)) throw new Error("UNIQUE constraint failed");
       this.#db.nonces.add(key);
       return { results: [] };
+    }
+
+    if (this.#sql.includes("INSERT INTO project_invitations")) {
+      const [invitationId, projectId, tokenHash, role, createdBy, createdAt, expiresAt] = this.#bindings;
+      this.#db.invitations.set(invitationId, {
+        invitation_id: invitationId, project_id: projectId, token_hash: tokenHash, role,
+        created_by_user_id: createdBy, created_at: createdAt, expires_at: expiresAt,
+        consumed_at: null, consumed_by_user_id: null, revoked_at: null,
+      });
+      return { results: [] };
+    }
+
+    if (this.#sql.includes("SELECT invitation_id, role, created_by_user_id")) {
+      const [projectId, now] = this.#bindings;
+      return { results: [...this.#db.invitations.values()].filter(value =>
+        value.project_id === projectId && value.consumed_at == null && value.revoked_at == null && value.expires_at > now) };
+    }
+
+    if (this.#sql.includes("SET revoked_at")) {
+      const [projectId, invitationId, now] = this.#bindings;
+      const value = this.#db.invitations.get(invitationId);
+      if (!value || value.project_id !== projectId || value.consumed_at != null || value.revoked_at != null || value.expires_at <= now)
+        return { results: [] };
+      value.revoked_at = now;
+      return { results: [{ invitation_id: invitationId }] };
+    }
+
+    if (this.#sql.includes("SET consumed_at")) {
+      const [projectId, tokenHash, userId, now, publicKey] = this.#bindings;
+      const value = [...this.#db.invitations.values()].find(invitation =>
+        invitation.project_id === projectId && invitation.token_hash === tokenHash);
+      const existing = this.#db.members.get(memberKey(projectId, userId));
+      if (!value || value.revoked_at != null || (existing && existing.public_key !== publicKey) ||
+          !((value.consumed_at == null && value.expires_at > now) || value.consumed_by_user_id === userId))
+        return { results: [] };
+      value.consumed_at ??= now;
+      value.consumed_by_user_id ??= userId;
+      return { results: [{ role: value.role }] };
+    }
+
+    if (this.#sql.includes("SET role = ?3")) {
+      const [projectId, userId, role] = this.#bindings;
+      const value = this.#db.members.get(memberKey(projectId, userId));
+      const otherAdmin = [...this.#db.members.values()].some(member =>
+        member.project_id === projectId && member.user_id !== userId && member.role === "admin");
+      if (!value || (value.role === "admin" && role !== "admin" && !otherAdmin)) return { results: [] };
+      value.role = role;
+      return { results: [value] };
+    }
+
+    if (this.#sql.includes("DELETE FROM project_members")) {
+      const [projectId, userId] = this.#bindings;
+      const key = memberKey(projectId, userId);
+      const value = this.#db.members.get(key);
+      const otherAdmin = [...this.#db.members.values()].some(member =>
+        member.project_id === projectId && member.user_id !== userId && member.role === "admin");
+      if (!value || (value.role === "admin" && !otherAdmin)) return { results: [] };
+      this.#db.members.delete(key);
+      return { results: [{ user_id: userId }] };
     }
 
     if (this.#sql.includes("INSERT INTO project_counters")) {
@@ -380,6 +552,10 @@ function memberKey(projectId, userId) {
 
 function counterKey(projectId, track) {
   return `${projectId}:${track}`;
+}
+
+function member(projectId, identity, displayName, role) {
+  return { project_id: projectId, user_id: identity.userId, display_name: displayName, public_key: identity.publicKey, role };
 }
 
 function base64UrlEncode(bytes) {

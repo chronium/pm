@@ -14,7 +14,8 @@ public sealed class PmMcpTools(
     ProjectConfigService configService,
     BoardService boardService,
     WikiService wikiService,
-    ProjectValidationService validationService)
+    ProjectValidationService validationService,
+    IProjectMembershipService? membershipService = null)
 {
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -70,6 +71,116 @@ public sealed class PmMcpTools(
             ToMilestones(config.Milestones, config.MilestonePriorities));
 
         return McpToolResponse<ProjectPayload>.Ok($"Project {config.Name} loaded.", payload);
+    }
+
+    [McpServerTool(Name = "get_local_identity", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the shareable local PM identity and public-key fingerprint. Never returns a private key.")]
+    public McpToolResponse<LocalIdentityPayload> GetLocalIdentity()
+    {
+        if (membershipService == null) return MembershipUnavailable<LocalIdentityPayload>();
+        var result = membershipService.GetLocalIdentity();
+        return result.Success
+            ? McpToolResponse<LocalIdentityPayload>.Ok("Local PM identity loaded.",
+                new LocalIdentityPayload(result.Payload!.UserId, result.Payload.DisplayName,
+                    result.Payload.PublicKey, result.Payload.Fingerprint))
+            : McpToolResponse<LocalIdentityPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "list_project_members", ReadOnly = true, Destructive = false, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Lists remote project members and identifies the current local identity.")]
+    public async Task<McpToolResponse<ProjectMembersPayload>> ListProjectMembers(
+        CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<ProjectMembersPayload>();
+        var result = await membershipService.ListMembers(cancellationToken);
+        if (!result.Success) return McpToolResponse<ProjectMembersPayload>.FromFailure(result);
+        var value = result.Payload!;
+        return McpToolResponse<ProjectMembersPayload>.Ok($"Listed {value.Members.Count} project member(s).",
+            new ProjectMembersPayload(value.ProjectId, value.CurrentUserId, value.CurrentRole, value.Authenticated,
+                value.Members.Select(ToMembershipPayload).ToList()));
+    }
+
+    [McpServerTool(Name = "list_project_invitations", ReadOnly = true, Destructive = false, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Lists active pending project invitations without invitation secrets.")]
+    public async Task<McpToolResponse<ProjectInvitationsPayload>> ListProjectInvitations(
+        CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<ProjectInvitationsPayload>();
+        var result = await membershipService.ListInvitations(cancellationToken);
+        return result.Success
+            ? McpToolResponse<ProjectInvitationsPayload>.Ok(
+                $"Listed {result.Payload!.Invitations.Count} active invitation(s).",
+                new ProjectInvitationsPayload(result.Payload.Invitations.Select(ToInvitationPayload).ToList()))
+            : McpToolResponse<ProjectInvitationsPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "create_project_invitation", Destructive = false, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Creates a 24-hour, single-use invitation. This is the only membership tool that returns a secret.")]
+    public async Task<McpToolResponse<CreatedProjectInvitationPayload>> CreateProjectInvitation(
+        string role = "user", CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<CreatedProjectInvitationPayload>();
+        var result = await membershipService.CreateInvitation(role, cancellationToken);
+        return result.Success
+            ? McpToolResponse<CreatedProjectInvitationPayload>.Ok("Project invitation created; store its secret now.",
+                new CreatedProjectInvitationPayload(ToInvitationPayload(result.Payload!.Invitation), result.Payload.Token))
+            : McpToolResponse<CreatedProjectInvitationPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "accept_project_invitation", Destructive = false, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Accepts an invitation using the independent local PM identity.")]
+    public async Task<McpToolResponse<ProjectMemberPayload>> AcceptProjectInvitation(
+        string token, CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<ProjectMemberPayload>();
+        var result = await membershipService.AcceptInvitation(token, cancellationToken);
+        return result.Success
+            ? McpToolResponse<ProjectMemberPayload>.Ok("Project invitation accepted.", ToMembershipPayload(result.Payload!))
+            : McpToolResponse<ProjectMemberPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "revoke_project_invitation", Destructive = true, Idempotent = true, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Revokes an active pending project invitation.")]
+    public async Task<McpToolResponse<MutatedPayload>> RevokeProjectInvitation(
+        string invitationId, CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<MutatedPayload>();
+        var result = await membershipService.RevokeInvitation(invitationId, cancellationToken);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok("Project invitation revoked.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "update_project_member_role", Destructive = true, Idempotent = true, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Changes a project member role. The Worker prevents demotion of the final admin.")]
+    public async Task<McpToolResponse<ProjectMemberPayload>> UpdateProjectMemberRole(
+        string userId, string role, CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<ProjectMemberPayload>();
+        var result = await membershipService.UpdateMemberRole(userId, role, cancellationToken);
+        return result.Success
+            ? McpToolResponse<ProjectMemberPayload>.Ok("Project member role updated.", ToMembershipPayload(result.Payload!))
+            : McpToolResponse<ProjectMemberPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "remove_project_member", Destructive = true, OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description("Removes a project member. The Worker prevents removal of the final admin.")]
+    public async Task<McpToolResponse<MutatedPayload>> RemoveProjectMember(
+        string userId, CancellationToken cancellationToken = default)
+    {
+        if (membershipService == null) return MembershipUnavailable<MutatedPayload>();
+        var result = await membershipService.RemoveMember(userId, cancellationToken);
+        return result.Success
+            ? McpToolResponse<MutatedPayload>.Ok("Project member removed.", new MutatedPayload(true))
+            : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "list_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -755,6 +866,16 @@ public sealed class PmMcpTools(
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    private static ProjectMemberPayload ToMembershipPayload(ProjectMember member) =>
+        new(member.UserId, member.DisplayName, member.PublicKey, member.Fingerprint, member.Role, member.IsLocal);
+
+    private static ProjectInvitationPayload ToInvitationPayload(ProjectInvitation invitation) =>
+        new(invitation.InvitationId, invitation.Role, invitation.CreatedByUserId,
+            invitation.CreatedAt, invitation.ExpiresAt);
+
+    private static McpToolResponse<T> MembershipUnavailable<T>() =>
+        McpToolResponse<T>.Fail("membership_unavailable", "Project membership service is unavailable.");
 
     private static string ToOperationValue(WikiPatchOperation operation)
     {

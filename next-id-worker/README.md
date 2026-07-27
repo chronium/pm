@@ -13,6 +13,11 @@ https://pm-next-id.chronium.workers.dev
 - `POST /legacy-projects/claim` claims an older bearer-key project into the authenticated model.
 - `GET /projects/{projectId}/tracks/{track}/nextid` returns JSON with the allocated ID: `{ "id": 1 }`.
 - `GET /projects/{projectId}/tracks/{track}/peekid` returns JSON with the next ID without incrementing it: `{ "id": 2 }`.
+- `GET /projects/{projectId}/members` lists members for any authenticated member.
+- `GET|POST /projects/{projectId}/invitations` lists active invitations or creates a 24-hour invitation for an admin.
+- `POST /projects/{projectId}/invitations/accept` accepts a single-use invitation with a joining identity.
+- `DELETE /projects/{projectId}/invitations/{invitationId}` revokes a pending invitation.
+- `PATCH|DELETE /projects/{projectId}/members/{userId}` changes a role or removes a member.
 
 Project creation, legacy claim, and ID routes require PM signed-request headers. Unknown projects or invalid signatures return `401`. Unknown routes return `404`.
 
@@ -22,7 +27,9 @@ This is a personal public utility, not a public SaaS API. PM project files are d
 
 PM stores the public Worker project identifier at `.pm/project_id.txt`. Local user identity and the signing private key live in OS user config, outside `.pm/`. Older `.pm/next_id.txt` bearer-key projects can be claimed into the new model; after claim, PM writes `.pm/project_id.txt`.
 
-Recovery-key use, member management, rate limiting, key rotation, admin tooling, and monitoring are intentionally deferred.
+Invitation tokens contain 256 bits of randomness, are returned only at creation, and are stored in D1 only as SHA-256 hashes. Acceptance is limited to ten attempts per minute for each project and source. Invitations are role-bound, single-use, revocable, and expire after 24 hours. The Worker prevents concurrent demotion or removal of the final admin.
+
+Recovery-key use, key rotation, organizations, Worker-level administration, and monitoring are intentionally deferred.
 
 ## Development
 

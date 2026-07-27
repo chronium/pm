@@ -43,6 +43,12 @@ class SettingsStoryBackend extends HttpBackend {
       return of(new HttpResponse({ status: 200, body: settings }));
     if (request.url === '/api/v1/validation')
       return of(new HttpResponse({ status: 200, body: { valid: true, issues: [] } }));
+    if (request.url === '/api/v1/project/identity')
+      return of(new HttpResponse({ status: 200, body: localIdentity }));
+    if (request.url === '/api/v1/project/members')
+      return of(new HttpResponse({ status: 200, body: projectMembers }));
+    if (request.url === '/api/v1/project/invitations')
+      return of(new HttpResponse({ status: 200, body: { invitations: [] } }));
     if ((request.body as { key?: string } | null)?.key === 'pending') return NEVER;
     if ((request.body as { key?: string } | null)?.key === 'duplicate') {
       return throwError(
@@ -60,6 +66,21 @@ class SettingsStoryBackend extends HttpBackend {
     return of(new HttpResponse({ status: 200, body: { ...settings, revision: 'story-r2' } }));
   }
 }
+
+const localIdentity = {
+  userId: 'usr_story_local',
+  displayName: 'Story admin',
+  publicKey: 'story-public-key',
+  fingerprint: 'ab'.repeat(32),
+};
+
+const projectMembers = {
+  projectId: 'prj_story',
+  currentUserId: localIdentity.userId,
+  currentRole: 'admin',
+  authenticated: true,
+  members: [{ ...localIdentity, role: 'admin', isLocal: true }],
+};
 
 const meta = {
   title: 'Settings/Workspace',

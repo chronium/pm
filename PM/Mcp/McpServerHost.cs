@@ -5,6 +5,7 @@ using PM.Application;
 using PM.Auth;
 using PM.Project;
 using PM.Tasks;
+using PM.Worker;
 
 namespace PM.Mcp;
 
@@ -20,7 +21,8 @@ public static class McpServerHost
         var builder = Host.CreateEmptyApplicationBuilder(settings);
         builder.Logging.ClearProviders();
 
-        builder.Services.AddHttpClient<INextIdService, NextIdService>();
+        builder.Services.AddHttpClient<IPmWorkerClient, PmWorkerClient>();
+        builder.Services.AddSingleton<INextIdService, NextIdService>();
         builder.Services.Configure<NextIdServiceOptions>(options => options.WriteFailuresToConsole = false);
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
         builder.Services.AddSingleton<ProjectRoot>();
@@ -30,6 +32,7 @@ public static class McpServerHost
         builder.Services.AddSingleton<BoardService>();
         builder.Services.AddSingleton<WikiService>();
         builder.Services.AddSingleton<ProjectValidationService>();
+        builder.Services.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
 
         builder.Services
             .AddMcpServer()
