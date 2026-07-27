@@ -7,13 +7,23 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   page.on('request', (request) => requests.push(request.url()));
 
   await page.goto('/#/tasks?track=OPS');
-  await expect(page.getByText('Read-only snapshot')).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Search tasks' })).toHaveCount(0);
+  await expect(page.locator('.snapshot-context')).toBeVisible();
+  await expect(page.locator('.snapshot-context')).toContainText('Read-only');
+  const taskSearch = page.getByRole('combobox', { name: 'Search tasks' });
+  const mobileTaskSearch = page.getByRole('button', { name: 'Search tasks' });
+  if (await mobileTaskSearch.isVisible()) {
+    await expect(mobileTaskSearch).toBeVisible();
+    await mobileTaskSearch.click();
+  } else {
+    await expect(taskSearch).toBeVisible();
+  }
   await expect(page.getByRole('link', { name: 'New task' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
   await expect(page.locator('[pmTaskRow]')).toHaveCount(2);
 
-  await page.getByRole('link', { name: /E2E-0003/ }).click();
+  await taskSearch.fill('Fixture description for E2E-0003');
+  await expect(page.getByRole('option', { name: /E2E-0003/ })).toBeVisible();
+  await taskSearch.press('Enter');
   await expect(page).toHaveURL(
     testInfo.project.name.includes('mobile')
       ? /#\/tasks\/E2E-0003\?track=OPS$/
@@ -36,11 +46,19 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
 
   await page.goto('/#/wiki/guides/section-1');
   await expect(page.getByRole('heading', { name: 'section-1' })).toBeVisible();
-  await page.getByRole('link', { name: /Wiki page 2/ }).click();
+  const wikiSearch = page.getByRole('combobox', { name: 'Search wiki' });
+  const mobileWikiSearch = page.getByRole('button', { name: 'Search wiki' });
+  if (await mobileWikiSearch.isVisible()) {
+    await expect(mobileWikiSearch).toBeVisible();
+    await mobileWikiSearch.click();
+  } else {
+    await expect(wikiSearch).toBeVisible();
+  }
+  await wikiSearch.fill('Local fixture content');
+  await page.getByRole('option', { name: /Wiki page 2/ }).click();
   await expect(page.getByRole('heading', { name: 'Wiki page 2' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Metadata' })).toHaveCount(0);
-  await expect(page.getByRole('combobox', { name: 'Search wiki' })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Wiki page 2' })).toBeVisible();
 

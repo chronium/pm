@@ -115,7 +115,7 @@ dotnet artifacts/release/PM.dll site build
 dotnet artifacts/release/PM.dll site build --output public/project --force
 ```
 
-The default output is `dist/pm-site`. It contains relative Angular assets, `.nojekyll`, and a sanitized `pm-snapshot.json`, and uses hash URLs so it can be hosted under a repository path. Exported tasks and wiki content are intentionally public; identity, recovery, next-ID, credential, and local-path metadata are omitted. Static v1 keeps board filters, task details and dependencies, wiki folders/pages, Markdown, themes, and responsive layouts, but hides search, settings, and every mutation action.
+The default output is `dist/pm-site`. It contains relative Angular assets, `.nojekyll`, and a sanitized `pm-snapshot.json`, and uses hash URLs so it can be hosted under a repository path. Exported tasks and wiki content are intentionally public; identity, recovery, next-ID, credential, and local-path metadata are omitted. Static mode keeps board filters, task details and dependencies, client-side task/wiki search, wiki folders/pages, Markdown, themes, and responsive layouts, but hides settings and every mutation action.
 
 ## GitHub Pages
 

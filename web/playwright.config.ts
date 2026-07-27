@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const embedded = process.env['PM_E2E_MODE'] === 'embedded';
 const staticSite = process.env['PM_E2E_MODE'] === 'static';
+const largeStaticSite = staticSite && process.env['PM_E2E_FIXTURE'] === 'large';
 const root = process.env['PM_E2E_ROOT'];
 if (!root) throw new Error('Run Playwright through npm run e2e or npm run e2e:embedded.');
 const uiPort = process.env['PM_E2E_UI_PORT'];
@@ -13,7 +14,9 @@ export default defineConfig({
   testMatch: embedded
     ? '**/embedded.smoke.spec.ts'
     : staticSite
-      ? '**/static.smoke.spec.ts'
+      ? largeStaticSite
+        ? '**/static.large.smoke.spec.ts'
+        : '**/static.smoke.spec.ts'
       : '**/workflows.spec.ts',
   fullyParallel: false,
   workers: 1,

@@ -85,6 +85,10 @@
   font-weight: 650;
 }
 
+.snapshot-label-compact {
+  display: none;
+}
+
 .snapshot-context time {
   color: var(--pm-text-subtle);
 }
@@ -142,5 +146,13 @@
 
   .snapshot-context time {
     display: none;
+  }
+
+  .snapshot-label-full {
+    display: none;
+  }
+
+  .snapshot-label-compact {
+    display: inline;
   }
 }

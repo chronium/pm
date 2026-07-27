@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const requestedMode = process.argv[2];
-const mode = requestedMode === 'embedded' || requestedMode === 'static' ? requestedMode : 'dev';
+const mode =
+  requestedMode === 'embedded' || requestedMode === 'static' || requestedMode === 'static-large'
+    ? requestedMode
+    : 'dev';
 const extraArguments = process.argv.slice(mode === 'dev' ? 2 : 3);
 const executable = join(
   'node_modules',
@@ -18,7 +21,8 @@ const ports = await allocatePorts([
 ]);
 const env = {
   ...process.env,
-  PM_E2E_MODE: mode,
+  PM_E2E_MODE: mode === 'static-large' ? 'static' : mode,
+  PM_E2E_FIXTURE: mode === 'static-large' ? 'large' : process.env.PM_E2E_FIXTURE,
   PM_E2E_ROOT: process.env.PM_E2E_ROOT ?? join(tmpdir(), `pm-e2e-${process.pid}`),
   ...ports,
 };

@@ -73,7 +73,7 @@ dotnet artifacts/release/PM.dll web
 
 Embedding is opt-in, and ordinary .NET builds ignore the local, uncommitted `web/dist` directory.
 
-The embedded release can also generate a read-only site with `dotnet artifacts/release/PM.dll site build`. Static mode is selected by document metadata, uses hash routing, and reads the generated snapshot once per application load instead of calling `/api`. Task/wiki search and mutation-only routes are deliberately unavailable in static v1.
+The embedded release can also generate a read-only site with `dotnet artifacts/release/PM.dll site build`. Static mode is selected by document metadata, uses hash routing, and reads the generated snapshot once per application load instead of calling `/api`. Task and wiki search run locally over that snapshot; mutation-only routes remain unavailable.
 
 Playwright starts either the API plus Angular dev server or the published embedded host, creates a disposable small or 180-task project, isolates identity storage, and uses dynamically assigned loopback ports plus a deterministic fake next-ID service. `PM_E2E_ID_PORT`, `PM_E2E_API_PORT`, and `PM_E2E_UI_PORT` can override those ports for troubleshooting. All children and fixtures are cleaned up on success, failure, and interruption. The embedded profile also rejects browser requests to non-loopback hosts. Install Chromium with `socket npx playwright install chromium` before running browser gates.
 

@@ -9,10 +9,11 @@ import {
   HttpResponse,
 } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable, catchError, map, shareReplay, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, map, shareReplay, throwError } from 'rxjs';
 
 import type { components, operations } from '../api/generated/pm-api';
 import { StaticModeService } from './static-mode.service';
+import { searchSnapshotTasks, searchSnapshotWiki } from './static-search';
 
 type ProjectResponse = operations['GetProject']['responses'][200]['content']['application/json'];
 type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
@@ -105,6 +106,8 @@ export function adaptGet(snapshot: StaticSnapshot, request: HttpRequest<unknown>
   if (url === '/api/v1/settings') return snapshot.settings;
   if (url === '/api/v1/board/navigation') return snapshot.navigation;
   if (url === '/api/v1/board') return filterBoard(snapshot.board, request);
+  if (url === '/api/v1/tasks/search') return searchSnapshotTasks(snapshot, request);
+  if (url === '/api/v1/wiki/search') return searchSnapshotWiki(snapshot, request);
   if (url === '/api/v1/wiki/pages') return snapshot.wikiIndex;
 
   const taskPrefix = '/api/v1/tasks/';

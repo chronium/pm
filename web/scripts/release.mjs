@@ -26,6 +26,7 @@ const steps = [
   ],
   [npm, ['run', 'e2e:embedded'], webRoot],
   [npm, ['run', 'e2e:static'], webRoot],
+  [npm, ['run', 'e2e:static:large'], webRoot],
 ];
 
 for (const [command, args, cwd] of steps) {

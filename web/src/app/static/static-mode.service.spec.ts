@@ -69,14 +69,53 @@ const snapshot: StaticSnapshot = {
       prioritySource: 'milestone',
       prioritySelection: 'inherit',
       state: 'todo',
-      dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+      dependencies: {
+        ready: false,
+        dependsOn: ['WEB-0001'],
+        waitingOn: ['WEB-0001'],
+        missing: [],
+        summary: 'waiting on WEB-0001',
+      },
       createdAt: '2026-01-01T00:00:00Z',
       modifiedAt: '2026-01-02T00:00:00Z',
-      description: 'Body',
+      description: 'Body contains release needle twice: needle.',
+      revision: 'static-snapshot',
+    },
+    {
+      id: 'PM-0002',
+      title: 'Follow-up',
+      track: 'PM',
+      milestone: 'launch',
+      priority: 'high',
+      prioritySource: 'milestone',
+      prioritySelection: 'inherit',
+      state: 'done',
+      dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+      createdAt: '2026-01-01T00:00:00Z',
+      modifiedAt: '2026-01-03T00:00:00Z',
+      description: 'Needle once.',
+      revision: 'static-snapshot',
+    },
+    {
+      id: 'WEB-0001',
+      title: 'Web delivery',
+      track: 'WEB',
+      milestone: 'launch',
+      priority: 'high',
+      prioritySource: 'milestone',
+      prioritySelection: 'inherit',
+      state: 'todo',
+      dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+      createdAt: '2026-01-01T00:00:00Z',
+      modifiedAt: '2026-01-04T00:00:00Z',
+      description: 'Needle in another track.',
       revision: 'static-snapshot',
     },
   ],
-  wikiIndex: [{ path: 'guide/start', title: 'Start', modifiedAt: '2026-01-02T00:00:00Z' }],
+  wikiIndex: [
+    { path: 'guide/start', title: 'Start', modifiedAt: '2026-01-02T00:00:00Z' },
+    { path: 'guide/next', title: 'Next', modifiedAt: '2026-01-03T00:00:00Z' },
+  ],
   wikiPages: [
     {
       path: 'guide/start',
@@ -84,6 +123,14 @@ const snapshot: StaticSnapshot = {
       createdAt: '2026-01-01T00:00:00Z',
       modifiedAt: '2026-01-02T00:00:00Z',
       body: '# Start',
+      revision: 'static-snapshot',
+    },
+    {
+      path: 'guide/next',
+      title: 'Next needle',
+      createdAt: '2026-01-01T00:00:00Z',
+      modifiedAt: '2026-01-03T00:00:00Z',
+      body: 'Needle needle in the body.',
       revision: 'static-snapshot',
     },
   ],
@@ -114,7 +161,7 @@ describe('static snapshot mode', () => {
     expect(adaptGet(snapshot, get('/api/v1/wiki/pages'))).toEqual(snapshot.wikiIndex);
     expect(adaptGet(snapshot, get('/api/v1/tasks/PM-0001'))).toMatchObject({
       id: 'PM-0001',
-      description: 'Body',
+      description: 'Body contains release needle twice: needle.',
       localMetadata: { filePath: '' },
     });
     expect(adaptGet(snapshot, get('/api/v1/wiki/pages/guide/start'))).toMatchObject({
@@ -139,6 +186,54 @@ describe('static snapshot mode', () => {
     expect(snapshot.board.milestoneGroups[0]!.states[0]!.tasks.map((task) => task.id)).toEqual([
       'PM-0001',
       'WEB-0001',
+    ]);
+  });
+
+  it('searches snapshot tasks with backend-compatible ranking, predicates, and selection scope', () => {
+    const scoped = adaptGet(
+      snapshot,
+      get(
+        '/api/v1/tasks/search',
+        new HttpParams().set('query', 'needle').set('track', 'PM').set('limit', '20'),
+      ),
+    ) as { id: string; matchCount: number | string; snippet: string }[];
+    expect(scoped.map((result) => result.id)).toEqual(['PM-0001', 'PM-0002']);
+    expect(Number(scoped[0]!.matchCount)).toBeGreaterThan(Number(scoped[1]!.matchCount));
+    expect(scoped[0]!.snippet).toContain('Description:');
+
+    const projectWide = adaptGet(
+      snapshot,
+      get('/api/v1/tasks/search', new HttpParams().set('query', 'in:all id:1').set('track', 'PM')),
+    ) as { id: string }[];
+    expect(projectWide.map((result) => result.id)).toEqual(['PM-0001', 'WEB-0001']);
+
+    const filtersOnly = adaptGet(
+      snapshot,
+      get('/api/v1/tasks/search', new HttpParams().set('query', 'state:done track:PM')),
+    ) as { id: string; snippet: string }[];
+    expect(filtersOnly).toEqual([
+      expect.objectContaining({ id: 'PM-0002', snippet: 'Needle once.' }),
+    ]);
+  });
+
+  it('returns task syntax errors and searches wiki titles, paths, and bodies locally', () => {
+    expect(() =>
+      adaptGet(
+        snapshot,
+        get('/api/v1/tasks/search', new HttpParams().set('query', 'state: track:PM')),
+      ),
+    ).toThrow();
+
+    const wiki = adaptGet(
+      snapshot,
+      get('/api/v1/wiki/search', new HttpParams().set('query', 'needle').set('limit', '1')),
+    ) as { path: string; matchCount: number | string; snippet: string }[];
+    expect(wiki).toEqual([
+      expect.objectContaining({
+        path: 'guide/next',
+        matchCount: 3,
+        snippet: expect.stringContaining('Needle needle'),
+      }),
     ]);
   });
 });
