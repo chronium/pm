@@ -7,6 +7,10 @@ riderModule.iml
 /next-id-worker/node_modules/
 /next-id-worker/.wrangler/
 
+/agent-host/node_modules/
+/agent-host/dist/
+/agent-host/coverage/
+
 /web/node_modules/
 /web/.angular/
 /web/dist/

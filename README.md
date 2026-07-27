@@ -79,6 +79,20 @@ The `run-worker` profile can read and search project, task, dependency, and wiki
 
 Agent conclusions and notes are advisory. Moving a task to its completed state remains an authoritative PM control-plane action after validation or review.
 
+## Agent Host Workspace
+
+The future Linux execution-plane service lives in `agent-host/`. It is a standalone TypeScript 7 workspace using Node 26 built-ins for SQLite, tests, cryptography, and process lifecycle. Its current foundation persists immutable protocol 1.0 runs and events, provides bounded scheduler and driver seams, recovers interrupted state, and prunes expired terminal runs; it does not yet expose HTTPS or execute Codex or Docker.
+
+Install its locked development tooling through Socket and run its complete gate separately:
+
+```sh
+cd agent-host
+socket npm install
+npm run validate
+```
+
+See `agent-host/README.md` for configuration and data-layout details.
+
 ## Angular Web Workspace
 
 The replacement web client lives in `web/` as a standalone Angular 22 application. It requires the Node version pinned in `.node-version` (`26.5.0`) and npm 11. Normal .NET builds and tests do not install or build the Angular application.

@@ -1,0 +1,28 @@
+{
+  "name": "pm-agent-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "pm-agent-host": "dist/src/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "start": "node dist/src/main.js",
+    "test": "npm run build && node --test --test-concurrency=1 dist/test/*.test.js",
+    "validate": "npm run format:check && npm run check && npm test"
+  },
+  "engines": {
+    "node": ">=26 <27",
+    "npm": ">=11 <12"
+  },
+  "packageManager": "npm@11.17.0",
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "prettier": "3.8.1",
+    "typescript": "7.0.2"
+  }
+}

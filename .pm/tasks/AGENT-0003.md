@@ -6,7 +6,7 @@ milestone: agent-runs
 dependsOn:
 - AGENT-0001
 createdAt: 2026-07-27T06:57:00.4242720Z
-modifiedAt: 2026-07-27T06:57:21.3232730Z
+modifiedAt: 2026-07-27T09:57:54.0674940Z
 ---
 
 ## Goal
@@ -36,3 +36,7 @@ Create the Linux `pm-agent-host` service foundation with durable scheduling stat
 - Add unit and persistence restart tests.
 - Add Socket-reviewed install instructions and package scripts.
 - Run formatting, strict TypeScript checks, and runner tests.
+
+## Notes
+
+- 2026-07-27 09:57 UTC - Implemented the standalone `agent-host/` foundation with TypeScript 7.0.2 and Node 26 built-ins. Added protocol 1.0 canonical validation, private SQLite persistence, transactional idempotent acceptance and monotonic event sequencing, bounded FIFO scheduling with fake runtime/agent drivers, restart recovery, retention pruning, structured redacted logging, CLI/environment configuration, documentation, and CI validation. All package mutations and the clean install used `socket npm`; Socket reported no new risks. Validation: `npm run validate` passed formatting, strict compilation, build, and 14 tests; `dotnet build PM.slnx -m:1 --no-restore` succeeded; `dotnet test PM.slnx -m:1 --no-restore` passed 337 tests; direct idle-host startup/shutdown smoke passed; `pm doctor` passed.

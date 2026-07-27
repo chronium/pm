@@ -24,6 +24,13 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Worker dev server: `npm run dev` in `next-id-worker/`.
 - Worker deploy: `npm run deploy` in `next-id-worker/`.
 - Worker D1 migrations: `npm run migrate:local` or `npm run migrate:remote` in `next-id-worker/`.
+- Agent-host prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11.
+- Agent-host dependencies: run `socket npm install` in `agent-host/`.
+- Agent-host formatting: run `npm run format` before completing and committing agent-host changes, then verify with `npm run format:check`.
+- Agent-host strict check: run `npm run check` in `agent-host/`.
+- Agent-host tests: run `npm test` in `agent-host/`.
+- Agent-host production build: run `npm run build` in `agent-host/`.
+- Complete agent-host gate: run `npm run validate` in `agent-host/`.
 - Angular prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11.
 - Angular dependencies: run `socket npm install` in `web/`.
 - Angular dev server: run `npm start` in `web/`; it proxies `/api` to `http://127.0.0.1:51237`.
@@ -41,7 +48,7 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 
 Any npm command that installs, updates, removes, or otherwise modifies packages, `package.json`, or lockfiles must use `socket npm ...`. Normal .NET build and test commands do not install or build the Angular workspace. Storybook browser tests use Playwright through `npm run test:storybook`; standalone application E2E uses `npm run e2e`. Use `playwright-cli` for ad hoc UI validation when available.
 
-No dedicated lint command is configured in this repository. Do not invent one. Before work is complete, format Angular changes and run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; Angular changes need `npm run format`, `npm run format:check`, and the relevant Angular validation commands; worker changes need `npm test` from `next-id-worker/`.
+No dedicated lint command is configured in this repository. Do not invent one. Before work is complete, format Angular or agent-host changes and run the relevant build and tests for the area changed: .NET changes need `dotnet build PM.slnx -m:1 --no-restore` and `dotnet test PM.slnx -m:1 --no-restore`; Angular changes need `npm run format`, `npm run format:check`, and the relevant Angular validation commands; agent-host changes need `npm run format`, `npm run format:check`, `npm run check`, `npm test`, and `npm run build`; worker changes need `npm test` from `next-id-worker/`.
 
 ## Architecture
 
@@ -57,6 +64,7 @@ No dedicated lint command is configured in this repository. Do not invent one. B
 - `PM/Files/` contains file-system abstractions.
 - `PM.Tests/` contains xUnit tests and test helpers. Add tests near the behavior being changed, especially for rendered HTML and file mutation behavior.
 - `next-id-worker/` contains the Cloudflare Worker used by the default next-ID service. Its API and trust model are documented in `next-id-worker/README.md`.
+- `agent-host/` contains the standalone TypeScript 7 Linux runner foundation. Keep protocol and persistence behavior aligned with `contracts/agent-runs/v1/`, use Node built-ins where sufficient, and keep host configuration and data outside repositories.
 - `next_id.cs` is listed in the solution under `/NanoServices/`.
 
 Use existing constructor-injected services and `AppResult`/`AppResult<T>` for application failures. Keep data access through `ProjectRoot`, `TaskService`, `BoardService`, and Worker D1 prepared statements rather than scattering file or database access through UI code. Keep HTML escaping in `BoardHtmlRenderer` for user-controlled values.

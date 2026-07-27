@@ -46,6 +46,14 @@ jobs:
         working-directory: web
         run: socket npm ci
 
+      - name: Install locked agent-host dependencies through Socket
+        working-directory: agent-host
+        run: socket npm ci
+
+      - name: Validate the agent host
+        working-directory: agent-host
+        run: npm run validate
+
       - name: Install the reviewed Chromium runtime through Socket
         working-directory: web
         run: socket npx playwright install --with-deps chromium
