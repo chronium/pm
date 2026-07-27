@@ -15,7 +15,8 @@ public sealed class PmMcpTools(
     BoardService boardService,
     WikiService wikiService,
     ProjectValidationService validationService,
-    IProjectMembershipService? membershipService = null)
+    IProjectMembershipService? membershipService,
+    McpCapabilityContext capabilityContext)
 {
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -454,6 +455,11 @@ public sealed class PmMcpTools(
     [Description("Appends a dated note under a task's Notes section.")]
     public McpToolResponse<TaskMutationPayload> AppendTaskNote(string taskId, string note)
     {
+        if (!capabilityContext.CanAppendNoteTo(taskId))
+            return McpToolResponse<TaskMutationPayload>.Fail(
+                "mcp_task_scope_denied",
+                $"The run-worker MCP profile may only append notes to task {capabilityContext.AssignedTaskId}.");
+
         var result = taskService.AppendTaskNote(taskId, note);
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);

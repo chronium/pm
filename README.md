@@ -65,6 +65,20 @@ Run tests:
 dotnet test PM.slnx -m:1 --no-restore
 ```
 
+## MCP Profiles
+
+`pm mcp` starts the normal MCP server and preserves the complete project-management tool surface for trusted local clients.
+
+Isolated agent runs must start the restricted profile with the task assigned by the trusted runner:
+
+```sh
+pm mcp --profile run-worker --task-id AGENT-0002
+```
+
+The `run-worker` profile can read and search project, task, dependency, and wiki context, inspect wiki outlines, validate the project, and append implementation notes to its assigned task. Other mutations and every membership-administration tool are absent from its advertised MCP schema. The profile and assigned task come only from process arguments and cannot be changed by repository configuration. A run must fail if this MCP process cannot initialize.
+
+Agent conclusions and notes are advisory. Moving a task to its completed state remains an authoritative PM control-plane action after validation or review.
+
 ## Angular Web Workspace
 
 The replacement web client lives in `web/` as a standalone Angular 22 application. It requires the Node version pinned in `.node-version` (`26.5.0`) and npm 11. Normal .NET builds and tests do not install or build the Angular application.

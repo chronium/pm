@@ -6,7 +6,7 @@ milestone: agent-runs
 dependsOn:
 - AGENT-0001
 createdAt: 2026-07-27T06:57:00.1964900Z
-modifiedAt: 2026-07-27T06:57:21.3002740Z
+modifiedAt: 2026-07-27T09:32:07.3753910Z
 ---
 
 ## Goal
@@ -34,3 +34,7 @@ Let Codex inspect PM context and append implementation notes inside an isolated 
 
 - Add MCP schema and authorization tests for allowed and denied tools.
 - Run the .NET build and tests.
+
+## Notes
+
+- 2026-07-27 09:32 UTC - Implemented the `run-worker` MCP profile with trusted `--profile run-worker --task-id <TASK-ID>` startup options, an explicit 14-tool read-oriented allowlist, assigned-task-only `append_task_note` authorization, fail-closed project/task startup validation, normal-profile schema compatibility, and README guidance on the control-plane authority boundary. Validation: `dotnet build PM.slnx -m:1 --no-restore` succeeded; `dotnet test PM.slnx -m:1 --no-restore` passed 337 tests; a live stdio handshake advertised only the restricted allowlist; missing-task startup exited with code 2; `pm doctor` passed.

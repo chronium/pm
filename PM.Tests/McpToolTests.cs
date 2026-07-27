@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
@@ -843,12 +844,126 @@ public class McpToolTests
             using var host = McpServerHost.CreateBuilder([]).Build();
 
             Assert.NotNull(host.Services.GetRequiredService<ProjectRoot>());
+            var advertisedNames = host.Services.GetServices<McpServerTool>()
+                .Select(tool => tool.ProtocolTool.Name)
+                .ToHashSet(StringComparer.Ordinal);
+            var expectedNames = typeof(PmMcpTools)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Select(method => method.GetCustomAttribute<McpServerToolAttribute>()?.Name)
+                .Where(name => name != null)
+                .Select(name => name!)
+                .ToHashSet(StringComparer.Ordinal);
+            Assert.True(advertisedNames.SetEquals(expectedNames));
             Assert.Equal(string.Empty, stdout.ToString());
         }
         finally
         {
             Console.SetOut(originalOut);
         }
+    }
+
+    [Fact]
+    public void McpStartupOptionsParseNormalAndRunWorkerProfiles()
+    {
+        var defaultProfile = McpServerStartupOptions.Parse([]);
+        var explicitNormal = McpServerStartupOptions.Parse(["--profile=normal"]);
+        var runWorker = McpServerStartupOptions.Parse(
+            ["--profile", "run-worker", "--task-id", "AGENT-0002"]);
+
+        Assert.True(defaultProfile.Success);
+        Assert.Equal(McpCapabilityProfile.Normal, defaultProfile.Payload!.Profile);
+        Assert.Null(defaultProfile.Payload.AssignedTaskId);
+        Assert.True(explicitNormal.Success);
+        Assert.Equal(McpCapabilityProfile.Normal, explicitNormal.Payload!.Profile);
+        Assert.True(runWorker.Success);
+        Assert.Equal(McpCapabilityProfile.RunWorker, runWorker.Payload!.Profile);
+        Assert.Equal("AGENT-0002", runWorker.Payload.AssignedTaskId);
+    }
+
+    [Fact]
+    public void McpStartupOptionsRejectInvalidOrAmbiguousArguments()
+    {
+        string[][] invalidArguments =
+        [
+            ["--profile"],
+            ["--profile", "unknown"],
+            ["--profile", "run-worker"],
+            ["--task-id", "AGENT-0002"],
+            ["--profile", "run-worker", "--task-id", "../AGENT-0002"],
+            ["--profile", "run-worker", "--task-id", "AGENT-0002", "--task-id", "AGENT-0003"],
+            ["--unknown", "value"],
+        ];
+
+        foreach (var arguments in invalidArguments)
+        {
+            var result = McpServerStartupOptions.Parse(arguments);
+
+            Assert.False(result.Success);
+            Assert.Equal("invalid_mcp_options", result.ErrorCode);
+        }
+    }
+
+    [Fact]
+    public void RunWorkerProfileAdvertisesOnlyTheRestrictedToolSet()
+    {
+        using var host = McpServerHost.CreateBuilder(new McpServerStartupOptions(
+            McpCapabilityProfile.RunWorker, "AGENT-0002")).Build();
+        var tools = host.Services.GetServices<McpServerTool>();
+        var names = tools.Select(tool => tool.ProtocolTool.Name).ToHashSet(StringComparer.Ordinal);
+
+        Assert.True(names.SetEquals(McpToolCatalog.RunWorkerToolNames));
+        Assert.Contains("get_task", names);
+        Assert.Contains("append_task_note", names);
+        Assert.DoesNotContain("move_task", names);
+        Assert.DoesNotContain("update_task_markdown", names);
+        Assert.DoesNotContain("patch_wiki_page", names);
+        Assert.DoesNotContain("create_project_invitation", names);
+    }
+
+    [Fact]
+    public async Task RunWorkerProfileScopesNotesToTheAssignedTask()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var assigned = TestData.Task("AGENT-0002", "Assigned task");
+        var other = TestData.Task("AGENT-0003", "Other task");
+        projectRoot.WriteTask(assigned);
+        projectRoot.WriteTask(other);
+        projectRoot.UpdateTaskState(assigned, "todo");
+        projectRoot.UpdateTaskState(other, "todo");
+        var tools = CreateTools(projectRoot,
+            capabilityContext: new McpCapabilityContext(McpCapabilityProfile.RunWorker, "AGENT-0002"));
+
+        var task = tools.GetTask("AGENT-0002");
+        var allowed = tools.AppendTaskNote("AGENT-0002", "Allowed note");
+        var denied = tools.AppendTaskNote("AGENT-0003", "Denied note");
+
+        Assert.True(task.Success);
+        Assert.True(allowed.Success);
+        Assert.False(denied.Success);
+        Assert.Equal("mcp_task_scope_denied", denied.ErrorCode);
+        Assert.True(projectRoot.TryGetById("AGENT-0002", out var assignedTask));
+        Assert.Contains("Allowed note", assignedTask.Description);
+        Assert.True(projectRoot.TryGetById("AGENT-0003", out var otherTask));
+        Assert.DoesNotContain("Denied note", otherTask.Description);
+    }
+
+    [Fact]
+    public async Task RunWorkerStartupRequiresAnExistingAssignedTask()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        projectRoot.WriteTask(TestData.Task("AGENT-0002", "Assigned task"));
+
+        using var validHost = McpServerHost.CreateBuilder(new McpServerStartupOptions(
+            McpCapabilityProfile.RunWorker, "AGENT-0002")).Build();
+        using var missingHost = McpServerHost.CreateBuilder(new McpServerStartupOptions(
+            McpCapabilityProfile.RunWorker, "AGENT-9999")).Build();
+
+        Assert.True(McpServerHost.ValidateStartup(validHost.Services).Success);
+        var missing = McpServerHost.ValidateStartup(missingHost.Services);
+        Assert.False(missing.Success);
+        Assert.Equal("missing_task", missing.ErrorCode);
     }
 
     [Fact]
@@ -876,7 +991,8 @@ public class McpToolTests
     }
 
     private static PmMcpTools CreateTools(ProjectRoot projectRoot, INextIdService? nextIdService = null,
-        IProjectMembershipService? membershipService = null)
+        IProjectMembershipService? membershipService = null,
+        McpCapabilityContext? capabilityContext = null)
     {
         nextIdService ??= new RecordingNextIdService();
         return new PmMcpTools(
@@ -887,7 +1003,8 @@ public class McpToolTests
             new BoardService(projectRoot),
             new WikiService(projectRoot),
             new ProjectValidationService(projectRoot),
-            membershipService);
+            membershipService,
+            capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal));
     }
 
     private static List<string> ResolveSchemaEnumValues(JsonElement root, JsonElement schema)
