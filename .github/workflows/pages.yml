@@ -1,0 +1,97 @@
+name: Publish PM site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore .NET dependencies
+        run: dotnet restore PM.slnx
+
+      - name: Install pinned Socket CLI bootstrap
+        run: npm install --global socket@1.1.146
+
+      - name: Install locked frontend dependencies through Socket
+        working-directory: web
+        run: socket npm ci
+
+      - name: Install the reviewed Chromium runtime through Socket
+        working-directory: web
+        run: socket npx playwright install --with-deps chromium
+
+      - name: Run the complete release gate
+        working-directory: web
+        run: npm run release
+
+      - name: Generate the repository snapshot site
+        run: dotnet artifacts/release/PM.dll site build --output dist/pm-site --force
+
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Mirror the exact site tree to orphaned gh-pages
+        id: mirror
+        env:
+          SITE_INDEX: ${{ runner.temp }}/pm-site.index
+        run: |
+          rm -f "$SITE_INDEX"
+          export GIT_INDEX_FILE="$SITE_INDEX"
+          git read-tree --empty
+          git --work-tree="$GITHUB_WORKSPACE/dist/pm-site" add --all
+          site_tree="$(git write-tree)"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          site_commit="$(printf 'Publish PM static site from %s\n' "$GITHUB_SHA" | git commit-tree "$site_tree")"
+          git push --force origin "$site_commit:refs/heads/gh-pages"
+          remote_commit="$(git ls-remote origin refs/heads/gh-pages | cut -f1)"
+          test "$remote_commit" = "$site_commit"
+          test "$(git rev-parse "$site_commit^{tree}")" = "$site_tree"
+          echo "tree=$site_tree" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the same site directory for Pages
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist/pm-site
+
+      - name: Record mirrored tree
+        run: echo "Uploaded Pages input and gh-pages tree ${{ steps.mirror.outputs.tree }} from dist/pm-site" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
