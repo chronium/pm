@@ -1,0 +1,9 @@
+{
+  "artifactId": "artifact-patch",
+  "kind": "git_patch",
+  "fileName": "run-01K0EXAMPLE.patch",
+  "mediaType": "text/x-diff",
+  "byteLength": 2048,
+  "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "createdAt": "2026-07-27T10:15:00.000Z"
+}

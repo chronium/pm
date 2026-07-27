@@ -1,0 +1,38 @@
+[
+  {
+    "protocolVersion": "1.0",
+    "runId": "run-01K0EXAMPLE",
+    "sequence": 1,
+    "timestamp": "2026-07-27T09:30:01.000Z",
+    "type": "run.state_changed",
+    "state": "accepted",
+    "summary": "Task accepted",
+    "data": {
+      "previousState": "requested",
+      "nextState": "accepted"
+    }
+  },
+  {
+    "protocolVersion": "1.0",
+    "runId": "run-01K0EXAMPLE",
+    "sequence": 2,
+    "timestamp": "2026-07-27T09:30:02.000Z",
+    "type": "run.state_changed",
+    "state": "queued",
+    "summary": "Run queued",
+    "data": {
+      "previousState": "accepted",
+      "nextState": "queued"
+    }
+  },
+  {
+    "protocolVersion": "1.0",
+    "runId": "run-01K0EXAMPLE",
+    "sequence": 3,
+    "timestamp": "2026-07-27T09:30:03.000Z",
+    "type": "runner.message",
+    "state": "queued",
+    "summary": "Waiting for an execution slot",
+    "data": null
+  }
+]

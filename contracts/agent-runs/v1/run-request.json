@@ -1,0 +1,66 @@
+{
+  "specificationHash": "d9a14452db77b5e82e444834ec2a1c26affef030016a152e6e4d3854ea00e174",
+  "specification": {
+    "protocolVersion": "1.0",
+    "runId": "run-01K0EXAMPLE",
+    "requestedAt": "2026-07-27T09:30:00.000Z",
+    "project": {
+      "projectId": "project-example",
+      "name": "PM π"
+    },
+    "task": {
+      "taskId": "PM-0001",
+      "title": "Define the agent protocol",
+      "revision": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "repository": {
+      "remote": "git@github.com:chronium/pm.git",
+      "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "agent": {
+      "providerId": "codex",
+      "modelId": "gpt-5.6",
+      "effortId": "xhigh",
+      "promptProfileId": "task-execution"
+    },
+    "runtime": {
+      "runnerId": "linux-workstation",
+      "profile": {
+        "profileId": "dotnet-10",
+        "revision": "b5b18ff76eb761618044050df2cc4f070ee3345eae1a7c76d3cf92a415757ab9",
+        "imageReference": "ghcr.io/chronium/pm-agent-dotnet@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "limits": {
+          "cpuMillicores": 4000,
+          "memoryBytes": 8589934592,
+          "pids": 1024,
+          "diskBytes": 21474836480,
+          "timeoutSeconds": 10800
+        },
+        "networkProfileId": "openai-nuget-github",
+        "validation": [
+          {
+            "stepId": "build",
+            "displayName": "Build",
+            "executable": "dotnet",
+            "arguments": ["build", "--no-restore"],
+            "workingDirectory": ".",
+            "timeoutSeconds": 600
+          },
+          {
+            "stepId": "test",
+            "displayName": "Test",
+            "executable": "dotnet",
+            "arguments": ["test", "--no-restore"],
+            "workingDirectory": ".",
+            "timeoutSeconds": 900
+          }
+        ],
+        "output": {
+          "mode": "patch",
+          "maxPatchBytes": 10485760,
+          "includeEventLog": true
+        }
+      }
+    }
+  }
+}

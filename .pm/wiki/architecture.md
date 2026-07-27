@@ -1,7 +1,7 @@
 ---
 title: Architecture
 createdAt: 2026-07-27T06:14:45.2713530Z
-modifiedAt: 2026-07-27T06:14:45.2713530Z
+modifiedAt: 2026-07-27T09:18:07.0984210Z
 ---
 
 PM is organized around one application model with several adapters.
@@ -41,3 +41,7 @@ The optional Cloudflare Worker allocates track-scoped numeric IDs in D1. Request
 ## Design boundary
 
 Adapters should not invent parallel business logic. New behavior belongs in an application service first, then receives CLI, MCP, API, or UI exposure as appropriate.
+
+## Agent run protocol
+
+The transport-neutral contracts for supervised agent execution live in `PM/AgentRuns/`. See **Agent Run Protocol** under Reference for immutable specifications, lifecycle, replay, authority, and v1 security boundaries.

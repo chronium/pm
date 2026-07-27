@@ -6,7 +6,7 @@ milestone: agent-runs
 dependsOn:
 - PM-0067
 createdAt: 2026-07-27T06:56:59.9661710Z
-modifiedAt: 2026-07-27T07:02:56.1463600Z
+modifiedAt: 2026-07-27T09:19:58.3950960Z
 ---
 
 ## Goal
@@ -34,3 +34,7 @@ Establish the durable contracts for supervised Codex runs before implementing ei
 
 - Run the .NET build and tests.
 - Review the protocol against restart, disconnect, stale task, cancellation, and duplicate-request scenarios.
+
+## Notes
+
+- 2026-07-27 09:19 UTC - Implemented protocol 1.0 as a transport-neutral `PM.AgentRuns` domain. Added immutable specification and validated runtime-profile snapshots, canonical SHA-256 hashing, stable validation failures, idempotent start evaluation, lifecycle enforcement, durable event replay semantics, runner capability and artifact contracts, and language-neutral fixtures under `contracts/agent-runs/v1/`. Added the Agent Run Protocol wiki reference and linked it from Architecture. Validation: `dotnet build PM.slnx -m:1 --no-restore` succeeded; `dotnet test PM.slnx -m:1 --no-restore --no-build` passed 332 tests; PM project validation passed.
