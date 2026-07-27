@@ -25,6 +25,7 @@ const steps = [
     repositoryRoot,
   ],
   [npm, ['run', 'e2e:embedded'], webRoot],
+  [npm, ['run', 'e2e:static'], webRoot],
 ];
 
 for (const [command, args, cwd] of steps) {

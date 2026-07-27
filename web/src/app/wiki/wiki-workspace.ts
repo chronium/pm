@@ -6,6 +6,7 @@ import { MarkdownDisplay } from '../markdown/markdown-display';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import { WikiBreadcrumbs } from './wiki-breadcrumbs';
 import { WikiStore } from './wiki.store';
+import { StaticModeService } from '../static/static-mode.service';
 
 @Component({
   selector: 'pm-wiki-workspace',
@@ -27,7 +28,9 @@ import { WikiStore } from './wiki.store';
           <p class="wiki-eyebrow">Folder</p>
           <h1>{{ folderName() }}</h1>
         </div>
-        <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
+        @if (!staticMode.enabled) {
+          <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
+        }
       </header>
       <div class="wiki-list" aria-label="Pages in folder">
         @for (page of folderPages(); track page.path) {
@@ -82,17 +85,19 @@ import { WikiStore } from './wiki.store';
               <time [attr.datetime]="page.modifiedAt">{{ page.modifiedAt | date: 'medium' }}</time>
             </p>
           </div>
-          <div class="wiki-actions">
-            <a
-              class="pm-button pm-button--secondary"
-              [routerLink]="['/wiki/meta', ...page.path.split('/')]"
-              >Metadata</a
-            ><a
-              class="pm-button pm-button--primary"
-              [routerLink]="['/wiki/edit', ...page.path.split('/')]"
-              >Edit</a
-            >
-          </div>
+          @if (!staticMode.enabled) {
+            <div class="wiki-actions">
+              <a
+                class="pm-button pm-button--secondary"
+                [routerLink]="['/wiki/meta', ...page.path.split('/')]"
+                >Metadata</a
+              ><a
+                class="pm-button pm-button--primary"
+                [routerLink]="['/wiki/edit', ...page.path.split('/')]"
+                >Edit</a
+              >
+            </div>
+          }
         </header>
         <pm-markdown-display [markdown]="page.body" />
       </article>
@@ -103,6 +108,7 @@ import { WikiStore } from './wiki.store';
 export class WikiWorkspace {
   readonly wikiPath = input('');
   protected readonly store = inject(WikiStore);
+  protected readonly staticMode = inject(StaticModeService);
   protected readonly resolution = computed(() => this.store.resolve(this.wikiPath()));
   protected readonly folderPages = computed(() => {
     const value = this.resolution();

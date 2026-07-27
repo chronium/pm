@@ -33,8 +33,9 @@ npm run api:types       # Regenerate TypeScript contracts from the runtime OpenA
 npm run api:types:check # Fail when committed TypeScript contracts have drifted
 npm run e2e              # Desktop and mobile Chromium workflows with disposable projects
 npm run e2e:embedded     # Smoke-test the published embedded host
+npm run e2e:static       # Smoke-test a backend-free generated site
 npm run frontend:validate # Complete frontend quality gate
-npm run release           # Locked install, all gates, publish, and embedded smoke
+npm run release           # Locked install, all gates, publish, embedded and static smoke
 ```
 
 Install the Chromium binary used by Storybook's browser tests after installing dependencies:
@@ -71,6 +72,8 @@ dotnet artifacts/release/PM.dll web
 ```
 
 Embedding is opt-in, and ordinary .NET builds ignore the local, uncommitted `web/dist` directory.
+
+The embedded release can also generate a read-only site with `dotnet artifacts/release/PM.dll site build`. Static mode is selected by document metadata, uses hash routing, and reads the generated snapshot once per application load instead of calling `/api`. Task/wiki search and mutation-only routes are deliberately unavailable in static v1.
 
 Playwright starts either the API plus Angular dev server or the published embedded host, creates a disposable small or 180-task project, isolates identity storage, and uses dynamically assigned loopback ports plus a deterministic fake next-ID service. `PM_E2E_ID_PORT`, `PM_E2E_API_PORT`, and `PM_E2E_UI_PORT` can override those ports for troubleshooting. All children and fixtures are cleaned up on success, failure, and interruption. The embedded profile also rejects browser requests to non-loopback hosts. Install Chromium with `socket npx playwright install chromium` before running browser gates.
 

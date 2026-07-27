@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { Component, ElementRef, HostListener, inject, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { cssMenu, cssMoon, cssScreen, cssSun } from '@ng-icons/css.gg';
@@ -10,10 +11,11 @@ import { TaskNavigationService } from './tasks/task-navigation.service';
 import { AppShell } from './app.routes';
 import { TaskSearch } from './tasks/task-search/task-search';
 import { WikiSearch } from './wiki/wiki-search';
+import { StaticModeService } from './static/static-mode.service';
 
 @Component({
   selector: 'pm-root',
-  imports: [NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch, WikiSearch],
+  imports: [DatePipe, NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch, WikiSearch],
   providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -24,6 +26,7 @@ export class App {
   protected readonly theme = inject(ThemeService);
   protected readonly projectApi = inject(ProjectApiService);
   protected readonly taskNavigation = inject(TaskNavigationService);
+  protected readonly staticMode = inject(StaticModeService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
 
   protected toggleNavigation(): void {

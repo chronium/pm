@@ -121,12 +121,13 @@ export class WikiMarkdownWorkspace implements FormValueControl<string>, OnDestro
     const current = this.activePane();
     this.scrollPositions[current] = this.paneScroller(current)?.scrollTop ?? 0;
     this.activePane.set(pane);
+    if (focus) {
+      const index = pane === 'editor' ? 0 : 1;
+      this.tabs()[index]?.nativeElement.focus();
+    }
     setTimeout(() => {
       const scroller = this.paneScroller(pane);
       if (scroller) scroller.scrollTop = this.scrollPositions[pane];
-      if (!focus) return;
-      const index = pane === 'editor' ? 0 : 1;
-      this.tabs()[index]?.nativeElement.focus();
     }, 0);
   }
 

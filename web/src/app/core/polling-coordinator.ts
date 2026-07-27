@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpParams, HttpResponse } from '@angular/common/http';
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
+import { StaticModeService } from '../static/static-mode.service';
 
 export type PollingState = 'idle' | 'online' | 'retrying';
 
@@ -27,9 +28,11 @@ export class PollingSession {
     private readonly http: HttpClient,
     private readonly document: Document,
     private readonly options: PollingOptions<unknown>,
+    private readonly disabled = false,
   ) {}
 
   start(immediate = false): void {
+    if (this.disabled) return;
     const wasActive = this.active;
     this.active = true;
     if (this.document.visibilityState === 'hidden') return;
@@ -116,6 +119,7 @@ export class PollingCoordinator {
   private readonly http = inject(HttpClient);
   private readonly document = inject(DOCUMENT, { optional: true }) ?? globalThis.document;
   private readonly destroyRef = inject(DestroyRef);
+  private readonly staticMode = inject(StaticModeService);
   private readonly sessions = new Set<PollingSession>();
 
   constructor() {
@@ -131,6 +135,7 @@ export class PollingCoordinator {
       this.http,
       this.document,
       options as PollingOptions<unknown>,
+      this.staticMode.enabled,
     );
     this.sessions.add(session);
     return session;

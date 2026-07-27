@@ -95,3 +95,54 @@ export const routes: Routes = [
   { path: 'settings', redirectTo: 'tasks/settings' },
   { path: '**', redirectTo: 'tasks' },
 ];
+
+export const staticRoutes: Routes = [
+  { path: '', pathMatch: 'full', redirectTo: 'tasks' },
+  {
+    path: 'tasks',
+    component: TasksShell,
+    data: { shell: AppShell.Tasks },
+    children: [
+      { path: 'settings', redirectTo: '' },
+      {
+        path: '',
+        component: TasksBoard,
+        children: [
+          { path: 'dialog/new', redirectTo: '' },
+          {
+            path: 'dialog/:taskId',
+            loadComponent: () =>
+              import('./tasks/task-workspace/task-dialog-host').then(
+                (module) => module.TaskDialogHost,
+              ),
+            data: { mode: 'detail' },
+          },
+        ],
+      },
+      { path: 'new', redirectTo: '' },
+      {
+        path: ':taskId',
+        loadComponent: () =>
+          import('./tasks/task-workspace/task-page-host').then((module) => module.TaskPageHost),
+        data: { mode: 'detail' },
+      },
+    ],
+  },
+  {
+    path: 'wiki',
+    component: WikiShell,
+    data: { shell: AppShell.Wiki },
+    children: [
+      { path: '', pathMatch: 'full', component: WikiIndex },
+      { path: 'new', redirectTo: '' },
+      { matcher: wikiEditMatcher, redirectTo: ({ params }) => params['wikiPath'] ?? '' },
+      { matcher: wikiMetaMatcher, redirectTo: ({ params }) => params['wikiPath'] ?? '' },
+      {
+        matcher: wikiPathMatcher,
+        loadComponent: () => import('./wiki/wiki-workspace').then((module) => module.WikiWorkspace),
+      },
+    ],
+  },
+  { path: 'settings', redirectTo: 'tasks' },
+  { path: '**', redirectTo: 'tasks' },
+];

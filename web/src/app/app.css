@@ -67,8 +67,26 @@
   color: var(--pm-text-primary);
 }
 
-.topbar > :is(pm-task-search, pm-wiki-search) + .icon-button {
+.topbar > :is(pm-task-search, pm-wiki-search, .snapshot-context) + .icon-button {
   margin-left: auto;
+}
+
+.snapshot-context {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pm-space-2);
+  margin: 0 0 0 auto;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-xs);
+  white-space: nowrap;
+}
+
+.snapshot-context span {
+  font-weight: 650;
+}
+
+.snapshot-context time {
+  color: var(--pm-text-subtle);
 }
 
 .icon-button {
@@ -120,5 +138,9 @@
   .mode-navigation a {
     min-width: 50px;
     padding-inline: var(--pm-space-2);
+  }
+
+  .snapshot-context time {
+    display: none;
   }
 }

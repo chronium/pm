@@ -8,6 +8,7 @@ import { filter, map } from 'rxjs';
 import { LayoutService } from '../../core/layout.service';
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskSidebarStore } from './task-sidebar.store';
+import { StaticModeService } from '../../static/static-mode.service';
 
 @Component({
   selector: 'pm-task-sidebar',
@@ -21,6 +22,7 @@ export class TaskSidebar {
   private readonly router = inject(Router);
   private readonly layout = inject(LayoutService);
   private readonly navigation = inject(TaskNavigationService);
+  protected readonly staticMode = inject(StaticModeService);
   private readonly url = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),

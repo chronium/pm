@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const embedded = process.env['PM_E2E_MODE'] === 'embedded';
+const staticSite = process.env['PM_E2E_MODE'] === 'static';
 const root = process.env['PM_E2E_ROOT'];
 if (!root) throw new Error('Run Playwright through npm run e2e or npm run e2e:embedded.');
 const uiPort = process.env['PM_E2E_UI_PORT'];
@@ -9,7 +10,11 @@ const baseURL = `http://127.0.0.1:${uiPort}`;
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: embedded ? '**/embedded.smoke.spec.ts' : '**/workflows.spec.ts',
+  testMatch: embedded
+    ? '**/embedded.smoke.spec.ts'
+    : staticSite
+      ? '**/static.smoke.spec.ts'
+      : '**/workflows.spec.ts',
   fullyParallel: false,
   workers: 1,
   retries: process.env['CI'] ? 2 : 0,
@@ -20,8 +25,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: `node scripts/e2e-host.mjs ${embedded ? 'embedded' : 'dev'}`,
-    url: `${baseURL}/api/v1/project`,
+    command: `node scripts/e2e-host.mjs ${embedded ? 'embedded' : staticSite ? 'static' : 'dev'}`,
+    url: staticSite ? `${baseURL}/pm-snapshot.json` : `${baseURL}/api/v1/project`,
     reuseExistingServer: false,
     timeout: 120_000,
     env: { ...process.env, PM_E2E_ROOT: root },

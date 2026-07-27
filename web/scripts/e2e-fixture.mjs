@@ -54,7 +54,7 @@ milestonePriorities:
     const track = number % 3 === 0 ? 'OPS' : 'E2E';
     const milestone = number % 4 === 0 ? 'later' : 'current';
     const dependency =
-      number > 1 && number % 7 === 0
+      number > 1 && number % 6 === 0
         ? `dependsOn:\n- E2E-${String(number - 1).padStart(4, '0')}\n`
         : '';
     await writeFile(

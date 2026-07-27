@@ -3,8 +3,9 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const mode = process.argv[2] === 'embedded' ? 'embedded' : 'dev';
-const extraArguments = process.argv.slice(mode === 'embedded' ? 3 : 2);
+const requestedMode = process.argv[2];
+const mode = requestedMode === 'embedded' || requestedMode === 'static' ? requestedMode : 'dev';
+const extraArguments = process.argv.slice(mode === 'dev' ? 2 : 3);
 const executable = join(
   'node_modules',
   '.bin',

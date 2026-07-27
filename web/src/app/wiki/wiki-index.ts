@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 
 import { PmEmptyState, PmErrorState, PmLoadingState } from '../ui/state/state';
 import { WikiStore } from './wiki.store';
+import { StaticModeService } from '../static/static-mode.service';
 
 @Component({
   selector: 'pm-wiki-index',
@@ -14,7 +15,9 @@ import { WikiStore } from './wiki.store';
         <p class="wiki-eyebrow">Workspace</p>
         <h1>Wiki</h1>
       </div>
-      <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
+      @if (!staticMode.enabled) {
+        <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
+      }
     </header>
     @if (store.indexLoading()) {
       <pm-loading-state>Loading wiki pages…</pm-loading-state>
@@ -28,10 +31,10 @@ import { WikiStore } from './wiki.store';
     } @else if (!store.pages()?.length) {
       <pm-empty-state
         ><p>No wiki pages yet.</p>
-        <a class="pm-button pm-button--primary" routerLink="/wiki/new"
-          >Create the first page</a
-        ></pm-empty-state
-      >
+        @if (!staticMode.enabled) {
+          <a class="pm-button pm-button--primary" routerLink="/wiki/new">Create the first page</a>
+        }
+      </pm-empty-state>
     } @else {
       <div class="wiki-list" aria-label="All wiki pages">
         @for (page of store.pages(); track page.path) {
@@ -48,4 +51,5 @@ import { WikiStore } from './wiki.store';
 })
 export class WikiIndex {
   protected readonly store = inject(WikiStore);
+  protected readonly staticMode = inject(StaticModeService);
 }

@@ -8,9 +8,11 @@
         (click)="layout.closeMobileSidebar()"
         >Wiki home</a
       >
-      <a routerLink="/wiki/new" routerLinkActive="active" (click)="layout.closeMobileSidebar()"
-        >New page</a
-      >
+      @if (!staticMode.enabled) {
+        <a routerLink="/wiki/new" routerLinkActive="active" (click)="layout.closeMobileSidebar()"
+          >New page</a
+        >
+      }
     </nav>
     <div class="wiki-tree-scroll" aria-label="Wiki pages">
       @if (store.tree().length) {

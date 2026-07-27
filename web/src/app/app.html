@@ -38,7 +38,16 @@
     >
   </nav>
 
-  @if (layout.activeShell() === AppShell.Tasks) {
+  @if (staticMode.enabled) {
+    <p class="snapshot-context" role="status">
+      <span>Read-only snapshot</span>
+      @if (staticMode.generatedAt) {
+        <time [attr.datetime]="staticMode.generatedAt">{{
+          staticMode.generatedAt | date: 'medium'
+        }}</time>
+      }
+    </p>
+  } @else if (layout.activeShell() === AppShell.Tasks) {
     <pm-task-search />
   } @else if (layout.activeShell() === AppShell.Wiki) {
     <pm-wiki-search />

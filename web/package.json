@@ -17,6 +17,7 @@
     "test:storybook": "vitest --config vitest.storybook.config.ts --project=storybook --run",
     "e2e": "node scripts/run-e2e.mjs",
     "e2e:embedded": "node scripts/run-e2e.mjs embedded",
+    "e2e:static": "node scripts/run-e2e.mjs static",
     "frontend:validate": "npm run format:check && npm run api:types:check && npm run check && npm test && npm run test:storybook && npm run build-storybook && npm run build && npm run e2e",
     "release": "node scripts/release.mjs"
   },

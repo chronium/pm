@@ -108,7 +108,16 @@ dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true
 
 The published application then serves the embedded client with plain `pm web` (or the equivalent `pm web --ui angular`). Ordinary .NET builds and tests do not inspect `web/dist`, invoke Node, or include local frontend output.
 
-`npm run frontend:validate` is the complete local frontend gate: formatting, generated API types, strict and production builds, unit tests, Storybook tests/build, and desktop/mobile Chromium E2E against disposable small and large projects. `npm run release` is the complete release gate: it begins with `socket npm ci`, builds and tests .NET, runs the frontend gate, publishes PM with embedded Angular assets under `artifacts/release/`, then runs the embedded-production smoke profile. Socket findings stop the release and must be accepted explicitly outside the release script when appropriate. E2E uses a temporary identity/config home, dynamically assigned loopback ports, and a fake next-ID service; it does not access the deployed Worker or this repository's `.pm` project.
+The same published application can export a backend-free, read-only project site:
+
+```sh
+dotnet artifacts/release/PM.dll site build
+dotnet artifacts/release/PM.dll site build --output public/project --force
+```
+
+The default output is `dist/pm-site`. It contains relative Angular assets, `.nojekyll`, and a sanitized `pm-snapshot.json`, and uses hash URLs so it can be hosted under a repository path. Exported tasks and wiki content are intentionally public; identity, recovery, next-ID, credential, and local-path metadata are omitted. Static v1 keeps board filters, task details and dependencies, wiki folders/pages, Markdown, themes, and responsive layouts, but hides search, settings, and every mutation action.
+
+`npm run frontend:validate` is the complete local frontend gate: formatting, generated API types, strict and production builds, unit tests, Storybook tests/build, and desktop/mobile Chromium E2E against disposable small and large projects. `npm run release` is the complete release gate: it begins with `socket npm ci`, builds and tests .NET, runs the frontend gate, publishes PM with embedded Angular assets under `artifacts/release/`, then runs the embedded-production and static-export smoke profiles. Socket findings stop the release and must be accepted explicitly outside the release script when appropriate. E2E uses a temporary identity/config home, dynamically assigned loopback ports, and a fake next-ID service; it does not access the deployed Worker or this repository's `.pm` project.
 
 Storybook runs as an isolated zoneless component workshop on port 6006. Its browser checks require Chromium, installed with `socket npx playwright install chromium`; reusable visual components should maintain collocated stories, while routed containers and feature stores generally should not add them.
 

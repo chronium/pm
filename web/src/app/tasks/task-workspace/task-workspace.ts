@@ -30,6 +30,7 @@ import {
 } from '../task-api.service';
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskOptionsResource } from '../task-options.resource';
+import { StaticModeService } from '../../static/static-mode.service';
 
 export type TaskWorkspacePresentation = 'dialog' | 'page';
 export type TaskWorkspaceMode = 'detail' | 'create';
@@ -83,6 +84,7 @@ export class TaskWorkspace {
   private readonly router = inject(Router);
   private readonly api = inject(TaskApiService);
   private readonly navigation = inject(TaskNavigationService);
+  protected readonly staticMode = inject(StaticModeService);
   protected readonly options = inject(TaskOptionsResource);
   protected readonly detail = inject(TaskDetailResource);
   protected readonly activeField = signal<WorkspaceField | null>(null);
@@ -210,7 +212,7 @@ export class TaskWorkspace {
   }
 
   protected activate(field: WorkspaceField): void {
-    if (!this.pending() && !this.blocked()) this.activeField.set(field);
+    if (!this.staticMode.enabled && !this.pending() && !this.blocked()) this.activeField.set(field);
   }
 
   protected cancel(): void {

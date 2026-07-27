@@ -16,7 +16,9 @@
       >
     }
   </a>
-  <a [attr.href]="newTaskHref()" (click)="openNew($event)">New task</a>
+  @if (!staticMode.enabled) {
+    <a [attr.href]="newTaskHref()" (click)="openNew($event)">New task</a>
+  }
 
   <div class="scope-scroll" aria-live="polite">
     @if (store.loading()) {
@@ -78,14 +80,16 @@
     }
   </div>
 
-  <a
-    class="settings-link"
-    routerLink="/tasks/settings"
-    [class.active]="settingsActive()"
-    [attr.aria-current]="settingsActive() ? 'page' : null"
-    (click)="select($event)"
-  >
-    <ng-icon name="cssOptions" aria-hidden="true" />
-    <span>Settings</span>
-  </a>
+  @if (!staticMode.enabled) {
+    <a
+      class="settings-link"
+      routerLink="/tasks/settings"
+      [class.active]="settingsActive()"
+      [attr.aria-current]="settingsActive() ? 'page' : null"
+      (click)="select($event)"
+    >
+      <ng-icon name="cssOptions" aria-hidden="true" />
+      <span>Settings</span>
+    </a>
+  }
 </nav>

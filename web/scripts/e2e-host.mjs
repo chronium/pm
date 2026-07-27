@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { access, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,8 +10,8 @@ import { configRoot, e2eRoot, projectRoot, resetFixture } from './e2e-fixture.mj
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(webRoot, '..');
 const mode = process.argv[2] ?? 'dev';
-const idPort = requiredPort('PM_E2E_ID_PORT');
-const apiPort = requiredPort('PM_E2E_API_PORT');
+const idPort = mode === 'static' ? 0 : requiredPort('PM_E2E_ID_PORT');
+const apiPort = mode === 'static' ? 0 : requiredPort('PM_E2E_API_PORT');
 const uiPort = requiredPort('PM_E2E_UI_PORT');
 const children = new Set();
 let stopping = false;
@@ -18,6 +19,48 @@ let stopping = false;
 await rm(e2eRoot, { recursive: true, force: true });
 await mkdir(e2eRoot, { recursive: true });
 await resetFixture(process.env.PM_E2E_FIXTURE ?? 'small');
+
+if (mode === 'static') {
+  const dll = resolve(
+    process.env.PM_E2E_PUBLISHED_DLL ?? join(repositoryRoot, 'artifacts/release/PM.dll'),
+  );
+  await access(dll);
+  const siteRoot = join(e2eRoot, 'site');
+  const build = spawnSync('dotnet', [dll, 'site', 'build', '--output', siteRoot], {
+    cwd: projectRoot,
+    env: process.env,
+    stdio: 'inherit',
+  });
+  if (build.error) throw build.error;
+  if (build.status !== 0) process.exit(build.status ?? 1);
+  const staticServer = createServer(async (request, response) => {
+    try {
+      const requested = decodeURIComponent(
+        new URL(request.url ?? '/', 'http://localhost').pathname,
+      );
+      const relative = requested === '/' ? 'index.html' : requested.replace(/^\/+/, '');
+      if (relative.split('/').some((segment) => segment === '..')) {
+        response.writeHead(404).end();
+        return;
+      }
+      const body = await readFile(join(siteRoot, relative));
+      response.writeHead(200, { 'content-type': contentType(relative) }).end(body);
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
+  await new Promise((resolveReady, reject) => {
+    staticServer.once('error', reject);
+    staticServer.listen(uiPort, '127.0.0.1', resolveReady);
+  });
+  const stopStatic = () => {
+    staticServer.close();
+    void rm(e2eRoot, { recursive: true, force: true }).finally(() => process.exit(0));
+  };
+  process.on('SIGINT', stopStatic);
+  process.on('SIGTERM', stopStatic);
+  await new Promise(() => {});
+}
 
 const idServer = createServer((request, response) => {
   if (request.url === '/health') {
@@ -115,4 +158,12 @@ function requiredPort(name) {
     throw new Error(`${name} must be set to an integer between 1 and 65535.`);
   }
   return port;
+}
+
+function contentType(path) {
+  if (path.endsWith('.html')) return 'text/html; charset=utf-8';
+  if (path.endsWith('.js')) return 'text/javascript; charset=utf-8';
+  if (path.endsWith('.css')) return 'text/css; charset=utf-8';
+  if (path.endsWith('.json')) return 'application/json; charset=utf-8';
+  return 'application/octet-stream';
 }
