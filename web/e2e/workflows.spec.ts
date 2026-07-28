@@ -125,6 +125,12 @@ test('uses desktop overlays, fullscreen replacement, and mobile canonical pages'
   await page.getByRole('link', { name: /E2E-0001/ }).click();
   await expect(page).toHaveURL(/\/tasks\/E2E-0001\?track=E2E$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  const contextLine = await page.locator('.task-context-line').boundingBox();
+  const mobileActions = await page.locator('.host-actions').boundingBox();
+  expect(mobileActions!.x + mobileActions!.width).toBeCloseTo(
+    contextLine!.x + contextLine!.width,
+    3,
+  );
   const description = await page.locator('.description-section').boundingBox();
   const metadata = await page.locator('.metadata-column').boundingBox();
   expect(metadata!.y).toBeGreaterThanOrEqual(description!.y + description!.height);

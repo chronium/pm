@@ -363,6 +363,10 @@ h2 {
     margin-inline-start: 0;
     justify-content: flex-start;
   }
+  .host-actions--clean-page {
+    margin-inline-start: auto;
+    justify-content: flex-end;
+  }
   .property-row {
     grid-template-columns: minmax(0, 1fr);
   }

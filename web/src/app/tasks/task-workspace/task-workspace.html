@@ -72,7 +72,11 @@
             {{ statusName() }}
           </button>
         }
-        <div class="host-actions" aria-label="Task actions">
+        <div
+          class="host-actions"
+          [class.host-actions--clean-page]="presentation() === 'page' && !dirty()"
+          aria-label="Task actions"
+        >
           @if (dirty()) {
             <button
               type="button"
