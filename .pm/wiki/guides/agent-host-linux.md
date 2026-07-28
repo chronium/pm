@@ -1,17 +1,17 @@
 ---
-title: Bazzite Agent Host Setup
+title: Linux Agent Host Setup
 createdAt: 2026-07-27T11:03:26.0456420Z
-modifiedAt: 2026-07-27T11:03:52.0410380Z
+modifiedAt: 2026-07-28T18:29:31.0867690Z
 ---
 
-This guide prepares a Bazzite workstation to host the PM execution plane. It is intentionally conservative: the trusted runner controls rootless Podman, while each unattended agent runs in a separately hardened worker container.
+This guide prepares a Linux workstation to host the PM execution plane. It is intentionally conservative: the trusted runner controls rootless Podman, while each unattended agent runs in a separately hardened worker container.
 
-The runner is not ready for production installation yet. Use this page to inspect and prepare the machine; AGENT-0007 will supply the final runtime driver and service unit.
+The repository includes the runtime adapter and a rootless user-service template. Production task execution remains queue-only until immutable Git workspaces and per-run credential preparation are integrated.
 
 ## Intended layout
 
 ```text
-Bazzite host
+Linux host
   pm-agent-host user service (trusted)
     -> rootless Podman
       -> isolated worker container per run (untrusted)
@@ -43,11 +43,23 @@ References:
 - [Bazzite Distrobox guidance](https://docs.bazzite.gg/Installing_and_Managing_Software/Distrobox/)
 - [Distrobox security implications](https://distrobox.it/)
 
+## Arch Linux
+
+The current integration host is Arch Linux with Podman 6, rootless native overlay on ext4, cgroup v2 managed by systemd, `crun`, and seccomp. SELinux and AppArmor are not active. SELinux-specific runtime labeling is deferred; the runner fails closed on an SELinux-enabled host rather than silently disabling labels.
+
+Node 26.5.0 is installed system-wide. Pinned npm 11 and Socket live under `~/.local/bin`; non-interactive SSH and systemd environments must prepend that directory explicitly:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+npm --version
+socket --version
+```
+
 ## Host prerequisites
 
 The first AGENT-0007 test session will require:
 
-- Bazzite with current system updates applied.
+- A current supported Linux host; Arch Linux is the live v1 integration target.
 - Tailscale connectivity between the Mac and Linux host.
 - Rootless Podman available to the runner account.
 - cgroup v2 available for CPU, memory, and PID limits.
@@ -56,7 +68,7 @@ The first AGENT-0007 test session will require:
 - Node 26 and npm 11 while the TypeScript host is run from source. A packaged host should eventually remove this development prerequisite.
 - The PM repository available for development only; production runs will use runner-owned mirrors and workspaces instead of the normal checkout.
 
-Prefer Homebrew, Distrobox, or the eventual packaged runner over layering development packages into Bazzite. Bazzite documents `rpm-ostree` package layering as a last resort because layered packages can interfere with upgrades.
+On Bazzite, prefer Homebrew, Distrobox, or the eventual packaged runner over `rpm-ostree` package layering. On Arch, install host prerequisites normally but keep the dedicated runner account free of unrelated credentials and personal data.
 
 When working from source, install the Socket CLI before restoring the agent-host workspace. Every npm operation that installs or changes dependencies must use `socket npm ...`; the normal validation scripts may continue to use `npm run ...` after the locked install.
 
@@ -112,7 +124,7 @@ Do not continue to unattended execution if CPU, memory, PID, user-namespace, rea
 
 ## Runner directories
 
-Protocol examples use `/var/lib/pm-runner`, but a rootless Bazzite service should use owner-controlled user directories:
+Protocol examples use `/var/lib/pm-runner`, but a rootless user service should use owner-controlled user directories:
 
 ```sh
 install -d -m 700 ~/.local/share/pm-runner
@@ -154,7 +166,7 @@ For a dedicated runner that must start before interactive login and survive logo
 sudo loginctl enable-linger <runner-user>
 ```
 
-AGENT-0007 will provide the final service or rootless Quadlet definition. Do not expose a Podman socket to worker containers. If the trusted host later uses the Podman API, only the trusted host process may access that socket.
+The repository provides `agent-host/systemd/pm-agent-host.service` as a user-service template. The trusted host invokes the Podman CLI directly; never expose the Podman socket or executable control channel to worker containers.
 
 Rootless Quadlet documentation and its cgroup v2 requirement are covered by the [Podman systemd unit documentation](https://docs.podman.io/en/stable/markdown/podman-systemd.unit.5.html).
 
@@ -190,7 +202,7 @@ findmnt -T ~/.local/share/pm-runner
 
 Set explicit retention and disk limits before allowing concurrent runs. Keep the runner data root on a local Linux filesystem with normal ownership and permission semantics.
 
-Because this Bazzite machine may also be used interactively, the runner account and its containers must not receive access to gaming libraries, mounted personal drives, the desktop session, GPU devices, audio devices, or the user's normal home directory.
+Because the runner host may also be used interactively, the runner account and its containers must not receive access to gaming libraries, mounted personal drives, the desktop session, GPU devices, audio devices, or the user's normal home directory.
 
 ## Information to capture for AGENT-0007
 

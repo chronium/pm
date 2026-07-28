@@ -60,13 +60,42 @@ export interface RuntimeProfile {
     diskBytes: number;
     timeoutSeconds: number;
   };
-  networkProfileId: string;
+  network: RuntimeNetworkPolicy;
+  container: RuntimeContainerPolicy;
   validation: ValidationStep[];
   output: {
     mode: 'patch';
     maxPatchBytes: number;
     includeEventLog: boolean;
   };
+}
+
+export interface RuntimeNetworkPolicy {
+  profileId: string;
+  mode: 'offline' | 'open';
+}
+
+export interface RuntimeContainerPolicy {
+  workspacePath: string;
+  codexHomePath: string;
+  temporaryPath: string;
+  temporaryBytes: number;
+  environmentAllowlist: string[];
+  readOnlyCaches: RuntimeCacheMount[];
+  security: {
+    readOnlyRootFilesystem: true;
+    userNamespace: 'keep-id';
+    noNewPrivileges: true;
+    dropAllCapabilities: true;
+    privateNamespaces: true;
+    seccompProfile: 'runtime-default';
+    lsmProfile: 'none';
+  };
+}
+
+export interface RuntimeCacheMount {
+  cacheId: string;
+  containerPath: string;
 }
 
 export interface ValidationStep {
@@ -97,12 +126,23 @@ export interface RunnerCapabilities extends CapabilityManifest {
   protocolVersions: string[];
   operatingSystem: string;
   architecture: string;
-  dockerAvailable: boolean;
+  containerRuntime: ContainerRuntimeCapability;
   capacity: {
     maximumRuns: number;
     activeRuns: number;
     memoryBytes: number;
   };
+}
+
+export interface ContainerRuntimeCapability {
+  engineId: 'podman';
+  version: string;
+  rootless: boolean;
+  cgroupVersion: string;
+  cgroupManager: string;
+  seccompEnabled: boolean;
+  selinuxEnabled: boolean;
+  appArmorEnabled: boolean;
 }
 
 export interface RunEvent {

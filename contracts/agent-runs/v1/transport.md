@@ -34,7 +34,9 @@ The runner accepts five minutes of clock skew and durably rejects a reused nonce
 ## Discovery and credential lifecycle
 
 - `GET /v1/health` distinguishes authenticated runner reachability from run state.
-- `GET /v1/capabilities` returns `AgentRunnerCapabilities`.
+- `GET /v1/capabilities` returns `AgentRunnerCapabilities`. OCI discovery reports the installed
+  engine and its rootless, cgroup, seccomp, and LSM state; protocol 1.0 execution requires rootless
+  Podman with cgroup v2/systemd and seccomp.
 - `POST /v1/client/rotate` requires the old request signature and a new-key proof over `pm-runner-rotation-v1`, runner ID, old client ID, new client ID, new public key, and request nonce.
 - `DELETE /v1/client` revokes the current client.
 

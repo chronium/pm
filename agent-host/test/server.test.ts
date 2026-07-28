@@ -9,7 +9,7 @@ import test from 'node:test';
 import { CredentialStore } from '../src/auth/credential-store.js';
 import { hashPairingCode } from '../src/auth/crypto.js';
 import { certificateFingerprint, loadTlsMaterial } from '../src/auth/tls.js';
-import { CapabilityService, type DockerProbe } from '../src/capabilities.js';
+import { CapabilityService } from '../src/capabilities.js';
 import { JsonLogger } from '../src/logging.js';
 import { RunStore } from '../src/persistence/run-store.js';
 import { computeSpecificationHash } from '../src/protocol/canonical-json.js';
@@ -19,6 +19,7 @@ import { QueueOnlyExecutionController, RunCoordinator } from '../src/run-coordin
 import {
   createIdentity,
   createRequest,
+  createRuntimeProbe,
   createTempDirectory,
   createTestCertificate,
   signRequest,
@@ -52,8 +53,8 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     agentProviders: manifestFixture['agentProviders'],
     runtimeProfiles: manifestFixture['runtimeProfiles'],
   });
-  const dockerProbe: DockerProbe = { available: () => true };
-  const capabilities = new CapabilityService(runStore, manifest, 2, dockerProbe);
+  const runtimeProbe = createRuntimeProbe();
+  const capabilities = new CapabilityService(runStore, manifest, 2, runtimeProbe);
   const runCoordinator = new RunCoordinator(
     runStore,
     capabilities,

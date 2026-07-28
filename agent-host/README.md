@@ -1,6 +1,6 @@
 # PM Agent Host
 
-`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It provides durable run state, authenticated HTTPS pairing and capability discovery, idempotent run submission, replayable event streaming, bounded scheduling seams, restart recovery, retention, and a container-ready Codex SDK worker. OCI runtime execution is intentionally deferred.
+`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It provides durable run state, authenticated HTTPS pairing and capability discovery, idempotent run submission, replayable event streaming, bounded scheduling seams, restart recovery, retention, a container-ready Codex SDK worker, and a hardened rootless Podman runtime adapter.
 
 The workspace uses Node 26 and TypeScript 7. Install only through Socket:
 
@@ -15,17 +15,18 @@ Tests require OpenSSL to generate temporary loopback certificates.
 
 The host uses CLI options with matching `PM_AGENT_HOST_*` environment variables. It fails closed if `serve` is missing its listen address, certificate, key, or capability manifest.
 
-| Option              | Environment                       | Default                         |
-| ------------------- | --------------------------------- | ------------------------------- |
-| `--data-root`       | `PM_AGENT_HOST_DATA_ROOT`         | `/var/lib/pm-runner`            |
-| `--max-concurrency` | `PM_AGENT_HOST_MAX_CONCURRENCY`   | `1`                             |
-| `--queue-capacity`  | `PM_AGENT_HOST_QUEUE_CAPACITY`    | `32`                            |
-| `--retention-days`  | `PM_AGENT_HOST_RETENTION_DAYS`    | `30`; `0` disables pruning      |
-| `--listen-address`  | `PM_AGENT_HOST_LISTEN_ADDRESS`    | required for `serve`            |
-| `--port`            | `PM_AGENT_HOST_PORT`              | `7443`                          |
-| `--tls-cert`        | `PM_AGENT_HOST_TLS_CERT_PATH`     | required for `serve` and `pair` |
-| `--tls-key`         | `PM_AGENT_HOST_TLS_KEY_PATH`      | required for `serve`            |
-| `--capabilities`    | `PM_AGENT_HOST_CAPABILITIES_PATH` | required for `serve`            |
+| Option                  | Environment                         | Default                         |
+| ----------------------- | ----------------------------------- | ------------------------------- |
+| `--data-root`           | `PM_AGENT_HOST_DATA_ROOT`           | `/var/lib/pm-runner`            |
+| `--max-concurrency`     | `PM_AGENT_HOST_MAX_CONCURRENCY`     | `1`                             |
+| `--queue-capacity`      | `PM_AGENT_HOST_QUEUE_CAPACITY`      | `32`                            |
+| `--retention-days`      | `PM_AGENT_HOST_RETENTION_DAYS`      | `30`; `0` disables pruning      |
+| `--min-free-disk-bytes` | `PM_AGENT_HOST_MIN_FREE_DISK_BYTES` | `5368709120`                    |
+| `--listen-address`      | `PM_AGENT_HOST_LISTEN_ADDRESS`      | required for `serve`            |
+| `--port`                | `PM_AGENT_HOST_PORT`                | `7443`                          |
+| `--tls-cert`            | `PM_AGENT_HOST_TLS_CERT_PATH`       | required for `serve` and `pair` |
+| `--tls-key`             | `PM_AGENT_HOST_TLS_KEY_PATH`        | required for `serve`            |
+| `--capabilities`        | `PM_AGENT_HOST_CAPABILITIES_PATH`   | required for `serve`            |
 
 The listen address must be an explicit non-wildcard IP. The operator provides the certificate and an owner-only private key, normally for a Tailscale or trusted private-network route. The capability manifest is host-owned and changes require restart; `capabilities.example.json` shows the validated shape.
 
@@ -56,7 +57,31 @@ Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the p
 
 The authenticated HTTPS surface accepts immutable run requests, inspects and pages active runs, journals cancellation, lists artifact metadata, pages event history, and streams replayable SSE events. See `contracts/agent-runs/v1/transport.md` for endpoints, status codes, signed cursors, event namespaces, and reconnect behavior.
 
-The current executable wires a queue-only execution controller. Accepted commands persist and survive disconnects or restart, but remain queued until the OCI runtime supplies the production process executor and activates the existing scheduler. Artifact endpoints expose metadata only in this slice.
+The current executable wires a queue-only execution controller. Accepted commands persist and survive disconnects or restart, but remain queued until immutable workspace preparation composes the Podman runtime, Codex driver, and existing scheduler. Artifact endpoints expose metadata only in this slice.
+
+## Rootless Podman runtime
+
+Runtime profiles carry an immutable container policy alongside the image digest and resource limits. The policy fixes the workspace, isolated Codex home, temporary filesystem, safe environment names, network mode, and hardening baseline. Host paths are derived exclusively from the runner data root; they are never accepted from a run request or repository.
+
+The adapter requires Linux, rootless Podman 5 or newer, cgroup v2 with the systemd manager, seccomp, subordinate UID/GID mappings, and every configured image already installed by digest. It uses the Podman CLI from the trusted host and never mounts the Podman or Docker socket into a worker. SELinux runtime labeling is intentionally deferred; a host with SELinux enabled fails readiness instead of silently disabling labels.
+
+V1 network policies are explicit: `offline` has no network, while `open` uses a private rootless namespace with unrestricted outbound access. Hostname-restricted egress requires a separate proxy boundary and is not represented by a misleading profile name. Writable workspace and Codex-home trees are watched against the profile disk budget, while tmpfs is hard-sized and the host maintains a configurable free-space reserve.
+
+The opt-in integration suite consumes an administrator-installed image and never pulls:
+
+```sh
+PM_AGENT_HOST_TEST_IMAGE='docker.io/library/alpine@sha256:<digest>' npm test
+```
+
+`systemd/pm-agent-host.service` is a rootless user-service template. Place an owner-only environment file at `~/.config/pm-agent-host/host.env`, verify the unit, and enable it only after installing a built workspace at the path named by the unit:
+
+```sh
+systemd-analyze --user verify systemd/pm-agent-host.service
+systemctl --user daemon-reload
+systemctl --user enable --now pm-agent-host.service
+```
+
+The service remains queue-only until AGENT-0008 supplies immutable workspaces and per-run credential material.
 
 ## Codex worker
 

@@ -8,6 +8,7 @@ export interface HostConfig {
   maxConcurrency: number;
   queueCapacity: number;
   retentionDays: number;
+  minimumFreeDiskBytes: number;
   listenAddress: string | null;
   port: number;
   tlsCertificatePath: string | null;
@@ -26,6 +27,7 @@ const defaults = {
   maxConcurrency: 1,
   queueCapacity: 32,
   retentionDays: 30,
+  minimumFreeDiskBytes: 5 * 1024 * 1024 * 1024,
   port: 7443,
 } as const;
 
@@ -34,6 +36,7 @@ const environmentNames = {
   maxConcurrency: 'PM_AGENT_HOST_MAX_CONCURRENCY',
   queueCapacity: 'PM_AGENT_HOST_QUEUE_CAPACITY',
   retentionDays: 'PM_AGENT_HOST_RETENTION_DAYS',
+  minimumFreeDiskBytes: 'PM_AGENT_HOST_MIN_FREE_DISK_BYTES',
   listenAddress: 'PM_AGENT_HOST_LISTEN_ADDRESS',
   port: 'PM_AGENT_HOST_PORT',
   tlsCertificatePath: 'PM_AGENT_HOST_TLS_CERT_PATH',
@@ -54,6 +57,8 @@ export function parseHostConfig(
     maxConcurrency: environment[environmentNames.maxConcurrency] ?? String(defaults.maxConcurrency),
     queueCapacity: environment[environmentNames.queueCapacity] ?? String(defaults.queueCapacity),
     retentionDays: environment[environmentNames.retentionDays] ?? String(defaults.retentionDays),
+    minimumFreeDiskBytes:
+      environment[environmentNames.minimumFreeDiskBytes] ?? String(defaults.minimumFreeDiskBytes),
     listenAddress: environment[environmentNames.listenAddress] ?? null,
     port: environment[environmentNames.port] ?? String(defaults.port),
     tlsCertificatePath: environment[environmentNames.tlsCertificatePath] ?? null,
@@ -89,6 +94,9 @@ export function parseHostConfig(
       case '--retention-days':
         values.retentionDays = option.value;
         break;
+      case '--min-free-disk-bytes':
+        values.minimumFreeDiskBytes = option.value;
+        break;
       case '--listen-address':
         values.listenAddress = option.value;
         break;
@@ -116,6 +124,7 @@ export function parseHostConfig(
     maxConcurrency: positiveInteger(values.maxConcurrency, '--max-concurrency'),
     queueCapacity: positiveInteger(values.queueCapacity, '--queue-capacity'),
     retentionDays: nonNegativeInteger(values.retentionDays, '--retention-days'),
+    minimumFreeDiskBytes: nonNegativeInteger(values.minimumFreeDiskBytes, '--min-free-disk-bytes'),
     listenAddress: values.listenAddress,
     port: portNumber(values.port),
     tlsCertificatePath: absoluteOptionalPath(values.tlsCertificatePath, '--tls-cert'),
@@ -139,6 +148,7 @@ Options:
   --max-concurrency <count>  Maximum active runs (default: 1)
   --queue-capacity <count>   Maximum queued runs (default: 32)
   --retention-days <days>    Terminal run retention; 0 disables pruning (default: 30)
+  --min-free-disk-bytes <n>  Stop runs below this host free-space floor (default: 5368709120)
   --listen-address <ip>      Explicit non-wildcard HTTPS interface
   --port <port>              HTTPS port (default: 7443)
   --tls-cert <path>          Operator-provided PEM certificate

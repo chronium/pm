@@ -91,7 +91,43 @@ public static class AgentRunCanonicalJson
         writer.WriteNumber("timeoutSeconds", profile.Limits.TimeoutSeconds);
         writer.WriteEndObject();
 
-        writer.WriteString("networkProfileId", profile.NetworkProfileId);
+        writer.WritePropertyName("network");
+        writer.WriteStartObject();
+        writer.WriteString("profileId", profile.Network.ProfileId);
+        writer.WriteString("mode", profile.Network.Mode == AgentRunNetworkMode.Offline ? "offline" : "open");
+        writer.WriteEndObject();
+
+        writer.WritePropertyName("container");
+        writer.WriteStartObject();
+        writer.WriteString("workspacePath", profile.Container.WorkspacePath);
+        writer.WriteString("codexHomePath", profile.Container.CodexHomePath);
+        writer.WriteString("temporaryPath", profile.Container.TemporaryPath);
+        writer.WriteNumber("temporaryBytes", profile.Container.TemporaryBytes);
+        writer.WritePropertyName("environmentAllowlist");
+        writer.WriteStartArray();
+        foreach (var name in profile.Container.EnvironmentAllowlist) writer.WriteStringValue(name);
+        writer.WriteEndArray();
+        writer.WritePropertyName("readOnlyCaches");
+        writer.WriteStartArray();
+        foreach (var cache in profile.Container.ReadOnlyCaches)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("cacheId", cache.CacheId);
+            writer.WriteString("containerPath", cache.ContainerPath);
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+        writer.WritePropertyName("security");
+        writer.WriteStartObject();
+        writer.WriteBoolean("readOnlyRootFilesystem", profile.Container.Security.ReadOnlyRootFilesystem);
+        writer.WriteString("userNamespace", profile.Container.Security.UserNamespace);
+        writer.WriteBoolean("noNewPrivileges", profile.Container.Security.NoNewPrivileges);
+        writer.WriteBoolean("dropAllCapabilities", profile.Container.Security.DropAllCapabilities);
+        writer.WriteBoolean("privateNamespaces", profile.Container.Security.PrivateNamespaces);
+        writer.WriteString("seccompProfile", profile.Container.Security.SeccompProfile);
+        writer.WriteString("lsmProfile", profile.Container.Security.LsmProfile);
+        writer.WriteEndObject();
+        writer.WriteEndObject();
         writer.WritePropertyName("validation");
         writer.WriteStartArray();
         foreach (var step in profile.Validation)

@@ -2,13 +2,18 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import test from 'node:test';
-import { CapabilityService, type DockerProbe } from '../src/capabilities.js';
+import { CapabilityService } from '../src/capabilities.js';
 import { EventStreamManager } from '../src/event-stream.js';
 import { RunStore } from '../src/persistence/run-store.js';
 import { sanitizeEventDraft } from '../src/protocol/event-sanitizer.js';
 import type { RunArtifact } from '../src/protocol/types.js';
 import { RunCoordinator, type RunExecutionController } from '../src/run-coordinator.js';
-import { createCapabilityManifest, createRequest, createTempDirectory } from './helpers.js';
+import {
+  createCapabilityManifest,
+  createRequest,
+  createRuntimeProbe,
+  createTempDirectory,
+} from './helpers.js';
 
 class FakeExecutionController implements RunExecutionController {
   notifications = 0;
@@ -22,12 +27,12 @@ class FakeExecutionController implements RunExecutionController {
   }
 }
 
-const noDocker: DockerProbe = { available: () => false };
+const runtimeProbe = createRuntimeProbe();
 
 test('coordinator validates capabilities and preserves idempotent acceptance', () => {
   const temporary = createTempDirectory();
   const store = new RunStore(temporary.path);
-  const capabilities = new CapabilityService(store, createCapabilityManifest(), 1, noDocker);
+  const capabilities = new CapabilityService(store, createCapabilityManifest(), 1, runtimeProbe);
   const execution = new FakeExecutionController();
   const coordinator = new RunCoordinator(store, capabilities, 2, execution);
   try {
@@ -40,7 +45,7 @@ test('coordinator validates capabilities and preserves idempotent acceptance', (
       store,
       { ...createCapabilityManifest(), agentProviders: [] },
       1,
-      noDocker,
+      runtimeProbe,
     );
     const restartedCoordinator = new RunCoordinator(store, reducedCapabilities, 2, execution);
     assert.equal(restartedCoordinator.start(request).disposition, 'existing');
@@ -64,7 +69,7 @@ test('coordinator validates capabilities and preserves idempotent acceptance', (
 test('active pages, cancellation, artifacts, and after-commit notifications remain bounded', () => {
   const temporary = createTempDirectory();
   const store = new RunStore(temporary.path);
-  const capabilities = new CapabilityService(store, createCapabilityManifest(), 1, noDocker);
+  const capabilities = new CapabilityService(store, createCapabilityManifest(), 1, runtimeProbe);
   const execution = new FakeExecutionController();
   const coordinator = new RunCoordinator(store, capabilities, 8, execution);
   const published: number[][] = [];

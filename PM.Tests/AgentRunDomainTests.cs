@@ -53,7 +53,7 @@ public class AgentRunDomainTests
             {
                 Profile = specification.Runtime.Profile with
                 {
-                    Limits = specification.Runtime.Profile.Limits with { MemoryBytes = 1 },
+                    Limits = specification.Runtime.Profile.Limits with { MemoryBytes = 4_294_967_296 },
                 },
             },
         };
@@ -67,6 +67,21 @@ public class AgentRunDomainTests
         });
         Assert.False(hashResult.Success);
         Assert.Equal("specification_hash_mismatch", hashResult.ErrorCode);
+    }
+
+    [Fact]
+    public void ProfileValidationRejectsMalformedEnvironmentAllowlist()
+    {
+        var profile = CreateSpecification().Runtime.Profile;
+        var malformed = profile with
+        {
+            Container = profile.Container with { EnvironmentAllowlist = [null!] },
+        };
+
+        var result = AgentRunContractValidator.ValidateProfile(malformed);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_specification", result.ErrorCode);
     }
 
     [Fact]
@@ -187,7 +202,16 @@ public class AgentRunDomainTests
             string.Empty,
             "ghcr.io/chronium/pm-agent-dotnet@sha256:" + new string('b', 64),
             new AgentRunResourceLimits(4000, 8_589_934_592, 1024, 21_474_836_480, 10_800),
-            "openai-nuget-github",
+            new AgentRunNetworkPolicy("development-open", AgentRunNetworkMode.Open),
+            new AgentRunContainerPolicy(
+                "/workspace",
+                "/home/pm/.codex",
+                "/tmp",
+                1_073_741_824,
+                ["CODEX_HOME", "HOME", "PATH"],
+                [],
+                new AgentRunContainerSecurityPolicy(
+                    true, "keep-id", true, true, true, "runtime-default", "none")),
             validation,
             new AgentRunOutputPolicy(AgentRunOutputMode.Patch, 10_485_760, true)), validation);
 

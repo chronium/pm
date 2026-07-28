@@ -79,9 +79,42 @@ public sealed record AgentRunRuntimeProfile(
     string Revision,
     string ImageReference,
     AgentRunResourceLimits Limits,
-    string NetworkProfileId,
+    AgentRunNetworkPolicy Network,
+    AgentRunContainerPolicy Container,
     IReadOnlyList<AgentRunValidationStep> Validation,
     AgentRunOutputPolicy Output);
+
+public sealed record AgentRunNetworkPolicy(string ProfileId, AgentRunNetworkMode Mode);
+
+[JsonConverter(typeof(JsonStringEnumConverter<AgentRunNetworkMode>))]
+public enum AgentRunNetworkMode
+{
+    [JsonStringEnumMemberName("offline")]
+    Offline,
+
+    [JsonStringEnumMemberName("open")]
+    Open,
+}
+
+public sealed record AgentRunContainerPolicy(
+    string WorkspacePath,
+    string CodexHomePath,
+    string TemporaryPath,
+    long TemporaryBytes,
+    IReadOnlyList<string> EnvironmentAllowlist,
+    IReadOnlyList<AgentRunCacheMount> ReadOnlyCaches,
+    AgentRunContainerSecurityPolicy Security);
+
+public sealed record AgentRunCacheMount(string CacheId, string ContainerPath);
+
+public sealed record AgentRunContainerSecurityPolicy(
+    bool ReadOnlyRootFilesystem,
+    string UserNamespace,
+    bool NoNewPrivileges,
+    bool DropAllCapabilities,
+    bool PrivateNamespaces,
+    string SeccompProfile,
+    string LsmProfile);
 
 public sealed record AgentRunResourceLimits(
     int CpuMillicores,
@@ -180,10 +213,20 @@ public sealed record AgentRunnerCapabilities(
     IReadOnlyList<AgentRunProtocolVersion> ProtocolVersions,
     string OperatingSystem,
     string Architecture,
-    bool DockerAvailable,
+    AgentContainerRuntimeCapability ContainerRuntime,
     AgentRunnerCapacity Capacity,
     IReadOnlyList<AgentRunnerProviderCapability> AgentProviders,
     IReadOnlyList<AgentRunRuntimeProfile> RuntimeProfiles);
+
+public sealed record AgentContainerRuntimeCapability(
+    string EngineId,
+    string Version,
+    bool Rootless,
+    string CgroupVersion,
+    string CgroupManager,
+    bool SeccompEnabled,
+    bool SelinuxEnabled,
+    bool AppArmorEnabled);
 
 public sealed record AgentRunnerCapacity(int MaximumRuns, int ActiveRuns, long MemoryBytes);
 

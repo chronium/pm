@@ -4,13 +4,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { CredentialStore } from '../src/auth/credential-store.js';
 import { hashPairingCode } from '../src/auth/crypto.js';
-import {
-  CapabilityService,
-  loadCapabilityManifest,
-  type DockerProbe,
-} from '../src/capabilities.js';
+import { CapabilityService, loadCapabilityManifest } from '../src/capabilities.js';
 import { RunStore } from '../src/persistence/run-store.js';
-import { createIdentity, createTempDirectory } from './helpers.js';
+import { createIdentity, createRuntimeProbe, createTempDirectory } from './helpers.js';
 
 test('pairing challenges are one-use, bounded, and credentials persist privately', () => {
   const temporary = createTempDirectory();
@@ -131,7 +127,7 @@ test('capability manifest validates profile revisions and combines dynamic host 
       }),
     );
     const manifest = loadCapabilityManifest(manifestPath);
-    const probe: DockerProbe = { available: () => true };
+    const probe = createRuntimeProbe();
     const capabilities = new CapabilityService(
       store,
       manifest,
@@ -144,7 +140,8 @@ test('capability manifest validates profile revisions and combines dynamic host 
     assert.equal(capabilities.runnerId, store.runnerId);
     assert.equal(capabilities.capacity.maximumRuns, 3);
     assert.equal(capabilities.capacity.activeRuns, 0);
-    assert.equal(capabilities.dockerAvailable, true);
+    assert.equal(capabilities.containerRuntime.engineId, 'podman');
+    assert.equal(capabilities.containerRuntime.rootless, true);
     assert.deepEqual(capabilities.protocolVersions, ['1.0']);
 
     const invalid = structuredClone(
