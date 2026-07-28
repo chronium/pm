@@ -41,6 +41,10 @@ function storyStore(
     navigation: signal(navigation),
     loading: signal(loading),
     error: signal(error),
+    recommendationPending: signal(false),
+    recommendationMessage: signal<string | null>(null),
+    recommendationError: signal<string | null>(null),
+    recommend: async () => null,
     reload: () => true,
   };
 }
@@ -109,6 +113,38 @@ export const EmptyCollections: Story = {
         {
           provide: TaskSidebarStore,
           useValue: storyStore({ ...realistic, remainingCount: 0, tracks: [], milestones: [] }),
+        },
+      ],
+    }),
+  ],
+};
+
+export const NoReadyRecommendation: Story = {
+  decorators: [
+    applicationConfig({
+      providers: [
+        {
+          provide: TaskSidebarStore,
+          useValue: {
+            ...storyStore(realistic),
+            recommendationMessage: signal('No dependency-ready actionable task found.'),
+          },
+        },
+      ],
+    }),
+  ],
+};
+
+export const RecommendationError: Story = {
+  decorators: [
+    applicationConfig({
+      providers: [
+        {
+          provide: TaskSidebarStore,
+          useValue: {
+            ...storyStore(realistic),
+            recommendationError: signal('The next task could not be recommended.'),
+          },
         },
       ],
     }),

@@ -95,6 +95,7 @@ export class TaskWorkspace {
   protected readonly noteFormOpen = signal(false);
   protected readonly noteDraft = signal('');
   protected readonly noteError = signal<string | null>(null);
+  protected readonly recommendationReason = this.navigation.recommendationReason();
   protected readonly model = signal<DraftModel>({
     title: '',
     state: '',

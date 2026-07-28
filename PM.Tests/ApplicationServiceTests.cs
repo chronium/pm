@@ -851,6 +851,30 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task NextTaskFiltersByMilestoneAndIntersectsTrackScope()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "First", ["m2"] = "Second" }));
+        var match = TestData.Task("BUILD-0001", "Match", track: "BUILD", milestone: "m2");
+        var wrongTrack = TestData.Task("PM-0002", "Wrong track", track: "PM", milestone: "m2");
+        var wrongMilestone = TestData.Task("BUILD-0003", "Wrong milestone", track: "BUILD", milestone: "m1");
+        foreach (var task in new[] { match, wrongTrack, wrongMilestone })
+        {
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, "todo");
+        }
+        var service = new BoardService(projectRoot);
+
+        var next = service.GetNextTask(new NextTaskQuery("BUILD", "m2", ReadyOnly: true));
+        var invalid = service.GetNextTask(new NextTaskQuery(Milestone: "missing"));
+
+        Assert.Equal("BUILD-0001", next.Payload!.Task!.Task.Id);
+        Assert.Equal("invalid_milestone", invalid.ErrorCode);
+    }
+
+    [Fact]
     public async Task NextTaskRespectsConfiguredMilestoneOrderWithUnassignedAfterConfiguredMilestones()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1034,6 +1058,20 @@ public class ApplicationServiceTests
         Assert.False(next.Found);
         Assert.Null(next.Task);
         Assert.Equal("No dependency-ready actionable task found for track BUILD.", next.Reason);
+    }
+
+    [Fact]
+    public async Task NextTaskReadyOnlyReasonIncludesCombinedScope()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "First" }));
+
+        var next = new BoardService(projectRoot)
+            .GetNextTask(new NextTaskQuery("BUILD", "m1", ReadyOnly: true)).Payload!;
+
+        Assert.Equal("No dependency-ready actionable task found for track BUILD and milestone m1.", next.Reason);
     }
 
     [Fact]

@@ -180,6 +180,26 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task GetNextTaskFiltersByMilestone()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["m1"] = "First", ["m2"] = "Second" }));
+        var first = TestData.Task("PM-0001", "First", milestone: "m1");
+        var second = TestData.Task("PM-0002", "Second", milestone: "m2");
+        projectRoot.WriteTask(first);
+        projectRoot.WriteTask(second);
+        projectRoot.UpdateTaskState(first, "todo");
+        projectRoot.UpdateTaskState(second, "todo");
+
+        var result = CreateTools(projectRoot).GetNextTask(milestone: " m2 ");
+
+        Assert.True(result.Success);
+        Assert.Equal("PM-0002", result.Data!.Task!.Id);
+        Assert.Equal("m2", result.Data.Task.Milestone);
+    }
+
+    [Fact]
     public async Task GetNextTaskDefaultCanReturnBlockedTask()
     {
         using var workspace = new TempWorkingDirectory();
@@ -294,6 +314,9 @@ public class McpToolTests
         Assert.False(readyOnly.Success);
         Assert.Equal("invalid_track", readyOnly.ErrorCode);
         Assert.Equal("Track NOPE not found.", readyOnly.Message);
+        var invalidMilestone = tools.GetNextTask(milestone: "missing");
+        Assert.False(invalidMilestone.Success);
+        Assert.Equal("invalid_milestone", invalidMilestone.ErrorCode);
     }
 
     [Fact]

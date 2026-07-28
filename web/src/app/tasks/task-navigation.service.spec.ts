@@ -59,4 +59,26 @@ describe('TaskNavigationService', () => {
     expect(modified.defaultPrevented).toBe(false);
     expect(router.url).toBe('/tasks?milestone=m1');
   });
+
+  it('carries recommendation context into task navigation state', async () => {
+    const router = TestBed.inject(Router);
+    const navigation = TestBed.inject(TaskNavigationService);
+    const navigate = vi.spyOn(router, 'navigate');
+    await router.navigateByUrl('/tasks?track=PM');
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }) as MediaQueryList),
+    );
+
+    await navigation.navigateToTask(router, 'PM-0060', 'Selected urgent ready task.');
+
+    expect(router.url).toBe('/tasks/dialog/PM-0060?track=PM');
+    expect(navigate).toHaveBeenCalledWith(['/tasks', 'dialog', 'PM-0060'], {
+      queryParams: { track: 'PM' },
+      state: {
+        returnUrl: '/tasks?track=PM',
+        recommendationReason: 'Selected urgent ready task.',
+      },
+    });
+  });
 });

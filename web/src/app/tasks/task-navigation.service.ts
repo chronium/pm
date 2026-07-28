@@ -35,12 +35,12 @@ export class TaskNavigationService {
     return typeof window.matchMedia === 'function' && window.matchMedia(this.mobileQuery).matches;
   }
 
-  navigateToTask(router: Router, taskId: string): Promise<boolean> {
+  navigateToTask(router: Router, taskId: string, recommendationReason?: string): Promise<boolean> {
     const returnUrl = router.url;
     const target = this.isMobile() ? ['/tasks', taskId] : ['/tasks', 'dialog', taskId];
     return router.navigate(target, {
       queryParams: router.parseUrl(returnUrl).queryParams,
-      state: { returnUrl },
+      state: { returnUrl, ...(recommendationReason ? { recommendationReason } : {}) },
     });
   }
 
@@ -76,8 +76,17 @@ export class TaskNavigationService {
       : this.scopedBoardUrl(router);
   }
 
-  returnState(router: Router): { returnUrl: string } {
-    return { returnUrl: this.returnUrl(router) };
+  returnState(router: Router): { returnUrl: string; recommendationReason?: string } {
+    const recommendationReason = this.recommendationReason();
+    return {
+      returnUrl: this.returnUrl(router),
+      ...(recommendationReason ? { recommendationReason } : {}),
+    };
+  }
+
+  recommendationReason(): string | null {
+    const candidate: unknown = history.state?.recommendationReason;
+    return typeof candidate === 'string' && candidate.trim() ? candidate : null;
   }
 
   restoreFocus(): void {

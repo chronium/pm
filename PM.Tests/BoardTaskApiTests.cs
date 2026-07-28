@@ -246,6 +246,45 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task NextTaskApiDefaultsToReadyAndSupportsTrackMilestoneScope()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            tracks: new() { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new() { ["m1"] = "First" }));
+        var ready = TestData.Task("PM-0001", "Ready", track: "PM");
+        var blocked = TestData.Task("BUILD-0001", "Blocked", track: "BUILD", milestone: "m1",
+            dependsOn: ["BUILD-9999"]);
+        root.WriteTask(ready);
+        root.WriteTask(blocked);
+        root.UpdateTaskState(ready, "todo");
+        root.UpdateTaskState(blocked, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var readyResponse = await client.GetFromJsonAsync<NextTaskResponse>("/api/v1/tasks/next");
+            Assert.True(readyResponse!.Found);
+            Assert.Equal("PM-0001", readyResponse.Task!.Id);
+
+            var scoped = await client.GetFromJsonAsync<NextTaskResponse>(
+                "/api/v1/tasks/next?track=BUILD&milestone=m1");
+            Assert.False(scoped!.Found);
+            Assert.Null(scoped.Task);
+            Assert.Contains("track BUILD and milestone m1", scoped.Reason);
+
+            var includeBlocked = await client.GetFromJsonAsync<NextTaskResponse>(
+                "/api/v1/tasks/next?track=BUILD&milestone=m1&readyOnly=false");
+            Assert.Equal("BUILD-0001", includeBlocked!.Task!.Id);
+
+            var invalid = await client.GetAsync("/api/v1/tasks/next?milestone=missing");
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            Assert.Equal("invalid_milestone",
+                (await invalid.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+        }
+    }
+
+    [Fact]
     public async Task TaskUpdateSupportsOptionalAssignedAndUnassignedPlacement()
     {
         using var workspace = new TempWorkingDirectory();
@@ -439,6 +478,9 @@ public partial class ApiContractTests
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}/notes", out var notes));
             Assert.True(notes.GetProperty("post").GetProperty("responses").GetProperty("200")
                 .GetProperty("headers").TryGetProperty("ETag", out _));
+            Assert.True(paths.TryGetProperty("/api/v1/tasks/next", out var next));
+            Assert.Contains(next.GetProperty("get").GetProperty("parameters").EnumerateArray(),
+                parameter => parameter.GetProperty("name").GetString() == "readyOnly");
             Assert.True(task.GetProperty("delete").GetProperty("responses").TryGetProperty("204", out var deleted));
             Assert.False(deleted.TryGetProperty("headers", out _));
             var created = paths.GetProperty("/api/v1/tasks").GetProperty("post")

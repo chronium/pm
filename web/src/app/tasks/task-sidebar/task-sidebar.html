@@ -18,6 +18,23 @@
   </a>
   @if (!staticMode.enabled) {
     <a [attr.href]="newTaskHref()" (click)="openNew($event)">New task</a>
+    <button
+      type="button"
+      class="next-task-action"
+      [disabled]="store.recommendationPending()"
+      (click)="openNext($event)"
+    >
+      <ng-icon name="cssPlayTrackNext" aria-hidden="true" />
+      <span>{{ store.recommendationPending() ? 'Finding next task…' : 'Next task' }}</span>
+    </button>
+    @if (store.recommendationMessage()) {
+      <p class="recommendation-message" role="status">{{ store.recommendationMessage() }}</p>
+    }
+    @if (store.recommendationError()) {
+      <p class="recommendation-message recommendation-message--error" role="alert">
+        {{ store.recommendationError() }}
+      </p>
+    }
   }
 
   <div class="scope-scroll" aria-live="polite">

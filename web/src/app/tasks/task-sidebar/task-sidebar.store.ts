@@ -1,9 +1,11 @@
 import { HttpErrorResponse, HttpResponse, httpResource } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
 import type { operations } from '../../api/generated/pm-api';
 import { PollingCoordinator } from '../../core/polling-coordinator';
 import { TaskNavigationService } from '../task-navigation.service';
+import { TaskApiService, type NextTaskResponse } from '../task-api.service';
 
 export type BoardNavigationResponse =
   operations['GetBoardNavigation']['responses'][200]['content']['application/json'];
@@ -12,6 +14,7 @@ export type BoardNavigationResponse =
 export class TaskSidebarStore {
   private readonly taskNavigation = inject(TaskNavigationService);
   private readonly polling = inject(PollingCoordinator);
+  private readonly api = inject(TaskApiService);
   private readonly retained = signal<BoardNavigationResponse | undefined>(undefined);
   private readonly etag = signal('');
   private lastRefreshRequest = this.taskNavigation.refreshRequest();
@@ -22,6 +25,9 @@ export class TaskSidebarStore {
   );
   readonly loading = computed(() => this.resource.isLoading() && !this.navigation());
   readonly error = computed(() => this.readableError(this.resource.error()));
+  readonly recommendationPending = signal(false);
+  readonly recommendationMessage = signal<string | null>(null);
+  readonly recommendationError = signal<string | null>(null);
   readonly pollStatus = this.polling.create<BoardNavigationResponse>({
     target: () => {
       const navigation = this.navigation();
@@ -51,6 +57,28 @@ export class TaskSidebarStore {
 
   reload(): boolean {
     return this.resource.reload();
+  }
+
+  async recommend(
+    track: string | null,
+    milestone: string | null,
+  ): Promise<NextTaskResponse | null> {
+    if (this.recommendationPending()) return null;
+    this.recommendationPending.set(true);
+    this.recommendationMessage.set(null);
+    this.recommendationError.set(null);
+    try {
+      const result = await firstValueFrom(this.api.next(track, milestone));
+      if (!result.found || !result.task) this.recommendationMessage.set(result.reason);
+      return result;
+    } catch (error) {
+      this.recommendationError.set(
+        this.api.error(error, 'The next task could not be recommended.').message,
+      );
+      return null;
+    } finally {
+      this.recommendationPending.set(false);
+    }
   }
 
   private accept(response: HttpResponse<BoardNavigationResponse>): void {

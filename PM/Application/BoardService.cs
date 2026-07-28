@@ -47,7 +47,7 @@ public sealed record DependencyStatus(
     IReadOnlyList<string> Missing,
     string Summary);
 
-public sealed record NextTaskQuery(string? Track = null, bool ReadyOnly = false);
+public sealed record NextTaskQuery(string? Track = null, string? Milestone = null, bool ReadyOnly = false);
 
 public sealed record NextTaskResult(bool Found, BoardTask? Task, string Reason);
 
@@ -191,11 +191,13 @@ public partial class BoardService(ProjectRoot projectRoot)
         var config = projectRoot.Config;
         if (!string.IsNullOrWhiteSpace(query.Track) && !config.Tracks.ContainsKey(query.Track))
             return AppResult<NextTaskResult>.Fail("invalid_track", $"Track {query.Track} not found.");
+        if (!string.IsNullOrWhiteSpace(query.Milestone) && !config.Milestones.ContainsKey(query.Milestone))
+            return AppResult<NextTaskResult>.Fail("invalid_milestone", $"Milestone {query.Milestone} not found.");
 
         var orderLookup = BuildOrderLookup(projectRoot.ReadTaskOrder());
         var stateIndex = BuildStateIndex(config);
         var milestoneIndex = BuildMilestoneIndex(config);
-        var selected = GetBoardTasks(new BoardQuery(query.Track), descriptionPreviewLength, orderLookup)
+        var selected = GetBoardTasks(new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength, orderLookup)
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
             .Where(task => !query.ReadyOnly || task.Dependencies.Ready)
             .OrderBy(task => task.Dependencies.Ready ? 0 : 1)
@@ -344,9 +346,10 @@ public partial class BoardService(ProjectRoot projectRoot)
 
     private static string BuildNoNextTaskReason(NextTaskQuery query)
     {
-        var scope = string.IsNullOrWhiteSpace(query.Track)
-            ? string.Empty
-            : $" for track {query.Track}";
+        var filters = new List<string>();
+        if (!string.IsNullOrWhiteSpace(query.Track)) filters.Add($"track {query.Track}");
+        if (!string.IsNullOrWhiteSpace(query.Milestone)) filters.Add($"milestone {query.Milestone}");
+        var scope = filters.Count == 0 ? string.Empty : $" for {string.Join(" and ", filters)}";
 
         return query.ReadyOnly
             ? $"No dependency-ready actionable task found{scope}."

@@ -43,6 +43,7 @@ public sealed record TaskSearchResultResponse(
     string? Milestone,
     int MatchCount,
     string Snippet);
+public sealed record NextTaskResponse(bool Found, BoardTaskSummaryResponse? Task, string Reason);
 
 public static class TaskApiEndpoints
 {
@@ -66,6 +67,26 @@ public static class TaskApiEndpoints
             .WithName("SearchTasks")
             .WithSummary("Search tasks")
             .Produces<IReadOnlyList<TaskSearchResultResponse>>()
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
+
+        api.MapGet("/tasks/next", (HttpRequest request, string? track = null,
+                string? milestone = null, bool readyOnly = true) =>
+            {
+                var result = boardService.GetNextTask(new NextTaskQuery(
+                    Normalize(track),
+                    Normalize(milestone),
+                    readyOnly), BoardService.WebDescriptionPreviewLength);
+                if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                var next = result.Payload!;
+                return Results.Ok(new NextTaskResponse(
+                    next.Found,
+                    next.Task == null ? null : BoardApiEndpoints.ToSummary(next.Task),
+                    next.Reason));
+            })
+            .WithName("GetNextTaskRecommendation")
+            .WithSummary("Get the next recommended task")
+            .Produces<NextTaskResponse>()
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
@@ -247,6 +268,9 @@ public static class TaskApiEndpoints
 
     private static IResult DomainFailure(string code, string message, HttpRequest request) =>
         ApiResults.Failure(code, message, request.Path);
+
+    private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static readonly HashSet<string> AcceptedPriorities =
         ["inherit", "none", "low", "medium", "high", "urgent"];

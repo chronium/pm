@@ -59,6 +59,7 @@ describe('TaskWorkspace', () => {
   });
 
   afterEach(() => {
+    history.replaceState({}, '');
     TestBed.inject(HttpTestingController).verify();
     TestBed.resetTestingModule();
   });
@@ -270,5 +271,13 @@ describe('TaskWorkspace', () => {
     cancel.click();
     fixture.detectChanges();
     expect(element.querySelector('#task-note')).toBeNull();
+  });
+
+  it('shows recommendation rationale only when navigation supplies it', async () => {
+    history.replaceState({ recommendationReason: 'Selected high priority ready task.' }, '');
+    const { element } = await render('detail');
+
+    expect(element.textContent).toContain('Recommendation');
+    expect(element.textContent).toContain('Selected high priority ready task.');
   });
 });

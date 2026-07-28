@@ -435,6 +435,54 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskNextCommandDefaultsToReadyTasksAndSupportsScopesAndBlockedFallback()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
+            milestones: new Dictionary<string, string> { ["m1"] = "First" }));
+        var ready = TestData.Task("PM-0001", "Ready task", track: "PM");
+        var blocked = TestData.Task("BUILD-0001", "Blocked task", track: "BUILD", milestone: "m1",
+            dependsOn: ["BUILD-9999"]);
+        projectRoot.WriteTask(ready);
+        projectRoot.WriteTask(blocked);
+        projectRoot.UpdateTaskState(ready, "todo");
+        projectRoot.UpdateTaskState(blocked, "todo");
+        var command = new TaskNextCommand(new BoardService(projectRoot));
+
+        var (readyExit, readyOutput) = await CaptureConsole(() =>
+            command.Execute(null!, new TaskNextCommand.Settings(), CancellationToken.None));
+        var (emptyExit, emptyOutput) = await CaptureConsole(() => command.Execute(null!,
+            new TaskNextCommand.Settings { Track = "BUILD", Milestone = "m1" }, CancellationToken.None));
+        var (blockedExit, blockedOutput) = await CaptureConsole(() => command.Execute(null!,
+            new TaskNextCommand.Settings { Track = "BUILD", Milestone = "m1", IncludeBlocked = true },
+            CancellationToken.None));
+
+        Assert.Equal(0, readyExit);
+        Assert.Contains("PM-0001", readyOutput);
+        Assert.Contains("Selected", readyOutput);
+        Assert.Equal(0, emptyExit);
+        Assert.Contains("No dependency-ready actionable task found for track BUILD and milestone m1", emptyOutput);
+        Assert.Equal(0, blockedExit);
+        Assert.Contains("BUILD-0001", blockedOutput);
+        Assert.Contains("missing BUILD-9999", blockedOutput);
+    }
+
+    [Fact]
+    public async Task TaskNextCommandRejectsInvalidScope()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var command = new TaskNextCommand(new BoardService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() => command.Execute(null!,
+            new TaskNextCommand.Settings { Milestone = "missing" }, CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Milestone missing not found", output);
+    }
+
+    [Fact]
     public async Task EditOutsideProjectReturnsOne()
     {
         using var workspace = new TempWorkingDirectory();

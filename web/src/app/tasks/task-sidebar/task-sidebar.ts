@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssOptions } from '@ng-icons/css.gg';
+import { cssOptions, cssPlayTrackNext } from '@ng-icons/css.gg';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
@@ -13,7 +13,7 @@ import { StaticModeService } from '../../static/static-mode.service';
 @Component({
   selector: 'pm-task-sidebar',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ cssOptions })],
+  providers: [provideIcons({ cssOptions, cssPlayTrackNext })],
   templateUrl: './task-sidebar.html',
   styleUrl: './task-sidebar.css',
 })
@@ -53,6 +53,18 @@ export class TaskSidebar {
 
   protected newTaskHref(): string {
     return this.navigation.canonicalHref(this.router, 'new');
+  }
+
+  protected async openNext(event: MouseEvent): Promise<void> {
+    this.navigation.captureOrigin(event.currentTarget);
+    const recommendation = await this.store.recommend(this.activeTrack(), this.activeMilestone());
+    if (!recommendation?.found || !recommendation.task) return;
+    this.layout.closeMobileSidebar(false);
+    await this.navigation.navigateToTask(
+      this.router,
+      recommendation.task.id,
+      recommendation.reason,
+    );
   }
 
   private path(): string {

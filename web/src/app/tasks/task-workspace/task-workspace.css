@@ -293,6 +293,7 @@ h2 {
   border-left: 1px solid var(--pm-border-subtle);
 }
 .dependencies p,
+.recommendation-context p,
 .creation-context p {
   margin: var(--pm-space-1) 0 0;
   color: var(--pm-text-muted);

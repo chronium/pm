@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the next recommended task */
+        get: operations["GetNextTaskRecommendation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{id}": {
         parameters: {
             query?: never;
@@ -568,6 +585,11 @@ export interface components {
             publicKey: string;
             fingerprint: string;
         };
+        NextTaskResponse: {
+            found: boolean;
+            task: null | components["schemas"]["BoardTaskSummaryResponse"];
+            reason: string;
+        };
         ProjectInvitationResponse: {
             invitationId: string;
             role: string;
@@ -922,6 +944,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskSearchResultResponse"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetNextTaskRecommendation: {
+        parameters: {
+            query?: {
+                track?: string;
+                milestone?: string;
+                readyOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextTaskResponse"];
                 };
             };
             /** @description Bad Request */

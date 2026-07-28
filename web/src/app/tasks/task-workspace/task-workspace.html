@@ -345,6 +345,12 @@
 
       <aside class="metadata-column" aria-label="Task metadata">
         @if (mode() === 'detail' && detail.task(); as task) {
+          @if (recommendationReason) {
+            <section class="recommendation-context" aria-labelledby="recommendation-heading">
+              <h2 id="recommendation-heading">Recommendation</h2>
+              <p>{{ recommendationReason }}</p>
+            </section>
+          }
           <section class="dependencies" aria-labelledby="dependencies-heading">
             <h2 id="dependencies-heading">Dependencies</h2>
             <p>{{ task.dependencies.summary }}</p>

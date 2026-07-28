@@ -1,4 +1,10 @@
-import { HttpClient, HttpErrorResponse, HttpResponse, httpResource } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpErrorResponse,
+  HttpParams,
+  HttpResponse,
+  httpResource,
+} from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { PollingCoordinator } from '../core/polling-coordinator';
 
@@ -9,6 +15,7 @@ export type CreateTaskRequest = components['schemas']['CreateTaskRequest'];
 export type UpdateTaskRequest = components['schemas']['UpdateTaskRequest'];
 export type UpdateTaskStateRequest = components['schemas']['UpdateTaskStateRequest'];
 export type AppendTaskNoteRequest = components['schemas']['AppendTaskNoteRequest'];
+export type NextTaskResponse = components['schemas']['NextTaskResponse'];
 export type ApiProblemDetails = components['schemas']['ApiProblemDetails'];
 export type TaskMutationResponse = HttpResponse<TaskResponse>;
 
@@ -49,6 +56,13 @@ export class TaskApiService {
       ...this.mutationOptions,
       headers: { ...this.mutationOptions.headers, 'If-Match': etag },
     });
+  }
+
+  next(track: string | null, milestone: string | null, readyOnly = true) {
+    let params = new HttpParams().set('readyOnly', readyOnly);
+    if (track) params = params.set('track', track);
+    if (milestone) params = params.set('milestone', milestone);
+    return this.http.get<NextTaskResponse>('/api/v1/tasks/next', { params });
   }
 
   remove(id: string, etag: string) {

@@ -108,4 +108,18 @@ describe('TaskApiService', () => {
       'could not be reached',
     );
   });
+
+  it('requests ready-only recommendations with optional board scope', () => {
+    const api = TestBed.inject(TaskApiService);
+    api.next('BUILD', 'm1').subscribe();
+
+    const request = TestBed.inject(HttpTestingController).expectOne(
+      (candidate) => candidate.url === '/api/v1/tasks/next',
+    );
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('track')).toBe('BUILD');
+    expect(request.request.params.get('milestone')).toBe('m1');
+    expect(request.request.params.get('readyOnly')).toBe('true');
+    request.flush({ found: false, task: null, reason: 'No ready task.' });
+  });
 });

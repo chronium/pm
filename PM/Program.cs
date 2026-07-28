@@ -116,6 +116,7 @@ app.Configure(config =>
             task.AddCommand<TaskEditCommand>(GlobalConfig.TaskEditCommandName);
             task.AddCommand<TaskMetadataCommand>(GlobalConfig.TaskMetadataCommandName);
             task.AddCommand<TaskNoteCommand>(GlobalConfig.TaskNoteCommandName);
+            task.AddCommand<TaskNextCommand>(GlobalConfig.TaskNextCommandName);
             task.AddCommand<TaskRemoveCommand>(GlobalConfig.TaskRemoveCommandName);
             task.AddCommand<TaskSearchCommand>(GlobalConfig.TaskSearchCommandName);
         });

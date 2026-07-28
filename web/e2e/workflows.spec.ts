@@ -71,6 +71,26 @@ test('task search follows sidebar scope, supports in:all, and preserves board co
   await expect(page.getByRole('option').filter({ hasText: 'E2E-0003' })).toBeVisible();
 });
 
+test('opens the next dependency-ready task within the active sidebar scope', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/tasks?track=E2E&milestone=current');
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  if (await menu.isVisible()) await menu.click();
+
+  await page.getByRole('button', { name: 'Next task' }).click();
+
+  await expect(page).toHaveURL(
+    testInfo.project.name.includes('mobile')
+      ? /\/tasks\/E2E-0001\?track=E2E&milestone=current$/
+      : /\/tasks\/dialog\/E2E-0001\?track=E2E&milestone=current$/,
+  );
+  await expect(page.getByRole('heading', { name: 'Recommendation' })).toBeVisible();
+  await expect(page.locator('.recommendation-context')).toContainText(
+    'Selected high priority task',
+  );
+});
+
 test('uses desktop overlays, fullscreen replacement, and mobile canonical pages', async ({
   page,
 }, testInfo) => {
