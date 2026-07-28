@@ -55,6 +55,7 @@
   font-size: var(--pm-font-size-xs);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .mode-navigation a:hover {
@@ -128,6 +129,7 @@
 
 @media (max-width: 767px) {
   .topbar {
+    gap: var(--pm-space-1);
     padding-inline: var(--pm-space-2);
   }
 
@@ -142,6 +144,10 @@
   .mode-navigation a {
     min-width: 50px;
     padding-inline: var(--pm-space-2);
+  }
+
+  .mode-count-suffix {
+    display: none;
   }
 
   .snapshot-context time {

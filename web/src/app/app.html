@@ -23,10 +23,13 @@
       <span>Tasks</span>
       @if (taskNavigation.remainingCount(); as remainingCount) {
         <span class="mode-count" [attr.aria-label]="remainingCount + ' tasks left'"
-          >{{ remainingCount }} left</span
+          ><span>{{ remainingCount }}</span
+          ><span class="mode-count-suffix"> left</span></span
         >
       } @else if (taskNavigation.remainingCount() === 0) {
-        <span class="mode-count" aria-label="No tasks left">0 left</span>
+        <span class="mode-count" aria-label="No tasks left"
+          ><span>0</span><span class="mode-count-suffix"> left</span></span
+        >
       }
     </a>
     <a
