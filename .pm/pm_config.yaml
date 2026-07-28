@@ -10,6 +10,7 @@ tracks:
   PM: PM
   ISSUE: PM Tool Issues
   AGENT: Agent execution and remote runners
+  DISCOVERY: Product discovery
 milestones:
   mcp-smoke: MCP Smoke Test
   angular-web: Angular Web UI Migration
