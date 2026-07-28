@@ -55,6 +55,9 @@ const migrations = [
   CREATE INDEX runs_active_page_index ON runs(accepted_at, run_id)
     WHERE terminal_at IS NULL;
   `,
+  `
+  ALTER TABLE runs ADD COLUMN agent_thread_id TEXT;
+  `,
 ];
 
 export function applyMigrations(database: DatabaseSync): void {

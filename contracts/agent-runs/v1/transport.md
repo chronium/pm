@@ -45,7 +45,7 @@ Replacing the TLS certificate requires explicit re-pairing in protocol 1.0.
 All run routes require the authenticated request headers above. A submitted body is the protocol 1.0 `RunRequest`, including its canonical specification hash.
 
 - `POST /v1/runs` accepts a run. A new run returns `202`; an identical retry returns the existing run with `200`. Reusing a run ID with another specification hash returns `409 run_id_conflict`. Unsupported runner, provider, model, effort, or runtime-profile selections return a stable capability error without creating a run.
-- `GET /v1/runs/{runId}` returns the immutable specification and current durable state.
+- `GET /v1/runs/{runId}` returns the immutable specification, current durable state, and nullable provider thread ID recorded after agent startup.
 - `GET /v1/runs?scope=active&limit=100&cursor=...` lists non-terminal runs in acceptance order. The cursor is opaque to clients. The default limit is 100 and the maximum is 500.
 - `POST /v1/runs/{runId}/cancel` journals the request. A queued run becomes cancelled immediately. An active run returns `202` and becomes terminal only after its processor stops. If completion wins the race, the completed state remains authoritative.
 - `GET /v1/runs/{runId}/artifacts` and `GET /v1/runs/{runId}/artifacts/{artifactId}` return validated artifact metadata. Protocol 1.0 does not transfer artifact bytes.
@@ -91,3 +91,5 @@ Every durable event carries `protocolVersion`, `runId`, a positive per-run `sequ
 - `artifact.*` for artifact collection and metadata.
 
 Before persistence, summaries and data have unsafe terminal controls removed, common credential forms and sensitive fields redacted, collection depth and size bounded, and oversized payloads replaced by a redaction marker. Raw output is never journaled first and sanitized later.
+
+The Codex adapter runs as a one-shot worker inside the selected runtime and translates SDK activity into these provider-neutral envelopes. Thread IDs are stored only for diagnostics and future continuation; Codex's local transport is not exposed as the PM runner protocol. Command output is emitted incrementally, file paths are workspace-relative, and MCP events omit raw tool arguments and results.

@@ -2,6 +2,8 @@ const ansiSequence = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\
 const controlCharacter = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 const sensitiveKey =
   /(?:authorization|cookie|credential|password|private.?key|secret|signature|nonce|token|api.?key)/i;
+const usageMetricKey =
+  /^(?:input_tokens|cached_input_tokens|cache_write_input_tokens|output_tokens|reasoning_output_tokens)$/;
 const privateKey =
   /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/gi;
 const bearerToken = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi;
@@ -61,7 +63,10 @@ function sanitizeValue(value: unknown, depth: number, seen: WeakSet<object>): un
     const result: Record<string, unknown> = {};
     for (const [rawKey, entry] of Object.entries(value).slice(0, maximumCollectionEntries)) {
       const key = sanitizeString(rawKey).slice(0, 256) || 'field';
-      result[key] = sensitiveKey.test(key) ? '[REDACTED]' : sanitizeValue(entry, depth + 1, seen);
+      result[key] =
+        sensitiveKey.test(key) && !(usageMetricKey.test(key) && typeof entry === 'number')
+          ? '[REDACTED]'
+          : sanitizeValue(entry, depth + 1, seen);
     }
     return result;
   } finally {

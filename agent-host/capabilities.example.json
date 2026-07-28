@@ -3,10 +3,10 @@
   "agentProviders": [
     {
       "providerId": "codex",
-      "modelIds": ["gpt-5.6"],
-      "defaultModelId": "gpt-5.6",
-      "effortIds": ["high", "xhigh"],
-      "defaultEffortId": "xhigh"
+      "modelIds": ["gpt-5.6-sol"],
+      "defaultModelId": "gpt-5.6-sol",
+      "effortIds": ["low", "medium", "high", "xhigh"],
+      "defaultEffortId": "medium"
     }
   ],
   "runtimeProfiles": [

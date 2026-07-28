@@ -491,6 +491,7 @@ function runResponse(run: StoredRun): object {
     updatedAt: run.updatedAt,
     terminalAt: run.terminalAt,
     cancellationRequestedAt: run.cancellationRequestedAt,
+    agentThreadId: run.agentThreadId,
   };
 }
 

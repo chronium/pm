@@ -198,7 +198,7 @@ public class AgentRunDomainTests
             new AgentRunProject("project-example", "PM π"),
             new AgentRunTask("PM-0001", "Define the agent protocol", new string('1', 64)),
             new AgentRunRepository("git@github.com:chronium/pm.git", new string('a', 40)),
-            new AgentRunAgent("codex", "gpt-5.6", "xhigh", "task-execution"),
+            new AgentRunAgent("codex", "gpt-5.6-sol", "medium", "task-execution"),
             new AgentRunRuntime("linux-workstation", profile));
     }
 

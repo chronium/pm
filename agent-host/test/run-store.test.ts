@@ -47,6 +47,29 @@ test('run acceptance is durable, idempotent, immutable, and queue bounded', () =
   }
 });
 
+test('agent thread ID is durable, idempotent, and immutable', () => {
+  const temporary = createTempDirectory();
+  try {
+    const store = new RunStore(temporary.path);
+    store.acceptRun(createRequest('run-thread'), 4);
+
+    store.recordAgentThreadId('run-thread', 'thread-123');
+    store.recordAgentThreadId('run-thread', 'thread-123');
+    assert.equal(store.getRun('run-thread')?.agentThreadId, 'thread-123');
+    assert.throws(
+      () => store.recordAgentThreadId('run-thread', 'thread-other'),
+      /cannot be changed/,
+    );
+    store.close();
+
+    const reopened = new RunStore(temporary.path);
+    assert.equal(reopened.getRun('run-thread')?.agentThreadId, 'thread-123');
+    reopened.close();
+  } finally {
+    temporary.dispose();
+  }
+});
+
 test('event allocation remains contiguous across database reopen', () => {
   const temporary = createTempDirectory();
   try {

@@ -216,6 +216,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     assert.equal(conflict.status, 409);
     assert.equal(JSON.parse(conflict.body).errorCode, 'run_id_conflict');
 
+    runStore.recordAgentThreadId(runRequest.specification.runId, 'thread-http-contract');
     const inspectPath = `${runPath}/${runRequest.specification.runId}`;
     const inspected = await send(
       port,
@@ -228,6 +229,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     );
     assert.equal(inspected.status, 200);
     assert.equal(JSON.parse(inspected.body).run.state, 'queued');
+    assert.equal(JSON.parse(inspected.body).run.agentThreadId, 'thread-http-contract');
 
     const activePath = '/v1/runs?scope=active&limit=1';
     const active = await send(

@@ -1,6 +1,6 @@
 # PM Agent Host
 
-`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It provides durable run state, authenticated HTTPS pairing and capability discovery, idempotent run submission, replayable event streaming, bounded scheduling seams, restart recovery, and retention. Codex and Docker execution are intentionally deferred.
+`pm-agent-host` is the Linux execution-plane foundation for remote PM agent runs. It provides durable run state, authenticated HTTPS pairing and capability discovery, idempotent run submission, replayable event streaming, bounded scheduling seams, restart recovery, retention, and a container-ready Codex SDK worker. OCI runtime execution is intentionally deferred.
 
 The workspace uses Node 26 and TypeScript 7. Install only through Socket:
 
@@ -56,11 +56,30 @@ Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the p
 
 The authenticated HTTPS surface accepts immutable run requests, inspects and pages active runs, journals cancellation, lists artifact metadata, pages event history, and streams replayable SSE events. See `contracts/agent-runs/v1/transport.md` for endpoints, status codes, signed cursors, event namespaces, and reconnect behavior.
 
-The current executable wires a queue-only execution controller. Accepted commands persist and survive disconnects or restart, but remain queued until later runtime and Codex driver tasks supply the actual processor. Artifact endpoints expose metadata only in this slice.
+The current executable wires a queue-only execution controller. Accepted commands persist and survive disconnects or restart, but remain queued until the OCI runtime supplies the production process executor and activates the existing scheduler. Artifact endpoints expose metadata only in this slice.
+
+## Codex worker
+
+`pm-agent-worker` is a one-shot internal process intended to run inside an isolated OCI runtime. It accepts one validated request over stdin, starts the pinned Codex SDK, and reserves stdout for bounded JSONL runner events. The trusted runtime supplies its executable, workspace, isolated `CODEX_HOME`, environment allowlist, network policy, and PM MCP command; none of those command paths come from the repository run request.
+
+The worker requires `pm mcp --profile run-worker --task-id <TASK-ID>`, uses `approvalPolicy: never` with `workspace-write`, and fails when PM MCP cannot initialize. It can read project context and append a note only to its assigned task. PM remains authoritative for task completion.
+
+For v1 ChatGPT authentication, the runtime will copy only the dedicated runner's owner-only `auth.json` into a fresh per-run `CODEX_HOME`. Run-local Codex sessions, logs, and refreshed authentication are deleted with the runtime and are never copied back to the host source.
+
+An opt-in smoke test exercises a real Codex turn in a disposable Git clone. It is excluded from normal tests and CI:
+
+```sh
+PM_AGENT_HOST_CODEX_SMOKE=1 \
+PM_AGENT_HOST_CODEX_SMOKE_AUTH="$HOME/.codex/auth.json" \
+PM_AGENT_HOST_PM_COMMAND_JSON='["dotnet","/absolute/path/to/PM.dll"]' \
+npm run test:codex-smoke
+```
+
+The smoke test creates a synthetic PM task, asks Codex to write one marker file, confirms the task state was not changed, and removes the entire temporary workspace.
 
 ## Persistence and security
 
-`runner.sqlite` stores immutable runs, queue order, cancellation intent, events, artifacts, and stable runner identity. Events are sanitized and committed before live subscribers are notified. `credentials.sqlite` separately stores the single authorized public identity, pairing challenge hashes, and expiring request nonces. Both databases live under the owner-only data root and use WAL, full synchronous writes, and versioned schemas.
+`runner.sqlite` stores immutable runs, queue order, cancellation intent, events, artifacts, the optional Codex thread ID, and stable runner identity. Events are sanitized and committed before live subscribers are notified. `credentials.sqlite` separately stores the single authorized public identity, pairing challenge hashes, and expiring request nonces. Both databases live under the owner-only data root and use WAL, full synchronous writes, and versioned schemas.
 
 Routine logs are newline-delimited JSON with whitelisted operational fields. They omit specifications, repository paths, URLs, request paths, pairing codes, certificates, credentials, signatures, nonces, and arbitrary exception messages.
 

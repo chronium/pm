@@ -21,13 +21,20 @@ export class DriverRunProcessor implements RunProcessor {
       this.store.transition(run.runId, 'starting_agent', 'Starting agent');
       this.store.transition(run.runId, 'running', 'Agent running');
 
-      for await (const event of this.agentDriver.execute(run.specification, runtime, signal))
+      for await (const event of this.agentDriver.execute(
+        { specificationHash: run.specificationHash, specification: run.specification },
+        runtime,
+        signal,
+      )) {
+        if (event.agentThreadId !== undefined)
+          this.store.recordAgentThreadId(run.runId, event.agentThreadId);
         this.store.appendEvent(run.runId, {
           type: event.type,
           state: 'running',
           summary: event.summary,
           data: event.data,
         });
+      }
 
       this.store.transition(run.runId, 'validating', 'Validating run');
       this.store.transition(run.runId, 'collecting_artifacts', 'Collecting artifacts');

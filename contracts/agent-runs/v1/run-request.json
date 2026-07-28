@@ -1,5 +1,5 @@
 {
-  "specificationHash": "d9a14452db77b5e82e444834ec2a1c26affef030016a152e6e4d3854ea00e174",
+  "specificationHash": "08f4ad97597cc1d4726f5fa12e50465094924f0094cce49c889000b7a7a1db4d",
   "specification": {
     "protocolVersion": "1.0",
     "runId": "run-01K0EXAMPLE",
@@ -19,8 +19,8 @@
     },
     "agent": {
       "providerId": "codex",
-      "modelId": "gpt-5.6",
-      "effortId": "xhigh",
+      "modelId": "gpt-5.6-sol",
+      "effortId": "medium",
       "promptProfileId": "task-execution"
     },
     "runtime": {
