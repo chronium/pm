@@ -56,7 +56,7 @@ npm start
 
 `pm web --api` serves only `/api/v1` and `/openapi/{documentName}.json`, does not open a browser, and accepts `--port` when a different proxy target is needed. The Angular workspace is not invoked by the repository's normal .NET build or test commands.
 
-Angular is the default for both `pm web` and `pm web --ui angular`. It requires assets embedded into the running assembly and fails before binding when they are absent; it never falls back silently. The previous server-rendered interface remains available for one stability release through the explicit `pm web --ui legacy` escape hatch.
+`pm web` serves the Angular client. It requires assets embedded into the running assembly and fails before binding when they are absent; development should use `pm web --api` with `npm start`.
 
 ```sh
 cd web

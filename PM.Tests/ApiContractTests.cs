@@ -319,7 +319,7 @@ public partial class ApiContractTests
     {
         using var workspace = new TempWorkingDirectory();
         var root = await workspace.CreateProject();
-        var (app, client) = await CreateApiClient(root, mapLegacy: true);
+        var (app, client) = await CreateApiClient(root, mapNonApiEndpoint: true);
         await using (app)
         using (client)
         {
@@ -382,7 +382,7 @@ public partial class ApiContractTests
     private static async Task<(WebApplication App, HttpClient Client)> CreateApiClient(
         ProjectRoot projectRoot,
         Action<Microsoft.AspNetCore.Routing.RouteGroupBuilder>? configure = null,
-        bool mapLegacy = false,
+        bool mapNonApiEndpoint = false,
         INextIdService? nextIdService = null,
         IProjectMembershipService? membershipService = null)
     {
@@ -399,8 +399,8 @@ public partial class ApiContractTests
             new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,
             membershipService);
         app.MapOpenApi("/openapi/{documentName}.json");
-        if (mapLegacy)
-            app.MapGet("/board", () => Results.Content("legacy", "text/html"));
+        if (mapNonApiEndpoint)
+            app.MapGet("/board", () => Results.Content("non-api", "text/html"));
 
         await app.StartAsync();
         return (app, new HttpClient { BaseAddress = new Uri(url) });

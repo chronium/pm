@@ -30,12 +30,6 @@ public static class AngularWebEndpoints
             return;
         }
 
-        if (TryGetLegacyRedirect(requestedPath, out var redirectPath))
-        {
-            context.Response.Redirect(redirectPath + context.Request.QueryString);
-            return;
-        }
-
         var assetPath = string.IsNullOrEmpty(requestedPath) ? "index.html" : requestedPath;
         if (!assets.TryGet(assetPath, out var asset))
         {
@@ -84,23 +78,4 @@ public static class AngularWebEndpoints
         !string.Equals(path, "index.html", StringComparison.Ordinal)
         && FingerprintedFile.IsMatch(path);
 
-    private static bool TryGetLegacyRedirect(string path, out string redirectPath)
-    {
-        redirectPath = string.Empty;
-        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 2 && segments[0] == "task" && segments[1] == "new")
-        {
-            redirectPath = "/tasks/new";
-            return true;
-        }
-
-        if (segments.Length is 2 or 3 && segments[0] == "task"
-            && (segments.Length == 2 || segments[2] == "edit"))
-        {
-            redirectPath = $"/tasks/{Uri.EscapeDataString(segments[1])}";
-            return true;
-        }
-
-        return false;
-    }
 }

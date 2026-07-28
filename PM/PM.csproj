@@ -23,10 +23,6 @@
         <PackageReference Include="YamlDotNet" Version="16.3.0"/>
     </ItemGroup>
 
-    <ItemGroup>
-        <EmbeddedResource Include="Web/Templates/**/*"/>
-    </ItemGroup>
-
     <ItemGroup Condition="'$(EmbedAngularAssets)' == 'true'">
         <EmbeddedResource Include="../web/dist/pm-web/browser/**/*">
             <LogicalName>PM.AngularAssets/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>

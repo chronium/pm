@@ -60,6 +60,7 @@ public class AngularWebEndpointTests
 
     [Theory]
     [InlineData("/tasks/PM-0001", HttpStatusCode.OK)]
+    [InlineData("/task/PM-0001", HttpStatusCode.OK)]
     [InlineData("/missing.js", HttpStatusCode.NotFound)]
     [InlineData("/api/unknown", HttpStatusCode.NotFound)]
     [InlineData("/openapi/unknown", HttpStatusCode.NotFound)]
@@ -79,28 +80,7 @@ public class AngularWebEndpointTests
         if (status == HttpStatusCode.OK) Assert.Equal("Angular shell", await response.Content.ReadAsStringAsync());
     }
 
-    [Theory]
-    [InlineData("/task/new?track=PM", "/tasks/new?track=PM")]
-    [InlineData("/task/PM-0001?state=todo", "/tasks/PM-0001?state=todo")]
-    [InlineData("/task/PM-0001/edit?milestone=m1", "/tasks/PM-0001?milestone=m1")]
-    public async Task RedirectsLegacyTaskRoutesAndPreservesQuery(string source, string destination)
-    {
-        var web = await CreateClient(new MemoryAssetStore(new Dictionary<string, string>
-        {
-            ["index.html"] = "index",
-        }), allowRedirects: false);
-        await using var app = web.App;
-        using var client = web.Client;
-
-        var response = await client.GetAsync(source);
-
-        Assert.Equal(HttpStatusCode.Found, response.StatusCode);
-        Assert.Equal(destination, response.Headers.Location?.OriginalString);
-    }
-
-    private static async Task<(WebApplication App, HttpClient Client)> CreateClient(
-        IAngularAssetStore assets,
-        bool allowRedirects = true)
+    private static async Task<(WebApplication App, HttpClient Client)> CreateClient(IAngularAssetStore assets)
     {
         var port = GetAvailablePort();
         var url = $"http://127.0.0.1:{port}";
@@ -110,8 +90,7 @@ public class AngularWebEndpointTests
         app.MapAngularWeb(assets);
         await app.StartAsync();
 
-        var handler = new HttpClientHandler { AllowAutoRedirect = allowRedirects };
-        return (app, new HttpClient(handler) { BaseAddress = new Uri(url) });
+        return (app, new HttpClient { BaseAddress = new Uri(url) });
     }
 
     private static int GetAvailablePort()

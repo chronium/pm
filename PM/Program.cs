@@ -56,6 +56,7 @@ var app = new CommandApp(registrar);
 
 app.Configure(config =>
 {
+    config.UseStrictParsing();
     config.SetApplicationName(GlobalConfig.ApplicationName)
         .SetApplicationVersion(GlobalConfig.ApplicationVersion);
 

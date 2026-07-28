@@ -57,7 +57,7 @@ cd web
 npm start
 ```
 
-The published release artifact serves the embedded Angular client with `dotnet artifacts/release/PM.dll web`. `pm web` now means `pm web --ui angular`; a normal Debug build has no embedded client and should use `--api` for development. During the stability release only, `pm web --ui legacy` explicitly starts the previous server-rendered interface as a temporary fallback.
+The published release artifact serves the embedded Angular client with `dotnet artifacts/release/PM.dll web`. A normal Debug build has no embedded client and should use `--api` for Angular development.
 
 Run tests:
 
@@ -123,7 +123,7 @@ cd web
 npm start
 ```
 
-API-only mode binds to `127.0.0.1:51237` by default, accepts an optional `--port`, exposes only `/api/v1` and `/openapi/{documentName}.json`, and never opens a browser. UI modes retain the existing available-port default and support `--port` and `--open`.
+API-only mode binds to `127.0.0.1:51237` by default, accepts an optional `--port`, exposes only `/api/v1` and `/openapi/{documentName}.json`, and never opens a browser. The embedded Angular UI uses an available port by default and supports `--port` and `--open`.
 
 Production Angular assets are included only when explicitly requested. Build the browser bundle first, then publish PM with embedding enabled:
 
@@ -134,7 +134,7 @@ cd ..
 dotnet publish PM/PM.csproj -p:EmbedAngularAssets=true
 ```
 
-The published application then serves the embedded client with plain `pm web` (or the equivalent `pm web --ui angular`). Ordinary .NET builds and tests do not inspect `web/dist`, invoke Node, or include local frontend output.
+The published application then serves the embedded client with `pm web`. Ordinary .NET builds and tests do not inspect `web/dist`, invoke Node, or include local frontend output.
 
 The same published application can export a backend-free, read-only project site:
 

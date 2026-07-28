@@ -18,7 +18,7 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Run .NET tests: `dotnet test PM.slnx -m:1 --no-restore`.
 - In Codex/sandboxed sessions, run the CLI locally after build with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll <command>`.
 - In Codex/sandboxed sessions, start the development API from inside an initialized PM project with elevated shell: `dotnet PM/bin/Debug/net10.0/PM.dll web --api --port 51237`, then run `npm start` in `web/`.
-- Run the embedded Angular board from the published release artifact with elevated shell: `dotnet artifacts/release/PM.dll web`; use `--ui legacy` only as the temporary fallback.
+- Run the embedded Angular board from the published release artifact with elevated shell: `dotnet artifacts/release/PM.dll web`.
 - Worker dependencies: run `socket npm install` in `next-id-worker/` only when Node tooling needs local install state.
 - Worker tests: `npm test` in `next-id-worker/`.
 - Worker dev server: `npm run dev` in `next-id-worker/`.
@@ -57,8 +57,7 @@ No dedicated lint command is configured in this repository. Do not invent one. B
 - `PM/Project/` owns project discovery, config, task/state file paths, and persistence under a `.pm` project root.
 - `PM/Tasks/` contains task model and CLI task commands.
 - `PM/Application/` contains service-level behavior such as `TaskService`, `BoardService`, and `AppResult`. Put cross-command workflow logic here rather than in renderers or command handlers.
-- `PM/Web/` contains the local web board command, endpoint mapping, HTML rendering, and template loading.
-- `PM/Web/Templates/` contains embedded HTML fragments and `styles.css`. Templates are embedded by `PM.csproj`; keep template names stable and update renderer tests when changing markup.
+- `PM/Web/` contains the local web command, JSON API hosting, and embedded Angular asset serving.
 - `web/` contains the standalone Angular 22 replacement client. Keep it zoneless, strictly typed, routed, and independent from the normal .NET build until the release integration work explicitly changes that boundary.
 - In Angular routed features, keep page components focused on coordinating data, routing, and page state. Extract repeated or independently meaningful regions into focused components with typed signal inputs and outputs; keep trivial one-off markup inline.
 - `PM/Mcp/` contains MCP server host, tools, and response shapes.
@@ -68,19 +67,19 @@ No dedicated lint command is configured in this repository. Do not invent one. B
 - `agent-host/` contains the standalone TypeScript 7 Linux runner foundation. Keep protocol and persistence behavior aligned with `contracts/agent-runs/v1/`, use Node built-ins where sufficient, and keep host configuration and data outside repositories.
 - `next_id.cs` is listed in the solution under `/NanoServices/`.
 
-Use existing constructor-injected services and `AppResult`/`AppResult<T>` for application failures. Keep data access through `ProjectRoot`, `TaskService`, `BoardService`, and Worker D1 prepared statements rather than scattering file or database access through UI code. Keep HTML escaping in `BoardHtmlRenderer` for user-controlled values.
+Use existing constructor-injected services and `AppResult`/`AppResult<T>` for application failures. Keep data access through `ProjectRoot`, `TaskService`, `BoardService`, and Worker D1 prepared statements rather than scattering file or database access through UI code. Keep API contracts typed and render user-controlled values through Angular's safe bindings and established Markdown sanitization.
 
-Prefer extending established patterns over introducing new abstractions. Do not add dependencies when the current .NET libraries, htmx, native browser APIs, or Worker runtime APIs are enough. All `npm` and `npx` flows for the Worker should go through the existing package scripts; Wrangler commands are Socket-wrapped there.
+Prefer extending established patterns over introducing new abstractions. Do not add dependencies when the current .NET libraries, Angular primitives, native browser APIs, or Worker runtime APIs are enough. All `npm` and `npx` flows for the Worker should go through the existing package scripts; Wrangler commands are Socket-wrapped there.
 
 ## UI Principles
 
-The existing .NET web UI is a focused professional tool built from server-rendered HTML fragments, htmx interactions, minimal JavaScript, and CSS variables in `PM/Web/Templates/styles.css`. The replacement client lives separately in `web/`. Do not broadly restyle existing screens unless the task explicitly requires it.
+The web UI is the Angular client in `web/`, embedded into published PM artifacts. Keep its styling focused and professional, and do not broadly restyle existing screens unless the task explicitly requires it.
 
 Non-negotiables:
 
 - Keep task content more prominent than navigation, filters, metadata, and controls.
 - Preserve dense but readable layouts for real task-board usage.
-- Reuse existing templates, htmx patterns, native browser APIs, and CSS tokens before adding new primitives.
+- Reuse existing Angular components, native browser APIs, and CSS tokens before adding new primitives.
 - Keep destructive and advanced actions contextual, confirmable, and keyboard-accessible.
 - Do not introduce decorative gradients, broad shadows, arbitrary colors, or excessive card nesting.
 - Preserve filters, board context, and immediate feedback after mutations.
@@ -92,7 +91,7 @@ Non-negotiables:
 3. Semantic color
    Use the existing CSS token system in `styles.css`. Use accent colors sparingly. Reserve strong color for status, priority, validation, selection, warnings, destructive actions, and meaningful emphasis. Do not introduce arbitrary colors directly in templates or components.
 4. Consistent interaction grammar
-   The same task should behave consistently in board cards, dialogs, forms, and filtered views. Reuse existing htmx targeting, dialog, selection, editing, filtering, and mutation patterns before adding new ones.
+   The same task should behave consistently in board rows, dialogs, forms, and filtered views. Reuse existing Angular routing, dialog, selection, editing, filtering, and mutation patterns before adding new ones.
 5. Progressive disclosure
    Keep common paths visible: filtering, opening a task, creating a task, editing, state changes, and removal flows should remain straightforward. Put advanced or destructive choices in contextual controls, dialogs, confirmations, popovers, drawers, expandable sections, or command interfaces.
 6. Contextual controls
@@ -100,7 +99,7 @@ Non-negotiables:
 7. Keyboard efficiency
    Preserve logical tab order and visible focus. Important repetitive workflows should be keyboard accessible. Add shortcuts only when they do not conflict with text entry, browser behavior, or accessibility. If a command menu is added, expose relevant actions there and show shortcut hints in menus where appropriate.
 8. Immediate, trustworthy feedback
-   Acknowledge actions immediately. Use htmx fragment swaps, out-of-band board updates, localized loading/error states, and stable layouts rather than unnecessary full-page loading. Use optimistic updates only when failure can be detected and safely rolled back. Preserve filters and user context after mutations.
+   Acknowledge actions immediately. Use localized loading/error states and stable layouts rather than unnecessary full-page loading. Use optimistic updates only when failure can be detected and safely rolled back. Preserve filters and user context after mutations.
 9. Motion
    Motion must explain state changes, hierarchy, or spatial relationships. Keep transitions subtle and brief, avoid decorative animation, and respect reduced-motion preferences.
 10. Responsive behavior
@@ -108,14 +107,14 @@ Non-negotiables:
 
 ## Component Requirements
 
-- Reuse existing templates, renderer helpers, CSS variables, controls, and htmx conventions before creating new primitives.
+- Reuse existing Angular components, CSS variables, and controls before creating new primitives.
 - Support states that matter for the component's behavior: default, hover, active, selected, focus-visible, disabled, loading, empty, and error where relevant.
-- Keep business logic in services and endpoint handlers; keep reusable presentation in templates and rendering helpers.
-- Prefer composition of templates and small renderer helpers over large components with many unrelated boolean options.
+- Keep business logic in application services and API endpoints; keep reusable presentation in focused Angular components.
+- Prefer composition of focused components over large components with many unrelated boolean options.
 - Avoid one-off styling that duplicates an existing selector or token.
 - Keep variants intentional and limited.
 - Ensure icons, if introduced, have consistent sizing, alignment, stroke treatment, accessible labels, and tooltips for icon-only buttons.
-- Keep user-controlled content HTML-escaped and URL-escaped through renderer helpers.
+- Keep user-controlled content safely rendered and URL-encoded through established Angular helpers.
 
 ## Accessibility
 
@@ -148,7 +147,7 @@ Before declaring UI work complete, verify:
 - Loading, empty, error, disabled, and permission-restricted states are handled.
 - Responsive layouts preserve primary actions.
 - Interaction feedback is immediate and understandable.
-- Existing templates, renderer helpers, and tokens were reused where possible.
+- Existing components, helpers, and tokens were reused where possible.
 - Relevant .NET and/or Worker tests pass, along with the .NET build when application code changes.
 - No unrelated behavior or visual regressions were introduced.
 
