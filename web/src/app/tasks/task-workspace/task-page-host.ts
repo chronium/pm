@@ -34,7 +34,13 @@ import { TaskWorkspace } from './task-workspace';
       padding: var(--pm-space-5);
     }
     @media (max-width: 767px) {
+      :host {
+        height: auto;
+        min-height: 100%;
+      }
       .task-page {
+        height: auto;
+        min-height: 100%;
         padding: var(--pm-space-3);
       }
     }

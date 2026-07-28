@@ -127,7 +127,19 @@ test('uses desktop overlays, fullscreen replacement, and mobile canonical pages'
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const description = await page.locator('.description-section').boundingBox();
   const metadata = await page.locator('.metadata-column').boundingBox();
-  expect(metadata!.y).toBeGreaterThan(description!.y);
+  expect(metadata!.y).toBeGreaterThanOrEqual(description!.y + description!.height);
+  const mobileFlow = await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>('.content')!;
+    const descriptionSection = document.querySelector<HTMLElement>('.description-section')!;
+    return {
+      contentClientHeight: content.clientHeight,
+      contentScrollHeight: content.scrollHeight,
+      descriptionClientHeight: descriptionSection.clientHeight,
+      descriptionScrollHeight: descriptionSection.scrollHeight,
+    };
+  });
+  expect(mobileFlow.contentScrollHeight).toBeGreaterThan(mobileFlow.contentClientHeight);
+  expect(mobileFlow.descriptionScrollHeight).toBe(mobileFlow.descriptionClientHeight);
 });
 
 test('wiki search finds body content and opens a nested page', async ({ page }) => {

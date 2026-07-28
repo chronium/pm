@@ -39,6 +39,23 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   }
   await page.reload();
   await expect(page.getByText('E2E-0003', { exact: true }).first()).toBeVisible();
+  if (testInfo.project.name.includes('mobile')) {
+    const description = await page.locator('.description-section').boundingBox();
+    const metadata = await page.locator('.metadata-column').boundingBox();
+    expect(metadata!.y).toBeGreaterThanOrEqual(description!.y + description!.height);
+    const mobileFlow = await page.evaluate(() => {
+      const content = document.querySelector<HTMLElement>('.content')!;
+      const descriptionSection = document.querySelector<HTMLElement>('.description-section')!;
+      return {
+        contentClientHeight: content.clientHeight,
+        contentScrollHeight: content.scrollHeight,
+        descriptionClientHeight: descriptionSection.clientHeight,
+        descriptionScrollHeight: descriptionSection.scrollHeight,
+      };
+    });
+    expect(mobileFlow.contentScrollHeight).toBeGreaterThan(mobileFlow.contentClientHeight);
+    expect(mobileFlow.descriptionScrollHeight).toBe(mobileFlow.descriptionClientHeight);
+  }
 
   await page.goto('/#/tasks/E2E-0006');
   await page.getByRole('link', { name: 'E2E-0005' }).click();

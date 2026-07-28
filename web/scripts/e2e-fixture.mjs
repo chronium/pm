@@ -57,6 +57,13 @@ milestonePriorities:
       number > 1 && number % 6 === 0
         ? `dependsOn:\n- E2E-${String(number - 1).padStart(4, '0')}\n`
         : '';
+    const longDescription = [1, 3].includes(number)
+      ? `\n\n${Array.from(
+          { length: 12 },
+          (_, index) =>
+            `## Section ${index + 1}\n\nLong fixture content verifies that task metadata follows the complete description.\n\n- Preserve headings\n- Preserve lists\n- Preserve document flow`,
+        ).join('\n\n')}`
+      : '';
     await writeFile(
       join(pm, 'tasks', `${id}.md`),
       `---
@@ -68,7 +75,7 @@ ${dependency}createdAt: ${timestamp}
 modifiedAt: ${timestamp}
 ---
 
-Fixture description for ${id}.
+Fixture description for ${id}.${longDescription}
 `,
     );
     await writeFile(join(pm, 'states', state, `${id}.ref`), `../../tasks/${id}.md`);

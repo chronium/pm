@@ -200,3 +200,7 @@ export const Creation: Story = { args: { mode: 'create', taskId: null } };
 export const LongContent: Story = { args: { taskId: longTask.id } };
 export const DarkMode: Story = { globals: { theme: 'dark' } };
 export const Mobile: Story = { globals: { viewport: 'mobile' } };
+export const MobileLongContent: Story = {
+  args: { taskId: longTask.id },
+  globals: { viewport: 'mobile' },
+};

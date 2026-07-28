@@ -339,8 +339,25 @@ h2 {
   }
 }
 @media (max-width: 767px) {
+  :host([presentation='page']) {
+    height: auto;
+    min-height: 100%;
+  }
+  :host([presentation='page']) .task-workspace {
+    height: auto;
+    min-height: 100%;
+  }
   .workspace-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+  :host([presentation='page']) .workspace-columns {
+    flex: 0 0 auto;
+    align-items: start;
+    min-height: auto;
+  }
+  :host([presentation='page']) .description-section,
+  :host([presentation='page']) .metadata-column {
+    min-height: auto;
   }
   .host-actions {
     margin-inline-start: 0;
