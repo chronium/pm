@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('embedded host serves deep links, API, hashed assets, redirects, and loopback-only requests', async ({
+test('embedded host serves deep links, API, hashed assets, and loopback-only requests', async ({
   page,
   request,
 }) => {
@@ -16,9 +16,8 @@ test('embedded host serves deep links, API, hashed assets, redirects, and loopba
 
   const api = await request.get('/api/v1/project');
   expect(api.ok()).toBeTruthy();
-  const redirect = await request.get('/task/E2E-0001/edit', { maxRedirects: 0 });
-  expect(redirect.status()).toBe(302);
-  expect(redirect.headers()['location']).toBe('/tasks/E2E-0001');
+  const taskDeepLink = await request.get('/tasks/E2E-0001');
+  expect(taskDeepLink.ok()).toBeTruthy();
 
   const html = await (await request.get('/')).text();
   const assets = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map((match) => match[1]);

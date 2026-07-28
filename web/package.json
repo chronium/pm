@@ -29,12 +29,12 @@
     "npm": ">=11 <12"
   },
   "dependencies": {
-    "@angular/common": "22.0.7",
-    "@angular/compiler": "22.0.7",
-    "@angular/core": "22.0.7",
-    "@angular/forms": "22.0.7",
-    "@angular/platform-browser": "22.0.7",
-    "@angular/router": "22.0.7",
+    "@angular/common": "22.0.8",
+    "@angular/compiler": "22.0.8",
+    "@angular/core": "22.0.8",
+    "@angular/forms": "22.0.8",
+    "@angular/platform-browser": "22.0.8",
+    "@angular/router": "22.0.8",
     "@knadh/oat": "0.6.2",
     "@ng-icons/core": "34.0.0",
     "@ng-icons/css.gg": "34.0.0",
@@ -46,11 +46,11 @@
   },
   "devDependencies": {
     "@analogjs/vite-plugin-angular": "2.6.3",
-    "@angular/animations": "22.0.7",
-    "@angular/build": "22.0.7",
-    "@angular/cli": "22.0.7",
-    "@angular/compiler-cli": "22.0.7",
-    "@angular/platform-browser-dynamic": "22.0.7",
+    "@angular/animations": "22.0.8",
+    "@angular/build": "22.0.8",
+    "@angular/cli": "22.0.8",
+    "@angular/compiler-cli": "22.0.8",
+    "@angular/platform-browser-dynamic": "22.0.8",
     "@playwright/test": "1.61.1",
     "@storybook/addon-a11y": "10.5.0",
     "@storybook/addon-vitest": "10.5.0",
@@ -67,6 +67,9 @@
     "vitest": "4.1.10"
   },
   "overrides": {
-    "vite@7.3.5": "7.3.6"
+    "vite@7.3.5": "7.3.6",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@hono/node-server": "2.0.12",
+    "tar": "7.5.22"
   }
 }
