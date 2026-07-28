@@ -72,19 +72,14 @@ public class NextIdService : INextIdService
         var existingProjectId = ReadProjectId(projectRoot);
         if (existingProjectId != null) return new ProjectRegistration(existingProjectId, null);
 
-        var legacyKey = ReadLegacyNextIdKey(projectRoot);
         try
         {
             var identity = _identityService.GetOrCreateIdentity();
             var projectId = RequestSigning.GeneratePublicId("prj");
             var recoveryKey = RequestSigning.GenerateRecoveryKey();
-            object payload = legacyKey == null
-                ? new CreateProjectRequest(projectId, identity.UserId, identity.DisplayName, identity.PublicKey,
-                    RequestSigning.Sha256Hex(recoveryKey))
-                : new ClaimLegacyProjectRequest(projectId, legacyKey, identity.UserId, identity.DisplayName,
-                    identity.PublicKey, RequestSigning.Sha256Hex(recoveryKey));
-            var path = legacyKey == null ? "/projects" : "/legacy-projects/claim";
-            var response = await _worker.Send<ProjectResponse>(projectRoot.Config!, HttpMethod.Post, path,
+            var payload = new CreateProjectRequest(projectId, identity.UserId, identity.DisplayName,
+                identity.PublicKey, RequestSigning.Sha256Hex(recoveryKey));
+            var response = await _worker.Send<ProjectResponse>(projectRoot.Config!, HttpMethod.Post, "/projects",
                 identity, payload, cancellationToken);
             var registered = Require(response);
             FileSystem.WriteAllText(Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile),
@@ -122,16 +117,8 @@ public class NextIdService : INextIdService
         return File.Exists(path) ? FileSystem.ReadAllText(path).Trim() : null;
     }
 
-    private static string? ReadLegacyNextIdKey(ProjectRoot projectRoot)
-    {
-        var path = Path.Combine(projectRoot.RootPath, GlobalConfig.LegacyNextIdFile);
-        return File.Exists(path) ? FileSystem.ReadAllText(path).Trim() : null;
-    }
-
     private sealed record CreateProjectRequest(string ProjectId, string UserId, string DisplayName,
         string PublicKey, string RecoveryKeyHash);
-    private sealed record ClaimLegacyProjectRequest(string ProjectId, string LegacyKey, string UserId,
-        string DisplayName, string PublicKey, string RecoveryKeyHash);
     private sealed record ProjectResponse(string ProjectId);
     private sealed record NextIdResponse(int Id);
 }

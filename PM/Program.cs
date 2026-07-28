@@ -63,7 +63,6 @@ app.Configure(config =>
     config.SetInterceptor(new TimingInterceptor());
 
     config.AddCommand<InitCommand>(GlobalConfig.InitCommandName);
-    config.AddCommand<ProjectClaimCommand>(GlobalConfig.ClaimCommandName);
 
     config.AddBranch(GlobalConfig.ProjectBranchName, project =>
     {

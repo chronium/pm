@@ -70,25 +70,19 @@ public class NextIdServiceTests
     }
 
     [Fact]
-    public async Task LegacyNextIdKeyIsClaimedThenReplacedByProjectId()
+    public async Task RegisterProjectReusesExistingPublicProjectIdWithoutWorkerRequest()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(nextIdServiceUrl: "http://ids.example.test"));
-        await File.WriteAllTextAsync(Path.Combine(projectRoot.RootPath, GlobalConfig.LegacyNextIdFile), "legacy-key");
-        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent("""{"projectId":"claimed-project"}"""),
-        });
+        await File.WriteAllTextAsync(Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "existing-project");
+        var handler = new RecordingHandler(_ => throw new InvalidOperationException("Worker should not be called."));
         var service = CreateService(handler, workspace);
 
         var registration = await service.RegisterProject(projectRoot);
 
-        Assert.Equal("claimed-project", registration.ProjectId);
-        Assert.Equal("claimed-project",
-            (await File.ReadAllTextAsync(Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile))).Trim());
-        var request = Assert.Single(handler.Requests);
-        Assert.Equal("http://ids.example.test/legacy-projects/claim", request.RequestUri!.ToString());
-        AssertSigned(request);
+        Assert.Equal("existing-project", registration.ProjectId);
+        Assert.Null(registration.RecoveryKey);
+        Assert.Empty(handler.Requests);
     }
 
     private static NextIdService CreateService(RecordingHandler handler, TempWorkingDirectory workspace)

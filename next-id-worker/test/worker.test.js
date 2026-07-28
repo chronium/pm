@@ -76,95 +76,14 @@ test("bad signatures are unauthorized", async () => {
   assert.equal(response.status, 401);
 });
 
-test("legacy claim preserves counters", async () => {
-  const db = new FakeD1();
-  const legacyKey = base64UrlEncode(webcrypto.getRandomValues(new Uint8Array(64)));
-  const keyHash = await sha512Hex(base64UrlDecode(legacyKey));
-  db.legacyProjects.set(keyHash, { keyHash, project_id: null });
-  db.legacyCounters.set(counterKey(keyHash, "BUILD"), 8);
-
-  const identity = await createIdentity();
-  const response = await signedJson(db, identity, "POST", "/legacy-projects/claim", {
-    projectId: "claimed-project",
-    legacyKey,
-    userId: identity.userId,
-    displayName: "Chronium",
-    publicKey: identity.publicKey,
-    recoveryKeyHash: "recovery-hash",
-  });
-
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { projectId: "claimed-project" });
-  assert.deepEqual(await json(db, identity, "GET", "/projects/claimed-project/tracks/BUILD/peekid"), { id: 8 });
-});
-
-test("unknown legacy keys cannot be claimed", async () => {
-  const db = new FakeD1();
-  const identity = await createIdentity();
-  const response = await signedJson(db, identity, "POST", "/legacy-projects/claim", {
-    projectId: "claimed-project",
-    legacyKey: "bm90LXJlZ2lzdGVyZWQ",
-    userId: identity.userId,
-    displayName: "Chronium",
-    publicKey: identity.publicKey,
-    recoveryKeyHash: "recovery-hash",
-  });
-
-  assert.equal(response.status, 401);
-});
-
-test("already claimed legacy keys with no members can recover the first admin", async () => {
-  const db = new FakeD1();
-  const legacyKey = base64UrlEncode(webcrypto.getRandomValues(new Uint8Array(64)));
-  const keyHash = await sha512Hex(base64UrlDecode(legacyKey));
-  db.legacyProjects.set(keyHash, { keyHash, project_id: "claimed-project" });
-  db.projects.set("claimed-project", { projectId: "claimed-project", recoveryKeyHash: "recovery-hash" });
-
-  const identity = await createIdentity();
-  const response = await signedJson(db, identity, "POST", "/legacy-projects/claim", {
-    projectId: "other-project",
-    legacyKey,
-    userId: identity.userId,
-    displayName: "Chronium",
-    publicKey: identity.publicKey,
-    recoveryKeyHash: "recovery-hash",
-  });
-
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { projectId: "claimed-project" });
-  assert.equal(db.members.has(memberKey("claimed-project", identity.userId)), true);
-});
-
-test("already claimed legacy keys with members cannot add another admin", async () => {
-  const db = new FakeD1();
-  const legacyKey = base64UrlEncode(webcrypto.getRandomValues(new Uint8Array(64)));
-  const keyHash = await sha512Hex(base64UrlDecode(legacyKey));
-  db.legacyProjects.set(keyHash, { keyHash, project_id: "claimed-project" });
-  db.projects.set("claimed-project", { projectId: "claimed-project", recoveryKeyHash: "recovery-hash" });
-  db.members.set(memberKey("claimed-project", "existing-user"), {
-    project_id: "claimed-project",
-    user_id: "existing-user",
-    display_name: "Existing",
-    public_key: "public-key",
-    role: "admin",
-  });
-
-  const identity = await createIdentity();
-  const response = await signedJson(db, identity, "POST", "/legacy-projects/claim", {
-    projectId: "other-project",
-    legacyKey,
-    userId: identity.userId,
-    displayName: "Chronium",
-    publicKey: identity.publicKey,
-    recoveryKeyHash: "recovery-hash",
-  });
-
-  assert.equal(response.status, 401);
-  assert.equal(db.members.has(memberKey("claimed-project", identity.userId)), false);
-});
-
 test("unknown routes are not found", async () => {
   const response = await request(new FakeD1(), "GET", "/projects/abc");
+
+  assert.equal(response.status, 404);
+});
+
+test("removed legacy claim route is not found", async () => {
+  const response = await request(new FakeD1(), "POST", "/legacy-projects/claim");
 
   assert.equal(response.status, 404);
 });
@@ -339,11 +258,9 @@ async function canonicalRequest(method, pathname, timestamp, nonce, userId, body
 
 class FakeD1 {
   projects = new Map();
-  legacyProjects = new Map();
   members = new Map();
   nonces = new Set();
   counters = new Map();
-  legacyCounters = new Map();
   invitations = new Map();
 
   prepare(sql) {
@@ -379,32 +296,6 @@ class FakeStatement {
       const [, projectId, recoveryKeyHash] = this.#bindings;
       if (this.#db.projects.has(projectId)) throw new Error("UNIQUE constraint failed");
       this.#db.projects.set(projectId, { projectId, recoveryKeyHash });
-      return { results: [] };
-    }
-
-    if (this.#sql.includes("SELECT key_hash, project_id")) {
-      const [keyHash] = this.#bindings;
-      const project = this.#db.legacyProjects.get(keyHash);
-      return { results: project ? [project] : [] };
-    }
-
-    if (this.#sql.includes("UPDATE projects")) {
-      const [keyHash, projectId, recoveryKeyHash] = this.#bindings;
-      const legacy = this.#db.legacyProjects.get(keyHash);
-      if (!legacy || legacy.project_id) return { results: [] };
-      legacy.project_id = projectId;
-      this.#db.projects.set(projectId, { projectId, recoveryKeyHash });
-      return { results: [{ project_id: projectId }] };
-    }
-
-    if (this.#sql.includes("FROM legacy_project_counters")) {
-      const [keyHash, projectId] = this.#bindings;
-      for (const [key, nextId] of this.#db.legacyCounters) {
-        if (!key.startsWith(`${keyHash}:`)) continue;
-        const track = key.slice(keyHash.length + 1);
-        const newKey = counterKey(projectId, track);
-        if (!this.#db.counters.has(newKey)) this.#db.counters.set(newKey, nextId);
-      }
       return { results: [] };
     }
 
@@ -562,16 +453,7 @@ function base64UrlEncode(bytes) {
   return Buffer.from(bytes).toString("base64url");
 }
 
-function base64UrlDecode(value) {
-  return new Uint8Array(Buffer.from(value, "base64url"));
-}
-
 async function sha256Hex(bytes) {
   const digest = await webcrypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function sha512Hex(bytes) {
-  const digest = await webcrypto.subtle.digest("SHA-512", bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

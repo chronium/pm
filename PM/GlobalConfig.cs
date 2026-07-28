@@ -6,7 +6,6 @@ public static class GlobalConfig
     public static string PmConfigFile = "pm_config.yaml";
 
     public static string ProjectIdFile = "project_id.txt";
-    public static string LegacyNextIdFile = "next_id.txt";
 
     public static string TasksDirName = "tasks";
     public static string StatesDirName = "states";
@@ -61,7 +60,6 @@ public static class GlobalConfig
     public static string WebCommandName => "web";
     public static string DoctorCommandName => "doctor";
     public static string McpCommandName => "mcp";
-    public static string ClaimCommandName => "claim";
     public static string SiteBranchName => "site";
     public static string SiteBuildCommandName => "build";
     public static string ProjectBranchName => "project";

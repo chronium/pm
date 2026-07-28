@@ -7,24 +7,6 @@ SELECT project_id
 FROM projects
 WHERE project_id = ?1;
 `;
-const FIND_LEGACY_PROJECT_SQL = `
-SELECT key_hash, project_id
-FROM projects
-WHERE key_hash = ?1;
-`;
-const CLAIM_LEGACY_PROJECT_SQL = `
-UPDATE projects
-SET project_id = ?2, recovery_key_hash = ?3
-WHERE key_hash = ?1 AND project_id IS NULL
-RETURNING project_id;
-`;
-const COPY_LEGACY_COUNTERS_SQL = `
-INSERT INTO project_counters(project_id, track, next_id)
-SELECT ?2, track, next_id
-FROM legacy_project_counters
-WHERE key_hash = ?1
-ON CONFLICT(project_id, track) DO NOTHING;
-`;
 const INSERT_MEMBER_SQL = `
 INSERT INTO project_members(project_id, user_id, display_name, public_key, role)
 VALUES(?1, ?2, ?3, ?4, ?5)
@@ -43,11 +25,6 @@ SELECT user_id, display_name, public_key, role
 FROM project_members
 WHERE project_id = ?1
 ORDER BY display_name COLLATE NOCASE, user_id;
-`;
-const COUNT_MEMBERS_SQL = `
-SELECT COUNT(*) AS count
-FROM project_members
-WHERE project_id = ?1;
 `;
 const INSERT_NONCE_SQL = `
 INSERT INTO request_nonces(user_id, nonce, timestamp)
@@ -155,8 +132,6 @@ export async function handleRequest(request, env) {
     if (request.method === "GET" && route.kind === "health") return new Response("ok");
     if (request.method === "POST" && route.kind === "projects")
       return await createProject(env.DB, request, url, body);
-    if (request.method === "POST" && route.kind === "legacyClaim")
-      return await claimLegacyProject(env.DB, request, url, body);
     if (request.method === "GET" && route.kind === "nextid")
       return await nextId(env.DB, request, url, body, route.projectId, route.track);
     if (request.method === "GET" && route.kind === "peekid")
@@ -186,7 +161,6 @@ export async function handleRequest(request, env) {
 function parseRoute(pathname) {
   if (pathname === "/health") return { kind: "health" };
   if (pathname === "/projects") return { kind: "projects" };
-  if (pathname === "/legacy-projects/claim") return { kind: "legacyClaim" };
 
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "projects") return { kind: "unknown" };
@@ -224,36 +198,6 @@ async function createProject(db, request, url, body) {
   if (auth.userId !== payload.userId || auth.publicKey !== publicKey) return textResponse("unauthorized", 401);
 
   await db.prepare(INSERT_PROJECT_SQL).bind(await sha512Hex(new TextEncoder().encode(`auth:${projectId}`)), projectId, recoveryKeyHash).run();
-  await db.prepare(INSERT_MEMBER_SQL).bind(projectId, auth.userId, displayName, publicKey, "admin").run();
-  return jsonResponse({ projectId });
-}
-
-async function claimLegacyProject(db, request, url, body) {
-  const auth = await validateSignedJsonRequest(db, request, url, body, null);
-  if (!auth.ok) return textResponse("unauthorized", 401);
-  const payload = parseJson(body);
-  const projectId = requireString(payload?.projectId);
-  const legacyKey = requireString(payload?.legacyKey);
-  const displayName = requireString(payload?.displayName);
-  const publicKey = requireString(payload?.publicKey);
-  const recoveryKeyHash = requireString(payload?.recoveryKeyHash);
-  if (!projectId || !legacyKey || !displayName || !publicKey || !recoveryKeyHash) return textResponse("bad request", 400);
-  if (auth.userId !== payload.userId || auth.publicKey !== publicKey) return textResponse("unauthorized", 401);
-
-  const keyHash = await keyHashFromProjectKey(legacyKey);
-  if (keyHash === null) return textResponse("unauthorized", 401);
-  const legacy = firstRow(await db.prepare(FIND_LEGACY_PROJECT_SQL).bind(keyHash).run());
-  if (!legacy) return textResponse("unauthorized", 401);
-  if (legacy.project_id) {
-    const members = firstRow(await db.prepare(COUNT_MEMBERS_SQL).bind(legacy.project_id).run());
-    if ((members?.count ?? 0) > 0) return textResponse("unauthorized", 401);
-    await db.prepare(INSERT_MEMBER_SQL).bind(legacy.project_id, auth.userId, displayName, publicKey, "admin").run();
-    return jsonResponse({ projectId: legacy.project_id });
-  }
-
-  const claim = firstRow(await db.prepare(CLAIM_LEGACY_PROJECT_SQL).bind(keyHash, projectId, recoveryKeyHash).run());
-  if (!claim) return textResponse("unauthorized", 401);
-  await db.prepare(COPY_LEGACY_COUNTERS_SQL).bind(keyHash, projectId).run();
   await db.prepare(INSERT_MEMBER_SQL).bind(projectId, auth.userId, displayName, publicKey, "admin").run();
   return jsonResponse({ projectId });
 }
@@ -479,14 +423,6 @@ function randomSecret(prefix, byteCount) {
 
 function firstRow(result) {
   return result?.results?.[0] ?? null;
-}
-
-async function keyHashFromProjectKey(key) {
-  try {
-    return await sha512Hex(base64UrlDecode(key));
-  } catch {
-    return null;
-  }
 }
 
 function base64UrlEncode(bytes) {
