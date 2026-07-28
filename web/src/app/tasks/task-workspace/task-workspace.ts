@@ -13,7 +13,7 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssClose, cssMaximize, cssPen } from '@ng-icons/css.gg';
+import { cssClose, cssMaximize, cssNotes, cssPen } from '@ng-icons/css.gg';
 import { firstValueFrom } from 'rxjs';
 
 import { ExternalChangeBanner, type ExternalChangePhase } from '../../core/external-change-banner';
@@ -68,7 +68,7 @@ type ConfirmKind = 'discard' | 'remove' | null;
     RouterLink,
     TitleCasePipe,
   ],
-  providers: [TaskDetailResource, provideIcons({ cssClose, cssMaximize, cssPen })],
+  providers: [TaskDetailResource, provideIcons({ cssClose, cssMaximize, cssNotes, cssPen })],
   templateUrl: './task-workspace.html',
   styleUrl: './task-workspace.css',
 })
@@ -92,6 +92,9 @@ export class TaskWorkspace {
   protected readonly error = signal<string | null>(null);
   protected readonly confirmKind = signal<ConfirmKind>(null);
   protected readonly conflictPhase = signal<ExternalChangePhase | null>(null);
+  protected readonly noteFormOpen = signal(false);
+  protected readonly noteDraft = signal('');
+  protected readonly noteError = signal<string | null>(null);
   protected readonly model = signal<DraftModel>({
     title: '',
     state: '',
@@ -144,6 +147,8 @@ export class TaskWorkspace {
     const accepted = this.accepted();
     return !!accepted && JSON.stringify(this.model()) !== JSON.stringify(accepted);
   });
+  protected readonly noteDirty = computed(() => this.noteDraft().length > 0);
+  protected readonly hasUnsavedChanges = computed(() => this.dirty() || this.noteDirty());
   protected readonly blocked = computed(
     () =>
       this.detail.unavailable() ||
@@ -189,7 +194,7 @@ export class TaskWorkspace {
         description: '',
       });
     });
-    effect(() => this.detail.setDirty(this.dirty()));
+    effect(() => this.detail.setDirty(this.hasUnsavedChanges()));
     effect(() => {
       if (this.detail.pendingExternal()) {
         this.conflictPhase.set('pending');
@@ -201,14 +206,14 @@ export class TaskWorkspace {
   canDeactivate(): boolean | Promise<boolean> {
     if (this.allowLeave) return true;
     if (this.pending()) return false;
-    if (!this.dirty()) return true;
+    if (!this.hasUnsavedChanges()) return true;
     this.confirmKind.set('discard');
     return new Promise((resolve) => (this.leaveResolver = resolve));
   }
 
   @HostListener('window:beforeunload', ['$event'])
   beforeUnload(event: BeforeUnloadEvent): void {
-    if (this.dirty() && !this.allowLeave) event.preventDefault();
+    if (this.hasUnsavedChanges() && !this.allowLeave) event.preventDefault();
   }
 
   protected activate(field: WorkspaceField): void {
@@ -223,6 +228,63 @@ export class TaskWorkspace {
     this.error.set(null);
     this.conflictPhase.set(null);
     this.draftSnapshot = null;
+  }
+
+  protected openNoteForm(): void {
+    if (
+      this.staticMode.enabled ||
+      this.pending() ||
+      this.blocked() ||
+      this.dirty() ||
+      this.activeField()
+    )
+      return;
+    this.noteError.set(null);
+    this.noteFormOpen.set(true);
+  }
+
+  protected cancelNote(): void {
+    this.noteDraft.set('');
+    this.noteError.set(null);
+    this.noteFormOpen.set(false);
+  }
+
+  protected updateNote(event: Event): void {
+    this.noteDraft.set((event.target as HTMLTextAreaElement).value);
+    this.noteError.set(null);
+  }
+
+  protected async appendNote(): Promise<void> {
+    const task = this.detail.task();
+    const note = this.noteDraft();
+    if (!note.trim()) {
+      this.noteError.set('Note text is required.');
+      return;
+    }
+    if (!task || !this.detail.etag() || this.pending() || this.blocked() || this.dirty()) return;
+
+    this.pending.set(true);
+    this.noteError.set(null);
+    try {
+      const response = await firstValueFrom(
+        this.api.appendNote(task.id, { note }, this.detail.etag()),
+      );
+      this.detail.accept(response);
+      if (response.body) this.acceptTask(response.body);
+      this.noteDraft.set('');
+      this.noteFormOpen.set(false);
+      this.navigation.requestNavigationRefresh();
+    } catch (error) {
+      const failure = this.api.error(error, 'The task note could not be added.');
+      this.noteError.set(
+        failure.conflict
+          ? 'This task changed elsewhere. Review the latest version before adding the note.'
+          : failure.message,
+      );
+      if (failure.conflict) this.detail.fetchLatest();
+    } finally {
+      this.pending.set(false);
+    }
   }
 
   protected async save(close: boolean): Promise<void> {

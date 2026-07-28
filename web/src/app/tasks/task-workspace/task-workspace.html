@@ -271,19 +271,66 @@
       <section class="description-section" aria-labelledby="description-heading">
         <div class="section-heading">
           <h2 id="description-heading">Description</h2>
-          @if (mode() === 'detail' && activeField() !== 'description') {
-            <button
-              type="button"
-              class="icon-button"
-              aria-label="Edit task description"
-              title="Edit description"
-              [disabled]="staticMode.enabled || pending() || blocked()"
-              (click)="activate('description')"
-            >
-              <ng-icon name="cssPen" aria-hidden="true" />
-            </button>
-          }
+          <div class="section-actions">
+            @if (mode() === 'detail' && activeField() !== 'description' && !staticMode.enabled) {
+              <button
+                type="button"
+                class="icon-button"
+                aria-label="Add task note"
+                title="Add note"
+                [disabled]="pending() || blocked() || dirty() || activeField() !== null"
+                (click)="openNoteForm()"
+              >
+                <ng-icon name="cssNotes" aria-hidden="true" />
+              </button>
+            }
+            @if (mode() === 'detail' && activeField() !== 'description') {
+              <button
+                type="button"
+                class="icon-button"
+                aria-label="Edit task description"
+                title="Edit description"
+                [disabled]="staticMode.enabled || pending() || blocked() || noteDirty()"
+                (click)="activate('description')"
+              >
+                <ng-icon name="cssPen" aria-hidden="true" />
+              </button>
+            }
+          </div>
         </div>
+        @if (noteFormOpen()) {
+          <div class="note-composer">
+            <label for="task-note">Add note</label>
+            <textarea
+              id="task-note"
+              rows="4"
+              [value]="noteDraft()"
+              [disabled]="pending() || blocked()"
+              (input)="updateNote($event)"
+            ></textarea>
+            @if (noteError()) {
+              <p class="field-error" role="alert">{{ noteError() }}</p>
+            }
+            <div class="note-actions">
+              <button
+                type="button"
+                class="pm-button pm-button--primary"
+                [disabled]="pending() || blocked() || !noteDraft().trim()"
+                (click)="appendNote()"
+              >
+                {{ pending() ? 'Adding…' : 'Add note' }}
+              </button>
+              <button
+                type="button"
+                class="pm-button pm-button--secondary"
+                [disabled]="pending()"
+                (click)="cancelNote()"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        }
         @if (mode() === 'create' || activeField() === 'description') {
           <pm-markdown-editor
             pmControl

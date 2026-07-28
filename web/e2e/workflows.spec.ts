@@ -182,6 +182,12 @@ test('creates, opens, edits, moves, conflicts, and removes a task', async ({ pag
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit task status' })).toContainText('In Progress');
 
+  await page.getByRole('button', { name: 'Add task note' }).click();
+  await page.locator('#task-note').fill('Added from the task workspace.');
+  await page.getByRole('button', { name: 'Add note', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+  await expect(page.getByText('Added from the task workspace.')).toBeVisible();
+
   await page.getByRole('button', { name: 'Edit task title' }).click();
   await page.locator('#workspace-title').fill('Draft title');
   await page.locator('.property-field').filter({ hasText: 'Track' }).getByRole('button').click();

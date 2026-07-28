@@ -207,6 +207,45 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task TaskNotesRequireCurrentRevisionAndReturnRefreshedTask()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Task", "Body");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var read = await client.GetAsync("/api/v1/tasks/PM-0001");
+            using var missingPrecondition = Mutation(HttpMethod.Post, "/api/v1/tasks/PM-0001/notes",
+                JsonContent.Create(new { note = "Rejected" }));
+            Assert.Equal(HttpStatusCode.PreconditionRequired,
+                (await client.SendAsync(missingPrecondition)).StatusCode);
+
+            using var empty = Mutation(HttpMethod.Post, "/api/v1/tasks/PM-0001/notes",
+                JsonContent.Create(new { note = " " }), read.Headers.ETag?.Tag);
+            var emptyResponse = await client.SendAsync(empty);
+            Assert.Equal(HttpStatusCode.BadRequest, emptyResponse.StatusCode);
+            Assert.Equal("invalid_note", (await emptyResponse.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+
+            using var append = Mutation(HttpMethod.Post, "/api/v1/tasks/PM-0001/notes",
+                JsonContent.Create(new { note = "API note\ncontinued" }), read.Headers.ETag?.Tag);
+            var response = await client.SendAsync(append);
+            var updated = await response.Content.ReadFromJsonAsync<TaskResponse>();
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains("## Notes", updated!.Description);
+            Assert.Contains("API note\n  continued", updated.Description);
+            Assert.NotEqual(read.Headers.ETag?.Tag, response.Headers.ETag?.Tag);
+
+            using var stale = Mutation(HttpMethod.Post, "/api/v1/tasks/PM-0001/notes",
+                JsonContent.Create(new { note = "Stale" }), read.Headers.ETag?.Tag);
+            Assert.Equal(HttpStatusCode.PreconditionFailed, (await client.SendAsync(stale)).StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task TaskUpdateSupportsOptionalAssignedAndUnassignedPlacement()
     {
         using var workspace = new TempWorkingDirectory();
@@ -397,6 +436,9 @@ public partial class ApiContractTests
                 parameter => parameter.GetProperty("name").GetString() == "query" &&
                              parameter.GetProperty("required").GetBoolean());
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}/state", out _));
+            Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}/notes", out var notes));
+            Assert.True(notes.GetProperty("post").GetProperty("responses").GetProperty("200")
+                .GetProperty("headers").TryGetProperty("ETag", out _));
             Assert.True(task.GetProperty("delete").GetProperty("responses").TryGetProperty("204", out var deleted));
             Assert.False(deleted.TryGetProperty("headers", out _));
             var created = paths.GetProperty("/api/v1/tasks").GetProperty("post")
@@ -412,6 +454,8 @@ public partial class ApiContractTests
             Assert.Contains("track", schemas.GetProperty("TaskPlacementRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("milestone", schemas.GetProperty("TaskPlacementRequest").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("note", schemas.GetProperty("AppendTaskNoteRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
         }
     }

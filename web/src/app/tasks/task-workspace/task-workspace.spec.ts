@@ -84,6 +84,11 @@ describe('TaskWorkspace', () => {
     element.dispatchEvent(new Event('input'));
   }
 
+  function textareaInput(element: HTMLTextAreaElement, value: string): void {
+    element.value = value;
+    element.dispatchEvent(new Event('input'));
+  }
+
   it('uses compact icon-only actions in dialog hosts', async () => {
     const { element } = await render('detail', 'dialog');
     const fullscreen = element.querySelector('[aria-label="Full screen"]') as HTMLButtonElement;
@@ -212,5 +217,58 @@ describe('TaskWorkspace', () => {
     request.flush(task, { status: 201, statusText: 'Created' });
     await fixture.whenStable();
     expect(created).toEqual([{ id: task.id, close: false }]);
+  });
+
+  it('appends a compact note with the current revision and refreshes the rendered description', async () => {
+    const { fixture, element, http } = await render('detail');
+    (element.querySelector('[aria-label="Add task note"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const note = element.querySelector('#task-note') as HTMLTextAreaElement;
+    expect(note.rows).toBe(4);
+    textareaInput(note, 'Progress **note**');
+    fixture.detectChanges();
+
+    const add = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Add note',
+    )!;
+    add.click();
+    const request = http.expectOne(`/api/v1/tasks/${task.id}/notes`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"task-r1"');
+    expect(request.request.body).toEqual({ note: 'Progress **note**' });
+    request.flush(
+      {
+        ...task,
+        description: 'Original description\n\n## Notes\n\n- Progress **note**',
+        revision: 'task-r2',
+      },
+      { headers: { ETag: '"task-r2"' } },
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(element.querySelector('#task-note')).toBeNull();
+    expect(element.textContent).toContain('Progress note');
+  });
+
+  it('keeps the note composer compact and prevents competing description edits', async () => {
+    const { fixture, element } = await render('detail');
+    (element.querySelector('[aria-label="Add task note"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const note = element.querySelector('#task-note') as HTMLTextAreaElement;
+    textareaInput(note, 'Unsent note');
+    fixture.detectChanges();
+
+    expect(
+      (element.querySelector('[aria-label="Edit task description"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(fixture.componentInstance.canDeactivate()).toBeInstanceOf(Promise);
+
+    const cancel = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Cancel' && button.closest('.note-actions'),
+    )!;
+    cancel.click();
+    fixture.detectChanges();
+    expect(element.querySelector('#task-note')).toBeNull();
   });
 });

@@ -34,6 +34,7 @@ public sealed record UpdateTaskRequest(
     string Priority,
     TaskPlacementRequest? Placement = null);
 public sealed record UpdateTaskStateRequest(string State);
+public sealed record AppendTaskNoteRequest(string Note);
 public sealed record TaskSearchResultResponse(
     string Id,
     string Title,
@@ -148,6 +149,28 @@ public static class TaskApiEndpoints
             .WithName("UpdateTaskState")
             .WithSummary("Update a task state")
             .Accepts<UpdateTaskStateRequest>("application/json")
+            .Produces<TaskResponse>()
+            .WithRevisionedMutationMetadata()
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
+
+        api.MapPost("/tasks/{id}/notes", async (HttpRequest request, string id,
+                CancellationToken cancellationToken) =>
+            {
+                var (input, error) = await ApiJsonRequest.Read<AppendTaskNoteRequest>(request, cancellationToken);
+                if (error != null) return error;
+                if (input!.Note == null)
+                    return DomainFailure("invalid_note", "Task note is required.", request);
+
+                var precondition = CheckPrecondition(request, id, revisions);
+                if (precondition != null) return precondition;
+                var result = taskService.AppendTaskNote(id, input.Note);
+                if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                return Refreshed(request, id, boardService, revisions);
+            })
+            .WithName("AppendTaskNote")
+            .WithSummary("Append a note to a task")
+            .Accepts<AppendTaskNoteRequest>("application/json")
             .Produces<TaskResponse>()
             .WithRevisionedMutationMetadata()
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")

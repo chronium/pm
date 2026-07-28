@@ -382,6 +382,59 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskNoteCommandAppendsInlineAndEditedNotes()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Task", "Body");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var editor = new RecordingEditorService
+        {
+            EditAction = path => File.AppendAllText(path, "\nSecond line"),
+        };
+        var command = new TaskNoteCommand(new TaskService(projectRoot, new RecordingNextIdService()), editor);
+
+        var inline = await command.ExecuteAsync(null!,
+            new TaskNoteCommand.Settings { TaskId = task.Id, Note = "Inline note" }, CancellationToken.None);
+        var edited = await command.ExecuteAsync(null!,
+            new TaskNoteCommand.Settings { TaskId = task.Id, Note = "Edited note", Edit = true },
+            CancellationToken.None);
+
+        Assert.Equal(0, inline);
+        Assert.Equal(0, edited);
+        Assert.Equal(1, editor.EditCalls);
+        var content = File.ReadAllText(projectRoot.GetTaskFilePath(task.Id));
+        Assert.Contains("Inline note", content);
+        Assert.Contains("Edited note\n  Second line", content);
+    }
+
+    [Fact]
+    public async Task TaskNoteCommandUsesEditorWhenTextIsOmittedAndRejectsFailuresAndEmptyNotes()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Task", "Body");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var editor = new RecordingEditorService
+        {
+            EditAction = path => File.WriteAllText(path, "Editor note"),
+        };
+
+        Assert.Equal(0, await new TaskNoteCommand(service, editor).ExecuteAsync(null!,
+            new TaskNoteCommand.Settings { TaskId = task.Id }, CancellationToken.None));
+        Assert.Equal(1, await new TaskNoteCommand(service, new RecordingEditorService { ExitCode = 1 })
+            .ExecuteAsync(null!, new TaskNoteCommand.Settings { TaskId = task.Id }, CancellationToken.None));
+        Assert.Equal(1, await new TaskNoteCommand(service, new RecordingEditorService())
+            .ExecuteAsync(null!, new TaskNoteCommand.Settings { TaskId = task.Id }, CancellationToken.None));
+        Assert.Equal(1, await new TaskNoteCommand(service, editor).ExecuteAsync(null!,
+            new TaskNoteCommand.Settings { TaskId = task.Id, Note = " " }, CancellationToken.None));
+        Assert.Contains("Editor note", File.ReadAllText(projectRoot.GetTaskFilePath(task.Id)));
+    }
+
+    [Fact]
     public async Task EditOutsideProjectReturnsOne()
     {
         using var workspace = new TempWorkingDirectory();

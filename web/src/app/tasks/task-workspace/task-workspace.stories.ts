@@ -185,6 +185,17 @@ export const ActiveDescription: Story = {
   },
 };
 
+export const ActiveNoteComposer: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Add task note' }));
+    const note = canvas.getByLabelText('Add note');
+    await userEvent.type(note, 'A compact progress note.');
+    await expect(note).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Add note', exact: true })).toBeEnabled();
+  },
+};
+
 export const Dirty: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

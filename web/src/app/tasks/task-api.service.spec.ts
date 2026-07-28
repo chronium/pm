@@ -48,7 +48,7 @@ describe('TaskApiService', () => {
     expect(etag).toBe('"revision-1"');
   });
 
-  it('requires the exact current ETag for update, state, and remove mutations', () => {
+  it('requires the exact current ETag for update, state, note, and remove mutations', () => {
     const api = TestBed.inject(TaskApiService);
     api
       .update(
@@ -64,21 +64,26 @@ describe('TaskApiService', () => {
       )
       .subscribe();
     api.updateState(task.id, { state: 'done' }, '"revision-2"').subscribe();
-    api.remove(task.id, '"revision-3"').subscribe();
+    api.appendNote(task.id, { note: 'Progress' }, '"revision-3"').subscribe();
+    api.remove(task.id, '"revision-4"').subscribe();
     const http = TestBed.inject(HttpTestingController);
     const state = http.expectOne('/api/v1/tasks/PM-0050/state');
+    const note = http.expectOne('/api/v1/tasks/PM-0050/notes');
     const taskRequests = http.match('/api/v1/tasks/PM-0050');
     const update = taskRequests.find((item) => item.request.method === 'PUT')!;
     const remove = taskRequests.find((item) => item.request.method === 'DELETE')!;
     expect(update.request.headers.get('If-Match')).toBe('"revision-1"');
     expect(state.request.headers.get('If-Match')).toBe('"revision-2"');
-    expect(remove.request.headers.get('If-Match')).toBe('"revision-3"');
+    expect(note.request.headers.get('If-Match')).toBe('"revision-3"');
+    expect(note.request.body).toEqual({ note: 'Progress' });
+    expect(remove.request.headers.get('If-Match')).toBe('"revision-4"');
     expect(update.request.body.placement).toEqual({ track: 'PM', milestone: null });
     expect(
-      [update, state, remove].every((item) => item.request.headers.get('If-Match') !== '*'),
+      [update, state, note, remove].every((item) => item.request.headers.get('If-Match') !== '*'),
     ).toBe(true);
     update.flush(task);
     state.flush(task);
+    note.flush(task);
     remove.flush(null, { status: 204, statusText: 'No Content' });
   });
 

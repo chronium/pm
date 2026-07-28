@@ -231,6 +231,12 @@ hr {
   min-height: 36px;
   margin-bottom: var(--pm-space-2);
 }
+.section-actions,
+.note-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pm-space-1);
+}
 h2 {
   margin: 0;
   font-size: var(--pm-font-size-md);
@@ -251,6 +257,33 @@ h2 {
 .icon-button:focus-visible {
   background: var(--pm-surface-hover);
   color: var(--pm-text-primary);
+}
+.note-composer {
+  display: grid;
+  gap: var(--pm-space-2);
+  margin-bottom: var(--pm-space-3);
+  padding: var(--pm-space-3);
+  border: 1px solid var(--pm-border-subtle);
+  border-radius: var(--pm-radius-sm);
+  background: var(--pm-surface-base);
+}
+.note-composer label {
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  font-weight: 650;
+}
+.note-composer textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  padding: var(--pm-space-2);
+  border: 1px solid var(--pm-border-strong);
+  border-radius: var(--pm-radius-sm);
+  background: var(--pm-surface-raised);
+  color: var(--pm-text-primary);
+  font: inherit;
+  line-height: 1.5;
 }
 .metadata-column {
   display: flex;

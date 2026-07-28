@@ -8,6 +8,7 @@ export type TaskResponse = components['schemas']['TaskResponse'];
 export type CreateTaskRequest = components['schemas']['CreateTaskRequest'];
 export type UpdateTaskRequest = components['schemas']['UpdateTaskRequest'];
 export type UpdateTaskStateRequest = components['schemas']['UpdateTaskStateRequest'];
+export type AppendTaskNoteRequest = components['schemas']['AppendTaskNoteRequest'];
 export type ApiProblemDetails = components['schemas']['ApiProblemDetails'];
 export type TaskMutationResponse = HttpResponse<TaskResponse>;
 
@@ -38,6 +39,13 @@ export class TaskApiService {
 
   updateState(id: string, request: UpdateTaskStateRequest, etag: string) {
     return this.http.put<TaskResponse>(`${this.taskUrl(id)}/state`, request, {
+      ...this.mutationOptions,
+      headers: { ...this.mutationOptions.headers, 'If-Match': etag },
+    });
+  }
+
+  appendNote(id: string, request: AppendTaskNoteRequest, etag: string) {
+    return this.http.post<TaskResponse>(`${this.taskUrl(id)}/notes`, request, {
       ...this.mutationOptions,
       headers: { ...this.mutationOptions.headers, 'If-Match': etag },
     });
