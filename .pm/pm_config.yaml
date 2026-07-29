@@ -11,11 +11,14 @@ tracks:
   ISSUE: PM Tool Issues
   AGENT: Agent execution and remote runners
   DISCOVERY: Product discovery
+  LINK: Linked projects
 milestones:
   mcp-smoke: MCP Smoke Test
   angular-web: Angular Web UI Migration
   agent-runs: Agent execution and remote runners
+  linked-project-foundation: Linked project foundation
   agent-runner-evolution: Agent runner evolution
+  linked-project-workflows: Linked project workflows
 milestonePriorities:
   angular-web: high
   agent-runs: urgent
