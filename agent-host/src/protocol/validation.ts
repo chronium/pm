@@ -15,6 +15,7 @@ import {
 import { posix } from 'node:path';
 
 const runId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const taskId = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const sha256 = /^[0-9a-f]{64}$/;
 const digestImage = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
 const gitCommit = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
@@ -22,7 +23,17 @@ const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const environmentName = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const sensitiveEnvironmentName =
   /(?:auth|cookie|credential|password|private|secret|signature|token|api.?key)/i;
-const supportedEnvironmentNames = new Set(['CODEX_HOME', 'HOME', 'PATH', 'TMPDIR']);
+const supportedEnvironmentNames = new Set([
+  'CODEX_HOME',
+  'DOTNET_CLI_HOME',
+  'DOTNET_CLI_TELEMETRY_OPTOUT',
+  'DOTNET_NOLOGO',
+  'DOTNET_SKIP_FIRST_TIME_EXPERIENCE',
+  'HOME',
+  'NUGET_PACKAGES',
+  'PATH',
+  'TMPDIR',
+]);
 
 export class ProtocolValidationError extends Error {
   constructor(
@@ -56,7 +67,7 @@ export function parseRunRequest(value: unknown): RunRequest {
         name: text(project['name'], 512, 'Project name'),
       },
       task: {
-        taskId: text(task['taskId'], 256, 'Task ID'),
+        taskId: text(task['taskId'], 128, 'Task ID'),
         title: text(task['title'], 1024, 'Task title'),
         revision: text(task['revision'], 64, 'Task revision'),
       },
@@ -267,6 +278,7 @@ function validateCanonicalHashes(request: RunRequest): void {
   if (specification.protocolVersion !== '1.0')
     throw new ProtocolValidationError('incompatible_protocol', 'Only protocol 1.0 is supported.');
   if (!runId.test(specification.runId)) invalid('Run ID is not URL-safe.');
+  if (!taskId.test(specification.task.taskId)) invalid('Task ID is not path-safe.');
   if (!sha256.test(specification.task.revision)) invalid('Task revision must be a SHA-256 hash.');
   if (!gitCommit.test(specification.repository.baseCommit)) invalid('Base commit is invalid.');
   if (!sha256.test(request.specificationHash)) invalid('Specification hash is invalid.');

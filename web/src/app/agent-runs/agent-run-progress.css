@@ -1,0 +1,139 @@
+:host {
+  display: grid;
+  align-content: start;
+}
+.drift-notice {
+  display: grid;
+  gap: var(--pm-space-1);
+  padding: var(--pm-space-3) var(--pm-space-4);
+  border-bottom: 1px solid var(--pm-warning);
+  background: var(--pm-warning-soft);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+.drift-notice strong {
+  color: var(--pm-warning);
+}
+.progress-section {
+  padding: var(--pm-space-4);
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+.progress-section h2 {
+  margin: 0 0 var(--pm-space-3);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  text-transform: uppercase;
+}
+.checkpoint-list,
+.artifact-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.checkpoint-list {
+  display: grid;
+}
+.checkpoint-list li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: var(--pm-space-2);
+  min-height: 44px;
+}
+.checkpoint-list li:not(:last-child)::after {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  left: 10px;
+  width: 1px;
+  background: var(--pm-border-strong);
+  content: '';
+}
+.checkpoint-mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  align-self: start;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--pm-border-strong);
+  border-radius: 50%;
+  background: var(--pm-surface-raised);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+.checkpoint-list li > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--pm-space-2);
+  padding-bottom: var(--pm-space-3);
+}
+.checkpoint-list strong {
+  font-size: var(--pm-font-size-sm);
+}
+.checkpoint-list li > div > span {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+.checkpoint-list p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+.checkpoint-list li[data-status='active'] .checkpoint-mark {
+  border-color: var(--pm-accent);
+  color: var(--pm-accent-strong);
+}
+.checkpoint-list li[data-status='complete'] .checkpoint-mark {
+  border-color: var(--pm-success);
+  color: var(--pm-success);
+}
+.checkpoint-list li[data-status='failed'] .checkpoint-mark {
+  border-color: var(--pm-danger);
+  color: var(--pm-danger);
+}
+.checkpoint-list li[data-status='cancelled'] .checkpoint-mark {
+  border-color: var(--pm-warning);
+  color: var(--pm-warning);
+}
+.context-list {
+  display: grid;
+  gap: var(--pm-space-2);
+  margin: 0;
+}
+.context-list div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--pm-space-2);
+}
+.context-list dt {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-sm);
+}
+.context-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+.artifact-list {
+  display: grid;
+  gap: var(--pm-space-3);
+}
+.artifact-list li,
+.artifact-list li > div {
+  display: grid;
+  gap: 2px;
+}
+.artifact-list span,
+.artifact-list code {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+.artifact-list code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

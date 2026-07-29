@@ -19,8 +19,13 @@ export interface RuntimeHandle {
   readonly agentContext: AgentRuntimeContext;
 }
 
+export interface RuntimeUsage {
+  readonly peakWritableBytes: number;
+}
+
 export interface RuntimeDriver {
   create(specification: RunSpecification, signal: AbortSignal): Promise<RuntimeHandle>;
+  measure?(handle: RuntimeHandle): Promise<RuntimeUsage>;
   destroy(handle: RuntimeHandle, reason: 'completed' | 'failed' | 'cancelled'): Promise<void>;
 }
 

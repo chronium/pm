@@ -1,12 +1,12 @@
 ---
 title: Linux Agent Host Setup
 createdAt: 2026-07-27T11:03:26.0456420Z
-modifiedAt: 2026-07-28T18:29:31.0867690Z
+modifiedAt: 2026-07-29T07:50:23.1064470Z
 ---
 
 This guide prepares a Linux workstation to host the PM execution plane. It is intentionally conservative: the trusted runner controls rootless Podman, while each unattended agent runs in a separately hardened worker container.
 
-The repository includes the runtime adapter and a rootless user-service template. Production task execution remains queue-only until immutable Git workspaces and per-run credential preparation are integrated.
+The repository includes the complete v1 runner lifecycle and a rootless user-service template. Accepted work is materialized from an immutable Git base, executed in an isolated agent container, validated in a fresh credential-free container, and reduced to retained evidence before transient state is removed.
 
 ## Intended layout
 
@@ -57,7 +57,7 @@ socket --version
 
 ## Host prerequisites
 
-The first AGENT-0007 test session will require:
+The v1 runner requires:
 
 - A current supported Linux host; Arch Linux is the live v1 integration target.
 - Tailscale connectivity between the Mac and Linux host.
@@ -102,7 +102,7 @@ Missing subordinate mappings must be fixed before relying on rootless user names
 
 ## Resource-limit smoke test
 
-This disposable command verifies the controls AGENT-0007 will depend on:
+This disposable command verifies the baseline controls used by the runner:
 
 ```sh
 podman run --rm \
@@ -130,6 +130,7 @@ Protocol examples use `/var/lib/pm-runner`, but a rootless user service should u
 install -d -m 700 ~/.local/share/pm-runner
 install -d -m 700 ~/.config/pm-agent-host
 install -d -m 700 ~/.config/pm-agent-host/tls
+install -m 600 /secure/source/auth.json ~/.config/pm-agent-host/codex-auth.json
 ```
 
 The intended split is:
@@ -137,6 +138,9 @@ The intended split is:
 ```text
 ~/.config/pm-agent-host/
   capabilities.json
+  repositories.json
+  codex-auth.json
+  host.env
   tls/
     certificate.pem
     key.pem
@@ -145,11 +149,15 @@ The intended split is:
   runner.sqlite
   credentials.sqlite
   mirrors/
+    <remote-sha256>.git/
   runs/
-  artifacts/
+    <run-id>/
+      artifacts/
 ```
 
-Private keys and runner credentials must be mode `0600`. Neither directory belongs in a Git repository or a worker mount.
+`repositories.json` contains an exact allowlist of trusted HTTPS or SSH Git remotes. The Codex auth file, TLS key, runner databases, and configuration must be owner-only. They never belong in Git or a worker image.
+
+During execution, each run temporarily gains `workspace/`, `codex-home/`, `runtime/`, and `scratch/` directories. The runner removes those before committing a terminal state. Only bounded artifacts and reusable bare mirrors survive according to retention policy.
 
 ## User service prerequisites
 
@@ -190,6 +198,33 @@ Before pairing, verify from the Mac that:
 
 Do not publish the runner port through a router, public reverse proxy, Funnel, or an unrestricted firewall rule.
 
+## Pair PM with the runner
+
+Open a one-use pairing window locally on the Linux host, then copy the displayed runner ID and TLS fingerprint:
+
+```sh
+node agent-host/dist/src/main.js pair \
+  --data-root ~/.local/share/pm-runner \
+  --tls-cert ~/.config/pm-agent-host/tls.crt
+```
+
+With the runner service listening on its explicit Tailscale address, pair from the PM machine. PM reads the short-lived code from a masked prompt and stores the TLS pin plus a runner-scoped signing credential in private OS user configuration outside every project:
+
+```sh
+pm runner pair https://<tailscale-ip>:7443 \
+  --runner-id <runner-id> \
+  --fingerprint sha256:<certificate-fingerprint>
+```
+
+Verify authenticated transport and advertised capacity after pairing:
+
+```sh
+pm runner list
+pm runner status <runner-id>
+```
+
+`pm runner rotate <runner-id>` replaces only that runner's signing credential. `pm runner revoke <runner-id>` revokes the remote client before deleting the local registration. A changed TLS certificate is never trusted automatically; perform local recovery on the runner and explicitly pair again with the new fingerprint.
+
 ## Storage and workstation safety
 
 Worker workspaces and images can consume substantial disk. Before a test session, record:
@@ -204,9 +239,9 @@ Set explicit retention and disk limits before allowing concurrent runs. Keep the
 
 Because the runner host may also be used interactively, the runner account and its containers must not receive access to gaming libraries, mounted personal drives, the desktop session, GPU devices, audio devices, or the user's normal home directory.
 
-## Information to capture for AGENT-0007
+## Information to capture for integration
 
-When Linux integration starts, capture the output of:
+When diagnosing Linux integration, capture the output of:
 
 ```sh
 cat /etc/os-release

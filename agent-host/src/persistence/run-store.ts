@@ -41,8 +41,7 @@ export interface EventDraft {
   data?: unknown;
 }
 
-const eventType =
-  /^(?:run|runner|runtime|agent|command|mcp|validation|artifact)\.[a-z0-9][a-z0-9._-]*$/;
+const eventType = /^[a-z][a-z0-9_-]*\.[a-z0-9][a-z0-9._-]*$/;
 
 export interface RecoveryResult {
   queued: number;
