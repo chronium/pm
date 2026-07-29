@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { StoredRun, RunStore } from '../persistence/run-store.js';
-import type { RunArtifact } from '../protocol/types.js';
+import type { RunArtifact, RunFailure } from '../protocol/types.js';
 import type { RunnerLayout } from './layout.js';
 import type { ValidationResult } from './validation.js';
 import type { RuntimeUsage } from '../drivers.js';
@@ -17,7 +17,7 @@ export interface CollectionInput {
   validation: ValidationResult;
   agentResponse: string | null;
   executionStatus: 'succeeded' | 'failed' | 'cancelled';
-  executionError: string | null;
+  executionFailure: RunFailure | null;
   startedAt: string;
   resourceUsage: {
     agent: RuntimeUsage | null;
@@ -139,7 +139,7 @@ export class ArtifactCollector {
         specificationHash: input.run.specificationHash,
         taskRevision: input.run.specification.task.revision,
         executionStatus: input.executionStatus,
-        executionError: input.executionError,
+        failure: input.executionFailure,
         validationStatus: input.validation.status,
         startedAt: input.startedAt,
         collectedAt: this.now().toISOString(),

@@ -99,6 +99,8 @@ Every durable event carries `protocolVersion`, `runId`, a positive per-run `sequ
 
 The standard families are not an exhaustive allowlist. Clients must retain, replay, and display an unknown event type generically when it follows the event-type grammar and its envelope is otherwise valid.
 
+Terminal `failed` and `cancelled` state events carry a bounded `data.failure` object when the runner can classify the outcome. It contains a stable lowercase `code`, the subsystem `stage`, a safe operator-facing `summary`, a safe `recommendedAction`, and a `retryable` boolean. These fields come from a closed runner catalog; raw command lines, remotes, host paths, environment values, credentials, and exception messages must not be copied into them. Unknown failures use `internal_failure` with generic guidance. A retry always creates a new immutable run.
+
 ## Forward compatibility
 
 Readers must ignore unknown additive object fields and unknown members inside extensible event `data`. They must preserve event `data` as an opaque JSON value when they journal or relay it. Unknown valid namespaced event types use the generic event behavior above.

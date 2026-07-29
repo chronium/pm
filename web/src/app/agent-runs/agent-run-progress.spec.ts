@@ -104,4 +104,34 @@ describe('AgentRunProgress', () => {
     expect(element.textContent).toContain('task-r3');
     expect(element.textContent).toContain('Codex execution');
   });
+
+  it('renders a stable failure code and operator action at the run outcome', () => {
+    const fixture = TestBed.createComponent(AgentRunProgress);
+    fixture.componentRef.setInput('inspection', {
+      ...runInspection,
+      run: { ...runInspection.run, state: 'failed' },
+    });
+    fixture.componentRef.setInput(
+      'checkpoints',
+      projectCheckpoints(
+        new Set(['accepted', 'preparing_workspace', 'failed']),
+        'failed',
+        'The runner could not fetch the repository.',
+        {
+          code: 'repository_fetch_failed',
+          stage: 'workspace',
+          summary: 'The runner could not fetch the repository.',
+          recommendedAction: 'Check runner network access and launch a new run.',
+          retryable: true,
+        },
+      ),
+    );
+    fixture.detectChanges();
+
+    const failure = (fixture.nativeElement as HTMLElement).querySelector('.failure-detail')!;
+    expect(failure.getAttribute('role')).toBe('alert');
+    expect(failure.textContent).toContain('repository_fetch_failed');
+    expect(failure.textContent).toContain('Check runner network access and launch a new run.');
+    expect(failure.textContent).toContain('A new run may be retried.');
+  });
 });

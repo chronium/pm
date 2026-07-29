@@ -82,6 +82,24 @@
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-sm);
 }
+.failure-detail {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--pm-space-1);
+  padding: var(--pm-space-2) 0 0;
+}
+.failure-detail code {
+  width: fit-content;
+  color: var(--pm-danger);
+  font-size: var(--pm-font-size-xs);
+}
+.failure-detail p {
+  color: var(--pm-text);
+}
+.failure-detail span {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
 .checkpoint-list li[data-status='active'] .checkpoint-mark {
   border-color: var(--pm-accent);
   color: var(--pm-accent-strong);

@@ -631,6 +631,62 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   expect(collections).toBe(1);
 });
 
+test('shows actionable diagnostics for a failed remote run', async ({ page }, testInfo) => {
+  const failure = {
+    code: 'repository_fetch_failed',
+    stage: 'workspace',
+    summary: 'The runner could not fetch the repository.',
+    recommendedAction:
+      'Check runner network access and repository credentials, then launch a new run.',
+    retryable: true,
+  };
+  const failedEvent = {
+    ...runEvents[0]!,
+    sequence: 4,
+    state: 'failed' as const,
+    summary: failure.summary,
+    data: { failure },
+  };
+  await page.route('**/api/v1/runs/run-failed**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/events')) {
+      await route.fulfill({
+        json: {
+          events: [...runEvents.slice(0, 3), failedEvent],
+          nextAfterSequence: 4,
+          hasMore: false,
+          terminal: true,
+        },
+      });
+      return;
+    }
+    if (path.endsWith('/artifacts')) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        ...runInspection,
+        run: {
+          ...runInspection.run,
+          runId: 'run-failed',
+          state: 'failed',
+          lastEventSequence: 4,
+          terminalAt: '2026-07-29T08:10:00.000Z',
+        },
+      },
+    });
+  });
+
+  await page.goto('/tasks/runs/run-failed');
+  await expect(page.getByText('repository_fetch_failed', { exact: true })).toBeVisible();
+  await expect(page.getByText(failure.recommendedAction, { exact: true })).toBeVisible();
+  if (testInfo.project.name.includes('mobile')) {
+    await page.getByRole('tab', { name: 'Output' }).click();
+  }
+  await expect(page.getByText(/Recommended action: Check runner network access/)).toBeVisible();
+});
+
 test('large project remains dense, navigable, and free of horizontal page overflow', async ({
   page,
 }) => {
