@@ -27,7 +27,7 @@ public interface IAgentRunnerClient
         string? cursor = null, CancellationToken cancellationToken = default);
     Task<AppResult<AgentRunEventPage>> Events(string runnerId, string runId, long afterSequence = 0,
         int limit = 100, CancellationToken cancellationToken = default);
-    Task<AppResult<AgentRunnerEventStream>> OpenEventStream(string runnerId, string runId,
+    Task<AppResult<IAgentRunnerEventStream>> OpenEventStream(string runnerId, string runId,
         long afterSequence = 0, CancellationToken cancellationToken = default);
     Task<AppResult<AgentRunCancellation>> Cancel(string runnerId, string runId,
         CancellationToken cancellationToken = default);
@@ -213,14 +213,14 @@ public sealed class AgentRunnerClient(
                 "The runner returned an invalid event cursor.");
     }
 
-    public async Task<AppResult<AgentRunnerEventStream>> OpenEventStream(string runnerId, string runId,
+    public async Task<AppResult<IAgentRunnerEventStream>> OpenEventStream(string runnerId, string runId,
         long afterSequence = 0, CancellationToken cancellationToken = default)
     {
         if (afterSequence < 0)
-            return AppResult<AgentRunnerEventStream>.Fail("invalid_event_sequence", "Event sequence cannot be negative.");
+            return AppResult<IAgentRunnerEventStream>.Fail("invalid_event_sequence", "Event sequence cannot be negative.");
         var stored = registrations.GetStored(runnerId);
         if (!stored.Success)
-            return AppResult<AgentRunnerEventStream>.Fail(stored.ErrorCode!, stored.Message!);
+            return AppResult<IAgentRunnerEventStream>.Fail(stored.ErrorCode!, stored.Message!);
         var path = $"/v1/runs/{Escape(runId)}/events/stream?afterSequence={afterSequence}";
         var pinned = CreateClient(stored.Payload!.TlsFingerprint, Timeout.InfiniteTimeSpan);
         try
@@ -232,7 +232,7 @@ public sealed class AgentRunnerClient(
             if (response.StatusCode != HttpStatusCode.OK)
             {
                 var bytes = await ReadBounded(response.Content, cancellationToken);
-                var failure = Failure<AgentRunnerEventStream>(new RawResponse(response.StatusCode,
+                var failure = Failure<IAgentRunnerEventStream>(new RawResponse(response.StatusCode,
                     response.Headers, bytes));
                 response.Dispose();
                 pinned.Client.Dispose();
@@ -242,17 +242,17 @@ public sealed class AgentRunnerClient(
             {
                 response.Dispose();
                 pinned.Client.Dispose();
-                return AppResult<AgentRunnerEventStream>.Fail("invalid_runner_response",
+                return AppResult<IAgentRunnerEventStream>.Fail("invalid_runner_response",
                     "The runner returned an invalid event stream content type.");
             }
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            return AppResult<AgentRunnerEventStream>.Ok(
+            return AppResult<IAgentRunnerEventStream>.Ok(
                 new AgentRunnerEventStream(pinned.Client, response, stream, runId, afterSequence));
         }
         catch (Exception exception) when (IsTransportException(exception))
         {
             pinned.Client.Dispose();
-            return AppResult<AgentRunnerEventStream>.Fail(
+            return AppResult<IAgentRunnerEventStream>.Fail(
                 pinned.CertificateRejected ? "runner_tls_mismatch" : "runner_unavailable",
                 pinned.CertificateRejected
                     ? "The runner TLS certificate did not match its pinned identity."

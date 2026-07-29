@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Serialization;
 
 namespace PM.AgentRuns;
 
@@ -25,9 +26,13 @@ public sealed record AgentRunnerHealth(
     AgentRunProtocolVersion ProtocolVersion,
     DateTimeOffset Timestamp);
 
+[JsonConverter(typeof(JsonStringEnumConverter<AgentRunRemoteStartDisposition>))]
 public enum AgentRunRemoteStartDisposition
 {
+    [JsonStringEnumMemberName("new")]
     New,
+
+    [JsonStringEnumMemberName("existing")]
     Existing,
 }
 

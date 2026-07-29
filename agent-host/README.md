@@ -77,6 +77,26 @@ Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the p
 
 Use `pm runner list`, `pm runner status <runner-id>`, `pm runner rotate <runner-id>`, and `pm runner revoke <runner-id>` from the PM installation. PM stores the certificate pin and runner-scoped signing credential in its private OS user configuration, never in a project `.pm` directory.
 
+## PM control-plane API
+
+`pm web --api` exposes the paired-runner lifecycle under `/api/v1/runners` and the project-scoped run lifecycle under `/api/v1/runs`. A run begins with `POST /api/v1/runs/preflight`, which validates the clean published Git base, exact committed task revision, runner health, capacity, and explicit provider/model/effort/profile selection. A ready response persists the immutable request outside `.pm` and returns its strong ETag. `POST /api/v1/runs/{runId}/start` requires that ETag in `If-Match`; PM repeats the checks and refuses stale drafts before contacting the runner.
+
+Run inspection, active-run listing, event replay, SSE streaming, cancellation, and artifact metadata remain PM API operations. The Angular client never receives runner signing credentials or communicates with the runner directly. Run state is private, non-authoritative local cache data; tasks and wiki remain public repository artifacts, and a run never marks its task complete.
+
+The environment-gated .NET smoke exercises this API against a real paired runner:
+
+```sh
+PM_AGENT_RUN_API_SMOKE=1 \
+PM_AGENT_RUN_API_SMOKE_RUNNER=<runner-id> \
+PM_AGENT_RUN_API_SMOKE_TASK=<task-id> \
+PM_AGENT_RUN_API_SMOKE_PROFILE=<profile-id> \
+PM_AGENT_RUN_API_SMOKE_PROVIDER=codex \
+PM_AGENT_RUN_API_SMOKE_MODEL=<model-id> \
+PM_AGENT_RUN_API_SMOKE_EFFORT=medium \
+dotnet test PM.Tests/PM.Tests.csproj -m:1 --no-restore \
+  --filter FullyQualifiedName~AgentRunApiSmokeTests
+```
+
 ## Run transport
 
 The authenticated HTTPS surface accepts immutable run requests, inspects and pages active runs, journals cancellation, lists artifact metadata, pages event history, and streams replayable SSE events. See `contracts/agent-runs/v1/transport.md` for endpoints, status codes, signed cursors, event namespaces, and reconnect behavior.

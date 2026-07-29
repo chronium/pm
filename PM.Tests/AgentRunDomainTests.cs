@@ -20,6 +20,17 @@ public class AgentRunDomainTests
     }
 
     [Fact]
+    public void AgentRunJsonUsesCanonicalUtcMillisecondTimestamps()
+    {
+        var timestamp = new DateTimeOffset(2026, 7, 29, 8, 50, 30, 123, TimeSpan.Zero);
+
+        var json = JsonSerializer.Serialize(timestamp, AgentRunJson.Options);
+
+        Assert.Equal("\"2026-07-29T08:50:30.123Z\"", json);
+        Assert.Equal(timestamp, JsonSerializer.Deserialize<DateTimeOffset>(json, AgentRunJson.Options));
+    }
+
+    [Fact]
     public void CanonicalHashIsStableAndCoversNestedValuesAndOrder()
     {
         var specification = CreateSpecification();
