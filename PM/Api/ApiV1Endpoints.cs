@@ -241,7 +241,8 @@ public static class ApiResults
             "missing_run" or "artifact_not_found" or "artifact_unavailable")
             return StatusCodes.Status404NotFound;
         if (errorCode == "artifact_too_large") return StatusCodes.Status413PayloadTooLarge;
-        if (errorCode == "precondition_failed") return StatusCodes.Status412PreconditionFailed;
+        if (errorCode is "precondition_failed" or "stale_patch_preflight")
+            return StatusCodes.Status412PreconditionFailed;
         if (errorCode.StartsWith("missing_", StringComparison.Ordinal)) return StatusCodes.Status404NotFound;
         if (errorCode.StartsWith("invalid_", StringComparison.Ordinal)) return StatusCodes.Status400BadRequest;
         if (errorCode.StartsWith("duplicate_", StringComparison.Ordinal) ||
@@ -249,7 +250,9 @@ public static class ApiResults
             errorCode is "project_exists" or "last_status" or "last_track" or "stale_wiki_page" or
                 "changed_task_id" or "status_directory_not_empty" or "final_admin" or
                 "stale_run_preflight" or "run_id_conflict" or "runner_already_registered" or
-                "runner_tls_mismatch" or "artifact_corrupt" or "artifact_invalid")
+                "runner_tls_mismatch" or "artifact_corrupt" or "artifact_invalid" or
+                "patch_already_collected" or "patch_not_ready" or "patch_preflight_failed" or
+                "patch_apply_failed")
             return StatusCodes.Status409Conflict;
 
         return StatusCodes.Status500InternalServerError;

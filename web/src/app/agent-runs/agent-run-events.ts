@@ -21,6 +21,15 @@ export interface AgentRunCheckpoint {
   states: AgentRunState[];
   status: AgentRunCheckpointStatus;
   summary: string | null;
+  failure: AgentRunFailure | null;
+}
+
+export interface AgentRunFailure {
+  code: string;
+  stage: string;
+  summary: string;
+  recommendedAction: string;
+  retryable: boolean;
 }
 
 const ansi =
@@ -59,7 +68,10 @@ export function eventSource(type: string): string {
 export function eventLogEntries(event: AgentRunEvent): AgentRunLogEntry[] {
   const source = eventSource(event.type);
   const detail = primaryText(event);
-  const lines = (detail || event.summary).split(/\r?\n/);
+  const failure = runFailureFromEvent(event);
+  const lines = failure
+    ? [`${failure.summary} (${failure.code})`, `Recommended action: ${failure.recommendedAction}`]
+    : (detail || event.summary).split(/\r?\n/);
   return (lines.length ? lines : ['']).map((line, index) => ({
     key: `${event.sequence}-${index}`,
     sequence: Number(event.sequence),
@@ -75,6 +87,7 @@ export function projectCheckpoints(
   states: ReadonlySet<AgentRunState>,
   currentState: AgentRunState | null,
   lastSummary: string | null,
+  failure: AgentRunFailure | null = null,
 ): AgentRunCheckpoint[] {
   const terminal: 'completed' | 'failed' | 'cancelled' | null =
     currentState === 'completed' || currentState === 'failed' || currentState === 'cancelled'
@@ -106,8 +119,31 @@ export function projectCheckpoints(
       ...item,
       status,
       summary: item.id === 'outcome' && terminal ? lastSummary : null,
+      failure: item.id === 'outcome' && terminal ? failure : null,
     };
   });
+}
+
+export function runFailureFromEvent(event: AgentRunEvent): AgentRunFailure | null {
+  if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return null;
+  const failure = (event.data as Record<string, unknown>)['failure'];
+  if (!failure || typeof failure !== 'object' || Array.isArray(failure)) return null;
+  const value = failure as Record<string, unknown>;
+  if (
+    typeof value['code'] !== 'string' ||
+    typeof value['stage'] !== 'string' ||
+    typeof value['summary'] !== 'string' ||
+    typeof value['recommendedAction'] !== 'string' ||
+    typeof value['retryable'] !== 'boolean'
+  )
+    return null;
+  return {
+    code: sanitizeRunText(value['code']),
+    stage: sanitizeRunText(value['stage']),
+    summary: sanitizeRunText(value['summary']),
+    recommendedAction: sanitizeRunText(value['recommendedAction']),
+    retryable: value['retryable'],
+  };
 }
 
 export function isTerminalRunState(state: AgentRunState): boolean {

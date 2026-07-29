@@ -1,0 +1,124 @@
+<dialog
+  #dialog
+  class="patch-dialog"
+  aria-labelledby="patch-collection-heading"
+  (cancel)="handleNativeCancel($event)"
+>
+  <header class="patch-header">
+    <div>
+      <span class="eyebrow">Agent result</span>
+      <h2 id="patch-collection-heading">Review patch collection</h2>
+    </div>
+    <button type="button" class="close-action" [disabled]="applying()" (click)="close()">
+      Close
+    </button>
+  </header>
+
+  <div class="patch-body">
+    @if (loading()) {
+      <p class="loading" role="status">Checking the local repository and verified patch…</p>
+    } @else if (preflight(); as result) {
+      <dl class="patch-summary">
+        <div>
+          <dt>Base</dt>
+          <dd>
+            <code>{{ short(result.baseCommit) }}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Files</dt>
+          <dd>{{ result.statistics.filesChanged }}</dd>
+        </div>
+        <div>
+          <dt>Insertions</dt>
+          <dd>+{{ result.statistics.insertions }}</dd>
+        </div>
+        <div>
+          <dt>Deletions</dt>
+          <dd>−{{ result.statistics.deletions }}</dd>
+        </div>
+        @if (+result.statistics.binaryFiles > 0) {
+          <div>
+            <dt>Binary</dt>
+            <dd>{{ result.statistics.binaryFiles }}</dd>
+          </div>
+        }
+      </dl>
+
+      @if (result.warnings.length) {
+        <div class="patch-warnings" role="status">
+          @for (warning of result.warnings; track warning) {
+            <p>{{ warning }}</p>
+          }
+        </div>
+      }
+
+      <section aria-labelledby="patch-checks-heading">
+        <h3 id="patch-checks-heading">Safety checks</h3>
+        <ul class="check-list">
+          @for (check of result.checks; track check.id) {
+            <li [attr.data-status]="check.status">
+              <span aria-hidden="true">{{ check.status === 'passed' ? '✓' : '×' }}</span>
+              <div>
+                <strong>{{ check.label }}</strong>
+                <p>{{ check.summary }}</p>
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+
+      @if (result.paths.length) {
+        <section aria-labelledby="patch-paths-heading">
+          <h3 id="patch-paths-heading">Changed paths</h3>
+          <ul class="path-list">
+            @for (path of result.paths; track path.status + ':' + path.path) {
+              <li>
+                <code>{{ path.path }}</code>
+                <span>{{ path.status.replaceAll('_', ' ') }}</span>
+                @if (path.binary) {
+                  <span>binary</span>
+                } @else if (path.insertions !== null && path.deletions !== null) {
+                  <span>+{{ path.insertions }} −{{ path.deletions }}</span>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    }
+
+    @if (error()) {
+      <p class="patch-error" role="alert">{{ error() }}</p>
+    }
+  </div>
+
+  <footer class="patch-actions">
+    <button
+      type="button"
+      class="pm-button pm-button--secondary"
+      [disabled]="applying()"
+      (click)="close()"
+    >
+      Cancel
+    </button>
+    @if (error() && !preflight()) {
+      <button
+        type="button"
+        class="pm-button pm-button--secondary"
+        [disabled]="loading()"
+        (click)="retry()"
+      >
+        Retry preflight
+      </button>
+    }
+    <button
+      type="button"
+      class="pm-button pm-button--primary"
+      [disabled]="!preflight()?.ready || !etag() || applying()"
+      (click)="apply()"
+    >
+      {{ applying() ? 'Collecting…' : 'Collect patch' }}
+    </button>
+  </footer>
+</dialog>

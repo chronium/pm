@@ -133,6 +133,10 @@
   color: var(--pm-accent-strong);
   cursor: pointer;
 }
+.workspace-alert.collection-success {
+  border-bottom-color: var(--pm-success);
+  background: var(--pm-success-soft);
+}
 .supervision-grid {
   display: grid;
   grid-template-columns: minmax(260px, 30%) minmax(0, 1fr);

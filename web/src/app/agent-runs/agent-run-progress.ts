@@ -1,8 +1,9 @@
 import { DatePipe, TitleCasePipe } from '@angular/common';
-import { Component, input } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 
 import type { AgentRunArtifact, AgentRunInspection } from './agent-runs-api.service';
 import type { AgentRunCheckpoint } from './agent-run-events';
+import type { AgentArtifactDownloadState } from './agent-run-artifact-download';
 
 @Component({
   selector: 'pm-agent-run-progress',
@@ -14,6 +15,13 @@ export class AgentRunProgress {
   readonly inspection = input.required<AgentRunInspection>();
   readonly checkpoints = input.required<AgentRunCheckpoint[]>();
   readonly artifacts = input<AgentRunArtifact[]>([]);
+  readonly artifactDownloads = input<Record<string, AgentArtifactDownloadState>>({});
+  readonly downloadRequested = output<AgentRunArtifact>();
+  readonly collectRequested = output<void>();
+
+  protected downloadState(artifactId: string): AgentArtifactDownloadState {
+    return this.artifactDownloads()[artifactId] ?? { status: 'idle', message: null };
+  }
 
   protected formatBytes(value: number | string): string {
     const bytes = Number(value);

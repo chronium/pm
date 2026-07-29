@@ -58,7 +58,14 @@ export const Running: Story = {};
 export const Failed: Story = {
   args: {
     inspection: inspection('failed'),
-    checkpoints: projectCheckpoints(statesThrough('failed'), 'failed', 'Validation failed.'),
+    checkpoints: projectCheckpoints(statesThrough('failed'), 'failed', 'Run validation failed.', {
+      code: 'validation_failed',
+      stage: 'validation',
+      summary: 'Run validation failed.',
+      recommendedAction:
+        'Review the failed validation step and collected patch before deciding whether to retry.',
+      retryable: false,
+    }),
   },
 };
 export const Cancelled: Story = {
@@ -72,6 +79,29 @@ export const Completed: Story = {
     inspection: inspection('completed'),
     checkpoints: projectCheckpoints(statesThrough('completed'), 'completed', 'Run completed.'),
     artifacts: runArtifacts,
+  },
+};
+export const ArtifactDownloading: Story = {
+  args: {
+    inspection: inspection('completed'),
+    checkpoints: projectCheckpoints(statesThrough('completed'), 'completed', 'Run completed.'),
+    artifacts: runArtifacts,
+    artifactDownloads: {
+      'changes-patch': { status: 'downloading', message: null },
+    },
+  },
+};
+export const ArtifactDownloadFailed: Story = {
+  args: {
+    inspection: inspection('completed'),
+    checkpoints: projectCheckpoints(statesThrough('completed'), 'completed', 'Run completed.'),
+    artifacts: runArtifacts,
+    artifactDownloads: {
+      'changes-patch': {
+        status: 'error',
+        message: 'Artifact integrity verification failed.',
+      },
+    },
   },
 };
 export const TaskDrift: Story = {

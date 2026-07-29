@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { RunSpecification } from '../protocol/types.js';
+import { failRun, RunFailureError } from '../run-failure.js';
 import type { RunPaths, RunnerLayout } from './layout.js';
 import type { RepositoryAccessPolicy } from './repository-policy.js';
 
@@ -41,8 +42,13 @@ export class GitWorkspaceService {
   }
 
   async prepare(specification: RunSpecification, signal: AbortSignal): Promise<PreparedWorkspace> {
-    this.policy.assertAllowed(specification.repository.remote);
-    if (!taskIdPattern.test(specification.task.taskId)) throw new Error('Task ID is unsafe.');
+    try {
+      this.policy.assertAllowed(specification.repository.remote);
+    } catch {
+      throw failRun('repository_not_allowed');
+    }
+    if (!taskIdPattern.test(specification.task.taskId))
+      throw failRun('workspace_policy_unsupported');
     const paths = this.layout.run(specification.runId);
     await this.prepareRunDirectories(paths);
     const mirror = this.layout.mirror(specification.repository.remote);
@@ -52,7 +58,12 @@ export class GitWorkspaceService {
       await this.materialize(mirror, paths.workspace, specification.repository.baseCommit, signal);
     });
     await this.assertUnsupportedFeaturesAbsent(paths.workspace, signal);
-    await this.verifyTaskRevision(specification, paths.workspace);
+    try {
+      await this.verifyTaskRevision(specification, paths.workspace);
+    } catch (error) {
+      if (error instanceof RunFailureError) throw error;
+      throw failRun('task_revision_mismatch');
+    }
     await this.stageCodexAuth(paths.codexHome);
     return { paths, mirror };
   }
@@ -122,50 +133,63 @@ export class GitWorkspaceService {
         signal,
         localGitEnvironment(),
       );
-    await run(
-      this.gitExecutable,
-      [
-        '--git-dir',
-        mirror,
-        '-c',
-        `protocol.file.allow=${this.allowFileRemotes ? 'always' : 'never'}`,
-        'fetch',
-        '--prune',
-        '--no-tags',
-        'origin',
-        '+refs/heads/*:refs/remotes/origin/*',
-      ],
-      undefined,
-      signal,
-      fetchGitEnvironment(),
-    );
+    try {
+      await run(
+        this.gitExecutable,
+        [
+          '--git-dir',
+          mirror,
+          '-c',
+          `protocol.file.allow=${this.allowFileRemotes ? 'always' : 'never'}`,
+          'fetch',
+          '--prune',
+          '--no-tags',
+          'origin',
+          '+refs/heads/*:refs/remotes/origin/*',
+        ],
+        undefined,
+        signal,
+        fetchGitEnvironment(),
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      throw failRun('repository_fetch_failed');
+    }
   }
 
   private async assertCommit(mirror: string, commit: string, signal: AbortSignal): Promise<void> {
-    await run(
-      this.gitExecutable,
-      ['--git-dir', mirror, 'cat-file', '-e', `${commit}^{commit}`],
-      undefined,
-      signal,
-      localGitEnvironment(),
-    );
-    const reachable = await run(
-      this.gitExecutable,
-      [
-        '--git-dir',
-        mirror,
-        'for-each-ref',
-        '--format=%(refname)',
-        '--contains',
-        commit,
-        'refs/remotes/origin/',
-      ],
-      undefined,
-      signal,
-      localGitEnvironment(),
-    );
-    if (reachable.stdout.trim().length === 0)
-      throw new Error('Base commit is not reachable from the fetched remote.');
+    try {
+      await run(
+        this.gitExecutable,
+        ['--git-dir', mirror, 'cat-file', '-e', `${commit}^{commit}`],
+        undefined,
+        signal,
+        localGitEnvironment(),
+      );
+      const reachable = await run(
+        this.gitExecutable,
+        [
+          '--git-dir',
+          mirror,
+          'for-each-ref',
+          '--format=%(refname)',
+          '--contains',
+          commit,
+          'refs/remotes/origin/',
+        ],
+        undefined,
+        signal,
+        localGitEnvironment(),
+      );
+      if (reachable.stdout.trim().length === 0) throw failRun('base_revision_unavailable');
+    } catch (error) {
+      if (
+        error instanceof RunFailureError ||
+        (error instanceof Error && error.name === 'AbortError')
+      )
+        throw error;
+      throw failRun('base_revision_unavailable');
+    }
   }
 
   private async materialize(
@@ -221,7 +245,7 @@ export class GitWorkspaceService {
   ): Promise<void> {
     try {
       await lstat(join(workspace, '.gitmodules'));
-      throw new Error('Git submodules are not supported by runner protocol 1.0.');
+      throw failRun('workspace_policy_unsupported');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -233,7 +257,7 @@ export class GitWorkspaceService {
       localGitEnvironment(),
     );
     if (tree.stdout.split('\n').some((line) => line.startsWith('160000 ')))
-      throw new Error('Git submodules are not supported by runner protocol 1.0.');
+      throw failRun('workspace_policy_unsupported');
     const candidates = await run(
       this.gitExecutable,
       [
@@ -260,8 +284,7 @@ export class GitWorkspaceService {
           signal,
           localGitEnvironment(),
         );
-        if (isGitLfsPointer(blob.stdout))
-          throw new Error('Git LFS is not supported by runner protocol 1.0.');
+        if (isGitLfsPointer(blob.stdout)) throw failRun('workspace_policy_unsupported');
       }
     }
   }
@@ -273,8 +296,7 @@ export class GitWorkspaceService {
     const path = join(workspace, '.pm', 'tasks', `${specification.task.taskId}.md`);
     const bytes = await readFile(path);
     const revision = createHash('sha256').update(bytes).digest('hex');
-    if (revision !== specification.task.revision)
-      throw new Error('Task revision does not match the immutable run specification.');
+    if (revision !== specification.task.revision) throw failRun('task_revision_mismatch');
   }
 
   private async stageCodexAuth(codexHome: string): Promise<void> {

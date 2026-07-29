@@ -34,5 +34,25 @@
     "state": "queued",
     "summary": "Waiting for an execution slot",
     "data": null
+  },
+  {
+    "protocolVersion": "1.0",
+    "runId": "run-01K0EXAMPLE",
+    "sequence": 4,
+    "timestamp": "2026-07-27T09:30:03.000Z",
+    "type": "run.state_changed",
+    "state": "failed",
+    "summary": "The runner could not fetch the repository.",
+    "data": {
+      "previousState": "preparing_workspace",
+      "nextState": "failed",
+      "failure": {
+        "code": "repository_fetch_failed",
+        "stage": "workspace",
+        "summary": "The runner could not fetch the repository.",
+        "recommendedAction": "Check runner network access and repository credentials, then launch a new run.",
+        "retryable": true
+      }
+    }
   }
 ]

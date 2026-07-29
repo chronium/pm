@@ -17,10 +17,16 @@ import {
   eventLogEntries,
   isTerminalRunState,
   projectCheckpoints,
+  runFailureFromEvent,
   sanitizeRunEvent,
   type AgentRunConnectivity,
   type AgentRunLogEntry,
+  type AgentRunFailure,
 } from './agent-run-events';
+import {
+  verifiedArtifactBlob,
+  type AgentArtifactDownloadState,
+} from './agent-run-artifact-download';
 
 const replayPageSize = 500;
 const maximumRetainedEntries = 10_000;
@@ -55,12 +61,19 @@ export class AgentRunSupervisionStore {
   readonly cancellationPending = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly downloading = signal(false);
+  readonly artifactDownloads = signal<Record<string, AgentArtifactDownloadState>>({});
   readonly lastStateSummary = signal<string | null>(null);
+  readonly failure = signal<AgentRunFailure | null>(null);
 
   readonly run = computed(() => this.inspection()?.run ?? null);
   readonly terminal = computed(() => !!this.run() && isTerminalRunState(this.run()!.state));
   readonly checkpoints = computed(() =>
-    projectCheckpoints(this.seenStates(), this.run()?.state ?? null, this.lastStateSummary()),
+    projectCheckpoints(
+      this.seenStates(),
+      this.run()?.state ?? null,
+      this.lastStateSummary(),
+      this.failure(),
+    ),
   );
   readonly canCancel = computed(
     () =>
@@ -91,7 +104,9 @@ export class AgentRunSupervisionStore {
     this.connectivity.set('loading');
     this.paused.set(false);
     this.actionError.set(null);
+    this.artifactDownloads.set({});
     this.lastStateSummary.set(null);
+    this.failure.set(null);
     void this.initialize(this.loadGeneration);
   }
 
@@ -146,6 +161,33 @@ export class AgentRunSupervisionStore {
     } finally {
       this.downloading.set(false);
     }
+  }
+
+  async downloadArtifact(artifact: AgentRunArtifact): Promise<Blob | null> {
+    if (this.artifactDownloads()[artifact.artifactId]?.status === 'downloading') return null;
+    this.setArtifactDownload(artifact.artifactId, { status: 'downloading', message: null });
+    try {
+      const response = await firstValueFrom(
+        this.api.artifactContent(this.runId, artifact.artifactId),
+      );
+      const blob = await verifiedArtifactBlob(artifact, response);
+      this.setArtifactDownload(artifact.artifactId, {
+        status: 'downloaded',
+        message: 'Download verified.',
+      });
+      return blob;
+    } catch (error) {
+      const message =
+        error instanceof Error && !(error as { status?: unknown }).status
+          ? error.message
+          : this.api.error(error, 'The artifact could not be downloaded.').message;
+      this.setArtifactDownload(artifact.artifactId, { status: 'error', message });
+      return null;
+    }
+  }
+
+  private setArtifactDownload(artifactId: string, state: AgentArtifactDownloadState): void {
+    this.artifactDownloads.update((current) => ({ ...current, [artifactId]: state }));
   }
 
   private async initialize(generation: number): Promise<void> {
@@ -278,6 +320,7 @@ export class AgentRunSupervisionStore {
       if (!this.terminal() || isTerminalRunState(event.state))
         this.updateRunState(event.state, event.timestamp, sequence);
       this.lastStateSummary.set(event.summary);
+      if (isTerminalRunState(event.state)) this.failure.set(runFailureFromEvent(event));
     }
     const additions = eventLogEntries(event);
     if (entries) entries.push(...additions);
