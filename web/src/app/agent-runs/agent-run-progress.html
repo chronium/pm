@@ -41,6 +41,15 @@
           @if (checkpoint.summary) {
             <p>{{ checkpoint.summary }}</p>
           }
+          @if (checkpoint.failure; as failure) {
+            <div class="failure-detail" role="alert">
+              <code>{{ failure.code }}</code>
+              <p>{{ failure.recommendedAction }}</p>
+              <span>{{
+                failure.retryable ? 'A new run may be retried.' : 'Review required before retrying.'
+              }}</span>
+            </div>
+          }
         </div>
       </li>
     }

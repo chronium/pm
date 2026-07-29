@@ -17,9 +17,11 @@ import {
   eventLogEntries,
   isTerminalRunState,
   projectCheckpoints,
+  runFailureFromEvent,
   sanitizeRunEvent,
   type AgentRunConnectivity,
   type AgentRunLogEntry,
+  type AgentRunFailure,
 } from './agent-run-events';
 import {
   verifiedArtifactBlob,
@@ -61,11 +63,17 @@ export class AgentRunSupervisionStore {
   readonly downloading = signal(false);
   readonly artifactDownloads = signal<Record<string, AgentArtifactDownloadState>>({});
   readonly lastStateSummary = signal<string | null>(null);
+  readonly failure = signal<AgentRunFailure | null>(null);
 
   readonly run = computed(() => this.inspection()?.run ?? null);
   readonly terminal = computed(() => !!this.run() && isTerminalRunState(this.run()!.state));
   readonly checkpoints = computed(() =>
-    projectCheckpoints(this.seenStates(), this.run()?.state ?? null, this.lastStateSummary()),
+    projectCheckpoints(
+      this.seenStates(),
+      this.run()?.state ?? null,
+      this.lastStateSummary(),
+      this.failure(),
+    ),
   );
   readonly canCancel = computed(
     () =>
@@ -98,6 +106,7 @@ export class AgentRunSupervisionStore {
     this.actionError.set(null);
     this.artifactDownloads.set({});
     this.lastStateSummary.set(null);
+    this.failure.set(null);
     void this.initialize(this.loadGeneration);
   }
 
@@ -311,6 +320,7 @@ export class AgentRunSupervisionStore {
       if (!this.terminal() || isTerminalRunState(event.state))
         this.updateRunState(event.state, event.timestamp, sequence);
       this.lastStateSummary.set(event.summary);
+      if (isTerminalRunState(event.state)) this.failure.set(runFailureFromEvent(event));
     }
     const additions = eventLogEntries(event);
     if (entries) entries.push(...additions);

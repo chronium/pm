@@ -26,16 +26,49 @@ describe('agent run event projection', () => {
   });
 
   it('keeps terminal failure understandable without requiring raw output', () => {
+    const failure = {
+      code: 'repository_fetch_failed',
+      stage: 'workspace',
+      summary: 'The runner could not fetch the repository.',
+      recommendedAction:
+        'Check runner network access and repository credentials, then launch a new run.',
+      retryable: true,
+    };
     const checkpoints = projectCheckpoints(
       new Set(['accepted', 'queued', 'preparing_workspace', 'failed']),
       'failed',
-      'Workspace preparation failed',
+      failure.summary,
+      failure,
     );
     expect(checkpoints.at(-1)).toMatchObject({
       status: 'failed',
-      summary: 'Workspace preparation failed',
+      summary: failure.summary,
+      failure,
     });
     expect(checkpoints[1]?.status).toBe('failed');
     expect(checkpoints[2]?.status).toBe('pending');
+  });
+
+  it('projects safe failure diagnostics into searchable output', () => {
+    const event = {
+      ...runEvents[0]!,
+      type: 'run.state_changed',
+      state: 'failed' as const,
+      summary: 'Run validation failed.',
+      data: {
+        failure: {
+          code: 'validation_failed',
+          stage: 'validation',
+          summary: 'Run validation failed.',
+          recommendedAction: 'Review the failed validation step and collected patch.',
+          retryable: false,
+        },
+      },
+    };
+
+    expect(eventLogEntries(event).map((entry) => entry.message)).toEqual([
+      'Run validation failed. (validation_failed)',
+      'Recommended action: Review the failed validation step and collected patch.',
+    ]);
   });
 });

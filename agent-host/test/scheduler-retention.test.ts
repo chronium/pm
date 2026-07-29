@@ -57,7 +57,7 @@ test('scheduler preserves FIFO order and enforces fixed concurrency', async () =
   }
 });
 
-test('scheduler turns processor failures into durable failed runs', async () => {
+test('scheduler turns processor failures into safe actionable durable failures', async () => {
   const temporary = createTempDirectory();
   try {
     const store = new RunStore(temporary.path);
@@ -66,7 +66,9 @@ test('scheduler turns processor failures into durable failed runs', async () => 
       store,
       {
         execute(): Promise<void> {
-          return Promise.reject(new Error('/private/repository secret'));
+          return Promise.reject(
+            new Error('/private/repository?token=super-secret Bearer abcdefghijklmnopqrstuvwxyz'),
+          );
         },
       },
       1,
@@ -74,7 +76,19 @@ test('scheduler turns processor failures into durable failed runs', async () => 
     scheduler.start();
     await scheduler.waitForIdle();
     assert.equal(store.getRun('run-failure')?.state, 'failed');
-    assert.equal(store.eventsAfter('run-failure').at(-1)?.summary, 'Run processor failed');
+    const terminal = store.eventsAfter('run-failure').at(-1)!;
+    assert.equal(terminal.summary, 'The runner encountered an internal failure.');
+    assert.deepEqual((terminal.data as { failure: unknown }).failure, {
+      code: 'internal_failure',
+      stage: 'system',
+      summary: 'The runner encountered an internal failure.',
+      recommendedAction: 'Retry once, then inspect private runner logs if the failure repeats.',
+      retryable: true,
+    });
+    assert.doesNotMatch(
+      JSON.stringify(terminal),
+      /\/private\/repository|super-secret|Bearer|abcdefghijklmnopqrstuvwxyz/,
+    );
     await scheduler.stop();
     store.close();
   } finally {
@@ -95,7 +109,13 @@ test('scheduler fails a processor that returns without a terminal result', async
     assert.deepEqual(store.eventsAfter('run-incomplete').at(-1)?.data, {
       previousState: 'preparing_workspace',
       nextState: 'failed',
-      reason: 'run_processor_incomplete',
+      failure: {
+        code: 'internal_failure',
+        stage: 'system',
+        summary: 'The runner encountered an internal failure.',
+        recommendedAction: 'Retry once, then inspect private runner logs if the failure repeats.',
+        retryable: true,
+      },
     });
     await scheduler.stop();
     store.close();

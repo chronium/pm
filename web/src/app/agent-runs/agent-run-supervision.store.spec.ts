@@ -149,6 +149,49 @@ describe('AgentRunSupervisionStore', () => {
     expect(stream.cursors).toEqual([]);
   });
 
+  it('retains structured terminal failure diagnostics for checkpoints and output', async () => {
+    const terminal = {
+      ...runEvents[0]!,
+      sequence: 8,
+      state: 'failed' as const,
+      summary: 'The runtime could not be started.',
+      data: {
+        failure: {
+          code: 'runtime_start_failed',
+          stage: 'runtime',
+          summary: 'The runtime could not be started.',
+          recommendedAction: 'Check the runtime profile and launch a new run.',
+          retryable: true,
+        },
+      },
+    };
+    store.load('run-01K123');
+    http.expectOne('/api/v1/runs/run-01K123').flush(runInspection);
+    await Promise.resolve();
+    await Promise.resolve();
+    http
+      .expectOne((request) => request.url.includes('/events'))
+      .flush({
+        events: [...runEvents.slice(0, 7), terminal],
+        nextAfterSequence: 8,
+        hasMore: false,
+        terminal: true,
+      });
+    await Promise.resolve();
+    await Promise.resolve();
+    http.expectOne('/api/v1/runs/run-01K123').flush({
+      ...runInspection,
+      run: { ...runInspection.run, state: 'failed', terminalAt: terminal.timestamp },
+    });
+    await Promise.resolve();
+    http.expectOne('/api/v1/runs/run-01K123/artifacts').flush([]);
+    await Promise.resolve();
+
+    expect(store.failure()?.code).toBe('runtime_start_failed');
+    expect(store.checkpoints().at(-1)?.failure?.recommendedAction).toContain('runtime profile');
+    expect(store.entries().at(-1)?.message).toContain('Recommended action');
+  });
+
   it('verifies artifact content and tracks each download independently', async () => {
     await loadRunningRun();
     const bytes = new TextEncoder().encode('hello').buffer;
