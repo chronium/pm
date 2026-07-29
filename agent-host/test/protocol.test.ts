@@ -7,6 +7,7 @@ import {
   computeSpecificationHash,
 } from '../src/protocol/canonical-json.js';
 import { ProtocolValidationError, parseRunRequest } from '../src/protocol/validation.js';
+import { createRequest } from './helpers.js';
 
 const fixturePath = join(process.cwd(), '..', 'contracts/agent-runs/v1/run-request.json');
 
@@ -33,4 +34,11 @@ test('protocol parsing rejects a changed immutable specification', () => {
     (error: unknown) =>
       error instanceof ProtocolValidationError && error.code === 'specification_hash_mismatch',
   );
+});
+
+test('protocol parsing rejects task IDs that could escape the task directory', () => {
+  const request = createRequest('run-task-path');
+  request.specification.task.taskId = '../outside';
+  request.specificationHash = computeSpecificationHash(request.specification);
+  assert.throws(() => parseRunRequest(request), /path-safe/);
 });

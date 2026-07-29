@@ -3,7 +3,6 @@ orders:
   state: todo
   milestone: agent-runs
   taskIds:
-  - AGENT-0008
   - AGENT-0009
   - AGENT-0010
   - AGENT-0011

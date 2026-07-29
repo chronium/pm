@@ -6,7 +6,7 @@ milestone: agent-runs
 dependsOn:
 - AGENT-0007
 createdAt: 2026-07-27T06:57:01.5504640Z
-modifiedAt: 2026-07-28T21:13:42.5461540Z
+modifiedAt: 2026-07-29T07:05:35.6654860Z
 ---
 
 ## Goal
@@ -48,3 +48,7 @@ This task owns the cohesive per-run lifecycle from immutable workspace preparati
 - Test unknown commits, changed remotes, fetch failure, credential staging, MCP startup failure, binary changes, oversized patches, validation failure, cancellation, timeout, restart recovery, retention, and cleanup.
 - Add a disposable local Git remote integration test.
 - Add a runner-level execution test using fake agent output before exercising the real Codex SDK profile on Linux.
+
+## Notes
+
+- 2026-07-29 07:05 UTC - Implemented the complete runner-owned lifecycle: exact allowlisted Git mirrors and immutable task revision checks, isolated Codex auth, separate agent and credential-free validation containers, bounded evidence collection, resource usage, restart reconciliation, and transient-state cleanup. Local validation passed 48 agent-host tests (one opt-in Podman test skipped) and 307 .NET tests. On the Arch runner, all 49 agent-host tests passed with real rootless Podman. A real Codex SDK run against the private chronium/pm-agent-smoke fixture completed end to end, changed only runner-smoke.txt, passed fresh-container validation, retained its artifacts, and removed workspace/auth/runtime state. The service startup and user-systemd unit also verified successfully.

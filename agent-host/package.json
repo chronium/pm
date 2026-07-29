@@ -15,6 +15,7 @@
     "start": "node dist/src/main.js",
     "test": "npm run build && node --test --test-concurrency=1 dist/test/*.test.js",
     "test:codex-smoke": "npm run build && node dist/test/codex-smoke.js",
+    "test:lifecycle-smoke": "npm run build && node dist/test/lifecycle-smoke.js",
     "validate": "npm run format:check && npm run check && npm test"
   },
   "engines": {

@@ -85,6 +85,21 @@ public class AgentRunDomainTests
     }
 
     [Fact]
+    public void RequestValidationRejectsTaskIdsThatCanEscapeTheTaskDirectory()
+    {
+        var specification = CreateSpecification();
+        var malformed = specification with
+        {
+            Task = specification.Task with { TaskId = "../outside" },
+        };
+
+        var result = AgentRunContractValidator.ValidateSpecification(malformed);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_specification", result.ErrorCode);
+    }
+
+    [Fact]
     public void DuplicateStartsAreIdempotentOnlyForTheSameHash()
     {
         var request = CreateRequest(CreateSpecification());

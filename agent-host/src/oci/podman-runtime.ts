@@ -12,6 +12,7 @@ import type {
   RuntimeDriver,
 } from '../drivers.js';
 import type { RunSpecification, RuntimeProfile } from '../protocol/types.js';
+import { RunnerLayout } from '../execution/layout.js';
 import {
   DiskBudgetExceededError,
   HostDiskBudgetChecker,
@@ -58,6 +59,7 @@ export interface PodmanRuntimeHandle extends RuntimeHandle {
   monitorController: AbortController;
   monitorPromise: Promise<void>;
   destroyed: boolean;
+  peakWritableBytes: number;
 }
 
 export class NodePodmanClient implements PodmanClient {
@@ -125,6 +127,7 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
   private readonly diskCheckIntervalMilliseconds: number;
   private readonly uid: number;
   private readonly gid: number;
+  private readonly layout: RunnerLayout;
 
   constructor(
     private readonly client: PodmanClient,
@@ -132,6 +135,7 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
     private readonly diskBudget: DiskBudgetChecker = new HostDiskBudgetChecker(),
   ) {
     this.dataRoot = resolve(options.dataRoot);
+    this.layout = new RunnerLayout(this.dataRoot);
     this.diskCheckIntervalMilliseconds = options.diskCheckIntervalMilliseconds ?? 1_000;
     this.uid = options.uid ?? process.getuid?.() ?? 1_000;
     this.gid = options.gid ?? process.getgid?.() ?? 1_000;
@@ -150,7 +154,7 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
     for (const cache of paths.caches)
       await assertDirectoryChain(this.dataRoot, cache.hostPath, false);
     await mkdir(paths.runtime, { recursive: true, mode: 0o700 });
-    await this.diskBudget.check(
+    const initialUsage = await this.diskBudget.check(
       [paths.workspace, paths.codexHome],
       profile.limits.diskBytes,
       this.dataRoot,
@@ -186,6 +190,7 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       monitorController,
       monitorPromise: Promise.resolve(),
       destroyed: false,
+      peakWritableBytes: initialUsage.bytes,
       agentContext: this.agentContext(profile),
     };
     handle.monitorPromise = this.monitor(handle, profile, monitorController.signal);
@@ -207,6 +212,11 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       recursive: true,
       force: true,
     });
+  }
+
+  async measure(runtime: RuntimeHandle): Promise<{ peakWritableBytes: number }> {
+    const handle = podmanHandle(runtime);
+    return { peakWritableBytes: handle.peakWritableBytes };
   }
 
   async *execute(
@@ -275,12 +285,13 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
     try {
       while (!signal.aborted) {
         await delay(this.diskCheckIntervalMilliseconds, undefined, { signal });
-        await this.diskBudget.check(
+        const usage = await this.diskBudget.check(
           [handle.hostWorkspaceDirectory, handle.hostCodexHomeDirectory],
           profile.limits.diskBytes,
           this.dataRoot,
           this.options.minimumFreeDiskBytes,
         );
+        handle.peakWritableBytes = Math.max(handle.peakWritableBytes, usage.bytes);
       }
     } catch (error) {
       if (signal.aborted) return;
@@ -291,12 +302,12 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
   }
 
   private paths(runId: string, profile: RuntimeProfile): RuntimeHostPaths {
-    const runRoot = join(this.dataRoot, 'runs', runId);
+    const run = this.layout.run(runId);
     return {
-      runRoot,
-      workspace: join(runRoot, 'workspace'),
-      codexHome: join(runRoot, 'codex-home'),
-      runtime: join(runRoot, 'runtime'),
+      runRoot: run.runRoot,
+      workspace: run.workspace,
+      codexHome: run.codexHome,
+      runtime: run.runtime,
       caches: profile.container.readOnlyCaches.map((cache) => ({
         ...cache,
         hostPath: join(this.dataRoot, 'caches', profile.profileId, cache.cacheId),

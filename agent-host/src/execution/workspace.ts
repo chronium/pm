@@ -1,0 +1,389 @@
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { constants } from 'node:fs';
+import { chmod, lstat, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import type { RunSpecification } from '../protocol/types.js';
+import type { RunPaths, RunnerLayout } from './layout.js';
+import type { RepositoryAccessPolicy } from './repository-policy.js';
+
+const maximumCommandOutputBytes = 4 * 1024 * 1024;
+const maximumAuthBytes = 1024 * 1024;
+const taskIdPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export interface PreparedWorkspace {
+  readonly paths: RunPaths;
+  readonly mirror: string;
+}
+
+export class GitWorkspaceService {
+  private readonly mirrorLocks = new Map<string, Promise<void>>();
+
+  constructor(
+    private readonly layout: RunnerLayout,
+    private readonly policy: RepositoryAccessPolicy,
+    private readonly codexAuthPath: string,
+    private readonly gitExecutable = 'git',
+    private readonly allowFileRemotes = false,
+  ) {}
+
+  async reconcile(): Promise<number> {
+    let entries;
+    try {
+      entries = await readdir(this.layout.runsRoot, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw error;
+    }
+    const runIds = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    await Promise.all(runIds.map((runId) => this.cleanup(runId)));
+    return runIds.length;
+  }
+
+  async prepare(specification: RunSpecification, signal: AbortSignal): Promise<PreparedWorkspace> {
+    this.policy.assertAllowed(specification.repository.remote);
+    if (!taskIdPattern.test(specification.task.taskId)) throw new Error('Task ID is unsafe.');
+    const paths = this.layout.run(specification.runId);
+    await this.prepareRunDirectories(paths);
+    const mirror = this.layout.mirror(specification.repository.remote);
+    await this.withMirrorLock(mirror, async () => {
+      await this.prepareMirror(mirror, specification.repository.remote, signal);
+      await this.assertCommit(mirror, specification.repository.baseCommit, signal);
+      await this.materialize(mirror, paths.workspace, specification.repository.baseCommit, signal);
+    });
+    await this.assertUnsupportedFeaturesAbsent(paths.workspace, signal);
+    await this.verifyTaskRevision(specification, paths.workspace);
+    await this.stageCodexAuth(paths.codexHome);
+    return { paths, mirror };
+  }
+
+  async resetCodexHome(runId: string): Promise<void> {
+    const path = this.layout.run(runId).codexHome;
+    await rm(path, { recursive: true, force: true });
+    await mkdir(path, { recursive: true, mode: 0o700 });
+    await chmod(path, 0o700);
+  }
+
+  async cleanup(runId: string): Promise<void> {
+    const paths = this.layout.run(runId);
+    for (const path of [paths.workspace, paths.codexHome, paths.runtime, paths.scratch])
+      await rm(path, { recursive: true, force: true });
+  }
+
+  private async prepareRunDirectories(paths: RunPaths): Promise<void> {
+    await ensureOwnerDirectory(this.layout.dataRoot);
+    await ensureOwnerDirectory(this.layout.runsRoot);
+    await ensureOwnerDirectory(paths.runRoot);
+    for (const path of [paths.workspace, paths.codexHome, paths.artifacts, paths.scratch]) {
+      await rm(path, { recursive: true, force: true });
+      await mkdir(path, { recursive: true, mode: 0o700 });
+      await chmod(path, 0o700);
+    }
+  }
+
+  private async prepareMirror(mirror: string, remote: string, signal: AbortSignal): Promise<void> {
+    await mkdir(this.layout.mirrorsRoot, { recursive: true, mode: 0o700 });
+    await chmod(this.layout.mirrorsRoot, 0o700);
+    try {
+      const stats = await lstat(mirror);
+      if (!stats.isDirectory() || stats.isSymbolicLink())
+        throw new Error('Repository mirror is not a real directory.');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      await run(
+        this.gitExecutable,
+        ['init', '--bare', mirror],
+        undefined,
+        signal,
+        localGitEnvironment(),
+      );
+      await chmod(mirror, 0o700);
+    }
+    const remotes = await run(
+      this.gitExecutable,
+      ['--git-dir', mirror, 'remote'],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    if (remotes.stdout.split('\n').includes('origin'))
+      await run(
+        this.gitExecutable,
+        ['--git-dir', mirror, 'remote', 'set-url', 'origin', remote],
+        undefined,
+        signal,
+        localGitEnvironment(),
+      );
+    else
+      await run(
+        this.gitExecutable,
+        ['--git-dir', mirror, 'remote', 'add', 'origin', remote],
+        undefined,
+        signal,
+        localGitEnvironment(),
+      );
+    await run(
+      this.gitExecutable,
+      [
+        '--git-dir',
+        mirror,
+        '-c',
+        `protocol.file.allow=${this.allowFileRemotes ? 'always' : 'never'}`,
+        'fetch',
+        '--prune',
+        '--no-tags',
+        'origin',
+        '+refs/heads/*:refs/remotes/origin/*',
+      ],
+      undefined,
+      signal,
+      fetchGitEnvironment(),
+    );
+  }
+
+  private async assertCommit(mirror: string, commit: string, signal: AbortSignal): Promise<void> {
+    await run(
+      this.gitExecutable,
+      ['--git-dir', mirror, 'cat-file', '-e', `${commit}^{commit}`],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    const reachable = await run(
+      this.gitExecutable,
+      [
+        '--git-dir',
+        mirror,
+        'for-each-ref',
+        '--format=%(refname)',
+        '--contains',
+        commit,
+        'refs/remotes/origin/',
+      ],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    if (reachable.stdout.trim().length === 0)
+      throw new Error('Base commit is not reachable from the fetched remote.');
+  }
+
+  private async materialize(
+    mirror: string,
+    workspace: string,
+    commit: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    await rm(workspace, { recursive: true, force: true });
+    await run(
+      this.gitExecutable,
+      [
+        '-c',
+        'protocol.file.allow=always',
+        'clone',
+        '--no-hardlinks',
+        '--no-checkout',
+        mirror,
+        workspace,
+      ],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    await run(
+      this.gitExecutable,
+      ['-C', workspace, 'checkout', '--detach', commit],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    await run(
+      this.gitExecutable,
+      ['-C', workspace, 'remote', 'remove', 'origin'],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    const head = await run(
+      this.gitExecutable,
+      ['-C', workspace, 'rev-parse', 'HEAD'],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    if (head.stdout.trim() !== commit) throw new Error('Workspace does not match the base commit.');
+    await chmod(workspace, 0o700);
+  }
+
+  private async assertUnsupportedFeaturesAbsent(
+    workspace: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      await lstat(join(workspace, '.gitmodules'));
+      throw new Error('Git submodules are not supported by runner protocol 1.0.');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const tree = await run(
+      this.gitExecutable,
+      ['-C', workspace, 'ls-tree', '-r', 'HEAD'],
+      undefined,
+      signal,
+      localGitEnvironment(),
+    );
+    if (tree.stdout.split('\n').some((line) => line.startsWith('160000 ')))
+      throw new Error('Git submodules are not supported by runner protocol 1.0.');
+    const tracked = await run(
+      this.gitExecutable,
+      ['-C', workspace, 'grep', '-I', '-l', 'version https://git-lfs.github.com/spec/v1', 'HEAD'],
+      undefined,
+      signal,
+      localGitEnvironment(),
+      true,
+    );
+    if (tracked.exitCode === 0 && tracked.stdout.trim().length > 0)
+      throw new Error('Git LFS is not supported by runner protocol 1.0.');
+  }
+
+  private async verifyTaskRevision(
+    specification: RunSpecification,
+    workspace: string,
+  ): Promise<void> {
+    const path = join(workspace, '.pm', 'tasks', `${specification.task.taskId}.md`);
+    const bytes = await readFile(path);
+    const revision = createHash('sha256').update(bytes).digest('hex');
+    if (revision !== specification.task.revision)
+      throw new Error('Task revision does not match the immutable run specification.');
+  }
+
+  private async stageCodexAuth(codexHome: string): Promise<void> {
+    const source = await open(this.codexAuthPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const stats = await source.stat();
+      const uid = process.getuid?.();
+      if (!stats.isFile() || (uid !== undefined && stats.uid !== uid) || (stats.mode & 0o077) !== 0)
+        throw new Error('Codex auth must be an owner-only regular file.');
+      if (stats.size === 0 || stats.size > maximumAuthBytes)
+        throw new Error('Codex auth size is invalid.');
+      const bytes = await source.readFile();
+      const parsed = JSON.parse(bytes.toString('utf8')) as unknown;
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('Codex auth must contain a JSON object.');
+      const destination = join(codexHome, 'auth.json');
+      await writeFile(destination, bytes, { mode: 0o600, flag: 'wx' });
+      await chmod(destination, 0o600);
+    } finally {
+      await source.close();
+    }
+  }
+
+  private async withMirrorLock<T>(mirror: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.mirrorLocks.get(mirror) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolveValue) => {
+      release = resolveValue;
+    });
+    const queued = previous.then(() => current);
+    this.mirrorLocks.set(mirror, queued);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+      if (this.mirrorLocks.get(mirror) === queued) this.mirrorLocks.delete(mirror);
+    }
+  }
+}
+
+async function ensureOwnerDirectory(path: string): Promise<void> {
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  const stats = await lstat(path);
+  const uid = process.getuid?.();
+  if (
+    !stats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    (uid !== undefined && stats.uid !== uid) ||
+    (stats.mode & 0o077) !== 0
+  )
+    throw new Error('Runner directory must be a real owner-only directory.');
+  await chmod(path, 0o700);
+}
+
+interface CommandResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+async function run(
+  executable: string,
+  argumentsValue: readonly string[],
+  cwd: string | undefined,
+  signal: AbortSignal,
+  environment: NodeJS.ProcessEnv,
+  allowFailure = false,
+): Promise<CommandResult> {
+  if (signal.aborted) throw abortError();
+  return await new Promise<CommandResult>((resolveValue, reject) => {
+    const child = spawn(executable, [...argumentsValue], {
+      cwd,
+      env: environment,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    const cancel = (): void => {
+      child.kill('SIGTERM');
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      if (stdout.length < maximumCommandOutputBytes)
+        stdout += chunk.slice(0, maximumCommandOutputBytes - stdout.length);
+    });
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < maximumCommandOutputBytes)
+        stderr += chunk.slice(0, maximumCommandOutputBytes - stderr.length);
+    });
+    child.once('error', reject);
+    child.once('close', (code) => {
+      signal.removeEventListener('abort', cancel);
+      if (signal.aborted) return reject(abortError());
+      const result = { exitCode: code ?? 1, stdout, stderr };
+      if (!allowFailure && result.exitCode !== 0)
+        reject(new Error(`Command ${executable} failed.`));
+      else resolveValue(result);
+    });
+  });
+}
+
+function localGitEnvironment(): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env['PATH'],
+    HOME: '/nonexistent',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_ASKPASS: '/bin/false',
+  };
+}
+
+function fetchGitEnvironment(): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = {
+    PATH: process.env['PATH'],
+    HOME: process.env['HOME'],
+    GIT_TERMINAL_PROMPT: '0',
+  };
+  for (const name of ['SSH_AUTH_SOCK', 'GIT_ASKPASS', 'GIT_SSH_COMMAND']) {
+    const value = process.env[name];
+    if (value !== undefined) result[name] = value;
+  }
+  return result;
+}
+
+function abortError(): Error {
+  const error = new Error('Workspace operation was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}

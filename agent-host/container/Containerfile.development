@@ -1,0 +1,25 @@
+FROM docker.io/library/node@sha256:2d49d876e96237d76de412761cf05dbfe5aee325cc4406a4d41d5824c5bb8beb
+
+LABEL org.opencontainers.image.title="PM agent development worker" \
+      org.opencontainers.image.description="Non-production Codex and PM MCP worker for AGENT-0008 integration" \
+      io.chronium.pm.production-ready="false"
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+       ca-certificates=20230311+deb12u1 \
+       git=1:2.39.5-0+deb12u3 \
+       libicu72=72.1-3+deb12u1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=root:root agent-host /opt/pm-agent-host
+COPY --chown=root:root pm /opt/pm
+
+RUN chmod -R a-w /opt/pm-agent-host /opt/pm \
+    && chmod 0555 /opt/pm/PM /opt/pm-agent-host/dist/src/codex/worker-main.js \
+    && ln -s /opt/pm/PM /usr/local/bin/pm \
+    && ln -s /opt/pm-agent-host/dist/src/codex/worker-main.js /usr/local/bin/pm-agent-worker
+
+WORKDIR /workspace
+
+# PodmanRuntimeDriver supplies the actual command, user, mounts, limits, and security policy.
+CMD ["/bin/sleep", "infinity"]

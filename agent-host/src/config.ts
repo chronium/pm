@@ -14,6 +14,8 @@ export interface HostConfig {
   tlsCertificatePath: string | null;
   tlsKeyPath: string | null;
   capabilityManifestPath: string | null;
+  repositoryPolicyPath: string | null;
+  codexAuthPath: string | null;
 }
 
 export interface ParsedHostConfig {
@@ -42,6 +44,8 @@ const environmentNames = {
   tlsCertificatePath: 'PM_AGENT_HOST_TLS_CERT_PATH',
   tlsKeyPath: 'PM_AGENT_HOST_TLS_KEY_PATH',
   capabilityManifestPath: 'PM_AGENT_HOST_CAPABILITIES_PATH',
+  repositoryPolicyPath: 'PM_AGENT_HOST_REPOSITORIES_PATH',
+  codexAuthPath: 'PM_AGENT_HOST_CODEX_AUTH_PATH',
 } as const;
 
 export function parseHostConfig(
@@ -64,6 +68,8 @@ export function parseHostConfig(
     tlsCertificatePath: environment[environmentNames.tlsCertificatePath] ?? null,
     tlsKeyPath: environment[environmentNames.tlsKeyPath] ?? null,
     capabilityManifestPath: environment[environmentNames.capabilityManifestPath] ?? null,
+    repositoryPolicyPath: environment[environmentNames.repositoryPolicyPath] ?? null,
+    codexAuthPath: environment[environmentNames.codexAuthPath] ?? null,
   };
   const seen = new Set<string>();
   let help = false;
@@ -112,6 +118,12 @@ export function parseHostConfig(
       case '--capabilities':
         values.capabilityManifestPath = option.value;
         break;
+      case '--repositories':
+        values.repositoryPolicyPath = option.value;
+        break;
+      case '--codex-auth':
+        values.codexAuthPath = option.value;
+        break;
       default:
         throw new Error(`Unknown option: ${option.name}.`);
     }
@@ -130,6 +142,8 @@ export function parseHostConfig(
     tlsCertificatePath: absoluteOptionalPath(values.tlsCertificatePath, '--tls-cert'),
     tlsKeyPath: absoluteOptionalPath(values.tlsKeyPath, '--tls-key'),
     capabilityManifestPath: absoluteOptionalPath(values.capabilityManifestPath, '--capabilities'),
+    repositoryPolicyPath: absoluteOptionalPath(values.repositoryPolicyPath, '--repositories'),
+    codexAuthPath: absoluteOptionalPath(values.codexAuthPath, '--codex-auth'),
   };
 
   if (!help) validateCommandConfig(command, config);
@@ -154,6 +168,8 @@ Options:
   --tls-cert <path>          Operator-provided PEM certificate
   --tls-key <path>           Protected PEM private key
   --capabilities <path>      Static runner capability manifest
+  --repositories <path>      Owner-only exact repository allowlist
+  --codex-auth <path>        Dedicated owner-only Codex auth.json
   --help                     Show this help
 `;
 
@@ -168,6 +184,9 @@ function validateCommandConfig(command: HostCommand, config: HostConfig): void {
     if (config.tlsKeyPath === null) throw new Error('--tls-key is required for serve.');
     if (config.capabilityManifestPath === null)
       throw new Error('--capabilities is required for serve.');
+    if (config.repositoryPolicyPath === null)
+      throw new Error('--repositories is required for serve.');
+    if (config.codexAuthPath === null) throw new Error('--codex-auth is required for serve.');
   }
   if (command === 'pair' && config.tlsCertificatePath === null)
     throw new Error('--tls-cert is required for pair.');

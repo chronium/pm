@@ -43,7 +43,8 @@ public static partial class AgentRunContractValidator
 
         if (!IsText(specification.Project?.ProjectId, 256) || !IsText(specification.Project?.Name, 512))
             return Invalid("Project ID and name are required.");
-        if (!IsText(specification.Task?.TaskId, 256) || !IsText(specification.Task?.Title, 1024) ||
+        if (!TaskIdPattern().IsMatch(specification.Task?.TaskId ?? string.Empty) ||
+            !IsText(specification.Task?.Title, 1024) ||
             !IsSha256(specification.Task?.Revision))
             return Invalid("Task ID, title, and lowercase SHA-256 revision are required.");
         if (!IsText(specification.Repository?.Remote, 2048) ||
@@ -267,6 +268,9 @@ public static partial class AgentRunContractValidator
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex RunIdPattern();
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", RegexOptions.CultureInvariant)]
+    private static partial Regex TaskIdPattern();
 
     [GeneratedRegex("^[0-9a-f]{40}([0-9a-f]{24})?$", RegexOptions.CultureInvariant)]
     private static partial Regex GitCommitPattern();
