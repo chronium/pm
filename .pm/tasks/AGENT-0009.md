@@ -9,7 +9,7 @@ dependsOn:
 - AGENT-0005
 - AGENT-0014
 createdAt: 2026-07-27T06:57:01.7833670Z
-modifiedAt: 2026-07-28T21:13:42.5859960Z
+modifiedAt: 2026-07-29T08:04:12.4782660Z
 ---
 
 ## Goal
@@ -49,3 +49,7 @@ Give PM a secure, provider-neutral transport adapter for registering, pairing wi
 - Add client tests against a fake authenticated HTTPS runner for pairing, signing, exact body bytes, nonce replay, clock skew, TLS replacement, capabilities, duplicate starts, replay, SSE reconnect, backpressure disconnect, cancellation, artifacts, rotation, revocation, and secret omission.
 - Add an opt-in Tailscale/Linux transport smoke using `codex@agent-box`.
 - Run the .NET build and test suite.
+
+## Notes
+
+- 2026-07-29 08:04 UTC - Implemented the provider-neutral runner registry and signed HTTPS client, including explicit TLS pinning, exact-byte request signatures, health/capability discovery, idempotent starts, inspection, paging, replayable SSE, cancellation, artifacts, credential rotation, and revocation. Added the `pm runner` management CLI, private OS-user persistence, fake HTTPS integration coverage, and Linux operator documentation. The real Mac-to-Arch smoke paired over Tailscale, persisted and queried the runner, rotated credentials, authenticated with the successor, and revoked cleanly. That smoke exposed a Node 26 TLS 1.3-only interoperability failure in .NET 10 AppleCrypto; the runner now permits TLS 1.2 and 1.3. Validation passed with 318 .NET tests and 51 agent-host tests; the optional Podman image integration remained skipped because its environment variable was not set.

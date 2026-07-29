@@ -30,7 +30,7 @@ The host uses CLI options with matching `PM_AGENT_HOST_*` environment variables.
 | `--repositories`        | `PM_AGENT_HOST_REPOSITORIES_PATH`   | required for `serve`            |
 | `--codex-auth`          | `PM_AGENT_HOST_CODEX_AUTH_PATH`     | required for `serve`            |
 
-The listen address must be an explicit non-wildcard IP. The operator provides the certificate and an owner-only private key, normally for a Tailscale or trusted private-network route. The capability manifest is host-owned and changes require restart; `capabilities.example.json` shows the validated shape.
+The listen address must be an explicit non-wildcard IP. The operator provides the certificate and an owner-only private key, normally for a Tailscale or trusted private-network route. The server permits TLS 1.2 and 1.3 so the .NET control plane remains compatible across macOS and Linux TLS stacks. The capability manifest is host-owned and changes require restart; `capabilities.example.json` shows the validated shape.
 
 `repositories.json` is an owner-only exact allowlist. V1 accepts only explicit HTTPS, SSH URL, or `git@host:path` remotes; local paths, file transports, helpers, local hosts, and URL credentials are rejected:
 
@@ -52,7 +52,15 @@ node dist/src/main.js pair \
   --tls-cert /etc/pm-runner/tls.crt
 ```
 
-The command prints the pairing code and TLS SHA-256 fingerprint once. Verify both in PM. Start the service with:
+The command prints the stable runner ID, pairing code, expiry, and TLS SHA-256 fingerprint once. Start the service, then verify all displayed identity details while pairing from PM:
+
+```sh
+pm runner pair https://100.64.0.2:7443 \
+  --runner-id <runner-id> \
+  --fingerprint sha256:<certificate-fingerprint>
+```
+
+PM prompts for the pairing code without placing it in the process argument list. Start the service with:
 
 ```sh
 node dist/src/main.js serve \
@@ -66,6 +74,8 @@ node dist/src/main.js serve \
 ```
 
 Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the paired PM identity is unavailable. Normal rotation and revocation are authenticated HTTPS operations.
+
+Use `pm runner list`, `pm runner status <runner-id>`, `pm runner rotate <runner-id>`, and `pm runner revoke <runner-id>` from the PM installation. PM stores the certificate pin and runner-scoped signing credential in its private OS user configuration, never in a project `.pm` directory.
 
 ## Run transport
 
