@@ -9,6 +9,8 @@ export type LogFields = Partial<{
   errorCode: string;
   recoveredRuns: number;
   prunedRuns: number;
+  removedContainers: number;
+  reconciledRuns: number;
 }>;
 
 const fieldNames = new Set([
@@ -20,6 +22,8 @@ const fieldNames = new Set([
   'errorCode',
   'recoveredRuns',
   'prunedRuns',
+  'removedContainers',
+  'reconciledRuns',
 ]);
 
 export class JsonLogger {

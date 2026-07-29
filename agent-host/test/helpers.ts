@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { computeSpecificationHash } from '../src/protocol/canonical-json.js';
 import { parseCapabilityManifest, parseRunRequest } from '../src/protocol/validation.js';
 import type { CapabilityManifest, RunRequest, RunState } from '../src/protocol/types.js';
+import type { ContainerRuntimeProbe } from '../src/oci/podman-probe.js';
 import type { RunStore } from '../src/persistence/run-store.js';
 import { canonicalSignedRequest, type SignedRequestValues } from '../src/auth/crypto.js';
 
@@ -33,6 +34,21 @@ export function createCapabilityManifest(): CapabilityManifest {
     agentProviders: capabilities['agentProviders'],
     runtimeProfiles: capabilities['runtimeProfiles'],
   });
+}
+
+export function createRuntimeProbe(): ContainerRuntimeProbe {
+  return {
+    inspect: () => ({
+      engineId: 'podman',
+      version: '6.0.1',
+      rootless: true,
+      cgroupVersion: 'v2',
+      cgroupManager: 'systemd',
+      seccompEnabled: true,
+      selinuxEnabled: false,
+      appArmorEnabled: false,
+    }),
+  };
 }
 
 export function createTempDirectory(): { path: string; dispose: () => void } {

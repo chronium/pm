@@ -43,7 +43,8 @@ public static partial class AgentRunContractValidator
 
         if (!IsText(specification.Project?.ProjectId, 256) || !IsText(specification.Project?.Name, 512))
             return Invalid("Project ID and name are required.");
-        if (!IsText(specification.Task?.TaskId, 256) || !IsText(specification.Task?.Title, 1024) ||
+        if (!TaskIdPattern().IsMatch(specification.Task?.TaskId ?? string.Empty) ||
+            !IsText(specification.Task?.Title, 1024) ||
             !IsSha256(specification.Task?.Revision))
             return Invalid("Task ID, title, and lowercase SHA-256 revision are required.");
         if (!IsText(specification.Repository?.Remote, 2048) ||
@@ -62,13 +63,51 @@ public static partial class AgentRunContractValidator
     public static AppResult ValidateProfile(AgentRunRuntimeProfile profile)
     {
         if (profile == null || !IsIdentifier(profile.ProfileId) || !IsSha256(profile.Revision) ||
-            !IsText(profile.ImageReference, 2048) || !IsIdentifier(profile.NetworkProfileId))
+            !ImageDigestPattern().IsMatch(profile.ImageReference ?? string.Empty))
             return Invalid("Runtime profile identity, revision, image, and network profile are required.");
 
         var limits = profile.Limits;
         if (limits == null || limits.CpuMillicores <= 0 || limits.MemoryBytes <= 0 || limits.Pids <= 0 ||
             limits.DiskBytes <= 0 || limits.TimeoutSeconds <= 0)
             return Invalid("Runtime resource limits must be greater than zero.");
+        if (profile.Network == null || !IsIdentifier(profile.Network.ProfileId) ||
+            profile.Network.Mode is not (AgentRunNetworkMode.Offline or AgentRunNetworkMode.Open))
+            return Invalid("Runtime network policy is invalid.");
+        var container = profile.Container;
+        if (container == null || !IsContainerPath(container.WorkspacePath) ||
+            !IsContainerPath(container.CodexHomePath) || !IsContainerPath(container.TemporaryPath) ||
+            container.TemporaryBytes <= 0 || container.TemporaryBytes > limits.MemoryBytes ||
+            container.EnvironmentAllowlist == null || container.EnvironmentAllowlist.Count > 32 ||
+            container.EnvironmentAllowlist.Any(name => name == null || !EnvironmentNamePattern().IsMatch(name) ||
+                SensitiveEnvironmentNamePattern().IsMatch(name) ||
+                name is not ("CODEX_HOME" or "DOTNET_CLI_HOME" or "DOTNET_CLI_TELEMETRY_OPTOUT" or
+                    "DOTNET_NOLOGO" or "DOTNET_SKIP_FIRST_TIME_EXPERIENCE" or "HOME" or "NUGET_PACKAGES" or
+                    "PATH" or "TMPDIR")) ||
+            container.EnvironmentAllowlist.Distinct(StringComparer.Ordinal).Count() !=
+            container.EnvironmentAllowlist.Count || container.ReadOnlyCaches == null ||
+            container.ReadOnlyCaches.Count > 16 || container.Security == null)
+            return Invalid("Runtime container policy is invalid.");
+        if (container.Security.ReadOnlyRootFilesystem != true ||
+            container.Security.UserNamespace != "keep-id" ||
+            container.Security.NoNewPrivileges != true ||
+            container.Security.DropAllCapabilities != true ||
+            container.Security.PrivateNamespaces != true ||
+            container.Security.SeccompProfile != "runtime-default" ||
+            container.Security.LsmProfile != "none")
+            return Invalid("Runtime security policy cannot weaken the protocol 1.0 baseline.");
+        var cacheIds = new HashSet<string>(StringComparer.Ordinal);
+        var mountPaths = new List<string>
+            { container.WorkspacePath, container.CodexHomePath, container.TemporaryPath };
+        foreach (var cache in container.ReadOnlyCaches)
+        {
+            if (cache == null || !IsIdentifier(cache.CacheId) || !cacheIds.Add(cache.CacheId) ||
+                !IsContainerPath(cache.ContainerPath))
+                return Invalid("Runtime read-only caches are invalid.");
+            mountPaths.Add(cache.ContainerPath);
+        }
+        if (mountPaths.SelectMany((path, index) => mountPaths.Where((_, other) => other != index)
+                .Select(other => PathsOverlap(path, other))).Any(overlaps => overlaps))
+            return Invalid("Runtime container paths must not overlap.");
         if (profile.Validation == null || profile.Validation.Count > 64)
             return Invalid("Runtime profiles support at most 64 validation steps.");
 
@@ -110,6 +149,13 @@ public static partial class AgentRunContractValidator
             capacity.ActiveRuns > capacity.MaximumRuns || capacity.MemoryBytes <= 0)
             return AppResult.Fail("invalid_runner_capabilities", "Runner capacity is invalid.");
 
+        var runtime = capabilities.ContainerRuntime;
+        if (runtime == null || runtime.EngineId != "podman" || !IsText(runtime.Version, 64) ||
+            !runtime.Rootless || runtime.CgroupVersion != "v2" || runtime.CgroupManager != "systemd" ||
+            !runtime.SeccompEnabled)
+            return AppResult.Fail("invalid_runner_capabilities",
+                "A rootless Podman runtime with cgroup v2 and seccomp is required.");
+
         if (capabilities.AgentProviders == null || capabilities.AgentProviders.Count == 0 ||
             capabilities.RuntimeProfiles == null || capabilities.RuntimeProfiles.Count == 0)
             return AppResult.Fail("invalid_runner_capabilities",
@@ -145,6 +191,7 @@ public static partial class AgentRunContractValidator
             !AgentRunProtocol.IsCompatible(runEvent.ProtocolVersion, AgentRunProtocol.Current) ||
             !RunIdPattern().IsMatch(runEvent.RunId ?? string.Empty) || runEvent.Sequence <= 0 ||
             !IsCanonicalTimestamp(runEvent.Timestamp) || !IsEventType(runEvent.Type) ||
+            runEvent.State.HasValue && !Enum.IsDefined(runEvent.State.Value) ||
             !IsText(runEvent.Summary, 4096))
             return AppResult.Fail("invalid_run_event", "The durable run event envelope is invalid.");
         return AppResult.Ok();
@@ -182,7 +229,7 @@ public static partial class AgentRunContractValidator
     private static bool IsIdentifier(string? value) => IsText(value, 256);
 
     private static bool IsEventType(string? value) =>
-        IsText(value, 256) && value!.Contains('.', StringComparison.Ordinal);
+        IsText(value, 256) && EventTypePattern().IsMatch(value!);
 
     private static bool IsDistinctIdentifiers(IReadOnlyList<string>? values) =>
         values != null && values.All(IsIdentifier) && values.Distinct(StringComparer.Ordinal).Count() == values.Count;
@@ -201,6 +248,20 @@ public static partial class AgentRunContractValidator
             .Any(segment => segment == "..");
     }
 
+    private static bool IsContainerPath(string? value)
+    {
+        if (!IsText(value, 1024) || !value!.StartsWith('/') || value == "/" ||
+            value.EndsWith('/') || value.Contains("//", StringComparison.Ordinal)) return false;
+        var segments = value.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(segment => segment is "." or "..")) return false;
+        return !new[] { "/proc", "/sys", "/dev", "/run" }
+            .Any(path => value == path || value.StartsWith(path + "/", StringComparison.Ordinal));
+    }
+
+    private static bool PathsOverlap(string left, string right) =>
+        left == right || left.StartsWith(right + "/", StringComparison.Ordinal) ||
+        right.StartsWith(left + "/", StringComparison.Ordinal);
+
     private static bool IsSha256(string? value) => Sha256Pattern().IsMatch(value ?? string.Empty);
 
     private static bool FixedTimeEquals(string left, string right) =>
@@ -211,9 +272,25 @@ public static partial class AgentRunContractValidator
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex RunIdPattern();
 
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", RegexOptions.CultureInvariant)]
+    private static partial Regex TaskIdPattern();
+
+    [GeneratedRegex("^[a-z][a-z0-9_-]*\\.[a-z0-9][a-z0-9._-]*$", RegexOptions.CultureInvariant)]
+    private static partial Regex EventTypePattern();
+
     [GeneratedRegex("^[0-9a-f]{40}([0-9a-f]{24})?$", RegexOptions.CultureInvariant)]
     private static partial Regex GitCommitPattern();
 
     [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex Sha256Pattern();
+
+    [GeneratedRegex("^[^\\s@]+@sha256:[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ImageDigestPattern();
+
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}$", RegexOptions.CultureInvariant)]
+    private static partial Regex EnvironmentNamePattern();
+
+    [GeneratedRegex("(?:auth|cookie|credential|password|private|secret|signature|token|api.?key)",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex SensitiveEnvironmentNamePattern();
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PM.AgentRuns;
 
 namespace PM.Tests;
@@ -16,6 +17,17 @@ public class AgentRunDomainTests
         Assert.True(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(1, 0), new AgentRunProtocolVersion(1, 2)));
         Assert.False(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(1, 3), new AgentRunProtocolVersion(1, 2)));
         Assert.False(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(2, 0), new AgentRunProtocolVersion(1, 9)));
+    }
+
+    [Fact]
+    public void AgentRunJsonUsesCanonicalUtcMillisecondTimestamps()
+    {
+        var timestamp = new DateTimeOffset(2026, 7, 29, 8, 50, 30, 123, TimeSpan.Zero);
+
+        var json = JsonSerializer.Serialize(timestamp, AgentRunJson.Options);
+
+        Assert.Equal("\"2026-07-29T08:50:30.123Z\"", json);
+        Assert.Equal(timestamp, JsonSerializer.Deserialize<DateTimeOffset>(json, AgentRunJson.Options));
     }
 
     [Fact]
@@ -53,7 +65,7 @@ public class AgentRunDomainTests
             {
                 Profile = specification.Runtime.Profile with
                 {
-                    Limits = specification.Runtime.Profile.Limits with { MemoryBytes = 1 },
+                    Limits = specification.Runtime.Profile.Limits with { MemoryBytes = 4_294_967_296 },
                 },
             },
         };
@@ -67,6 +79,50 @@ public class AgentRunDomainTests
         });
         Assert.False(hashResult.Success);
         Assert.Equal("specification_hash_mismatch", hashResult.ErrorCode);
+    }
+
+    [Fact]
+    public void ProfileValidationRejectsMalformedEnvironmentAllowlist()
+    {
+        var profile = CreateSpecification().Runtime.Profile;
+        var dotnetEnvironment = profile with
+        {
+            Container = profile.Container with
+            {
+                EnvironmentAllowlist =
+                [
+                    "CODEX_HOME", "DOTNET_CLI_HOME", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_NOLOGO",
+                    "DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "HOME", "NUGET_PACKAGES", "PATH", "TMPDIR",
+                ],
+            },
+        };
+        dotnetEnvironment = RebuildProfile(dotnetEnvironment, dotnetEnvironment.Validation);
+        Assert.True(AgentRunContractValidator.ValidateProfile(dotnetEnvironment).Success);
+
+        var malformed = profile with
+        {
+            Container = profile.Container with { EnvironmentAllowlist = [null!] },
+        };
+
+        var result = AgentRunContractValidator.ValidateProfile(malformed);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_specification", result.ErrorCode);
+    }
+
+    [Fact]
+    public void RequestValidationRejectsTaskIdsThatCanEscapeTheTaskDirectory()
+    {
+        var specification = CreateSpecification();
+        var malformed = specification with
+        {
+            Task = specification.Task with { TaskId = "../outside" },
+        };
+
+        var result = AgentRunContractValidator.ValidateSpecification(malformed);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_specification", result.ErrorCode);
     }
 
     [Fact]
@@ -141,12 +197,57 @@ public class AgentRunDomainTests
     [Fact]
     public void EventEnvelopeAllowsUnknownCompatibleEventTypes()
     {
-        var runEvent = CreateEvent(1) with { Type = "codex.future_event" };
+        var runEvent = CreateEvent(1) with
+        {
+            Type = "system.storage_warning",
+            Data = JsonSerializer.SerializeToElement(new { futureField = new { value = 42 } }),
+        };
         var json = JsonSerializer.Serialize(runEvent, AgentRunJson.Options);
-        var roundTrip = JsonSerializer.Deserialize<AgentRunEvent>(json, AgentRunJson.Options)!;
+        var envelope = JsonNode.Parse(json)!.AsObject();
+        envelope["futureEnvelopeField"] = true;
+        envelope["data"]!["futureDataField"] = "preserved";
+        var roundTrip = envelope.Deserialize<AgentRunEvent>(AgentRunJson.Options)!;
 
-        Assert.Equal("codex.future_event", roundTrip.Type);
+        Assert.Equal("system.storage_warning", roundTrip.Type);
+        Assert.Equal("preserved", roundTrip.Data!.Value.GetProperty("futureDataField").GetString());
         Assert.True(AgentRunContractValidator.ValidateEvent(roundTrip).Success);
+    }
+
+    [Theory]
+    [InlineData("not-namespaced")]
+    [InlineData("Uppercase.output")]
+    [InlineData("run.")]
+    public void EventEnvelopeRejectsInvalidEventNames(string eventType)
+    {
+        var result = AgentRunContractValidator.ValidateEvent(CreateEvent(1) with { Type = eventType });
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_event", result.ErrorCode);
+    }
+
+    [Fact]
+    public void EventEnvelopeRejectsUnknownLifecycleValues()
+    {
+        var result = AgentRunContractValidator.ValidateEvent(CreateEvent(1) with
+        {
+            State = (AgentRunState)999,
+        });
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_event", result.ErrorCode);
+    }
+
+    [Fact]
+    public void ContractJsonIgnoresUnknownAdditiveFields()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "AgentRunContracts", "v1", "run-request.json");
+        var document = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        document["futureEnvelopeField"] = new JsonObject { ["enabled"] = true };
+        document["specification"]!["project"]!["futureProjectField"] = "ignored";
+
+        var request = document.Deserialize<AgentRunRequest>(AgentRunJson.Options)!;
+
+        Assert.True(AgentRunContractValidator.ValidateRequest(request).Success);
     }
 
     [Fact]
@@ -187,7 +288,16 @@ public class AgentRunDomainTests
             string.Empty,
             "ghcr.io/chronium/pm-agent-dotnet@sha256:" + new string('b', 64),
             new AgentRunResourceLimits(4000, 8_589_934_592, 1024, 21_474_836_480, 10_800),
-            "openai-nuget-github",
+            new AgentRunNetworkPolicy("development-open", AgentRunNetworkMode.Open),
+            new AgentRunContainerPolicy(
+                "/workspace",
+                "/home/pm/.codex",
+                "/tmp",
+                1_073_741_824,
+                ["CODEX_HOME", "HOME", "PATH"],
+                [],
+                new AgentRunContainerSecurityPolicy(
+                    true, "keep-id", true, true, true, "runtime-default", "none")),
             validation,
             new AgentRunOutputPolicy(AgentRunOutputMode.Patch, 10_485_760, true)), validation);
 

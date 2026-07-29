@@ -5,7 +5,8 @@
   "type": "module",
   "bin": {
     "pm-agent-host": "dist/src/main.js",
-    "pm-agent-worker": "dist/src/codex/worker-main.js"
+    "pm-agent-worker": "dist/src/codex/worker-main.js",
+    "pm-agent-release": "dist/src/release-tool.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -15,11 +16,13 @@
     "start": "node dist/src/main.js",
     "test": "npm run build && node --test --test-concurrency=1 dist/test/*.test.js",
     "test:codex-smoke": "npm run build && node dist/test/codex-smoke.js",
-    "validate": "npm run format:check && npm run check && npm test"
+    "test:lifecycle-smoke": "npm run build && node dist/test/lifecycle-smoke.js",
+    "validate": "npm run format:check && npm run check && npm test",
+    "package:linux": "./release/build-linux-release.sh"
   },
   "engines": {
     "node": ">=26 <27",
-    "npm": ">=11 <12"
+    "npm": ">=11 <13"
   },
   "packageManager": "npm@11.17.0",
   "devDependencies": {

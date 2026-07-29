@@ -13,7 +13,30 @@ function profileValue(profile: RuntimeProfile, includeRevision: boolean): object
       diskBytes: profile.limits.diskBytes,
       timeoutSeconds: profile.limits.timeoutSeconds,
     },
-    networkProfileId: profile.networkProfileId,
+    network: {
+      profileId: profile.network.profileId,
+      mode: profile.network.mode,
+    },
+    container: {
+      workspacePath: profile.container.workspacePath,
+      codexHomePath: profile.container.codexHomePath,
+      temporaryPath: profile.container.temporaryPath,
+      temporaryBytes: profile.container.temporaryBytes,
+      environmentAllowlist: profile.container.environmentAllowlist,
+      readOnlyCaches: profile.container.readOnlyCaches.map((cache) => ({
+        cacheId: cache.cacheId,
+        containerPath: cache.containerPath,
+      })),
+      security: {
+        readOnlyRootFilesystem: profile.container.security.readOnlyRootFilesystem,
+        userNamespace: profile.container.security.userNamespace,
+        noNewPrivileges: profile.container.security.noNewPrivileges,
+        dropAllCapabilities: profile.container.security.dropAllCapabilities,
+        privateNamespaces: profile.container.security.privateNamespaces,
+        seccompProfile: profile.container.security.seccompProfile,
+        lsmProfile: profile.container.security.lsmProfile,
+      },
+    },
     validation: profile.validation.map((step) => ({
       stepId: step.stepId,
       displayName: step.displayName,

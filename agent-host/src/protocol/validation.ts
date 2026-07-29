@@ -12,11 +12,28 @@ import {
   type RunState,
   type RuntimeProfile,
 } from './types.js';
+import { posix } from 'node:path';
 
 const runId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const taskId = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const sha256 = /^[0-9a-f]{64}$/;
+const digestImage = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
 const gitCommit = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const environmentName = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const sensitiveEnvironmentName =
+  /(?:auth|cookie|credential|password|private|secret|signature|token|api.?key)/i;
+const supportedEnvironmentNames = new Set([
+  'CODEX_HOME',
+  'DOTNET_CLI_HOME',
+  'DOTNET_CLI_TELEMETRY_OPTOUT',
+  'DOTNET_NOLOGO',
+  'DOTNET_SKIP_FIRST_TIME_EXPERIENCE',
+  'HOME',
+  'NUGET_PACKAGES',
+  'PATH',
+  'TMPDIR',
+]);
 
 export class ProtocolValidationError extends Error {
   constructor(
@@ -38,32 +55,6 @@ export function parseRunRequest(value: unknown): RunRequest {
   const agent = record(specification['agent'], 'Agent');
   const runtime = record(specification['runtime'], 'Runtime');
   const profile = record(runtime['profile'], 'Runtime profile');
-  const limits = record(profile['limits'], 'Runtime limits');
-  const output = record(profile['output'], 'Output policy');
-  const validation = array(profile['validation'], 'Validation steps').map((item) => {
-    const step = record(item, 'Validation step');
-    const argumentsValue = array(step['arguments'], 'Validation arguments').map((argument) =>
-      text(argument, 4096, 'Validation argument', true),
-    );
-    if (argumentsValue.length > 128) invalid('Validation steps support at most 128 arguments.');
-    return {
-      stepId: id(step['stepId'], 'Validation step ID'),
-      displayName: text(step['displayName'], 512, 'Validation display name'),
-      executable: text(step['executable'], 1024, 'Validation executable'),
-      arguments: argumentsValue,
-      workingDirectory: relativePath(step['workingDirectory']),
-      timeoutSeconds: positiveInteger(step['timeoutSeconds'], 'Validation timeout'),
-    };
-  });
-
-  if (
-    validation.length > 64 ||
-    new Set(validation.map((step) => step.stepId)).size !== validation.length
-  )
-    invalid('Validation steps must be unique and contain at most 64 entries.');
-
-  const outputMode = text(output['mode'], 32, 'Output mode');
-  if (outputMode !== 'patch') invalid('Protocol 1.0 supports patch output only.');
 
   const request: RunRequest = {
     specificationHash,
@@ -76,7 +67,7 @@ export function parseRunRequest(value: unknown): RunRequest {
         name: text(project['name'], 512, 'Project name'),
       },
       task: {
-        taskId: text(task['taskId'], 256, 'Task ID'),
+        taskId: text(task['taskId'], 128, 'Task ID'),
         title: text(task['title'], 1024, 'Task title'),
         revision: text(task['revision'], 64, 'Task revision'),
       },
@@ -92,25 +83,7 @@ export function parseRunRequest(value: unknown): RunRequest {
       },
       runtime: {
         runnerId: id(runtime['runnerId'], 'Runner ID'),
-        profile: {
-          profileId: id(profile['profileId'], 'Runtime profile ID'),
-          revision: text(profile['revision'], 64, 'Runtime profile revision'),
-          imageReference: text(profile['imageReference'], 2048, 'Image reference'),
-          limits: {
-            cpuMillicores: positiveInteger(limits['cpuMillicores'], 'CPU limit'),
-            memoryBytes: positiveInteger(limits['memoryBytes'], 'Memory limit'),
-            pids: positiveInteger(limits['pids'], 'PID limit'),
-            diskBytes: positiveInteger(limits['diskBytes'], 'Disk limit'),
-            timeoutSeconds: positiveInteger(limits['timeoutSeconds'], 'Runtime timeout'),
-          },
-          networkProfileId: id(profile['networkProfileId'], 'Network profile'),
-          validation,
-          output: {
-            mode: 'patch',
-            maxPatchBytes: positiveInteger(output['maxPatchBytes'], 'Maximum patch size'),
-            includeEventLog: boolean(output['includeEventLog'], 'Include event log'),
-          },
-        },
+        profile: parseRuntimeProfile(profile),
       },
     },
   };
@@ -148,6 +121,9 @@ export function parseCapabilityManifest(value: unknown): CapabilityManifest {
 export function parseRuntimeProfile(value: unknown): RuntimeProfile {
   const profile = record(value, 'Runtime profile');
   const limits = record(profile['limits'], 'Runtime limits');
+  const network = record(profile['network'], 'Runtime network policy');
+  const container = record(profile['container'], 'Runtime container policy');
+  const security = record(container['security'], 'Runtime security policy');
   const output = record(profile['output'], 'Output policy');
   const validation = array(profile['validation'], 'Validation steps').map((item) => {
     const step = record(item, 'Validation step');
@@ -171,6 +147,65 @@ export function parseRuntimeProfile(value: unknown): RuntimeProfile {
     invalid('Validation steps must be unique and contain at most 64 entries.');
   const outputMode = text(output['mode'], 32, 'Output mode');
   if (outputMode !== 'patch') invalid('Protocol 1.0 supports patch output only.');
+  const networkMode = text(network['mode'], 32, 'Network mode');
+  if (networkMode !== 'offline' && networkMode !== 'open')
+    invalid('Runtime network mode must be offline or open.');
+  const environmentAllowlist = array(
+    container['environmentAllowlist'],
+    'Environment allowlist',
+  ).map((entry) => text(entry, 128, 'Environment name'));
+  if (
+    environmentAllowlist.length > 32 ||
+    new Set(environmentAllowlist).size !== environmentAllowlist.length ||
+    environmentAllowlist.some(
+      (name) =>
+        !environmentName.test(name) ||
+        sensitiveEnvironmentName.test(name) ||
+        !supportedEnvironmentNames.has(name),
+    )
+  )
+    invalid('Environment allowlist contains an invalid or sensitive name.');
+  const readOnlyCaches = array(container['readOnlyCaches'], 'Read-only caches').map((entry) => {
+    const cache = record(entry, 'Read-only cache');
+    return {
+      cacheId: id(cache['cacheId'], 'Cache ID'),
+      containerPath: containerPath(cache['containerPath'], 'Cache container path'),
+    };
+  });
+  if (
+    readOnlyCaches.length > 16 ||
+    new Set(readOnlyCaches.map((cache) => cache.cacheId)).size !== readOnlyCaches.length
+  )
+    invalid('Read-only caches must be unique and contain at most 16 entries.');
+  const workspacePath = containerPath(container['workspacePath'], 'Workspace path');
+  const codexHomePath = containerPath(container['codexHomePath'], 'Codex home path');
+  const temporaryPath = containerPath(container['temporaryPath'], 'Temporary path');
+  const mountPaths = [
+    workspacePath,
+    codexHomePath,
+    temporaryPath,
+    ...readOnlyCaches.map((cache) => cache.containerPath),
+  ];
+  if (
+    mountPaths.some((path, index) =>
+      mountPaths.some(
+        (other, otherIndex) =>
+          index !== otherIndex &&
+          (path === other || path.startsWith(`${other}/`) || other.startsWith(`${path}/`)),
+      ),
+    )
+  )
+    invalid('Runtime container paths must not overlap.');
+  if (
+    security['readOnlyRootFilesystem'] !== true ||
+    security['userNamespace'] !== 'keep-id' ||
+    security['noNewPrivileges'] !== true ||
+    security['dropAllCapabilities'] !== true ||
+    security['privateNamespaces'] !== true ||
+    security['seccompProfile'] !== 'runtime-default' ||
+    security['lsmProfile'] !== 'none'
+  )
+    invalid('Runtime security policy cannot weaken the protocol 1.0 baseline.');
   const result: RuntimeProfile = {
     profileId: id(profile['profileId'], 'Runtime profile ID'),
     revision: text(profile['revision'], 64, 'Runtime profile revision'),
@@ -182,7 +217,27 @@ export function parseRuntimeProfile(value: unknown): RuntimeProfile {
       diskBytes: positiveInteger(limits['diskBytes'], 'Disk limit'),
       timeoutSeconds: positiveInteger(limits['timeoutSeconds'], 'Runtime timeout'),
     },
-    networkProfileId: id(profile['networkProfileId'], 'Network profile'),
+    network: {
+      profileId: id(network['profileId'], 'Network profile'),
+      mode: networkMode,
+    },
+    container: {
+      workspacePath,
+      codexHomePath,
+      temporaryPath,
+      temporaryBytes: positiveInteger(container['temporaryBytes'], 'Temporary filesystem size'),
+      environmentAllowlist,
+      readOnlyCaches,
+      security: {
+        readOnlyRootFilesystem: true,
+        userNamespace: 'keep-id',
+        noNewPrivileges: true,
+        dropAllCapabilities: true,
+        privateNamespaces: true,
+        seccompProfile: 'runtime-default',
+        lsmProfile: 'none',
+      },
+    },
     validation,
     output: {
       mode: 'patch',
@@ -190,6 +245,10 @@ export function parseRuntimeProfile(value: unknown): RuntimeProfile {
       includeEventLog: boolean(output['includeEventLog'], 'Include event log'),
     },
   };
+  if (!digestImage.test(result.imageReference))
+    invalid('Runtime image must be pinned by a SHA-256 digest.');
+  if (result.container.temporaryBytes > result.limits.memoryBytes)
+    invalid('Temporary filesystem size cannot exceed the memory limit.');
   if (!sha256.test(result.revision)) invalid('Runtime profile revision is invalid.');
   const expected = computeProfileRevision(result);
   if (!fixedTimeHashEquals(expected, result.revision))
@@ -200,11 +259,26 @@ export function parseRuntimeProfile(value: unknown): RuntimeProfile {
   return result;
 }
 
+function containerPath(value: unknown, name: string): string {
+  const path = text(value, 1024, name);
+  if (
+    !path.startsWith('/') ||
+    path === '/' ||
+    posix.normalize(path) !== path ||
+    ['/proc', '/sys', '/dev', '/run'].some(
+      (protectedPath) => path === protectedPath || path.startsWith(`${protectedPath}/`),
+    )
+  )
+    invalid(`${name} must be a normalized, non-protected absolute path.`);
+  return path;
+}
+
 function validateCanonicalHashes(request: RunRequest): void {
   const specification = request.specification;
   if (specification.protocolVersion !== '1.0')
     throw new ProtocolValidationError('incompatible_protocol', 'Only protocol 1.0 is supported.');
   if (!runId.test(specification.runId)) invalid('Run ID is not URL-safe.');
+  if (!taskId.test(specification.task.taskId)) invalid('Task ID is not path-safe.');
   if (!sha256.test(specification.task.revision)) invalid('Task revision must be a SHA-256 hash.');
   if (!gitCommit.test(specification.repository.baseCommit)) invalid('Base commit is invalid.');
   if (!sha256.test(request.specificationHash)) invalid('Specification hash is invalid.');

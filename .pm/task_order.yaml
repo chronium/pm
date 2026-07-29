@@ -2,18 +2,7 @@ orders:
 - track: AGENT
   state: todo
   milestone: agent-runs
-  taskIds:
-  - AGENT-0007
-  - AGENT-0008
-  - AGENT-0009
-  - AGENT-0010
-  - AGENT-0011
-  - AGENT-0012
-- track: AGENT
-  state: todo
-  milestone: agent-runs-v2
-  taskIds:
-  - AGENT-0013
+  taskIds: []
 - track: PM
   state: done
   milestone: agent-runs
