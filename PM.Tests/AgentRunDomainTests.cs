@@ -20,6 +20,17 @@ public class AgentRunDomainTests
     }
 
     [Fact]
+    public void AgentRunJsonUsesCanonicalUtcMillisecondTimestamps()
+    {
+        var timestamp = new DateTimeOffset(2026, 7, 29, 8, 50, 30, 123, TimeSpan.Zero);
+
+        var json = JsonSerializer.Serialize(timestamp, AgentRunJson.Options);
+
+        Assert.Equal("\"2026-07-29T08:50:30.123Z\"", json);
+        Assert.Equal(timestamp, JsonSerializer.Deserialize<DateTimeOffset>(json, AgentRunJson.Options));
+    }
+
+    [Fact]
     public void CanonicalHashIsStableAndCoversNestedValuesAndOrder()
     {
         var specification = CreateSpecification();
@@ -74,6 +85,20 @@ public class AgentRunDomainTests
     public void ProfileValidationRejectsMalformedEnvironmentAllowlist()
     {
         var profile = CreateSpecification().Runtime.Profile;
+        var dotnetEnvironment = profile with
+        {
+            Container = profile.Container with
+            {
+                EnvironmentAllowlist =
+                [
+                    "CODEX_HOME", "DOTNET_CLI_HOME", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_NOLOGO",
+                    "DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "HOME", "NUGET_PACKAGES", "PATH", "TMPDIR",
+                ],
+            },
+        };
+        dotnetEnvironment = RebuildProfile(dotnetEnvironment, dotnetEnvironment.Validation);
+        Assert.True(AgentRunContractValidator.ValidateProfile(dotnetEnvironment).Success);
+
         var malformed = profile with
         {
             Container = profile.Container with { EnvironmentAllowlist = [null!] },

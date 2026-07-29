@@ -41,6 +41,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
   const temporary = createTempDirectory();
   const tlsFiles = createTestCertificate(temporary.path);
   const tls = loadTlsMaterial(tlsFiles.certificatePath, tlsFiles.keyPath);
+  assert.equal(tls.options.minVersion, 'TLSv1.2');
   const runStore = new RunStore(temporary.path);
   const credentials = new CredentialStore(temporary.path);
   const manifestFixture = JSON.parse(

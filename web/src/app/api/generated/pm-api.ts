@@ -474,12 +474,533 @@ export interface paths {
         patch: operations["UpdateProjectMemberRole"];
         trace?: never;
     };
+    "/api/v1/runners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List paired agent runners */
+        get: operations["ListAgentRunners"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runners/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pair an agent runner */
+        post: operations["PairAgentRunner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runners/{runnerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a paired agent runner */
+        get: operations["GetAgentRunner"];
+        put?: never;
+        post?: never;
+        /** Revoke and remove an agent runner */
+        delete: operations["RevokeAgentRunner"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runners/{runnerId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get agent runner health, capacity, and capabilities */
+        get: operations["GetAgentRunnerStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runners/{runnerId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate the local credential for an agent runner */
+        post: operations["RotateAgentRunnerCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate and persist an immutable agent run draft */
+        post: operations["PreflightAgentRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a persisted immutable agent run draft */
+        post: operations["StartAgentRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active runs on an agent runner */
+        get: operations["ListActiveAgentRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect an agent run and local task drift */
+        get: operations["GetAgentRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Replay durable agent run events */
+        get: operations["ListAgentRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/events/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream and resume durable agent run events */
+        get: operations["StreamAgentRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request cancellation of an agent run */
+        post: operations["CancelAgentRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List agent run artifact metadata */
+        get: operations["ListAgentRunArtifacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/artifacts/{artifactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get agent run artifact metadata */
+        get: operations["GetAgentRunArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AcceptProjectInvitationRequest: {
             token: string;
+        };
+        AgentContainerRuntimeCapability: {
+            engineId: string;
+            version: string;
+            rootless: boolean;
+            cgroupVersion: string;
+            cgroupManager: string;
+            seccompEnabled: boolean;
+            selinuxEnabled: boolean;
+            appArmorEnabled: boolean;
+        };
+        AgentRunActionRequest: Record<string, never>;
+        AgentRunAgent: {
+            providerId: string;
+            modelId: string;
+            effortId: string;
+            promptProfileId: string;
+        };
+        AgentRunArtifact: {
+            artifactId: string;
+            kind: string;
+            fileName: string;
+            mediaType: string;
+            /** Format: int64 */
+            byteLength: number | string;
+            sha256: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AgentRunCacheMount: {
+            cacheId: string;
+            containerPath: string;
+        };
+        AgentRunCancellation: {
+            disposition: string;
+            run: components["schemas"]["AgentRunnerRun"];
+        };
+        AgentRunContainerPolicy: {
+            workspacePath: string;
+            codexHomePath: string;
+            temporaryPath: string;
+            /** Format: int64 */
+            temporaryBytes: number | string;
+            environmentAllowlist: string[];
+            readOnlyCaches: components["schemas"]["AgentRunCacheMount"][];
+            security: components["schemas"]["AgentRunContainerSecurityPolicy"];
+        };
+        AgentRunContainerSecurityPolicy: {
+            readOnlyRootFilesystem: boolean;
+            userNamespace: string;
+            noNewPrivileges: boolean;
+            dropAllCapabilities: boolean;
+            privateNamespaces: boolean;
+            seccompProfile: string;
+            lsmProfile: string;
+        };
+        AgentRunEvent: {
+            protocolVersion: components["schemas"]["AgentRunProtocolVersion"];
+            runId: string;
+            /** Format: int64 */
+            sequence: number | string;
+            /** Format: date-time */
+            timestamp: string;
+            type: string;
+            state: null | components["schemas"]["AgentRunState"];
+            summary: string;
+            data: null | components["schemas"]["JsonElement"];
+        };
+        AgentRunEventPage: {
+            events: components["schemas"]["AgentRunEvent"][];
+            /** Format: int64 */
+            nextAfterSequence: number | string;
+            hasMore: boolean;
+            terminal: boolean;
+        };
+        AgentRunInspection: {
+            run: components["schemas"]["AgentRunnerRun"];
+            taskChanged: boolean;
+            currentTaskRevision: null | string;
+            revision: string;
+        };
+        AgentRunnerBuildInfo: {
+            version: string;
+            sourceRevision: string;
+            imageDigest: null | string;
+        };
+        AgentRunnerCapabilities: {
+            runnerId: string;
+            displayName: string;
+            protocolVersions: unknown[];
+            operatingSystem: string;
+            architecture: string;
+            containerRuntime: components["schemas"]["AgentContainerRuntimeCapability"];
+            capacity: components["schemas"]["AgentRunnerCapacity"];
+            agentProviders: components["schemas"]["AgentRunnerProviderCapability"][];
+            runtimeProfiles: components["schemas"]["AgentRunRuntimeProfile"][];
+        };
+        AgentRunnerCapacity: {
+            /** Format: int32 */
+            maximumRuns: number | string;
+            /** Format: int32 */
+            activeRuns: number | string;
+            /** Format: int64 */
+            memoryBytes: number | string;
+        };
+        AgentRunnerHealth: {
+            runnerId: string;
+            status: string;
+            protocolVersion: components["schemas"]["AgentRunProtocolVersion"];
+            /** Format: date-time */
+            timestamp: string;
+            build?: null | components["schemas"]["AgentRunnerBuildInfo"];
+        };
+        AgentRunnerProviderCapability: {
+            providerId: string;
+            modelIds: string[];
+            defaultModelId: null | string;
+            effortIds: string[];
+            defaultEffortId: null | string;
+        };
+        AgentRunnerRegistration: {
+            runnerId: string;
+            displayName: string;
+            /** Format: uri */
+            endpoint: string;
+            tlsFingerprint: string;
+            protocolVersion: components["schemas"]["AgentRunProtocolVersion"];
+            clientId: string;
+            clientFingerprint: string;
+            /** Format: date-time */
+            pairedAt: string;
+        };
+        AgentRunnerRun: {
+            runId: string;
+            specificationHash: string;
+            specification: components["schemas"]["AgentRunSpecification"];
+            state: components["schemas"]["AgentRunState"];
+            /** Format: int64 */
+            lastEventSequence: number | string;
+            /** Format: date-time */
+            acceptedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            terminalAt: null | string;
+            /** Format: date-time */
+            cancellationRequestedAt: null | string;
+            agentThreadId: null | string;
+        };
+        AgentRunnerRunPage: {
+            runs: components["schemas"]["AgentRunnerRunSummary"][];
+            nextCursor: null | string;
+            hasMore: boolean;
+        };
+        AgentRunnerRunSummary: {
+            runId: string;
+            taskId: string;
+            taskTitle: string;
+            state: components["schemas"]["AgentRunState"];
+            /** Format: int64 */
+            lastEventSequence: number | string;
+            /** Format: date-time */
+            acceptedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            cancellationRequestedAt: null | string;
+        };
+        AgentRunnerStatusResponse: {
+            registration: components["schemas"]["AgentRunnerRegistration"];
+            health: components["schemas"]["AgentRunnerHealth"];
+            capabilities: components["schemas"]["AgentRunnerCapabilities"];
+            revision: string;
+        };
+        /** @enum {unknown} */
+        AgentRunNetworkMode: "offline" | "open";
+        AgentRunNetworkPolicy: {
+            profileId: string;
+            mode: components["schemas"]["AgentRunNetworkMode"];
+        };
+        /** @enum {unknown} */
+        AgentRunOutputMode: "patch";
+        AgentRunOutputPolicy: {
+            mode: components["schemas"]["AgentRunOutputMode"];
+            /** Format: int64 */
+            maxPatchBytes: number | string;
+            includeEventLog: boolean;
+        };
+        AgentRunPreflightCheck: {
+            id: string;
+            label: string;
+            status: components["schemas"]["AgentRunPreflightCheckStatus"];
+            summary: string;
+        };
+        /** @enum {unknown} */
+        AgentRunPreflightCheckStatus: "passed" | "failed" | "skipped";
+        AgentRunPreflightRequest: {
+            taskId: string;
+            runnerId: string;
+            profileId: string;
+            providerId: string;
+            modelId: string;
+            effortId: string;
+        };
+        AgentRunPreflightResult: {
+            ready: boolean;
+            runId: null | string;
+            revision: null | string;
+            request: null | components["schemas"]["AgentRunRequest"];
+            checks: components["schemas"]["AgentRunPreflightCheck"][];
+        };
+        AgentRunProject: {
+            projectId: string;
+            name: string;
+        };
+        AgentRunProtocolVersion: string;
+        AgentRunRemoteStart: {
+            disposition: components["schemas"]["AgentRunRemoteStartDisposition"];
+            run: components["schemas"]["AgentRunnerRun"];
+        };
+        /** @enum {unknown} */
+        AgentRunRemoteStartDisposition: "new" | "existing";
+        AgentRunRepository: {
+            remote: string;
+            baseCommit: string;
+        };
+        AgentRunRequest: {
+            specificationHash: string;
+            specification: components["schemas"]["AgentRunSpecification"];
+        };
+        AgentRunResourceLimits: {
+            /** Format: int32 */
+            cpuMillicores: number | string;
+            /** Format: int64 */
+            memoryBytes: number | string;
+            /** Format: int32 */
+            pids: number | string;
+            /** Format: int64 */
+            diskBytes: number | string;
+            /** Format: int32 */
+            timeoutSeconds: number | string;
+        };
+        AgentRunRuntime: {
+            runnerId: string;
+            profile: components["schemas"]["AgentRunRuntimeProfile"];
+        };
+        AgentRunRuntimeProfile: {
+            profileId: string;
+            revision: string;
+            imageReference: string;
+            limits: components["schemas"]["AgentRunResourceLimits"];
+            network: components["schemas"]["AgentRunNetworkPolicy"];
+            container: components["schemas"]["AgentRunContainerPolicy"];
+            validation: components["schemas"]["AgentRunValidationStep"][];
+            output: components["schemas"]["AgentRunOutputPolicy"];
+        };
+        AgentRunSpecification: {
+            protocolVersion: components["schemas"]["AgentRunProtocolVersion"];
+            runId: string;
+            /** Format: date-time */
+            requestedAt: string;
+            project: components["schemas"]["AgentRunProject"];
+            task: components["schemas"]["AgentRunTask"];
+            repository: components["schemas"]["AgentRunRepository"];
+            agent: components["schemas"]["AgentRunAgent"];
+            runtime: components["schemas"]["AgentRunRuntime"];
+        };
+        /** @enum {unknown} */
+        AgentRunState: "requested" | "accepted" | "queued" | "preparing_workspace" | "starting_runtime" | "starting_agent" | "running" | "validating" | "collecting_artifacts" | "completed" | "failed" | "cancelled";
+        AgentRunTask: {
+            taskId: string;
+            title: string;
+            revision: string;
+        };
+        AgentRunValidationStep: {
+            stepId: string;
+            displayName: string;
+            executable: string;
+            arguments: string[];
+            workingDirectory: string;
+            /** Format: int32 */
+            timeoutSeconds: number | string;
         };
         ApiProblemDetails: {
             type?: null | string;
@@ -579,6 +1100,7 @@ export interface components {
             missing: string[];
             summary: string;
         };
+        JsonElement: unknown;
         LocalIdentityResponse: {
             userId: string;
             displayName: string;
@@ -589,6 +1111,14 @@ export interface components {
             found: boolean;
             task: null | components["schemas"]["BoardTaskSummaryResponse"];
             reason: string;
+        };
+        PairAgentRunnerRequest: {
+            endpoint: string;
+            runnerId: string;
+            tlsFingerprint: string;
+            pairingCode: string;
+            /** @default false */
+            replaceExisting: boolean;
         };
         ProjectInvitationResponse: {
             invitationId: string;
@@ -3064,6 +3594,647 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    ListAgentRunners: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunnerRegistration"][];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PairAgentRunner: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairAgentRunnerRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunnerRegistration"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAgentRunner: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                runnerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunnerRegistration"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    RevokeAgentRunner: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                runnerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAgentRunnerStatus: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                runnerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunnerStatusResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    RotateAgentRunnerCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                runnerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunActionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunnerRegistration"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    PreflightAgentRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunPreflightRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunPreflightResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    StartAgentRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+            };
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunActionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunRemoteStart"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunRemoteStart"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    ListActiveAgentRuns: {
+        parameters: {
+            query: {
+                runnerId: string;
+                scope?: string;
+                limit?: number | string;
+                cursor?: string;
+            };
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunnerRunPage"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetAgentRun: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunInspection"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    ListAgentRunEvents: {
+        parameters: {
+            query?: {
+                afterSequence?: number | string;
+                limit?: number | string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunEventPage"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    StreamAgentRunEvents: {
+        parameters: {
+            query?: {
+                afterSequence?: number | string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    CancelAgentRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunActionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunCancellation"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    ListAgentRunArtifacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunArtifact"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetAgentRunArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunArtifact"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

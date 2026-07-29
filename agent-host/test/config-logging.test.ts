@@ -18,6 +18,7 @@ test('host configuration uses defaults, environment, then CLI precedence', () =>
     capabilityManifestPath: null,
     repositoryPolicyPath: null,
     codexAuthPath: null,
+    releaseManifestPath: null,
   });
 
   const configured = parseHostConfig(
@@ -42,6 +43,9 @@ test('host configuration uses defaults, environment, then CLI precedence', () =>
       '/runner/repositories.json',
       '--codex-auth',
       '/runner/codex-auth.json',
+      '--release-manifest',
+      '/runner/release-info.json',
+      '--json',
     ],
     {
       PM_AGENT_HOST_DATA_ROOT: '/environment/root',
@@ -63,7 +67,9 @@ test('host configuration uses defaults, environment, then CLI precedence', () =>
     capabilityManifestPath: '/runner/capabilities.json',
     repositoryPolicyPath: '/runner/repositories.json',
     codexAuthPath: '/runner/codex-auth.json',
+    releaseManifestPath: '/runner/release-info.json',
   });
+  assert.equal(configured.json, true);
 });
 
 test('host configuration rejects repository-relative and invalid settings', () => {

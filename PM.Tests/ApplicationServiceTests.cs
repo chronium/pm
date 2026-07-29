@@ -695,6 +695,35 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task TaskServiceSearchCountsMarkdownOnlyWhenSemanticFieldsDoNotMatch()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task(
+            "PM-0001",
+            "Metadata needle",
+            "Body needle needle",
+            dependsOn: ["DEP-0001"]);
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var combined = Assert.Single(service.SearchTasks("needle").Payload!);
+        var metadataOnly = Assert.Single(service.SearchTasks("metadata").Payload!);
+        var bodyOnly = Assert.Single(service.SearchTasks("body").Payload!);
+        var dependency = Assert.Single(service.SearchTasks("DEP-0001").Payload!);
+        var frontmatterOnly = Assert.Single(service.SearchTasks("dependsOn:").Payload!);
+
+        Assert.Equal(3, combined.MatchCount);
+        Assert.Equal(1, metadataOnly.MatchCount);
+        Assert.Equal(1, bodyOnly.MatchCount);
+        Assert.Equal(1, dependency.MatchCount);
+        Assert.Equal(1, frontmatterOnly.MatchCount);
+        Assert.StartsWith("Markdown:", frontmatterOnly.Snippet);
+    }
+
+    [Fact]
     public async Task TaskServiceSearchClampsLimitAndReturnsStableFailures()
     {
         using var workspace = new TempWorkingDirectory();

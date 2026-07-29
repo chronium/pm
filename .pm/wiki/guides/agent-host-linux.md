@@ -1,7 +1,7 @@
 ---
 title: Linux Agent Host Setup
 createdAt: 2026-07-27T11:03:26.0456420Z
-modifiedAt: 2026-07-29T06:34:48.0273910Z
+modifiedAt: 2026-07-29T07:50:23.1064470Z
 ---
 
 This guide prepares a Linux workstation to host the PM execution plane. It is intentionally conservative: the trusted runner controls rootless Podman, while each unattended agent runs in a separately hardened worker container.
@@ -197,6 +197,33 @@ Before pairing, verify from the Mac that:
 - sleep, logout, and a Mac disconnect do not stop the Linux user service.
 
 Do not publish the runner port through a router, public reverse proxy, Funnel, or an unrestricted firewall rule.
+
+## Pair PM with the runner
+
+Open a one-use pairing window locally on the Linux host, then copy the displayed runner ID and TLS fingerprint:
+
+```sh
+node agent-host/dist/src/main.js pair \
+  --data-root ~/.local/share/pm-runner \
+  --tls-cert ~/.config/pm-agent-host/tls.crt
+```
+
+With the runner service listening on its explicit Tailscale address, pair from the PM machine. PM reads the short-lived code from a masked prompt and stores the TLS pin plus a runner-scoped signing credential in private OS user configuration outside every project:
+
+```sh
+pm runner pair https://<tailscale-ip>:7443 \
+  --runner-id <runner-id> \
+  --fingerprint sha256:<certificate-fingerprint>
+```
+
+Verify authenticated transport and advertised capacity after pairing:
+
+```sh
+pm runner list
+pm runner status <runner-id>
+```
+
+`pm runner rotate <runner-id>` replaces only that runner's signing credential. `pm runner revoke <runner-id>` revokes the remote client before deleting the local registration. A changed TLS certificate is never trusted automatically; perform local recovery on the runner and explicitly pair again with the new fingerprint.
 
 ## Storage and workstation safety
 

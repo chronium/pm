@@ -4,6 +4,7 @@ using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Languages;
 using Microsoft.Extensions.DependencyInjection;
 using PM;
+using PM.AgentRuns;
 using PM.Application;
 using PM.Auth;
 using PM.Mcp;
@@ -35,6 +36,13 @@ serviceProvider.AddHttpClient<IPmWorkerClient, PmWorkerClient>();
 serviceProvider.AddSingleton<INextIdService, NextIdService>();
 
 serviceProvider.AddSingleton<IIdentityService, IdentityService>();
+serviceProvider.AddSingleton<AgentRunnerRegistrationStore>();
+serviceProvider.AddSingleton<IAgentRunnerClient, AgentRunnerClient>();
+serviceProvider.AddSingleton<IAgentRunnerCommandPrompts, AgentRunnerCommandPrompts>();
+serviceProvider.AddSingleton<TimeProvider>(TimeProvider.System);
+serviceProvider.AddSingleton<AgentRunCache>();
+serviceProvider.AddSingleton<IAgentRunGitInspector, AgentRunGitInspector>();
+serviceProvider.AddSingleton<IAgentRunService, AgentRunService>();
 serviceProvider.AddSingleton<ProjectRoot>();
 serviceProvider.AddSingleton<TaskService>();
 serviceProvider.AddSingleton<ProjectCreationService>();
@@ -76,6 +84,16 @@ app.Configure(config =>
         project.AddCommand<ProjectRevokeInvitationCommand>("revoke-invite");
         project.AddCommand<ProjectSetRoleCommand>("set-role");
         project.AddCommand<ProjectRemoveMemberCommand>("remove-member");
+    });
+
+    config.AddBranch(GlobalConfig.RunnerBranchName, runner =>
+    {
+        runner.SetDescription("Pair with and inspect agent execution hosts");
+        runner.AddCommand<AgentRunnerPairCommand>("pair");
+        runner.AddCommand<AgentRunnerListCommand>("list");
+        runner.AddCommand<AgentRunnerStatusCommand>("status");
+        runner.AddCommand<AgentRunnerRotateCommand>("rotate");
+        runner.AddCommand<AgentRunnerRevokeCommand>("revoke");
     });
 
     config.AddBranch(GlobalConfig.TrackBranchName,

@@ -65,4 +65,5 @@ public static class GlobalConfig
     public static string SiteBranchName => "site";
     public static string SiteBuildCommandName => "build";
     public static string ProjectBranchName => "project";
+    public static string RunnerBranchName => "runner";
 }
