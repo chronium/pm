@@ -97,6 +97,8 @@ export class AgentHostServer {
       if (!authentication.authenticated) {
         if (authentication.status === 426)
           response.setHeader('PM-Runner-Supported-Protocols', '1.0');
+        if (authentication.serverTime !== undefined)
+          response.setHeader('PM-Runner-Server-Time', authentication.serverTime);
         writeError(
           response,
           authentication.status,

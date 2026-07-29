@@ -1,10 +1,10 @@
 # Agent runner HTTPS transport 1.0
 
-The runner exposes HTTPS only on an explicitly configured non-wildcard interface. Pairing is the only route that does not require a signed PM identity request, and it requires a short-lived one-use code displayed locally beside the runner certificate fingerprint.
+The runner exposes HTTPS only on an explicitly configured non-wildcard interface. Pairing is the only route that does not require a signed PM identity request, and it requires a short-lived one-use code displayed locally beside the stable runner ID and runner certificate fingerprint.
 
 ## Pairing
 
-`POST /v1/pairing/complete` accepts a pairing code, the client's supported protocol versions, and the existing PM P-256 identity. The operator must verify the displayed `sha256:<hex>` TLS certificate fingerprint before submitting the code. A successful response selects protocol `1.0`, consumes the code, registers the single client, and returns capabilities. Codes expire after ten minutes and lock after five invalid attempts.
+`POST /v1/pairing/complete` accepts a pairing code, the client's supported protocol versions, and the existing PM P-256 identity. Before submitting the code, the local pairing command must display the stable runner ID, one-use code, expiry, and `sha256:<hex>` TLS certificate fingerprint together. The operator must verify that the runner ID and fingerprint match the PM pairing presentation. A successful response selects protocol `1.0`, consumes the code, registers the single client, and returns capabilities. Codes expire after ten minutes and lock after five invalid attempts.
 
 ## Authenticated requests
 
@@ -26,10 +26,14 @@ pm-runner-auth-v1
 <TIMESTAMP>
 <NONCE>
 <CLIENT ID>
-<LOWERCASE SHA-256 BODY HASH>
+<LOWERCASE HEX SHA-256 OF EXACT REQUEST BODY BYTES>
 ```
 
-The runner accepts five minutes of clock skew and durably rejects a reused nonce. It verifies the signature before reporting an incompatible authenticated protocol.
+The body hash covers the exact bytes received after the HTTP message framing is removed. Implementations must not decode text, parse or reserialize JSON, normalize Unicode, convert line endings, trim whitespace, or otherwise transform the body before hashing it. An empty request body hashes the zero-length byte sequence.
+
+The runner accepts five minutes of clock skew and durably rejects a reused `(clientId, nonce)` tuple. A nonce record is persisted before the authenticated operation proceeds and survives runner restarts. It remains retained through the final server second in which the signed timestamp could pass the skew check; an implementation may remove it only after that signature is necessarily outside the accepted window. Expired records may be pruned lazily. Reusing the same nonce under another client ID is a distinct tuple, although protocol 1.0 registers only one client at a time.
+
+If a syntactically valid integer timestamp is outside the accepted skew window, the runner returns the same generic `401 unauthorized` body as other authentication failures and adds `PM-Runner-Server-Time` containing the runner's current Unix time in seconds. Malformed timestamps and other authentication failures do not include this header. The runner verifies the signature before reporting an incompatible authenticated protocol.
 
 ## Discovery and credential lifecycle
 
@@ -52,7 +56,7 @@ All run routes require the authenticated request headers above. A submitted body
 - `POST /v1/runs/{runId}/cancel` journals the request. A queued run becomes cancelled immediately. An active run returns `202` and becomes terminal only after its processor stops. If completion wins the race, the completed state remains authoritative.
 - `GET /v1/runs/{runId}/artifacts` and `GET /v1/runs/{runId}/artifacts/{artifactId}` return validated artifact metadata. Protocol 1.0 does not transfer artifact bytes.
 
-The host implemented by AGENT-0005 intentionally uses a queue-only execution controller. It durably accepts commands, but production runs remain queued until a configured runtime and agent driver are introduced by later slices.
+Once a run is durably accepted, the runner owns its execution lifecycle. Client disconnects, PM process shutdown, SSE disconnection, and later connectivity loss do not cancel, invalidate, or return ownership of the run. Cancellation requires the authenticated cancellation command. The runner recovers accepted work from its durable state after restart.
 
 ## Event history
 
@@ -81,7 +85,7 @@ The host bounds concurrent streams, writes one event at a time, waits for socket
 
 ## Event envelopes
 
-Every durable event carries `protocolVersion`, `runId`, a positive per-run `sequence`, UTC `timestamp`, namespaced `type`, optional lifecycle `state`, human summary, and extensible JSON `data`. Protocol 1.0 reserves these type families:
+Every durable event carries `protocolVersion`, `runId`, a positive per-run `sequence`, UTC `timestamp`, namespaced `type`, optional lifecycle `state`, human summary, and extensible JSON `data`. Event types use the lowercase grammar `^[a-z][a-z0-9_-]*\.[a-z0-9][a-z0-9._-]*$`. Protocol 1.0 reserves these standard type families:
 
 - `run.*` for acceptance, lifecycle, and cancellation.
 - `runner.*` for execution-host messages.
@@ -91,6 +95,14 @@ Every durable event carries `protocolVersion`, `runId`, a positive per-run `sequ
 - `mcp.*` for repository-local PM MCP activity.
 - `validation.*` for validation steps and outcomes.
 - `artifact.*` for artifact collection and metadata.
+
+The standard families are not an exhaustive allowlist. Clients must retain, replay, and display an unknown event type generically when it follows the event-type grammar and its envelope is otherwise valid.
+
+## Forward compatibility
+
+Readers must ignore unknown additive object fields and unknown members inside extensible event `data`. They must preserve event `data` as an opaque JSON value when they journal or relay it. Unknown valid namespaced event types use the generic event behavior above.
+
+Readers must reject unknown values that select authentication, protocol, lifecycle, runtime, security, network, or output semantics. In particular, an unknown protocol version, lifecycle state, network mode, output mode, container security value, or authentication scheme must never silently fall back to a known behavior. Additive compatibility does not permit weakening validation of required fields, canonical hashes, or security policy.
 
 Before persistence, summaries and data have unsafe terminal controls removed, common credential forms and sensitive fields redacted, collection depth and size bounded, and oversized payloads replaced by a redaction marker. Raw output is never journaled first and sanitized later.
 

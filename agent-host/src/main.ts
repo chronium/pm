@@ -6,6 +6,7 @@ import { RetentionService } from './retention.js';
 import { CredentialStore } from './auth/credential-store.js';
 import { certificateFingerprint, loadTlsMaterial } from './auth/tls.js';
 import { generatePairingCode, hashPairingCode } from './auth/crypto.js';
+import { formatPairingInstructions } from './auth/pairing.js';
 import { CapabilityService, loadCapabilityManifest } from './capabilities.js';
 import { AgentHostServer } from './server.js';
 import { RunCoordinator } from './run-coordinator.js';
@@ -51,7 +52,12 @@ function openPairingWindow(config: HostConfig): void {
       new Date(Date.now() + pairingLifetimeMilliseconds),
     );
     process.stdout.write(
-      `Runner: ${store.runnerId}\nPairing code: ${code}\nTLS fingerprint: ${fingerprint}\nExpires in: 10 minutes\n`,
+      formatPairingInstructions({
+        runnerId: store.runnerId,
+        code,
+        tlsFingerprint: fingerprint,
+        expiresIn: '10 minutes',
+      }),
     );
   } finally {
     credentials.close();

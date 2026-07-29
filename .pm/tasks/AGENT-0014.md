@@ -7,7 +7,7 @@ dependsOn:
 - AGENT-0004
 - AGENT-0005
 createdAt: 2026-07-28T18:44:20.1114510Z
-modifiedAt: 2026-07-28T18:44:31.9458650Z
+modifiedAt: 2026-07-29T07:19:37.9285340Z
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ Remove the remaining protocol 1.0 ambiguities before the PM control-plane client
 - The RFC explicitly assigns accepted-run lifecycle ownership to the runner.
 - Compatibility tests cover ignored additive fields, accepted future event types, and rejected unknown security-critical discriminator values.
 - AGENT-0009 can implement the PM client without inferring undocumented behavior.
+
+## Notes
+
+- 2026-07-29 07:19 UTC - Implemented protocol 1.0 interoperability tightening across the TypeScript runner, shared .NET contracts, and RFC. Exact request bytes now define signed body hashes; durable nonce expiry covers the final valid skew second; skew rejections expose PM-Runner-Server-Time with a generic body; pairing presentation is tested; valid future event namespaces are replayable while unknown semantic discriminators remain rejected; and accepted-run ownership is normative. Validation: agent-host npm run validate passed (51 passed, 1 expected Linux Podman skip); dotnet build PM.slnx -m:1 --no-restore passed with two existing NU1510 warnings; dotnet test PM.slnx -m:1 --no-restore --no-build passed (312 tests).

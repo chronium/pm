@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PM.AgentRuns;
 
 namespace PM.Tests;
@@ -171,12 +172,57 @@ public class AgentRunDomainTests
     [Fact]
     public void EventEnvelopeAllowsUnknownCompatibleEventTypes()
     {
-        var runEvent = CreateEvent(1) with { Type = "codex.future_event" };
+        var runEvent = CreateEvent(1) with
+        {
+            Type = "system.storage_warning",
+            Data = JsonSerializer.SerializeToElement(new { futureField = new { value = 42 } }),
+        };
         var json = JsonSerializer.Serialize(runEvent, AgentRunJson.Options);
-        var roundTrip = JsonSerializer.Deserialize<AgentRunEvent>(json, AgentRunJson.Options)!;
+        var envelope = JsonNode.Parse(json)!.AsObject();
+        envelope["futureEnvelopeField"] = true;
+        envelope["data"]!["futureDataField"] = "preserved";
+        var roundTrip = envelope.Deserialize<AgentRunEvent>(AgentRunJson.Options)!;
 
-        Assert.Equal("codex.future_event", roundTrip.Type);
+        Assert.Equal("system.storage_warning", roundTrip.Type);
+        Assert.Equal("preserved", roundTrip.Data!.Value.GetProperty("futureDataField").GetString());
         Assert.True(AgentRunContractValidator.ValidateEvent(roundTrip).Success);
+    }
+
+    [Theory]
+    [InlineData("not-namespaced")]
+    [InlineData("Uppercase.output")]
+    [InlineData("run.")]
+    public void EventEnvelopeRejectsInvalidEventNames(string eventType)
+    {
+        var result = AgentRunContractValidator.ValidateEvent(CreateEvent(1) with { Type = eventType });
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_event", result.ErrorCode);
+    }
+
+    [Fact]
+    public void EventEnvelopeRejectsUnknownLifecycleValues()
+    {
+        var result = AgentRunContractValidator.ValidateEvent(CreateEvent(1) with
+        {
+            State = (AgentRunState)999,
+        });
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_run_event", result.ErrorCode);
+    }
+
+    [Fact]
+    public void ContractJsonIgnoresUnknownAdditiveFields()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "AgentRunContracts", "v1", "run-request.json");
+        var document = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        document["futureEnvelopeField"] = new JsonObject { ["enabled"] = true };
+        document["specification"]!["project"]!["futureProjectField"] = "ignored";
+
+        var request = document.Deserialize<AgentRunRequest>(AgentRunJson.Options)!;
+
+        Assert.True(AgentRunContractValidator.ValidateRequest(request).Success);
     }
 
     [Fact]

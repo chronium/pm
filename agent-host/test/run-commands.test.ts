@@ -167,21 +167,40 @@ test('event sanitizer strips terminal controls and redacts bounded nested payloa
   assert.deepEqual(oversized.data, { redacted: true, reason: 'event_payload_too_large' });
 });
 
-test('event journal rejects types outside protocol namespaces', () => {
+test('event journal preserves future namespaces and rejects invalid event names', () => {
   const temporary = createTempDirectory();
   const store = new RunStore(temporary.path);
   try {
     store.acceptRun(createRequest('run-event-type'), 4);
+    const future = store.appendEvent('run-event-type', {
+      type: 'system.storage_warning',
+      state: 'queued',
+      summary: 'Storage is nearing its configured floor',
+      data: { futureField: { value: 42 } },
+    });
+    assert.equal(future.type, 'system.storage_warning');
+    assert.deepEqual(store.eventsAfter('run-event-type').at(-1)?.data, {
+      futureField: { value: 42 },
+    });
     assert.throws(
       () =>
         store.appendEvent('run-event-type', {
-          type: 'custom.output',
+          type: 'not-namespaced',
           state: 'queued',
-          summary: 'Unversioned custom output',
+          summary: 'Invalid custom output',
         }),
       /event is invalid/,
     );
-    assert.equal(store.getRun('run-event-type')?.lastEventSequence, 2);
+    assert.throws(
+      () =>
+        store.appendEvent('run-event-type', {
+          type: 'Uppercase.output',
+          state: 'queued',
+          summary: 'Invalid uppercase namespace',
+        }),
+      /event is invalid/,
+    );
+    assert.equal(store.getRun('run-event-type')?.lastEventSequence, 3);
   } finally {
     store.close();
     temporary.dispose();
