@@ -124,6 +124,37 @@ test('workspace preparation rejects task revision drift and unsupported Git feat
     submoduleFixture.dispose();
   }
 
+  const lfsMentionFixture = createGitFixture(
+    'run-lfs-mention',
+    false,
+    "export const marker = 'version https://git-lfs.github.com/spec/v1';\n",
+  );
+  try {
+    await lfsMentionFixture.workspaceService.prepare(
+      lfsMentionFixture.request.specification,
+      new AbortController().signal,
+    );
+  } finally {
+    lfsMentionFixture.dispose();
+  }
+
+  const lfsPointerFixture = createGitFixture(
+    'run-lfs-pointer',
+    false,
+    `version https://git-lfs.github.com/spec/v1\noid sha256:${'a'.repeat(64)}\nsize 42\n`,
+  );
+  try {
+    await assert.rejects(
+      lfsPointerFixture.workspaceService.prepare(
+        lfsPointerFixture.request.specification,
+        new AbortController().signal,
+      ),
+      /Git LFS/,
+    );
+  } finally {
+    lfsPointerFixture.dispose();
+  }
+
   const authFixture = createGitFixture('run-auth-mode');
   try {
     chmodSync(authFixture.authPath, 0o644);
@@ -270,7 +301,7 @@ class FakeLifecycleRuntime implements RuntimeDriver, RuntimeProcessExecutor {
   }
 }
 
-function createGitFixture(runId: string, withSubmodules = false) {
+function createGitFixture(runId: string, withSubmodules = false, lfsContent?: string) {
   const temporary = createTempDirectory();
   const source = join(temporary.path, 'source');
   const remote = join(temporary.path, 'remote.git');
@@ -283,6 +314,7 @@ function createGitFixture(runId: string, withSubmodules = false) {
   writeFileSync(join(source, '.pm', 'tasks', 'AGENT-0008.md'), taskBytes);
   writeFileSync(join(source, 'README.md'), '# Fixture\n');
   if (withSubmodules) writeFileSync(join(source, '.gitmodules'), '[submodule "unsafe"]\n');
+  if (lfsContent !== undefined) writeFileSync(join(source, 'lfs-candidate.txt'), lfsContent);
   git(['-C', source, 'add', '.']);
   git(['-C', source, 'commit', '-m', 'fixture']);
   const commit = git(['-C', source, 'rev-parse', 'HEAD']).trim();

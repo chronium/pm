@@ -1,0 +1,90 @@
+<header class="output-toolbar">
+  <div class="output-search">
+    <label for="run-output-search">Search output</label>
+    <input
+      id="run-output-search"
+      type="search"
+      placeholder="Message, source, sequence…"
+      [value]="query()"
+      (input)="updateQuery($event)"
+    />
+  </div>
+  <details class="source-filter">
+    <summary>Sources</summary>
+    <div>
+      @for (source of sources(); track source) {
+        <label>
+          <input
+            type="checkbox"
+            [checked]="sourceIncluded(source)"
+            (change)="toggleSource(source, $event)"
+          />
+          {{ source }}
+        </label>
+      }
+    </div>
+  </details>
+  <label class="toggle-control">
+    <input type="checkbox" [checked]="follow()" (change)="setFollow($event)" />
+    Follow
+  </label>
+  <label class="toggle-control">
+    <input type="checkbox" [checked]="paused()" (change)="setPaused($event)" />
+    Pause
+  </label>
+  <button
+    type="button"
+    class="toolbar-action"
+    [disabled]="!filteredEntries().length"
+    (click)="copyVisible()"
+  >
+    Copy
+  </button>
+  <button
+    type="button"
+    class="toolbar-action"
+    [disabled]="downloading()"
+    (click)="downloadRequested.emit()"
+  >
+    {{ downloading() ? 'Preparing…' : 'Download' }}
+  </button>
+</header>
+
+<div class="output-status">
+  <span>{{ filteredEntries().length }} lines</span>
+  @if (droppedEntries()) {
+    <span>{{ droppedEntries() }} earlier lines released from browser memory</span>
+  }
+  @if (connectivity() === 'reconnecting') {
+    <button type="button" (click)="reconnectRequested.emit()">Reconnect now</button>
+  }
+</div>
+
+<div class="log-header" aria-hidden="true">
+  <span>Sequence</span><span>Time</span><span>Source</span><span>Message</span>
+</div>
+<cdk-virtual-scroll-viewport
+  class="log-viewport"
+  itemSize="30"
+  minBufferPx="300"
+  maxBufferPx="900"
+  role="list"
+  aria-label="Run output"
+  tabindex="0"
+>
+  <div
+    *cdkVirtualFor="let entry of filteredEntries(); trackBy: trackEntry"
+    class="log-row"
+    [class.log-row--continuation]="entry.continuation"
+    role="listitem"
+    [title]="entry.type"
+  >
+    <span class="log-sequence">{{ entry.continuation ? '' : '#' + entry.sequence }}</span>
+    <time [attr.datetime]="entry.timestamp">{{
+      entry.continuation ? '' : time(entry.timestamp)
+    }}</time>
+    <span class="log-source">{{ entry.continuation ? '' : entry.source }}</span>
+    <span class="log-message">{{ entry.message }}</span>
+  </div>
+</cdk-virtual-scroll-viewport>
+<p class="copy-status" role="status">{{ copyStatus() }}</p>

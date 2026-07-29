@@ -1,0 +1,149 @@
+<article class="run-workspace">
+  @if (store.loading()) {
+    <pm-loading-state>Loading agent run…</pm-loading-state>
+  } @else if (store.error() && !store.inspection()) {
+    <pm-error-state>
+      <p>{{ store.error() }}</p>
+      <div class="error-actions">
+        <button type="button" class="pm-button pm-button--secondary" (click)="store.load(runId())">
+          Retry
+        </button>
+        <button type="button" class="pm-button pm-button--ghost" (click)="back()">Back</button>
+      </div>
+    </pm-error-state>
+  } @else if (store.inspection(); as inspection) {
+    <header class="run-header">
+      <div class="run-identity">
+        <button type="button" class="back-action" (click)="back()">Back</button>
+        <div>
+          <span class="run-id">{{ inspection.run.runId }}</span>
+          <h1>
+            <a [routerLink]="['/tasks', inspection.run.specification.task.taskId]">
+              {{ inspection.run.specification.task.taskId }} ·
+              {{ inspection.run.specification.task.title }}
+            </a>
+          </h1>
+        </div>
+      </div>
+      <div class="run-summary" aria-label="Run status">
+        <span class="run-state" [attr.data-state]="inspection.run.state">
+          {{ stateLabel(inspection.run.state) }}
+        </span>
+        <span>{{ elapsed() }}</span>
+        <span class="connectivity" [attr.data-connectivity]="store.connectivity()" role="status">
+          {{ connectivityLabel(store.connectivity()) }}
+        </span>
+      </div>
+      <div class="run-actions">
+        @if (inspection.run.state === 'failed' || inspection.run.state === 'cancelled') {
+          <button
+            type="button"
+            class="pm-button pm-button--secondary"
+            (click)="retryOpen.set(true)"
+          >
+            Retry
+          </button>
+        }
+        @if (!store.terminal()) {
+          <button
+            type="button"
+            class="cancel-action"
+            [disabled]="!store.canCancel()"
+            (click)="cancelOpen.set(true)"
+          >
+            {{ inspection.run.cancellationRequestedAt ? 'Cancellation requested' : 'Cancel run' }}
+          </button>
+        }
+      </div>
+    </header>
+
+    @if (store.connectionError() || store.actionError()) {
+      <div class="workspace-alert" role="alert">
+        <span>{{ store.actionError() || store.connectionError() }}</span>
+        @if (store.connectivity() === 'reconnecting') {
+          <button type="button" (click)="store.retryConnection()">Reconnect now</button>
+        }
+      </div>
+    }
+
+    <div class="mobile-tabs" role="tablist" aria-label="Run supervision view">
+      <button
+        id="run-progress-tab"
+        type="button"
+        role="tab"
+        aria-controls="run-progress-panel"
+        [attr.aria-selected]="mobilePane() === 'progress'"
+        [attr.tabindex]="mobilePane() === 'progress' ? 0 : -1"
+        (click)="showMobilePane('progress')"
+        (keydown)="mobileTabKeydown($event)"
+      >
+        Progress
+      </button>
+      <button
+        id="run-output-tab"
+        type="button"
+        role="tab"
+        aria-controls="run-output-panel"
+        [attr.aria-selected]="mobilePane() === 'output'"
+        [attr.tabindex]="mobilePane() === 'output' ? 0 : -1"
+        (click)="showMobilePane('output')"
+        (keydown)="mobileTabKeydown($event)"
+      >
+        Output
+      </button>
+    </div>
+
+    <div class="supervision-grid" [attr.data-mobile-pane]="mobilePane()">
+      <div
+        id="run-progress-panel"
+        class="progress-pane"
+        role="tabpanel"
+        aria-labelledby="run-progress-tab"
+      >
+        <pm-agent-run-progress
+          [inspection]="inspection"
+          [checkpoints]="store.checkpoints()"
+          [artifacts]="store.artifacts()"
+        />
+      </div>
+      <div
+        id="run-output-panel"
+        class="output-pane"
+        role="tabpanel"
+        aria-labelledby="run-output-tab"
+      >
+        <pm-agent-run-output
+          [entries]="store.entries()"
+          [connectivity]="store.connectivity()"
+          [paused]="store.paused()"
+          [droppedEntries]="store.droppedEntries()"
+          [downloading]="store.downloading()"
+          (pauseChange)="store.setPaused($event)"
+          (reconnectRequested)="store.retryConnection()"
+          (downloadRequested)="downloadJournal()"
+        />
+      </div>
+    </div>
+  }
+</article>
+
+<pm-confirm-dialog
+  [open]="cancelOpen()"
+  [pending]="store.cancellationPending()"
+  heading="Cancel this run?"
+  message="The runner will stop the agent and preserve the durable journal and collected output available at cancellation."
+  confirmLabel="Cancel run"
+  (confirmed)="confirmCancel()"
+  (cancelled)="cancelOpen.set(false)"
+  (openChange)="$event || cancelOpen.set(false)"
+/>
+
+@if (store.run(); as run) {
+  <pm-agent-run-launch
+    [open]="retryOpen()"
+    [taskId]="run.specification.task.taskId"
+    [taskTitle]="run.specification.task.title"
+    (openChange)="retryOpen.set($event)"
+    (runStarted)="retryStarted($event)"
+  />
+}

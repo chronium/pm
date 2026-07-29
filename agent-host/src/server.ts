@@ -11,6 +11,7 @@ import type { ActiveRunCursor, RunStore, StoredRun } from './persistence/run-sto
 import { RunCoordinator } from './run-coordinator.js';
 import { EventStreamManager, StreamCapacityError } from './event-stream.js';
 import { ProtocolValidationError, parseRunRequest } from './protocol/validation.js';
+import type { ReleaseInfo } from './release-info.js';
 
 const maximumBodyBytes = 1_048_576;
 const defaultPageLimit = 100;
@@ -26,6 +27,7 @@ export interface AgentHostServerOptions {
   runStore: RunStore;
   runCoordinator: RunCoordinator;
   logger: JsonLogger;
+  release?: ReleaseInfo;
   now?: () => Date;
   eventStreamOptions?: {
     maximumStreams?: number;
@@ -114,6 +116,14 @@ export class AgentHostServer {
           status: 'online',
           protocolVersion: authentication.protocolVersion,
           timestamp: (this.options.now ?? (() => new Date()))().toISOString(),
+          build:
+            this.options.release === undefined
+              ? undefined
+              : {
+                  version: this.options.release.packageVersion,
+                  sourceRevision: this.options.release.sourceRevision,
+                  imageDigest: this.options.release.workerImageDigest,
+                },
         });
         return;
       }

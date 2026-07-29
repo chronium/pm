@@ -5,19 +5,21 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/.local/share/pm-agent-host/current/agent-host
 EnvironmentFile=%h/.config/pm-agent-host/host.env
 ExecStartPre=/usr/bin/podman info
-ExecStart=/usr/bin/env node dist/src/main.js serve
+ExecStartPre=%h/.local/share/pm-agent-host/current/bin/pm-agent-host doctor
+ExecStart=%h/.local/share/pm-agent-host/current/bin/pm-agent-host serve
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s
 KillMode=mixed
 UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-LockPersonality=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# Rootless Podman needs newuidmap and its own namespaces; harden worker containers instead.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pm-agent-host
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=200
 
 [Install]
 WantedBy=default.target

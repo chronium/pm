@@ -85,6 +85,20 @@ public class AgentRunDomainTests
     public void ProfileValidationRejectsMalformedEnvironmentAllowlist()
     {
         var profile = CreateSpecification().Runtime.Profile;
+        var dotnetEnvironment = profile with
+        {
+            Container = profile.Container with
+            {
+                EnvironmentAllowlist =
+                [
+                    "CODEX_HOME", "DOTNET_CLI_HOME", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_NOLOGO",
+                    "DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "HOME", "NUGET_PACKAGES", "PATH", "TMPDIR",
+                ],
+            },
+        };
+        dotnetEnvironment = RebuildProfile(dotnetEnvironment, dotnetEnvironment.Validation);
+        Assert.True(AgentRunContractValidator.ValidateProfile(dotnetEnvironment).Success);
+
         var malformed = profile with
         {
             Container = profile.Container with { EnvironmentAllowlist = [null!] },

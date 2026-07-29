@@ -73,6 +73,7 @@ describe('SettingsPage', () => {
     http.expectOne('/api/v1/project/identity').flush(identity);
     http.expectOne('/api/v1/project/members').flush(membership);
     http.expectOne('/api/v1/project/invitations').flush({ invitations: [] });
+    http.expectOne('/api/v1/runners').flush([]);
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement, http };
@@ -82,7 +83,14 @@ describe('SettingsPage', () => {
     const { element } = await render();
     expect(
       [...element.querySelectorAll('section h2')].map((heading) => heading.textContent),
-    ).toEqual(['Project health', 'Project members', 'Statuses', 'Milestones', 'Tracks']);
+    ).toEqual([
+      'Project health',
+      'Project members',
+      'Agent runners',
+      'Statuses',
+      'Milestones',
+      'Tracks',
+    ]);
     expect(element.textContent).toContain('task_state_missing');
     expect(element.textContent).toContain('.pm/tasks/PM-0001.md');
     expect(element.textContent).toContain('A very long milestone title');

@@ -800,6 +800,11 @@ export interface components {
             currentTaskRevision: null | string;
             revision: string;
         };
+        AgentRunnerBuildInfo: {
+            version: string;
+            sourceRevision: string;
+            imageDigest: null | string;
+        };
         AgentRunnerCapabilities: {
             runnerId: string;
             displayName: string;
@@ -825,6 +830,7 @@ export interface components {
             protocolVersion: components["schemas"]["AgentRunProtocolVersion"];
             /** Format: date-time */
             timestamp: string;
+            build?: null | components["schemas"]["AgentRunnerBuildInfo"];
         };
         AgentRunnerProviderCapability: {
             providerId: string;

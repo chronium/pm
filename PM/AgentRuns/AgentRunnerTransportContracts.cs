@@ -24,7 +24,13 @@ public sealed record AgentRunnerHealth(
     string RunnerId,
     string Status,
     AgentRunProtocolVersion ProtocolVersion,
-    DateTimeOffset Timestamp);
+    DateTimeOffset Timestamp,
+    AgentRunnerBuildInfo? Build = null);
+
+public sealed record AgentRunnerBuildInfo(
+    string Version,
+    string SourceRevision,
+    string? ImageDigest);
 
 [JsonConverter(typeof(JsonStringEnumConverter<AgentRunRemoteStartDisposition>))]
 public enum AgentRunRemoteStartDisposition
