@@ -115,6 +115,12 @@ describe('AgentRunsApiService', () => {
 
     api.artifacts('run/one').subscribe();
     http.expectOne('/api/v1/runs/run%2Fone/artifacts').flush([]);
+
+    api.artifactContent('run/one', 'changes/patch').subscribe();
+    const content = http.expectOne('/api/v1/runs/run%2Fone/artifacts/changes%2Fpatch/content');
+    expect(content.request.method).toBe('GET');
+    expect(content.request.responseType).toBe('arraybuffer');
+    content.flush(new ArrayBuffer(0));
   });
 
   it('downloads the complete event journal through paginated replay', async () => {

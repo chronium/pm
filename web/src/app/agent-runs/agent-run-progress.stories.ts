@@ -74,6 +74,29 @@ export const Completed: Story = {
     artifacts: runArtifacts,
   },
 };
+export const ArtifactDownloading: Story = {
+  args: {
+    inspection: inspection('completed'),
+    checkpoints: projectCheckpoints(statesThrough('completed'), 'completed', 'Run completed.'),
+    artifacts: runArtifacts,
+    artifactDownloads: {
+      'changes-patch': { status: 'downloading', message: null },
+    },
+  },
+};
+export const ArtifactDownloadFailed: Story = {
+  args: {
+    inspection: inspection('completed'),
+    checkpoints: projectCheckpoints(statesThrough('completed'), 'completed', 'Run completed.'),
+    artifacts: runArtifacts,
+    artifactDownloads: {
+      'changes-patch': {
+        status: 'error',
+        message: 'Artifact integrity verification failed.',
+      },
+    },
+  },
+};
 export const TaskDrift: Story = {
   args: {
     inspection: {

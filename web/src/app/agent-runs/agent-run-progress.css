@@ -133,6 +133,34 @@
   color: var(--pm-text-subtle);
   font-size: var(--pm-font-size-xs);
 }
+.artifact-heading {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--pm-space-2);
+}
+.artifact-download {
+  min-height: 28px;
+  padding: 2px var(--pm-space-2);
+  border: 1px solid var(--pm-border-strong);
+  border-radius: var(--pm-radius-sm);
+  background: transparent;
+  color: var(--pm-text-muted);
+  font: inherit;
+  font-size: var(--pm-font-size-xs);
+  cursor: pointer;
+}
+.artifact-download:hover:not(:disabled),
+.artifact-download:focus-visible {
+  color: var(--pm-text);
+  border-color: var(--pm-accent);
+}
+.artifact-download:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.artifact-download-status.error {
+  color: var(--pm-danger);
+}
 .artifact-list code {
   overflow: hidden;
   text-overflow: ellipsis;

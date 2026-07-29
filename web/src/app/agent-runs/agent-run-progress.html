@@ -85,11 +85,44 @@
     <ul class="artifact-list">
       @for (artifact of artifacts(); track artifact.artifactId) {
         <li>
-          <div>
-            <strong>{{ artifact.fileName }}</strong>
-            <span>{{ artifact.kind }} · {{ formatBytes(artifact.byteLength) }}</span>
+          <div class="artifact-heading">
+            <div>
+              <strong>{{ artifact.fileName }}</strong>
+              <span>{{ artifact.kind }} · {{ formatBytes(artifact.byteLength) }}</span>
+            </div>
+            <button
+              type="button"
+              class="artifact-download"
+              [disabled]="downloadState(artifact.artifactId).status === 'downloading'"
+              [attr.aria-describedby]="'artifact-status-' + artifact.artifactId"
+              (click)="downloadRequested.emit(artifact)"
+            >
+              @switch (downloadState(artifact.artifactId).status) {
+                @case ('downloading') {
+                  Downloading…
+                }
+                @case ('downloaded') {
+                  Download again
+                }
+                @case ('error') {
+                  Retry
+                }
+                @default {
+                  Download
+                }
+              }
+            </button>
           </div>
           <code title="SHA-256">{{ artifact.sha256 }}</code>
+          @if (downloadState(artifact.artifactId).message; as message) {
+            <span
+              class="artifact-download-status"
+              [class.error]="downloadState(artifact.artifactId).status === 'error'"
+              [attr.id]="'artifact-status-' + artifact.artifactId"
+              role="status"
+              >{{ message }}</span
+            >
+          }
         </li>
       }
     </ul>

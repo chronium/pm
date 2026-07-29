@@ -117,6 +117,16 @@ export class AgentRunsApiService {
     });
   }
 
+  artifactContent(runId: string, artifactId: string) {
+    return this.http.get(
+      `${this.runUrl(runId)}/artifacts/${encodeURIComponent(artifactId)}/content`,
+      {
+        observe: 'response' as const,
+        responseType: 'arraybuffer' as const,
+      },
+    );
+  }
+
   async eventJournal(runId: string): Promise<Blob> {
     const lines: string[] = [];
     let afterSequence = 0;

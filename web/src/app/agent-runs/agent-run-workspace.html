@@ -104,6 +104,8 @@
           [inspection]="inspection"
           [checkpoints]="store.checkpoints()"
           [artifacts]="store.artifacts()"
+          [artifactDownloads]="store.artifactDownloads()"
+          (downloadRequested)="downloadArtifact($event)"
         />
       </div>
       <div

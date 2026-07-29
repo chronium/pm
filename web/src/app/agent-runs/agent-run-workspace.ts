@@ -15,7 +15,7 @@ import { AgentRunLaunch } from './agent-run-launch';
 import { AgentRunOutput } from './agent-run-output';
 import { AgentRunProgress } from './agent-run-progress';
 import { AgentRunSupervisionStore } from './agent-run-supervision.store';
-import type { AgentRunRemoteStart } from './agent-runs-api.service';
+import type { AgentRunArtifact, AgentRunRemoteStart } from './agent-runs-api.service';
 import type { AgentRunConnectivity } from './agent-run-events';
 import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
@@ -137,6 +137,17 @@ export class AgentRunWorkspace {
     const anchor = this.document.createElement('a');
     anchor.href = url;
     anchor.download = `${this.runId()}-events.jsonl`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  protected async downloadArtifact(artifact: AgentRunArtifact): Promise<void> {
+    const blob = await this.store.downloadArtifact(artifact);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const anchor = this.document.createElement('a');
+    anchor.href = url;
+    anchor.download = artifact.fileName;
     anchor.click();
     URL.revokeObjectURL(url);
   }

@@ -33,6 +33,33 @@ describe('AgentRunProgress', () => {
     expect(element.textContent).toContain('runner-linux');
     expect(element.textContent).toContain('changes.patch');
     expect(element.textContent).toContain('4.0 KiB');
+    expect(element.querySelector<HTMLButtonElement>('.artifact-download')?.textContent).toContain(
+      'Download',
+    );
+  });
+
+  it('emits the selected artifact and renders isolated download state', () => {
+    const fixture = TestBed.createComponent(AgentRunProgress);
+    fixture.componentRef.setInput('inspection', runInspection);
+    fixture.componentRef.setInput('checkpoints', []);
+    fixture.componentRef.setInput('artifacts', runArtifacts);
+    fixture.componentRef.setInput('artifactDownloads', {
+      'event-log': { status: 'error', message: 'Integrity verification failed.' },
+    });
+    const emitted = vi.fn();
+    fixture.componentInstance.downloadRequested.subscribe(emitted);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const buttons = element.querySelectorAll<HTMLButtonElement>('.artifact-download');
+    buttons[0]!.click();
+
+    expect(emitted).toHaveBeenCalledWith(runArtifacts[0]);
+    expect(buttons[0]!.textContent).toContain('Download');
+    expect(buttons[1]!.textContent).toContain('Retry');
+    expect(element.querySelector('[role="status"]')?.textContent).toContain(
+      'Integrity verification failed.',
+    );
   });
 
   it('makes task-revision drift explicit without replacing run progress', () => {

@@ -398,6 +398,12 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
 }, testInfo) => {
   let paired = false;
   let starts = 0;
+  const artifactContent = 'hello';
+  const downloadableArtifact = {
+    ...runArtifacts[0]!,
+    byteLength: artifactContent.length,
+    sha256: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+  };
   const journal = [
     ...runEvents,
     ...Array.from({ length: 1989 }, (_, index) => ({
@@ -503,7 +509,20 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
       return;
     }
     if (path === '/api/v1/runs/run-01K123/artifacts') {
-      await route.fulfill({ json: runArtifacts });
+      await route.fulfill({ json: [downloadableArtifact] });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/artifacts/changes-patch/content') {
+      await route.fulfill({
+        body: artifactContent,
+        contentType: downloadableArtifact.mediaType,
+        headers: {
+          'Content-Length': String(downloadableArtifact.byteLength),
+          'PM-Artifact-Id': downloadableArtifact.artifactId,
+          'PM-Artifact-SHA256': downloadableArtifact.sha256,
+          ETag: `"sha256:${downloadableArtifact.sha256}"`,
+        },
+      });
       return;
     }
     await route.fulfill({ status: 404 });
@@ -531,6 +550,13 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   await expect(page).toHaveURL(/\/tasks\/runs\/run-01K123$/);
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('changes.patch')).toBeVisible();
+  const artifactDownload = page.waitForEvent('download');
+  await page
+    .getByRole('region', { name: 'Artifacts' })
+    .getByRole('button', { name: 'Download', exact: true })
+    .click();
+  expect((await artifactDownload).suggestedFilename()).toBe('changes.patch');
+  await expect(page.getByText('Download verified.')).toBeVisible();
   if (testInfo.project.name.includes('mobile')) {
     await page.getByRole('tab', { name: 'Output' }).click();
   }

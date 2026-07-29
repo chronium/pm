@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpHeaders, HttpResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
@@ -147,6 +147,61 @@ describe('AgentRunSupervisionStore', () => {
     expect(store.artifacts()).toEqual(runArtifacts);
     expect(store.connectivity()).toBe('complete');
     expect(stream.cursors).toEqual([]);
+  });
+
+  it('verifies artifact content and tracks each download independently', async () => {
+    await loadRunningRun();
+    const bytes = new TextEncoder().encode('hello').buffer;
+    const artifact = {
+      ...runArtifacts[0]!,
+      byteLength: bytes.byteLength,
+      sha256: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+    };
+
+    const download = store.downloadArtifact(artifact);
+    expect(store.artifactDownloads()[artifact.artifactId]?.status).toBe('downloading');
+    http.expectOne('/api/v1/runs/run-01K123/artifacts/changes-patch/content').event(
+      new HttpResponse<ArrayBuffer>({
+        body: bytes,
+        headers: new HttpHeaders({
+          'Content-Length': String(bytes.byteLength),
+          'Content-Type': artifact.mediaType,
+          'PM-Artifact-Id': artifact.artifactId,
+          'PM-Artifact-SHA256': artifact.sha256,
+          ETag: `"sha256:${artifact.sha256}"`,
+        }),
+      }),
+    );
+
+    expect(await download).toBeInstanceOf(Blob);
+    expect(store.artifactDownloads()[artifact.artifactId]).toEqual({
+      status: 'downloaded',
+      message: 'Download verified.',
+    });
+  });
+
+  it('does not expose an artifact when integrity verification fails', async () => {
+    await loadRunningRun();
+    const artifact = { ...runArtifacts[0]!, byteLength: 5 };
+    const download = store.downloadArtifact(artifact);
+    http.expectOne('/api/v1/runs/run-01K123/artifacts/changes-patch/content').event(
+      new HttpResponse<ArrayBuffer>({
+        body: new TextEncoder().encode('hello').buffer,
+        headers: new HttpHeaders({
+          'Content-Length': '5',
+          'Content-Type': artifact.mediaType,
+          'PM-Artifact-Id': artifact.artifactId,
+          'PM-Artifact-SHA256': artifact.sha256,
+          ETag: `"sha256:${artifact.sha256}"`,
+        }),
+      }),
+    );
+
+    expect(await download).toBeNull();
+    expect(store.artifactDownloads()[artifact.artifactId]?.status).toBe('error');
+    expect(store.artifactDownloads()[artifact.artifactId]?.message).toContain(
+      'integrity verification failed',
+    );
   });
 
   it('repairs a live sequence gap through replay without duplicating output', async () => {
