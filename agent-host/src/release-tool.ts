@@ -21,7 +21,7 @@ export interface ReleaseArtifactManifest {
   builtAt: string;
   platform: 'linux-x64';
   nodeVersion: string;
-  protocolVersion: '1.0';
+  protocolVersion: '1.1';
   workerImageReference: string;
   workerImageDigest: string;
   artifacts: ReleaseArtifact[];
@@ -41,7 +41,7 @@ export function createReleaseInfo(
     builtAt,
     platform: 'linux-x64',
     nodeVersion: '26.5.0',
-    protocolVersion: '1.0',
+    protocolVersion: '1.1',
     workerImageReference,
     workerImageDigest,
   });
@@ -93,7 +93,7 @@ export function createArtifactManifest(
     builtAt: release.builtAt,
     platform: 'linux-x64',
     nodeVersion: release.nodeVersion,
-    protocolVersion: '1.0',
+    protocolVersion: '1.1',
     workerImageReference: release.workerImageReference,
     workerImageDigest: release.workerImageDigest,
     artifacts,

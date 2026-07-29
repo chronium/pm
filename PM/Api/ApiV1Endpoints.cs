@@ -238,7 +238,9 @@ public static class ApiResults
         if (errorCode == "admin_required") return StatusCodes.Status403Forbidden;
         if (errorCode == "rate_limited") return StatusCodes.Status429TooManyRequests;
         if (errorCode is "member_not_found" or "invitation_not_found" or "runner_not_registered" or
-            "missing_run") return StatusCodes.Status404NotFound;
+            "missing_run" or "artifact_not_found" or "artifact_unavailable")
+            return StatusCodes.Status404NotFound;
+        if (errorCode == "artifact_too_large") return StatusCodes.Status413PayloadTooLarge;
         if (errorCode == "precondition_failed") return StatusCodes.Status412PreconditionFailed;
         if (errorCode.StartsWith("missing_", StringComparison.Ordinal)) return StatusCodes.Status404NotFound;
         if (errorCode.StartsWith("invalid_", StringComparison.Ordinal)) return StatusCodes.Status400BadRequest;
@@ -247,7 +249,7 @@ public static class ApiResults
             errorCode is "project_exists" or "last_status" or "last_track" or "stale_wiki_page" or
                 "changed_task_id" or "status_directory_not_empty" or "final_admin" or
                 "stale_run_preflight" or "run_id_conflict" or "runner_already_registered" or
-                "runner_tls_mismatch")
+                "runner_tls_mismatch" or "artifact_corrupt" or "artifact_invalid")
             return StatusCodes.Status409Conflict;
 
         return StatusCodes.Status500InternalServerError;

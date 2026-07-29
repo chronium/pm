@@ -178,7 +178,7 @@ function checkRelease(config: HostConfig, checks: DoctorCheck[]): ReleaseInfo {
       builtAt: 'development',
       platform: 'development',
       nodeVersion: '26.5.0',
-      protocolVersion: '1.0',
+      protocolVersion: '1.1',
       workerImageReference: null,
       workerImageDigest: null,
     };

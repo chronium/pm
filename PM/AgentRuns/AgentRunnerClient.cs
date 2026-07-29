@@ -35,6 +35,8 @@ public interface IAgentRunnerClient
         CancellationToken cancellationToken = default);
     Task<AppResult<AgentRunArtifact>> Artifact(string runnerId, string runId, string artifactId,
         CancellationToken cancellationToken = default);
+    Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(string runnerId, string runId, string artifactId,
+        CancellationToken cancellationToken = default);
     Task<AppResult<AgentRunnerRegistration>> Rotate(string runnerId,
         CancellationToken cancellationToken = default);
     Task<AppResult> Revoke(string runnerId, CancellationToken cancellationToken = default);
@@ -81,7 +83,8 @@ public sealed class AgentRunnerClient(
             return AppResult<AgentRunnerRegistration>.Fail("invalid_identity", "The PM identity could not be loaded.");
         }
 
-        var body = Serialize(new PairingBody(request.PairingCode.Trim(), [AgentRunProtocol.Current.ToString()],
+        var body = Serialize(new PairingBody(request.PairingCode.Trim(),
+            AgentRunProtocol.Supported.Select(item => item.ToString()).ToArray(),
             new PairingClient(credential.ClientId, credential.DisplayName, credential.PublicKey)));
         var raw = await Send(endpoint, request.ExpectedTlsFingerprint, HttpMethod.Post,
             "/v1/pairing/complete", body, null, cancellationToken);
@@ -95,7 +98,7 @@ public sealed class AgentRunnerClient(
         var paired = response.Payload!;
         var capabilitiesValidation = AgentRunContractValidator.ValidateCapabilities(paired.Capabilities);
         if (paired.RunnerId != request.ExpectedRunnerId ||
-            paired.ProtocolVersion != AgentRunProtocol.Current ||
+            !AgentRunProtocol.Supported.Contains(paired.ProtocolVersion) ||
             paired.TlsFingerprint != request.ExpectedTlsFingerprint ||
             paired.Client.ClientId != credential.ClientId ||
             paired.Client.Fingerprint != credential.Fingerprint ||
@@ -131,8 +134,23 @@ public sealed class AgentRunnerClient(
         CancellationToken cancellationToken = default)
     {
         var raw = await SendRegistered(runnerId, HttpMethod.Get, "/v1/capabilities", [], cancellationToken);
-        return ParseRegistered<AgentRunnerCapabilities>(raw, runnerId, capabilities =>
+        var parsed = ParseRegistered<AgentRunnerCapabilities>(raw, runnerId, capabilities =>
             capabilities.RunnerId == runnerId && AgentRunContractValidator.ValidateCapabilities(capabilities).Success);
+        if (!parsed.Success) return parsed;
+        var selected = AgentRunProtocol.HighestCommon(parsed.Payload!.ProtocolVersions);
+        if (selected == null)
+            return AppResult<AgentRunnerCapabilities>.Fail("incompatible_protocol",
+                $"Runner {runnerId} does not advertise a compatible protocol.");
+        var stored = registrations.GetStored(runnerId);
+        if (!stored.Success)
+            return AppResult<AgentRunnerCapabilities>.Fail(stored.ErrorCode!, stored.Message!);
+        if (stored.Payload!.ProtocolVersion != selected.Value)
+        {
+            var saved = registrations.Save(stored.Payload with { ProtocolVersion = selected.Value }, true);
+            if (!saved.Success)
+                return AppResult<AgentRunnerCapabilities>.Fail(saved.ErrorCode!, saved.Message!);
+        }
+        return parsed;
     }
 
     public async Task<AppResult<AgentRunRemoteStart>> Start(string runnerId, AgentRunRequest request,
@@ -302,6 +320,66 @@ public sealed class AgentRunnerClient(
             ? AppResult<AgentRunArtifact>.Ok(parsed.Payload.Artifact)
             : AppResult<AgentRunArtifact>.Fail("invalid_runner_response",
                 "The runner returned invalid artifact metadata.");
+    }
+
+    public async Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(string runnerId, string runId,
+        string artifactId, CancellationToken cancellationToken = default)
+    {
+        var metadata = await Artifact(runnerId, runId, artifactId, cancellationToken);
+        if (!metadata.Success)
+            return AppResult<IAgentRunArtifactContent>.Fail(metadata.ErrorCode!, metadata.Message!);
+        const long maximumArtifactBytes = 64L * 1024 * 1024;
+        if (metadata.Payload!.ByteLength > maximumArtifactBytes)
+            return AppResult<IAgentRunArtifactContent>.Fail("artifact_too_large",
+                "The artifact exceeds the transfer limit.");
+
+        var stored = registrations.GetStored(runnerId);
+        if (!stored.Success)
+            return AppResult<IAgentRunArtifactContent>.Fail(stored.ErrorCode!, stored.Message!);
+        var path = $"/v1/runs/{Escape(runId)}/artifacts/{Escape(artifactId)}/content";
+        var pinned = CreateClient(stored.Payload!.TlsFingerprint, Timeout.InfiniteTimeSpan);
+        try
+        {
+            var uri = new Uri(new Uri(stored.Payload.Endpoint), path);
+            using var request = SignedRequest(stored.Payload, HttpMethod.Get, uri, []);
+            var response = await pinned.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                var bytes = await ReadBounded(response.Content, cancellationToken);
+                var failure = Failure<IAgentRunArtifactContent>(new RawResponse(response.StatusCode,
+                    response.Headers, bytes));
+                response.Dispose();
+                pinned.Client.Dispose();
+                return failure;
+            }
+
+            var artifact = metadata.Payload;
+            var validHeaders = response.Content.Headers.ContentLength == artifact.ByteLength &&
+                               response.Content.Headers.ContentType?.MediaType == artifact.MediaType &&
+                               Header(response.Headers, "PM-Artifact-Id") == artifact.ArtifactId &&
+                               Header(response.Headers, "PM-Artifact-SHA256") == artifact.Sha256 &&
+                               response.Headers.ETag?.Tag == $"\"sha256:{artifact.Sha256}\"";
+            if (!validHeaders)
+            {
+                response.Dispose();
+                pinned.Client.Dispose();
+                return AppResult<IAgentRunArtifactContent>.Fail("invalid_runner_response",
+                    "The runner returned invalid artifact content metadata.");
+            }
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            return AppResult<IAgentRunArtifactContent>.Ok(
+                new AgentRunArtifactContent(artifact, stream, response, pinned.Client));
+        }
+        catch (Exception exception) when (IsTransportException(exception))
+        {
+            pinned.Client.Dispose();
+            return AppResult<IAgentRunArtifactContent>.Fail(
+                pinned.CertificateRejected ? "runner_tls_mismatch" : "runner_unavailable",
+                pinned.CertificateRejected
+                    ? "The runner TLS certificate did not match its pinned identity."
+                    : "The runner could not be reached.");
+        }
     }
 
     public async Task<AppResult<AgentRunnerRegistration>> Rotate(string runnerId,
@@ -505,6 +583,8 @@ public sealed class AgentRunnerClient(
         value[7..].All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static string Escape(string value) => Uri.EscapeDataString(value);
+    private static string? Header(System.Net.Http.Headers.HttpResponseHeaders headers, string name) =>
+        headers.TryGetValues(name, out var values) ? values.SingleOrDefault() : null;
     private static byte[] Serialize<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions);
     private static bool IsTransportException(Exception exception) =>
         exception is HttpRequestException or TaskCanceledException or AuthenticationException or IOException;
@@ -569,4 +649,21 @@ public sealed class AgentRunnerClient(
         string NewKeySignature);
     private sealed record RotationResponse(string ClientId, string DisplayName, string Fingerprint,
         DateTimeOffset RotatedAt);
+
+    private sealed class AgentRunArtifactContent(
+        AgentRunArtifact artifact,
+        Stream content,
+        HttpResponseMessage response,
+        HttpClient client) : IAgentRunArtifactContent
+    {
+        public AgentRunArtifact Artifact { get; } = artifact;
+        public Stream Content { get; } = content;
+
+        public async ValueTask DisposeAsync()
+        {
+            await Content.DisposeAsync();
+            response.Dispose();
+            client.Dispose();
+        }
+    }
 }

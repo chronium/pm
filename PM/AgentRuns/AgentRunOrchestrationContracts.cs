@@ -104,4 +104,8 @@ public interface IAgentRunService
         string runId,
         string artifactId,
         CancellationToken cancellationToken = default);
+    Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(
+        string runId,
+        string artifactId,
+        CancellationToken cancellationToken = default);
 }

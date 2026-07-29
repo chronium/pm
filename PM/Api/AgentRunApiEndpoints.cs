@@ -302,6 +302,14 @@ public static class AgentRunApiEndpoints
             .Produces<AgentRunArtifact>()
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
+        api.MapGet("/runs/{runId}/artifacts/{artifactId}/content", StreamArtifactContent)
+            .WithName("DownloadAgentRunArtifact")
+            .WithSummary("Download verified agent run artifact content")
+            .Produces(StatusCodes.Status200OK, contentType: "application/octet-stream")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status413PayloadTooLarge, "application/problem+json");
+
         return;
 
         async Task StreamEvents(HttpContext context, string runId, long afterSequence = 0)
@@ -345,6 +353,33 @@ public static class AgentRunApiEndpoints
             catch (AgentRunnerStreamException)
             {
             }
+        }
+
+        async Task StreamArtifactContent(HttpContext context, string runId, string artifactId)
+        {
+            var result = await runs.ArtifactContent(runId, artifactId, context.RequestAborted);
+            if (!result.Success)
+            {
+                await ApiResults.Failure(result.ErrorCode, result.Message, context.Request.Path).ExecuteAsync(context);
+                return;
+            }
+
+            await using var content = result.Payload!;
+            var artifact = content.Artifact;
+            var disposition = new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+            {
+                FileNameStar = artifact.FileName,
+            };
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.ContentType = artifact.MediaType;
+            context.Response.ContentLength = artifact.ByteLength;
+            context.Response.Headers.ContentDisposition = disposition.ToString();
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            context.Response.Headers["PM-Artifact-Id"] = artifact.ArtifactId;
+            context.Response.Headers["PM-Artifact-SHA256"] = artifact.Sha256;
+            context.Response.Headers.ETag = $"\"sha256:{artifact.Sha256}\"";
+            await content.Content.CopyToAsync(context.Response.Body, context.RequestAborted);
         }
     }
 

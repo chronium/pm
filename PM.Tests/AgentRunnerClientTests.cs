@@ -161,6 +161,7 @@ public class AgentRunnerClientTests
         Assert.Equal(new string('a', 40), health.Payload.Build.SourceRevision);
         Assert.True(capabilities.Success);
         Assert.Equal(server.RunnerId, capabilities.Payload!.RunnerId);
+        Assert.Equal(AgentRunProtocol.Current, client.Registration(server.RunnerId).Payload!.ProtocolVersion);
 
         var request = Request(server.RunnerId, "run-client-flow");
         var started = await client.Start(server.RunnerId, request);
@@ -219,6 +220,15 @@ public class AgentRunnerClientTests
         var artifact = await client.Artifact(server.RunnerId, request.Specification.RunId,
             artifactList.Payload!.Single().ArtifactId);
         Assert.True(artifact.Success);
+        var artifactContent = await client.ArtifactContent(server.RunnerId, request.Specification.RunId,
+            artifact.Payload!.ArtifactId);
+        Assert.True(artifactContent.Success, artifactContent.Message);
+        await using (var content = artifactContent.Payload!)
+        {
+            using var memory = new MemoryStream();
+            await content.Content.CopyToAsync(memory);
+            Assert.Equal(Encoding.UTF8.GetBytes(new string('a', 42)), memory.ToArray());
+        }
 
         var beforeRotation = registration.ClientId;
         var rotated = await client.Rotate(server.RunnerId);
@@ -285,7 +295,8 @@ public class AgentRunnerClientTests
 
     private static byte[] Canonical(string pathAndQuery, ReadOnlySpan<byte> body,
         DateTimeOffset timestamp, string nonce, string clientId) => Encoding.UTF8.GetBytes(string.Join('\n',
-        "pm-runner-auth-v1", "POST", pathAndQuery, "1.0", timestamp.ToUnixTimeSeconds(), nonce,
+        "pm-runner-auth-v1", "POST", pathAndQuery, AgentRunProtocol.Current.ToString(),
+        timestamp.ToUnixTimeSeconds(), nonce,
         clientId, AgentRunnerRequestSigning.Sha256Hex(body)));
 
     private static bool VerifySignature(string publicKey, string signature, byte[] canonical)
@@ -465,6 +476,23 @@ public class AgentRunnerClientTests
                     await Json(context, new { artifacts = new[] { ArtifactFor(runId) } });
                     return;
                 }
+                if (segments is ["v1", "runs", _, "artifacts", var contentArtifactId, "content"])
+                {
+                    var artifact = ArtifactFor(runId);
+                    if (artifact.ArtifactId != contentArtifactId)
+                    {
+                        await Error(context, 404, "artifact_not_found", "Artifact not found.");
+                        return;
+                    }
+                    context.Response.StatusCode = 200;
+                    context.Response.ContentType = artifact.MediaType;
+                    context.Response.ContentLength = artifact.ByteLength;
+                    context.Response.Headers["PM-Artifact-Id"] = artifact.ArtifactId;
+                    context.Response.Headers["PM-Artifact-SHA256"] = artifact.Sha256;
+                    context.Response.Headers.ETag = $"\"sha256:{artifact.Sha256}\"";
+                    await context.Response.Body.WriteAsync(ArtifactBytes());
+                    return;
+                }
                 if (segments is ["v1", "runs", _, "artifacts", var artifactId])
                 {
                     var artifact = ArtifactFor(runId);
@@ -518,7 +546,7 @@ public class AgentRunnerClientTests
             var signature = request.Headers["PM-Runner-Signature"].SingleOrDefault();
             var version = request.Headers["PM-Runner-Protocol-Version"].SingleOrDefault();
             if (clientId == null || clientId != _clientId || timestamp == null || nonce == null ||
-                signature == null || version != "1.0" || _clientPublicKey == null) return false;
+                signature == null || version is not ("1.0" or "1.1") || _clientPublicKey == null) return false;
             var canonical = string.Join('\n', "pm-runner-auth-v1", request.Method,
                 request.Path + request.QueryString, version, timestamp, nonce, clientId,
                 AgentRunnerRequestSigning.Sha256Hex(body));
@@ -645,9 +673,14 @@ public class AgentRunnerClientTests
             new(run.RunId, run.Specification.Task.TaskId, run.Specification.Task.Title, run.State,
                 run.LastEventSequence, run.AcceptedAt, run.UpdatedAt, run.CancellationRequestedAt);
 
-        private static AgentRunArtifact ArtifactFor(string runId) =>
-            new("artifact-patch", "git_patch", $"{runId}.patch", "text/x-diff", 42,
-                new string('a', 64), CanonicalNow());
+        private static AgentRunArtifact ArtifactFor(string runId)
+        {
+            var bytes = ArtifactBytes();
+            return new AgentRunArtifact("artifact-patch", "git_patch", $"{runId}.patch", "text/x-diff",
+                bytes.Length, AgentRunnerRequestSigning.Sha256Hex(bytes), CanonicalNow());
+        }
+
+        private static byte[] ArtifactBytes() => Encoding.UTF8.GetBytes(new string('a', 42));
 
         private static DateTimeOffset CanonicalNow()
         {

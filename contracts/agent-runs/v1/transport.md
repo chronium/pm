@@ -1,10 +1,10 @@
-# Agent runner HTTPS transport 1.0
+# Agent runner HTTPS transport 1.x
 
 The runner exposes HTTPS only on an explicitly configured non-wildcard interface. Pairing is the only route that does not require a signed PM identity request, and it requires a short-lived one-use code displayed locally beside the stable runner ID and runner certificate fingerprint.
 
 ## Pairing
 
-`POST /v1/pairing/complete` accepts a pairing code, the client's supported protocol versions, and the existing PM P-256 identity. Before submitting the code, the local pairing command must display the stable runner ID, one-use code, expiry, and `sha256:<hex>` TLS certificate fingerprint together. The operator must verify that the runner ID and fingerprint match the PM pairing presentation. A successful response selects protocol `1.0`, consumes the code, registers the single client, and returns capabilities. Codes expire after ten minutes and lock after five invalid attempts.
+`POST /v1/pairing/complete` accepts a pairing code, the client's supported protocol versions, and the existing PM P-256 identity. Before submitting the code, the local pairing command must display the stable runner ID, one-use code, expiry, and `sha256:<hex>` TLS certificate fingerprint together. The operator must verify that the runner ID and fingerprint match the PM pairing presentation. A successful response selects the highest mutually supported 1.x protocol, consumes the code, registers the single client, and returns capabilities. Codes expire after ten minutes and lock after five invalid attempts.
 
 ## Authenticated requests
 
@@ -48,13 +48,14 @@ Replacing the TLS certificate requires explicit re-pairing in protocol 1.0.
 
 ## Run commands
 
-All run routes require the authenticated request headers above. A submitted body is the protocol 1.0 `RunRequest`, including its canonical specification hash.
+All run routes require the authenticated request headers above. A submitted body is the negotiated protocol's `RunRequest`, including its canonical specification hash.
 
 - `POST /v1/runs` accepts a run. A new run returns `202`; an identical retry returns the existing run with `200`. Reusing a run ID with another specification hash returns `409 run_id_conflict`. Unsupported runner, provider, model, effort, or runtime-profile selections return a stable capability error without creating a run.
 - `GET /v1/runs/{runId}` returns the immutable specification, current durable state, and nullable provider thread ID recorded after agent startup.
 - `GET /v1/runs?scope=active&limit=100&cursor=...` lists non-terminal runs in acceptance order. The cursor is opaque to clients. The default limit is 100 and the maximum is 500.
 - `POST /v1/runs/{runId}/cancel` journals the request. A queued run becomes cancelled immediately. An active run returns `202` and becomes terminal only after its processor stops. If completion wins the race, the completed state remains authoritative.
-- `GET /v1/runs/{runId}/artifacts` and `GET /v1/runs/{runId}/artifacts/{artifactId}` return validated artifact metadata. Protocol 1.0 does not transfer artifact bytes.
+- `GET /v1/runs/{runId}/artifacts` and `GET /v1/runs/{runId}/artifacts/{artifactId}` return validated artifact metadata.
+- Protocol 1.1 adds `GET /v1/runs/{runId}/artifacts/{artifactId}/content`. The authenticated endpoint resolves content only from persisted run metadata, verifies the retained regular file against its recorded length and SHA-256 digest, and streams at most 64 MiB without exposing storage paths. Protocol 1.0 clients remain metadata-only.
 
 Once a run is durably accepted, the runner owns its execution lifecycle. Client disconnects, PM process shutdown, SSE disconnection, and later connectivity loss do not cancel, invalidate, or return ownership of the run. Cancellation requires the authenticated cancellation command. The runner recovers accepted work from its durable state after restart.
 

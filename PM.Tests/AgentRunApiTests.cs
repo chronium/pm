@@ -53,6 +53,14 @@ public class AgentRunApiTests
                 (await client.GetAsync($"/api/v1/runs/{runService.RunId}/events")).StatusCode);
             Assert.Equal(HttpStatusCode.OK,
                 (await client.GetAsync($"/api/v1/runs/{runService.RunId}/artifacts")).StatusCode);
+            var artifactContent = await client.GetAsync(
+                $"/api/v1/runs/{runService.RunId}/artifacts/changes-patch/content");
+            Assert.Equal(HttpStatusCode.OK, artifactContent.StatusCode);
+            Assert.Equal([0x64], await artifactContent.Content.ReadAsByteArrayAsync());
+            Assert.Equal("changes-patch", artifactContent.Headers.GetValues("PM-Artifact-Id").Single());
+            Assert.Equal(new string('d', 64),
+                artifactContent.Headers.GetValues("PM-Artifact-SHA256").Single());
+            Assert.Equal("no-store", artifactContent.Headers.CacheControl!.ToString());
 
             var stream = await client.GetStringAsync($"/api/v1/runs/{runService.RunId}/events/stream");
             Assert.Contains("event: run-event", stream);
@@ -89,6 +97,8 @@ public class AgentRunApiTests
             var paths = document.RootElement.GetProperty("paths");
             Assert.True(paths.TryGetProperty("/api/v1/runs/preflight", out _));
             Assert.True(paths.TryGetProperty("/api/v1/runs/{runId}/events/stream", out _));
+            Assert.True(paths.TryGetProperty(
+                "/api/v1/runs/{runId}/artifacts/{artifactId}/content", out _));
             Assert.True(paths.TryGetProperty("/api/v1/runners/{runnerId}/rotate", out _));
         }
     }
@@ -176,6 +186,11 @@ public class AgentRunApiTests
             CancellationToken cancellationToken = default) => Task.FromResult(
             AppResult<AgentRunArtifact>.Ok(new AgentRunArtifact(artifactId, "git_patch", "change.patch",
                 "text/x-diff", 1, new string('d', 64), Request.Specification.RequestedAt)));
+        public Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(string runId, string artifactId,
+            CancellationToken cancellationToken = default) => Task.FromResult(
+            AppResult<IAgentRunArtifactContent>.Ok(new FakeArtifactContent(
+                new AgentRunArtifact(artifactId, "git_patch", "change.patch", "text/x-diff", 1,
+                    new string('d', 64), Request.Specification.RequestedAt), [0x64])));
     }
 
     private sealed class FakeStream(string runId) : IAgentRunnerEventStream
@@ -190,6 +205,13 @@ public class AgentRunApiTests
             await Task.CompletedTask;
         }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeArtifactContent(AgentRunArtifact artifact, byte[] bytes) : IAgentRunArtifactContent
+    {
+        public AgentRunArtifact Artifact { get; } = artifact;
+        public Stream Content { get; } = new MemoryStream(bytes, writable: false);
+        public async ValueTask DisposeAsync() => await Content.DisposeAsync();
     }
 
     private sealed class FakeRunnerClient : IAgentRunnerClient
@@ -235,6 +257,8 @@ public class AgentRunApiTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult<AgentRunArtifact>> Artifact(string runnerId, string runId, string artifactId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(string runnerId, string runId,
+            string artifactId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult<AgentRunnerRegistration>> Rotate(string runnerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(AppResult<AgentRunnerRegistration>.Ok(RegistrationValue));

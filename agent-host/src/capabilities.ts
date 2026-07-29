@@ -10,6 +10,7 @@ import type { RunRequest } from './protocol/types.js';
 import { canonicalRuntimeProfile } from './protocol/canonical-json.js';
 import { parseCapabilityManifest } from './protocol/validation.js';
 import { CommandPodmanProbe, type ContainerRuntimeProbe } from './oci/podman-probe.js';
+import { supportedProtocolVersions } from './auth/authentication.js';
 
 export type RunCapabilityResult =
   | { valid: true }
@@ -44,7 +45,7 @@ export class CapabilityService {
     return {
       runnerId: this.store.runnerId,
       displayName: this.manifest.displayName,
-      protocolVersions: ['1.0'],
+      protocolVersions: [...supportedProtocolVersions],
       operatingSystem: normalizePlatform(this.platform()),
       architecture: normalizeArchitecture(this.architecture()),
       containerRuntime: this.containerRuntime,

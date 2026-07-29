@@ -329,6 +329,8 @@ public class AgentRunOrchestrationTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult<AgentRunArtifact>> Artifact(string runnerId, string runId, string artifactId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(string runnerId, string runId,
+            string artifactId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult<AgentRunnerRegistration>> Rotate(string runnerId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult> Revoke(string runnerId,

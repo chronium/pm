@@ -11,12 +11,14 @@ public class AgentRunDomainTests
     {
         var json = JsonSerializer.Serialize(AgentRunProtocol.Current, AgentRunJson.Options);
 
-        Assert.Equal("\"1.0\"", json);
+        Assert.Equal("\"1.1\"", json);
         Assert.Equal(AgentRunProtocol.Current,
             JsonSerializer.Deserialize<AgentRunProtocolVersion>(json, AgentRunJson.Options));
         Assert.True(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(1, 0), new AgentRunProtocolVersion(1, 2)));
         Assert.False(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(1, 3), new AgentRunProtocolVersion(1, 2)));
         Assert.False(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(2, 0), new AgentRunProtocolVersion(1, 9)));
+        Assert.Equal(AgentRunProtocol.Current,
+            AgentRunProtocol.HighestCommon([AgentRunProtocol.Version10, AgentRunProtocol.Current]));
     }
 
     [Fact]

@@ -5,10 +5,17 @@ namespace PM.AgentRuns;
 
 public static class AgentRunProtocol
 {
-    public static readonly AgentRunProtocolVersion Current = new(1, 0);
+    public static readonly AgentRunProtocolVersion Version10 = new(1, 0);
+    public static readonly AgentRunProtocolVersion Current = new(1, 1);
+    public static IReadOnlyList<AgentRunProtocolVersion> Supported { get; } = [Current, Version10];
 
     public static bool IsCompatible(AgentRunProtocolVersion requested, AgentRunProtocolVersion supported) =>
         requested.Major == supported.Major && requested.Minor <= supported.Minor;
+
+    public static AgentRunProtocolVersion? HighestCommon(IEnumerable<AgentRunProtocolVersion> versions) =>
+        Supported.FirstOrDefault(candidate => versions.Contains(candidate)) is var selected && selected != default
+            ? selected
+            : null;
 }
 
 [JsonConverter(typeof(AgentRunProtocolVersionJsonConverter))]
