@@ -2,11 +2,12 @@
 id: AGENT-0018
 title: Publish signed versioned agent runner releases
 track: AGENT
+milestone: agent-runner-evolution
 priority: low
 dependsOn:
 - AGENT-0012
 createdAt: 2026-07-29T10:30:08.6559220Z
-modifiedAt: 2026-07-29T10:30:08.6677220Z
+modifiedAt: 2026-07-29T12:09:47.2306250Z
 ---
 
 ## Goal
