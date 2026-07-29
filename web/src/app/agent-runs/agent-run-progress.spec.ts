@@ -52,14 +52,36 @@ describe('AgentRunProgress', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     const buttons = element.querySelectorAll<HTMLButtonElement>('.artifact-download');
-    buttons[0]!.click();
+    const firstDownload = [...buttons].find((button) => button.textContent?.trim() === 'Download')!;
+    firstDownload.click();
 
     expect(emitted).toHaveBeenCalledWith(runArtifacts[0]);
-    expect(buttons[0]!.textContent).toContain('Download');
-    expect(buttons[1]!.textContent).toContain('Retry');
+    expect(firstDownload.textContent).toContain('Download');
+    expect([...buttons].some((button) => button.textContent?.includes('Retry'))).toBe(true);
     expect(element.querySelector('[role="status"]')?.textContent).toContain(
       'Integrity verification failed.',
     );
+  });
+
+  it('offers collection only for a completed retained patch', () => {
+    const fixture = TestBed.createComponent(AgentRunProgress);
+    fixture.componentRef.setInput('inspection', {
+      ...runInspection,
+      run: { ...runInspection.run, state: 'completed' },
+    });
+    fixture.componentRef.setInput('checkpoints', []);
+    fixture.componentRef.setInput('artifacts', runArtifacts);
+    const collected = vi.fn();
+    fixture.componentInstance.collectRequested.subscribe(collected);
+    fixture.detectChanges();
+
+    const collect = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '.artifact-collect',
+    )!;
+    collect.click();
+
+    expect(collect.textContent).toContain('Review & collect');
+    expect(collected).toHaveBeenCalledOnce();
   });
 
   it('makes task-revision drift explicit without replacing run progress', () => {

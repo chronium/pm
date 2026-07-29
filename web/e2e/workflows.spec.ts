@@ -398,6 +398,7 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
 }, testInfo) => {
   let paired = false;
   let starts = 0;
+  let collections = 0;
   const artifactContent = 'hello';
   const downloadableArtifact = {
     ...runArtifacts[0]!,
@@ -525,6 +526,58 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
       });
       return;
     }
+    if (path === '/api/v1/runs/run-01K123/patch-collection/preflight') {
+      await route.fulfill({
+        headers: { ETag: '"patch-r1"' },
+        json: {
+          ready: true,
+          revision: 'patch-r1',
+          artifactId: downloadableArtifact.artifactId,
+          artifactSha256: downloadableArtifact.sha256,
+          baseCommit: completedInspection.run.specification.repository.baseCommit,
+          currentHead: completedInspection.run.specification.repository.baseCommit,
+          taskRevision: completedInspection.run.specification.task.revision,
+          currentTaskRevision: completedInspection.run.specification.task.revision,
+          checks: [
+            {
+              id: 'base',
+              label: 'Exact base commit',
+              status: 'passed',
+              summary: 'Base matches.',
+            },
+          ],
+          warnings: [],
+          paths: [
+            {
+              path: 'PM/TaskService.cs',
+              status: 'modified',
+              insertions: 3,
+              deletions: 1,
+              binary: false,
+            },
+          ],
+          statistics: { filesChanged: 1, insertions: 3, deletions: 1, binaryFiles: 0 },
+        },
+      });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/patch-collection/apply') {
+      expect(request.headers()['if-match']).toBe('"patch-r1"');
+      expect(request.postDataJSON()).toEqual({ artifactSha256: downloadableArtifact.sha256 });
+      collections += 1;
+      await route.fulfill({
+        json: {
+          runId: 'run-01K123',
+          artifactId: downloadableArtifact.artifactId,
+          artifactSha256: downloadableArtifact.sha256,
+          baseCommit: completedInspection.run.specification.repository.baseCommit,
+          headCommit: completedInspection.run.specification.repository.baseCommit,
+          paths: ['PM/TaskService.cs'],
+          appliedAt: '2026-07-29T08:11:00.000Z',
+        },
+      });
+      return;
+    }
     await route.fulfill({ status: 404 });
   });
 
@@ -557,6 +610,11 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
     .click();
   expect((await artifactDownload).suggestedFilename()).toBe('changes.patch');
   await expect(page.getByText('Download verified.')).toBeVisible();
+  await page.getByRole('button', { name: 'Review & collect' }).click();
+  const collection = page.getByRole('dialog', { name: 'Review patch collection' });
+  await expect(collection.getByText('PM/TaskService.cs')).toBeVisible();
+  await collection.getByRole('button', { name: 'Collect patch' }).click();
+  await expect(page.getByText('Collected 1 changed path into the local worktree.')).toBeVisible();
   if (testInfo.project.name.includes('mobile')) {
     await page.getByRole('tab', { name: 'Output' }).click();
   }
@@ -570,6 +628,7 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   }));
   expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
   expect(starts).toBe(1);
+  expect(collections).toBe(1);
 });
 
 test('large project remains dense, navigable, and free of horizontal page overflow', async ({

@@ -19,6 +19,8 @@ export type AgentRunEventPage = components['schemas']['AgentRunEventPage'];
 export type AgentRunArtifact = components['schemas']['AgentRunArtifact'];
 export type AgentRunCancellation = components['schemas']['AgentRunCancellation'];
 export type AgentRunState = components['schemas']['AgentRunState'];
+export type AgentRunPatchPreflightResult = components['schemas']['AgentRunPatchPreflightResult'];
+export type AgentRunPatchCollectionResult = components['schemas']['AgentRunPatchCollectionResult'];
 
 export interface AgentRunsApiError {
   status: number;
@@ -123,6 +125,28 @@ export class AgentRunsApiService {
       {
         observe: 'response' as const,
         responseType: 'arraybuffer' as const,
+      },
+    );
+  }
+
+  preflightPatchCollection(runId: string) {
+    return this.http.post<AgentRunPatchPreflightResult>(
+      `${this.runUrl(runId)}/patch-collection/preflight`,
+      {},
+      {
+        observe: 'response' as const,
+        headers: this.mutationHeaders,
+      },
+    );
+  }
+
+  collectPatch(runId: string, artifactSha256: string, etag: string) {
+    return this.http.post<AgentRunPatchCollectionResult>(
+      `${this.runUrl(runId)}/patch-collection/apply`,
+      { artifactSha256 },
+      {
+        observe: 'response' as const,
+        headers: { ...this.mutationHeaders, 'If-Match': etag },
       },
     );
   }

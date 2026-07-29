@@ -66,6 +66,12 @@
       </div>
     }
 
+    @if (collectionMessage()) {
+      <div class="workspace-alert collection-success" role="status">
+        <span>{{ collectionMessage() }}</span>
+      </div>
+    }
+
     <div class="mobile-tabs" role="tablist" aria-label="Run supervision view">
       <button
         id="run-progress-tab"
@@ -106,6 +112,7 @@
           [artifacts]="store.artifacts()"
           [artifactDownloads]="store.artifactDownloads()"
           (downloadRequested)="downloadArtifact($event)"
+          (collectRequested)="patchCollectionOpen.set(true)"
         />
       </div>
       <div
@@ -149,3 +156,10 @@
     (runStarted)="retryStarted($event)"
   />
 }
+
+<pm-agent-run-patch-collection
+  [open]="patchCollectionOpen()"
+  [runId]="runId()"
+  (openChange)="patchCollectionOpen.set($event)"
+  (collected)="patchCollected($event)"
+/>

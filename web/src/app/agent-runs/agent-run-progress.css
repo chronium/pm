@@ -138,6 +138,12 @@
   align-items: start;
   gap: var(--pm-space-2);
 }
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--pm-space-1);
+}
 .artifact-download {
   min-height: 28px;
   padding: 2px var(--pm-space-2);

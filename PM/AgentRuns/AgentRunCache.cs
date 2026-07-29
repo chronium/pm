@@ -24,7 +24,25 @@ public sealed record AgentRunCacheRecord(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     AgentRunnerRun? RemoteRun,
-    long LastObservedSequence);
+    long LastObservedSequence,
+    AgentRunPatchCollectionResult? PatchCollection = null);
+
+public sealed class AgentRunTemporaryFile(string path) : IAsyncDisposable
+{
+    public string Path { get; } = path;
+
+    public ValueTask DisposeAsync()
+    {
+        try
+        {
+            File.Delete(Path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
+        return ValueTask.CompletedTask;
+    }
+}
 
 public sealed partial class AgentRunCache(
     ProjectRoot projectRoot,
@@ -118,6 +136,61 @@ public sealed partial class AgentRunCache(
         finally
         {
             _mutationGate.Release();
+        }
+    }
+
+    public async Task<AppResult> RecordPatchCollection(string runId, AgentRunPatchCollectionResult collection)
+    {
+        await _mutationGate.WaitAsync();
+        try
+        {
+            var current = await Get(runId);
+            if (!current.Success) return AppResult.Fail(current.ErrorCode!, current.Message!);
+            if (current.Payload!.PatchCollection != null)
+                return AppResult.Fail("patch_already_collected", "This run's patch was already collected.");
+            if (collection.RunId != runId || collection.ArtifactId.Length == 0 ||
+                collection.ArtifactSha256.Length != 64 || collection.BaseCommit.Length != 40 ||
+                collection.HeadCommit.Length != 40 || collection.Paths.Count == 0 ||
+                collection.Paths.Any(path => path.Length == 0 || path.Any(char.IsControl) ||
+                                             Path.IsPathFullyQualified(path) ||
+                                             path.Split('/').Any(segment => segment is "." or "..")))
+                return AppResult.Fail("invalid_patch_collection", "The patch collection result is invalid.");
+            return await Replace(current.Payload with
+            {
+                PatchCollection = collection,
+                UpdatedAt = CanonicalNow(),
+            });
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    public AppResult<AgentRunTemporaryFile> CreateTemporaryFile(string runId, string purpose)
+    {
+        if (!RunIdPattern().IsMatch(runId ?? string.Empty) ||
+            !TemporaryPurposePattern().IsMatch(purpose ?? string.Empty))
+            return AppResult<AgentRunTemporaryFile>.Fail("invalid_run_id",
+                "Run temporary file input is invalid.");
+        var context = Context();
+        if (!context.Success)
+            return AppResult<AgentRunTemporaryFile>.Fail(context.ErrorCode!, context.Message!);
+        try
+        {
+            var prepared = PrepareDirectory(context.Payload!.Directory, create: true);
+            if (!prepared.Success)
+                return AppResult<AgentRunTemporaryFile>.Fail(prepared.ErrorCode!, prepared.Message!);
+            var path = Path.Combine(context.Payload.Directory,
+                $".{runId}.{purpose}.{Guid.NewGuid():N}.tmp");
+            using (File.Create(path)) { }
+            SetPrivateFileMode(path);
+            return AppResult<AgentRunTemporaryFile>.Ok(new AgentRunTemporaryFile(path));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return AppResult<AgentRunTemporaryFile>.Fail("run_cache_unavailable",
+                "A private temporary run file could not be created.");
         }
     }
 
@@ -238,6 +311,14 @@ public sealed partial class AgentRunCache(
             record.Selection.EffortId != record.Request.Specification.Agent.EffortId ||
             record.RemoteRun != null && (record.RemoteRun.RunId != record.RunId ||
                                          record.RemoteRun.SpecificationHash != record.Request.SpecificationHash) ||
+            record.PatchCollection != null && (record.PatchCollection.RunId != record.RunId ||
+                                                record.PatchCollection.ArtifactId.Length == 0 ||
+                                                record.PatchCollection.ArtifactSha256.Length != 64 ||
+                                                record.PatchCollection.BaseCommit.Length != 40 ||
+                                                record.PatchCollection.HeadCommit.Length != 40 ||
+                                                record.PatchCollection.Paths.Count == 0 ||
+                                                record.PatchCollection.Paths.Any(path => path.Length == 0 ||
+                                                    path.Any(char.IsControl) || Path.IsPathFullyQualified(path))) ||
             !AgentRunContractValidator.ValidateRequest(record.Request).Success)
             return AppResult.Fail("invalid_run_cache", "A cached run is invalid.");
         return AppResult.Ok();
@@ -319,4 +400,7 @@ public sealed partial class AgentRunCache(
 
     [GeneratedRegex("^run-[A-Za-z0-9._-]{1,124}$", RegexOptions.CultureInvariant)]
     private static partial Regex RunIdPattern();
+
+    [GeneratedRegex("^[a-z][a-z0-9-]{0,31}$", RegexOptions.CultureInvariant)]
+    private static partial Regex TemporaryPurposePattern();
 }
