@@ -2,11 +2,11 @@
 id: AGENT-0015
 title: Design requirement-based runner capability discovery
 track: AGENT
-milestone: agent-runs-v2
+milestone: agent-runner-evolution
 dependsOn:
 - AGENT-0012
 createdAt: 2026-07-28T18:44:20.3773910Z
-modifiedAt: 2026-07-28T18:44:31.9717930Z
+modifiedAt: 2026-07-29T12:08:46.9573350Z
 ---
 
 ## Goal
@@ -16,7 +16,7 @@ Evolve runner discovery from named-machine selection toward requirement-based sc
 ## Investigation and implementation
 
 - Separate static capabilities from dynamic capacity and availability.
-- Define additive capability reporting for logical CPU count, total and available memory, GPU inventory, installed runtime/toolchain capability IDs, supported agent providers, runtime profiles, concurrency, and protocol feature flags.
+- Define additive capability reporting for logical CPU count, total and available memory, GPU inventory, installed runtime and toolchain capability IDs, supported agent providers, runtime profiles, concurrency, and protocol feature flags.
 - Prefer stable capability identifiers and profile requirements over free-form SDK descriptions or runner-name checks.
 - Define how a run or routing recommendation expresses hard requirements such as GPU access, a toolchain capability, or a named runtime profile.
 - Define deterministic preflight matching and useful mismatch reasons.

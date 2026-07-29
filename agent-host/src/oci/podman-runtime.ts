@@ -318,7 +318,12 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
   private agentContext(profile: RuntimeProfile): AgentRuntimeContext {
     const available = {
       CODEX_HOME: profile.container.codexHomePath,
+      DOTNET_CLI_HOME: posix.join(profile.container.temporaryPath, 'dotnet-cli'),
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+      DOTNET_NOLOGO: '1',
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
       HOME: posix.dirname(profile.container.codexHomePath),
+      NUGET_PACKAGES: posix.join(profile.container.temporaryPath, 'nuget-packages'),
       PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
       TMPDIR: profile.container.temporaryPath,
     } as const;
@@ -357,7 +362,12 @@ export function buildPodmanCreateArguments(
   const profile = specification.runtime.profile;
   const environment = {
     CODEX_HOME: profile.container.codexHomePath,
+    DOTNET_CLI_HOME: posix.join(profile.container.temporaryPath, 'dotnet-cli'),
+    DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+    DOTNET_NOLOGO: '1',
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
     HOME: posix.dirname(profile.container.codexHomePath),
+    NUGET_PACKAGES: posix.join(profile.container.temporaryPath, 'nuget-packages'),
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
     TMPDIR: profile.container.temporaryPath,
   } as const;

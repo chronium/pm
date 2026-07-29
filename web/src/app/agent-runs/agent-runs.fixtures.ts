@@ -1,6 +1,9 @@
 import type {
   AgentRunnerRegistration,
   AgentRunnerStatus,
+  AgentRunArtifact,
+  AgentRunEvent,
+  AgentRunInspection,
   AgentRunPreflightResult,
   AgentRunRemoteStart,
 } from './agent-runs-api.service';
@@ -151,3 +154,69 @@ export const acceptedRun: AgentRunRemoteStart = {
     agentThreadId: null,
   },
 };
+
+export const runInspection: AgentRunInspection = {
+  run: {
+    ...acceptedRun.run,
+    state: 'running',
+    lastEventSequence: 7,
+    updatedAt: '2026-07-29T08:03:07.000Z',
+    agentThreadId: 'thread-01K123',
+  },
+  taskChanged: false,
+  currentTaskRevision: 'task-r1',
+  revision: 'run-r7',
+};
+
+export const runEvents: AgentRunEvent[] = [
+  runEvent(1, 'run.state_changed', 'accepted', 'Task accepted'),
+  runEvent(2, 'run.state_changed', 'queued', 'Run queued'),
+  runEvent(3, 'run.state_changed', 'preparing_workspace', 'Preparing workspace'),
+  runEvent(4, 'run.state_changed', 'starting_runtime', 'Starting runtime'),
+  runEvent(5, 'run.state_changed', 'starting_agent', 'Starting agent'),
+  runEvent(6, 'run.state_changed', 'running', 'Agent running'),
+  runEvent(7, 'agent.thread_started', 'running', 'Codex thread started'),
+  {
+    ...runEvent(8, 'command.output', 'running', 'Command output'),
+    data: { output: '\u001b[31mnpm test\u001b[0m\n133 tests passed' },
+  },
+];
+
+export const runArtifacts: AgentRunArtifact[] = [
+  {
+    artifactId: 'changes-patch',
+    kind: 'patch',
+    fileName: 'changes.patch',
+    mediaType: 'text/x-diff',
+    byteLength: 4096,
+    sha256: 'ab'.repeat(32),
+    createdAt: '2026-07-29T08:10:00.000Z',
+  },
+  {
+    artifactId: 'event-log',
+    kind: 'events',
+    fileName: 'events.jsonl',
+    mediaType: 'application/x-ndjson',
+    byteLength: 8192,
+    sha256: 'cd'.repeat(32),
+    createdAt: '2026-07-29T08:10:00.000Z',
+  },
+];
+
+function runEvent(
+  sequence: number,
+  type: string,
+  state: AgentRunEvent['state'],
+  summary: string,
+): AgentRunEvent {
+  return {
+    protocolVersion: '1.0',
+    runId: acceptedRun.run.runId,
+    sequence,
+    timestamp: `2026-07-29T08:03:${String(sequence).padStart(2, '0')}.000Z`,
+    type,
+    state,
+    summary,
+    data: null,
+  };
+}

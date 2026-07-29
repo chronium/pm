@@ -15,7 +15,8 @@ milestones:
   mcp-smoke: MCP Smoke Test
   angular-web: Angular Web UI Migration
   agent-runs: Agent execution and remote runners
-  agent-runs-v2: Agent collaboration and Git delivery
+  agent-runner-evolution: Agent runner evolution
 milestonePriorities:
   angular-web: high
   agent-runs: urgent
+  agent-runner-evolution: high

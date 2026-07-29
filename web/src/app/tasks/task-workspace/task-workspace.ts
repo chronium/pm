@@ -32,6 +32,7 @@ import { TaskNavigationService } from '../task-navigation.service';
 import { TaskOptionsResource } from '../task-options.resource';
 import { StaticModeService } from '../../static/static-mode.service';
 import { AgentRunLaunch } from '../../agent-runs/agent-run-launch';
+import type { AgentRunRemoteStart } from '../../agent-runs/agent-runs-api.service';
 
 export type TaskWorkspacePresentation = 'dialog' | 'page';
 export type TaskWorkspaceMode = 'detail' | 'create';
@@ -169,6 +170,13 @@ export class TaskWorkspace {
       ? `Inherited (${this.detail.task()?.priority ?? this.creationPriority()})`
       : this.label(this.model().priority),
   );
+
+  protected openRun(result: AgentRunRemoteStart): void {
+    this.launchOpen.set(false);
+    void this.router.navigate(['/tasks/runs', result.run.runId], {
+      state: { returnUrl: this.router.url },
+    });
+  }
 
   constructor() {
     effect(() => {
