@@ -80,6 +80,20 @@ describe('AgentRunsApiService', () => {
     expect(start.request.headers.get('X-PM-Client')).toBe('angular-web');
     expect(start.request.body).toEqual({});
     start.flush({});
+
+    api.preflightPatchCollection('run/one').subscribe((response) => {
+      expect(api.etag(response)).toBe('"patch-r1"');
+    });
+    const patchPreflight = http.expectOne('/api/v1/runs/run%2Fone/patch-collection/preflight');
+    expect(patchPreflight.request.headers.get('X-PM-Client')).toBe('angular-web');
+    patchPreflight.flush({}, { headers: { ETag: '"patch-r1"' } });
+
+    api.collectPatch('run/one', 'abc123', '"patch-r1"').subscribe();
+    const collection = http.expectOne('/api/v1/runs/run%2Fone/patch-collection/apply');
+    expect(collection.request.headers.get('If-Match')).toBe('"patch-r1"');
+    expect(collection.request.headers.get('X-PM-Client')).toBe('angular-web');
+    expect(collection.request.body).toEqual({ artifactSha256: 'abc123' });
+    collection.flush({});
   });
 
   it('maps problem details and stale preconditions without exposing response internals', () => {

@@ -17,6 +17,7 @@ export class AgentRunProgress {
   readonly artifacts = input<AgentRunArtifact[]>([]);
   readonly artifactDownloads = input<Record<string, AgentArtifactDownloadState>>({});
   readonly downloadRequested = output<AgentRunArtifact>();
+  readonly collectRequested = output<void>();
 
   protected downloadState(artifactId: string): AgentArtifactDownloadState {
     return this.artifactDownloads()[artifactId] ?? { status: 'idle', message: null };

@@ -13,6 +13,7 @@ import type {
   RunSpecification,
   RunState,
 } from '../protocol/types.js';
+import { runFailure } from '../run-failure.js';
 import { applyMigrations } from './migrations.js';
 
 export interface StoredRun {
@@ -350,10 +351,11 @@ export class RunStore {
         data: { reason: 'client_requested' },
       });
       if (current.state === 'accepted' || current.state === 'queued') {
+        const failure = runFailure('run_cancelled');
         this.transitionInTransaction(runId, 'cancelled', 'Run cancelled', {
           previousState: current.state,
           nextState: 'cancelled',
-          reason: 'client_requested',
+          failure,
         });
         return { disposition: 'cancelled', run: this.requireRun(runId) };
       }
@@ -393,10 +395,11 @@ export class RunStore {
           this.ensureQueued(row.run_id);
           requeued += 1;
         } else if (activeRunStates.includes(row.state)) {
-          this.transitionInTransaction(row.run_id, 'failed', 'Run interrupted by runner restart', {
+          const failure = runFailure('runner_restarted');
+          this.transitionInTransaction(row.run_id, 'failed', failure.summary, {
             previousState: row.state,
             nextState: 'failed',
-            reason: 'runner_restarted',
+            failure,
           });
           failed += 1;
         }

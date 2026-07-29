@@ -58,7 +58,14 @@ export const Running: Story = {};
 export const Failed: Story = {
   args: {
     inspection: inspection('failed'),
-    checkpoints: projectCheckpoints(statesThrough('failed'), 'failed', 'Validation failed.'),
+    checkpoints: projectCheckpoints(statesThrough('failed'), 'failed', 'Run validation failed.', {
+      code: 'validation_failed',
+      stage: 'validation',
+      summary: 'Run validation failed.',
+      recommendedAction:
+        'Review the failed validation step and collected patch before deciding whether to retry.',
+      retryable: false,
+    }),
   },
 };
 export const Cancelled: Story = {
