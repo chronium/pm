@@ -18,6 +18,8 @@ import { CodexAgentDriver } from './codex/agent-driver.js';
 import { ValidationRunner } from './execution/validation.js';
 import { ArtifactCollector } from './execution/artifacts.js';
 import { DriverRunProcessor, RunScheduler } from './scheduler.js';
+import { formatDoctorReport, runDoctor } from './doctor.js';
+import { loadReleaseInfo } from './release-info.js';
 
 const retentionIntervalMilliseconds = 60 * 60 * 1000;
 const pairingLifetimeMilliseconds = 10 * 60 * 1000;
@@ -30,6 +32,23 @@ async function main(): Promise<void> {
   }
 
   switch (parsed.command) {
+    case 'version': {
+      const release = loadReleaseInfo(parsed.config.releaseManifestPath);
+      process.stdout.write(
+        parsed.json
+          ? `${JSON.stringify(release)}\n`
+          : `pm-agent-host ${release.packageVersion} (${release.sourceRevision}) protocol ${release.protocolVersion}\n`,
+      );
+      return;
+    }
+    case 'doctor': {
+      const report = runDoctor(parsed.config);
+      process.stdout.write(
+        parsed.json ? `${JSON.stringify(report)}\n` : formatDoctorReport(report),
+      );
+      if (!report.ok) process.exitCode = 1;
+      return;
+    }
     case 'pair':
       openPairingWindow(parsed.config);
       return;
@@ -85,6 +104,7 @@ async function serve(config: HostConfig): Promise<void> {
   let server: AgentHostServer | undefined;
   let scheduler: RunScheduler | undefined;
   try {
+    const release = loadReleaseInfo(config.releaseManifestPath);
     const manifest = loadCapabilityManifest(config.capabilityManifestPath!);
     const layout = new RunnerLayout(config.dataRoot);
     const repositoryPolicy = RepositoryPolicy.load(config.repositoryPolicyPath!);
@@ -126,6 +146,7 @@ async function serve(config: HostConfig): Promise<void> {
       runStore: store,
       runCoordinator,
       logger,
+      release,
     });
     await server.start();
     scheduler.start();

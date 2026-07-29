@@ -249,9 +249,34 @@ public enum AgentRunnerConnectivity
 
 public static class AgentRunJson
 {
-    public static JsonSerializerOptions Options { get; } = new()
+    public static JsonSerializerOptions Options { get; } = CreateOptions();
+
+    private static JsonSerializerOptions CreateOptions()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+        };
+        options.Converters.Add(new AgentRunTimestampJsonConverter());
+        return options;
+    }
+}
+
+public sealed class AgentRunTimestampJsonConverter : JsonConverter<DateTimeOffset>
+{
+    public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        return DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
+            ? timestamp
+            : throw new JsonException("Agent run timestamps must use ISO 8601 format.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTimeOffset value,
+        JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
+            System.Globalization.CultureInfo.InvariantCulture));
 }

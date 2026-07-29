@@ -23,7 +23,17 @@ const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const environmentName = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const sensitiveEnvironmentName =
   /(?:auth|cookie|credential|password|private|secret|signature|token|api.?key)/i;
-const supportedEnvironmentNames = new Set(['CODEX_HOME', 'HOME', 'PATH', 'TMPDIR']);
+const supportedEnvironmentNames = new Set([
+  'CODEX_HOME',
+  'DOTNET_CLI_HOME',
+  'DOTNET_CLI_TELEMETRY_OPTOUT',
+  'DOTNET_NOLOGO',
+  'DOTNET_SKIP_FIRST_TIME_EXPERIENCE',
+  'HOME',
+  'NUGET_PACKAGES',
+  'PATH',
+  'TMPDIR',
+]);
 
 export class ProtocolValidationError extends Error {
   constructor(

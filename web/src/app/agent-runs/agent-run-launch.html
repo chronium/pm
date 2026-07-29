@@ -1,0 +1,399 @@
+<dialog
+  #dialog
+  class="launch-dialog"
+  aria-labelledby="launch-heading"
+  (cancel)="$event.preventDefault(); close()"
+>
+  <div class="launch-shell">
+    <header class="launch-header">
+      <div>
+        <span class="eyebrow">{{ taskId() }}</span>
+        <h2 id="launch-heading">Run with Codex</h2>
+        <p>{{ taskTitle() }}</p>
+      </div>
+      <button
+        type="button"
+        class="close-button"
+        aria-label="Close run launch"
+        [disabled]="checking() || starting()"
+        (click)="close()"
+      >
+        ×
+      </button>
+    </header>
+
+    <div class="launch-body">
+      @if (accepted(); as result) {
+        <section class="accepted-state" aria-live="polite">
+          <span class="accepted-mark" aria-hidden="true">✓</span>
+          <div>
+            <h3>Run accepted</h3>
+            <p>
+              {{
+                result.disposition === 'existing'
+                  ? 'The existing immutable run was returned; no duplicate was created.'
+                  : 'The runner owns this execution and will continue if PM disconnects.'
+              }}
+            </p>
+          </div>
+          <dl>
+            <div>
+              <dt>Run ID</dt>
+              <dd>
+                <code>{{ result.run.runId }}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>State</dt>
+              <dd>{{ result.run.state | titlecase }}</dd>
+            </div>
+            <div>
+              <dt>Runner</dt>
+              <dd>{{ result.run.specification.runtime.runnerId }}</dd>
+            </div>
+          </dl>
+        </section>
+      } @else if (loading()) {
+        <pm-loading-state>Loading paired runners and capabilities…</pm-loading-state>
+      } @else if (!runners().length && !error()) {
+        <pm-empty-state>
+          <p>No agent runners are paired.</p>
+          <a routerLink="/tasks/settings" fragment="agent-runners" (click)="close()">
+            Manage agent runners
+          </a>
+        </pm-empty-state>
+      } @else {
+        @if (error()) {
+          <pm-error-state
+            ><p>{{ error() }}</p></pm-error-state
+          >
+        }
+
+        <section class="launch-section" aria-labelledby="execution-heading">
+          <div class="section-heading">
+            <div>
+              <h3 id="execution-heading">Execution profile</h3>
+              <p>Choose only capabilities advertised by the selected runner.</p>
+            </div>
+          </div>
+          <div class="selection-grid">
+            <label>
+              <span>Runner</span>
+              <select [disabled]="checking() || starting()" (change)="selectRunner($event)">
+                <option value="" [selected]="!selectionModel().runnerId">Choose runner</option>
+                @for (runner of runners(); track runner.runnerId) {
+                  <option
+                    [value]="runner.runnerId"
+                    [selected]="selectionModel().runnerId === runner.runnerId"
+                  >
+                    {{ runner.displayName }}
+                    {{
+                      state(runner.runnerId).loading
+                        ? '(checking)'
+                        : state(runner.runnerId).error
+                          ? '(offline)'
+                          : ''
+                    }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Runtime profile</span>
+              <select
+                [disabled]="!selectedStatus() || checking() || starting()"
+                (change)="selectProfile($event)"
+              >
+                <option value="" [selected]="!selectionModel().profileId">Choose profile</option>
+                @for (profile of profiles(); track profile.profileId) {
+                  <option
+                    [value]="profile.profileId"
+                    [selected]="selectionModel().profileId === profile.profileId"
+                  >
+                    {{ profile.profileId }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Provider</span>
+              <select
+                [disabled]="!selectedStatus() || checking() || starting()"
+                (change)="selectProvider($event)"
+              >
+                <option value="" [selected]="!selectionModel().providerId">Choose provider</option>
+                @for (provider of providers(); track provider.providerId) {
+                  <option
+                    [value]="provider.providerId"
+                    [selected]="selectionModel().providerId === provider.providerId"
+                  >
+                    {{ provider.providerId }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Model</span>
+              <select
+                [disabled]="!selectedProvider() || checking() || starting()"
+                (change)="selectModel($event)"
+              >
+                <option value="" [selected]="!selectionModel().modelId">Choose model</option>
+                @for (model of selectedProvider()?.modelIds ?? []; track model) {
+                  <option [value]="model" [selected]="selectionModel().modelId === model">
+                    {{ model }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Reasoning effort</span>
+              <select
+                [disabled]="!selectedProvider() || checking() || starting()"
+                (change)="selectEffort($event)"
+              >
+                <option value="" [selected]="!selectionModel().effortId">Choose effort</option>
+                @for (effort of selectedProvider()?.effortIds ?? []; track effort) {
+                  <option [value]="effort" [selected]="selectionModel().effortId === effort">
+                    {{ effort }}
+                  </option>
+                }
+              </select>
+            </label>
+          </div>
+
+          @if (selectedRunnerState(); as runnerState) {
+            @if (runnerState.loading) {
+              <p class="inline-status" role="status">Checking runner capabilities…</p>
+            } @else if (runnerState.error) {
+              <p class="inline-error" role="alert">{{ runnerState.error }}</p>
+            } @else if (selectedStatus() && !providers().length) {
+              <p class="inline-error" role="alert">
+                This runner does not advertise a compatible Codex provider.
+              </p>
+            }
+          }
+
+          @if (selectedProfile(); as profile) {
+            <div
+              class="trust-notice"
+              [class.trust-notice--warning]="profile.network.mode === 'open'"
+            >
+              <strong>
+                {{
+                  profile.network.mode === 'open'
+                    ? 'Open network profile'
+                    : 'Offline network profile'
+                }}
+              </strong>
+              <span>
+                @if (profile.network.mode === 'open') {
+                  The isolated runtime can reach external services. Dedicated runner Codex
+                  authentication is available inside this run.
+                } @else {
+                  The isolated runtime has no outbound network access.
+                }
+              </span>
+            </div>
+          }
+        </section>
+
+        @if (preflight(); as result) {
+          <section class="launch-section" aria-labelledby="checks-heading">
+            <div class="section-heading">
+              <div>
+                <h3 id="checks-heading">Readiness</h3>
+                <p>
+                  {{ result.ready ? 'Ready to start.' : 'Resolve failed checks and try again.' }}
+                </p>
+              </div>
+              <span
+                class="readiness-state"
+                [class.readiness-state--ready]="result.ready"
+                [class.readiness-state--blocked]="!result.ready"
+              >
+                {{ result.ready ? 'Ready' : 'Blocked' }}
+              </span>
+            </div>
+            <ol class="check-list">
+              @for (check of result.checks; track check.id) {
+                <li [attr.data-status]="check.status">
+                  <span class="check-mark" aria-hidden="true">{{
+                    check.status === 'passed' ? '✓' : check.status === 'failed' ? '×' : '–'
+                  }}</span>
+                  <div>
+                    <strong>{{ check.label }}</strong
+                    ><span>{{ check.summary }}</span>
+                  </div>
+                </li>
+              }
+            </ol>
+          </section>
+
+          @if (result.request?.specification; as specification) {
+            <section class="launch-section" aria-labelledby="specification-heading">
+              <div class="section-heading">
+                <div>
+                  <h3 id="specification-heading">Immutable run specification</h3>
+                  <p>This exact revision and profile will be submitted.</p>
+                </div>
+              </div>
+              <dl class="specification-grid">
+                <div>
+                  <dt>Run ID</dt>
+                  <dd>
+                    <code>{{ specification.runId }}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Runner</dt>
+                  <dd>{{ specification.runtime.runnerId }}</dd>
+                </div>
+                <div>
+                  <dt>Task revision</dt>
+                  <dd>
+                    <code>{{ specification.task.revision }}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Base commit</dt>
+                  <dd>
+                    <code>{{ specification.repository.baseCommit }}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Profile</dt>
+                  <dd>{{ specification.runtime.profile.profileId }}</dd>
+                </div>
+                <div>
+                  <dt>Profile revision</dt>
+                  <dd>
+                    <code>{{ specification.runtime.profile.revision }}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Image</dt>
+                  <dd>
+                    <code>{{ specification.runtime.profile.imageReference }}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Provider</dt>
+                  <dd>{{ specification.agent.providerId }}</dd>
+                </div>
+                <div>
+                  <dt>Model</dt>
+                  <dd>{{ specification.agent.modelId }}</dd>
+                </div>
+                <div>
+                  <dt>Effort</dt>
+                  <dd>{{ specification.agent.effortId }}</dd>
+                </div>
+                <div>
+                  <dt>Resources</dt>
+                  <dd>
+                    {{ formatCpu(specification.runtime.profile.limits.cpuMillicores) }},
+                    {{ formatBytes(specification.runtime.profile.limits.memoryBytes) }},
+                    {{ formatDuration(specification.runtime.profile.limits.timeoutSeconds) }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Network</dt>
+                  <dd>
+                    {{ specification.runtime.profile.network.profileId }} ·
+                    {{ specification.runtime.profile.network.mode }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Output</dt>
+                  <dd>
+                    {{ specification.runtime.profile.output.mode }} ·
+                    {{ formatBytes(specification.runtime.profile.output.maxPatchBytes) }} maximum
+                  </dd>
+                </div>
+              </dl>
+              <div class="validation-list">
+                <h4>Validation</h4>
+                @for (step of specification.runtime.profile.validation; track step.stepId) {
+                  <code>{{ command(step.executable, step.arguments) }}</code>
+                } @empty {
+                  <span>No validation commands configured.</span>
+                }
+              </div>
+              <details class="security-details">
+                <summary>Runtime security</summary>
+                <dl>
+                  <div>
+                    <dt>Read-only root</dt>
+                    <dd>
+                      {{
+                        specification.runtime.profile.container.security.readOnlyRootFilesystem
+                          ? 'Yes'
+                          : 'No'
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>No new privileges</dt>
+                    <dd>
+                      {{
+                        specification.runtime.profile.container.security.noNewPrivileges
+                          ? 'Yes'
+                          : 'No'
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Capabilities dropped</dt>
+                    <dd>
+                      {{
+                        specification.runtime.profile.container.security.dropAllCapabilities
+                          ? 'All'
+                          : 'Profile-defined'
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Seccomp</dt>
+                    <dd>{{ specification.runtime.profile.container.security.seccompProfile }}</dd>
+                  </div>
+                </dl>
+              </details>
+            </section>
+          }
+        }
+      }
+    </div>
+
+    <footer class="launch-actions">
+      @if (accepted()) {
+        <button type="button" class="pm-button pm-button--primary" (click)="close()">Close</button>
+      } @else {
+        <button
+          type="button"
+          class="pm-button pm-button--secondary"
+          [disabled]="checking() || starting()"
+          (click)="close()"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="pm-button pm-button--secondary"
+          [disabled]="!canCheck()"
+          (click)="checkReadiness()"
+        >
+          {{ checking() ? 'Checking…' : preflight() ? 'Check again' : 'Check readiness' }}
+        </button>
+        <button
+          type="button"
+          class="pm-button pm-button--primary"
+          [disabled]="!canStart()"
+          (click)="start()"
+        >
+          {{ starting() ? 'Starting…' : 'Start run' }}
+        </button>
+      }
+    </footer>
+  </div>
+</dialog>

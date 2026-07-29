@@ -49,6 +49,7 @@ class SettingsStoryBackend extends HttpBackend {
       return of(new HttpResponse({ status: 200, body: projectMembers }));
     if (request.url === '/api/v1/project/invitations')
       return of(new HttpResponse({ status: 200, body: { invitations: [] } }));
+    if (request.url === '/api/v1/runners') return of(new HttpResponse({ status: 200, body: [] }));
     if ((request.body as { key?: string } | null)?.key === 'pending') return NEVER;
     if ((request.body as { key?: string } | null)?.key === 'duplicate') {
       return throwError(

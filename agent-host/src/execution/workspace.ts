@@ -234,16 +234,36 @@ export class GitWorkspaceService {
     );
     if (tree.stdout.split('\n').some((line) => line.startsWith('160000 ')))
       throw new Error('Git submodules are not supported by runner protocol 1.0.');
-    const tracked = await run(
+    const candidates = await run(
       this.gitExecutable,
-      ['-C', workspace, 'grep', '-I', '-l', 'version https://git-lfs.github.com/spec/v1', 'HEAD'],
+      [
+        '-C',
+        workspace,
+        'grep',
+        '-I',
+        '-l',
+        '-z',
+        'version https://git-lfs.github.com/spec/v1',
+        'HEAD',
+      ],
       undefined,
       signal,
       localGitEnvironment(),
       true,
     );
-    if (tracked.exitCode === 0 && tracked.stdout.trim().length > 0)
-      throw new Error('Git LFS is not supported by runner protocol 1.0.');
+    if (candidates.exitCode === 0) {
+      for (const reference of candidates.stdout.split('\0').filter((value) => value.length > 0)) {
+        const blob = await run(
+          this.gitExecutable,
+          ['-C', workspace, 'cat-file', 'blob', reference],
+          undefined,
+          signal,
+          localGitEnvironment(),
+        );
+        if (isGitLfsPointer(blob.stdout))
+          throw new Error('Git LFS is not supported by runner protocol 1.0.');
+      }
+    }
   }
 
   private async verifyTaskRevision(
@@ -294,6 +314,17 @@ export class GitWorkspaceService {
       if (this.mirrorLocks.get(mirror) === queued) this.mirrorLocks.delete(mirror);
     }
   }
+}
+
+function isGitLfsPointer(content: string): boolean {
+  const lines = content.replaceAll('\r\n', '\n').split('\n');
+  if (lines[0] !== 'version https://git-lfs.github.com/spec/v1') return false;
+  let index = 1;
+  while (lines[index]?.startsWith('ext-')) index += 1;
+  return (
+    /^oid sha256:[0-9a-f]{64}$/.test(lines[index] ?? '') &&
+    /^size [0-9]+$/.test(lines[index + 1] ?? '')
+  );
 }
 
 async function ensureOwnerDirectory(path: string): Promise<void> {

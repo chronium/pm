@@ -4,7 +4,12 @@ using System.Text.Json;
 
 namespace PM.AgentRuns;
 
-public sealed class AgentRunnerEventStream : IAsyncDisposable
+public interface IAgentRunnerEventStream : IAsyncDisposable
+{
+    IAsyncEnumerable<AgentRunStreamMessage> ReadAllAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class AgentRunnerEventStream : IAgentRunnerEventStream
 {
     private const int MaximumEventBytes = 1_048_576;
     private readonly HttpClient _client;

@@ -116,6 +116,9 @@ public sealed class AgentRunnerStatusCommand(IAgentRunnerClient runners)
         AnsiConsole.MarkupLineInterpolated($"Runner: [green]{runner.RunnerId.EscapeMarkup()}[/]");
         AnsiConsole.MarkupLineInterpolated($"Name: {runner.DisplayName.EscapeMarkup()}");
         AnsiConsole.MarkupLineInterpolated($"Status: [green]{health.Payload!.Status.EscapeMarkup()}[/]");
+        if (health.Payload.Build is { } build)
+            AnsiConsole.MarkupLineInterpolated(
+                $"Build: {build.Version.EscapeMarkup()} ({build.SourceRevision[..Math.Min(12, build.SourceRevision.Length)].EscapeMarkup()})");
         AnsiConsole.MarkupLineInterpolated(
             $"Capacity: {runner.Capacity.ActiveRuns}/{runner.Capacity.MaximumRuns} active");
         AnsiConsole.MarkupLineInterpolated(

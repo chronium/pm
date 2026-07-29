@@ -57,6 +57,11 @@ export const routes: Routes = [
         canDeactivate: [canLeaveDirtyRoute],
       },
       {
+        path: 'runs/:runId',
+        loadComponent: () =>
+          import('./agent-runs/agent-run-workspace').then((module) => module.AgentRunWorkspace),
+      },
+      {
         path: ':taskId',
         loadComponent: () =>
           import('./tasks/task-workspace/task-page-host').then((module) => module.TaskPageHost),
@@ -120,6 +125,7 @@ export const staticRoutes: Routes = [
         ],
       },
       { path: 'new', redirectTo: '' },
+      { path: 'runs/:runId', redirectTo: '' },
       {
         path: ':taskId',
         loadComponent: () =>

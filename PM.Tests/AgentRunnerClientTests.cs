@@ -157,6 +157,8 @@ public class AgentRunnerClientTests
         var capabilities = await client.Capabilities(server.RunnerId);
         Assert.True(health.Success);
         Assert.Equal("online", health.Payload!.Status);
+        Assert.Equal("0.1.0", health.Payload.Build!.Version);
+        Assert.Equal(new string('a', 40), health.Payload.Build.SourceRevision);
         Assert.True(capabilities.Success);
         Assert.Equal(server.RunnerId, capabilities.Payload!.RunnerId);
 
@@ -382,6 +384,12 @@ public class AgentRunnerClientTests
                     status = "online",
                     protocolVersion = "1.0",
                     timestamp = DateTimeOffset.UtcNow,
+                    build = new
+                    {
+                        version = "0.1.0",
+                        sourceRevision = new string('a', 40),
+                        imageDigest = $"sha256:{new string('b', 64)}",
+                    },
                     futureField = true,
                 });
                 return;
