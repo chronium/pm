@@ -3,7 +3,12 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { JsonLogger } from '../src/logging.js';
-import type { AgentDriver, RuntimeDriver, RuntimeHandle } from '../src/drivers.js';
+import type {
+  AgentDriver,
+  AgentDriverEvent,
+  RuntimeDriver,
+  RuntimeHandle,
+} from '../src/drivers.js';
 import { RunStore, type StoredRun } from '../src/persistence/run-store.js';
 import { RetentionService } from '../src/retention.js';
 import { DriverRunProcessor, RunScheduler, type RunProcessor } from '../src/scheduler.js';
@@ -177,7 +182,17 @@ test('runtime and agent driver fakes execute through the scheduler seam', async 
     const store = new RunStore(temporary.path);
     store.acceptRun(createRequest('run-drivers'), 4);
     const lifecycle: string[] = [];
-    const runtimeHandle: RuntimeHandle = { runtimeId: 'fake-runtime' };
+    const runtimeHandle: RuntimeHandle = {
+      runtimeId: 'fake-runtime',
+      agentContext: {
+        workspaceDirectory: '/workspace',
+        codexHomeDirectory: '/run/codex-home',
+        networkAccessEnabled: false,
+        workerCommand: { executable: 'node', arguments: ['worker.js'] },
+        pmMcpCommand: { executable: 'pm', arguments: [] },
+        environment: { CODEX_HOME: '/run/codex-home', PATH: '/usr/bin' },
+      },
+    };
     const runtimeDriver: RuntimeDriver = {
       async create(): Promise<RuntimeHandle> {
         lifecycle.push('runtime.create');
@@ -188,8 +203,13 @@ test('runtime and agent driver fakes execute through the scheduler seam', async 
       },
     };
     const agentDriver: AgentDriver = {
-      async *execute(_specification, runtime): AsyncIterable<{ type: string; summary: string }> {
+      async *execute(_specification, runtime): AsyncIterable<AgentDriverEvent> {
         lifecycle.push(`agent.execute:${runtime.runtimeId}`);
+        yield {
+          type: 'agent.thread_started',
+          summary: 'Fake agent started',
+          agentThreadId: 'thread-scheduler',
+        };
         yield { type: 'agent.message', summary: 'Fake agent response' };
       },
     };
@@ -212,6 +232,7 @@ test('runtime and agent driver fakes execute through the scheduler seam', async 
       store.eventsAfter('run-drivers').find((event) => event.type === 'agent.message')?.summary,
       'Fake agent response',
     );
+    assert.equal(store.getRun('run-drivers')?.agentThreadId, 'thread-scheduler');
     await scheduler.stop();
     store.close();
   } finally {

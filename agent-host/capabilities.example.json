@@ -3,16 +3,16 @@
   "agentProviders": [
     {
       "providerId": "codex",
-      "modelIds": ["gpt-5.6"],
-      "defaultModelId": "gpt-5.6",
-      "effortIds": ["high", "xhigh"],
-      "defaultEffortId": "xhigh"
+      "modelIds": ["gpt-5.6-sol"],
+      "defaultModelId": "gpt-5.6-sol",
+      "effortIds": ["low", "medium", "high", "xhigh"],
+      "defaultEffortId": "medium"
     }
   ],
   "runtimeProfiles": [
     {
       "profileId": "dotnet-10",
-      "revision": "b5b18ff76eb761618044050df2cc4f070ee3345eae1a7c76d3cf92a415757ab9",
+      "revision": "33a364a71ae07e2248370ca096e4d7332342815fe5213c2d6d0fe52ed2dace95",
       "imageReference": "ghcr.io/chronium/pm-agent-dotnet@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "limits": {
         "cpuMillicores": 4000,
@@ -21,7 +21,27 @@
         "diskBytes": 21474836480,
         "timeoutSeconds": 10800
       },
-      "networkProfileId": "openai-nuget-github",
+      "network": {
+        "profileId": "development-open",
+        "mode": "open"
+      },
+      "container": {
+        "workspacePath": "/workspace",
+        "codexHomePath": "/home/pm/.codex",
+        "temporaryPath": "/tmp",
+        "temporaryBytes": 1073741824,
+        "environmentAllowlist": ["CODEX_HOME", "HOME", "PATH"],
+        "readOnlyCaches": [],
+        "security": {
+          "readOnlyRootFilesystem": true,
+          "userNamespace": "keep-id",
+          "noNewPrivileges": true,
+          "dropAllCapabilities": true,
+          "privateNamespaces": true,
+          "seccompProfile": "runtime-default",
+          "lsmProfile": "none"
+        }
+      },
       "validation": [
         {
           "stepId": "build",

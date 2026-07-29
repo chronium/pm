@@ -6,7 +6,13 @@ const allowedClockSkewSeconds = 300;
 
 export type AuthenticationResult =
   | { authenticated: true; client: PairedClient; nonce: string; protocolVersion: '1.0' }
-  | { authenticated: false; status: 401 | 426; errorCode: string; message: string };
+  | {
+      authenticated: false;
+      status: 401 | 426;
+      errorCode: string;
+      message: string;
+      serverTime?: string;
+    };
 
 export class RequestAuthenticator {
   constructor(
@@ -37,11 +43,9 @@ export class RequestAuthenticator {
 
     const timestampSeconds = Number(timestamp);
     const nowSeconds = Math.floor(this.now().getTime() / 1000);
-    if (
-      !Number.isSafeInteger(timestampSeconds) ||
-      Math.abs(timestampSeconds - nowSeconds) > allowedClockSkewSeconds
-    )
-      return unauthorized();
+    if (!Number.isSafeInteger(timestampSeconds)) return unauthorized();
+    if (Math.abs(timestampSeconds - nowSeconds) > allowedClockSkewSeconds)
+      return unauthorized(String(nowSeconds));
 
     const client = this.credentials.getClient();
     if (client === undefined || client.clientId !== clientId) return unauthorized();
@@ -60,8 +64,8 @@ export class RequestAuthenticator {
         errorCode: 'incompatible_protocol',
         message: 'The authenticated protocol version is not supported.',
       };
-    if (!this.credentials.useNonce(clientId, nonce, new Date((nowSeconds + 600) * 1000)))
-      return unauthorized();
+    const nonceExpiresAt = new Date((timestampSeconds + allowedClockSkewSeconds + 1) * 1000);
+    if (!this.credentials.useNonce(clientId, nonce, nonceExpiresAt)) return unauthorized();
     return { authenticated: true, client, nonce, protocolVersion: '1.0' };
   }
 }
@@ -71,11 +75,12 @@ function header(headers: IncomingHttpHeaders, name: string): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-function unauthorized(): AuthenticationResult {
+function unauthorized(serverTime?: string): AuthenticationResult {
   return {
     authenticated: false,
     status: 401,
     errorCode: 'unauthorized',
     message: 'Authentication failed.',
+    ...(serverTime === undefined ? {} : { serverTime }),
   };
 }

@@ -1,30 +1,19 @@
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
 import type { RunStore } from './persistence/run-store.js';
-import type { CapabilityManifest, RunnerCapabilities } from './protocol/types.js';
+import type {
+  CapabilityManifest,
+  ContainerRuntimeCapability,
+  RunnerCapabilities,
+} from './protocol/types.js';
 import type { RunRequest } from './protocol/types.js';
 import { canonicalRuntimeProfile } from './protocol/canonical-json.js';
 import { parseCapabilityManifest } from './protocol/validation.js';
-
-export interface DockerProbe {
-  available(): boolean;
-}
+import { CommandPodmanProbe, type ContainerRuntimeProbe } from './oci/podman-probe.js';
 
 export type RunCapabilityResult =
   | { valid: true }
   | { valid: false; errorCode: string; message: string };
-
-export class CommandDockerProbe implements DockerProbe {
-  available(): boolean {
-    const result = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'ignore', 'ignore'],
-      timeout: 2_000,
-    });
-    return result.status === 0;
-  }
-}
 
 export function loadCapabilityManifest(path: string): CapabilityManifest {
   let value: unknown;
@@ -37,18 +26,18 @@ export function loadCapabilityManifest(path: string): CapabilityManifest {
 }
 
 export class CapabilityService {
-  private readonly dockerAvailable: boolean;
+  private readonly containerRuntime: ContainerRuntimeCapability;
 
   constructor(
     private readonly store: RunStore,
     private readonly manifest: CapabilityManifest,
     private readonly maximumRuns: number,
-    dockerProbe: DockerProbe = new CommandDockerProbe(),
+    runtimeProbe: ContainerRuntimeProbe = new CommandPodmanProbe(),
     private readonly memoryBytes: () => number = totalmem,
     private readonly platform: () => NodeJS.Platform = () => process.platform,
     private readonly architecture: () => string = () => process.arch,
   ) {
-    this.dockerAvailable = dockerProbe.available();
+    this.containerRuntime = runtimeProbe.inspect(manifest.runtimeProfiles);
   }
 
   get(): RunnerCapabilities {
@@ -58,7 +47,7 @@ export class CapabilityService {
       protocolVersions: ['1.0'],
       operatingSystem: normalizePlatform(this.platform()),
       architecture: normalizeArchitecture(this.architecture()),
-      dockerAvailable: this.dockerAvailable,
+      containerRuntime: this.containerRuntime,
       capacity: {
         maximumRuns: this.maximumRuns,
         activeRuns: this.store.activeRunCount(),

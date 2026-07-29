@@ -210,7 +210,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
             var fields = BuildSearchFields(task, markdown, track, state, priority.Priority);
             var matchCount = search.HasFreeText
-                ? fields.Sum(field => CountMatches(field.Value, search.FreeText))
+                ? CountSearchMatches(fields, search.FreeText)
                 : 0;
             if (search.HasFreeText && matchCount == 0) continue;
 
@@ -653,7 +653,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         return $"{normalizedDescription}\n\n## Notes\n\n{formattedNote}";
     }
 
-    private static IReadOnlyList<(string Label, string Value)> BuildSearchFields(
+    private static IReadOnlyList<(string Label, string Value, bool IsFallback)> BuildSearchFields(
         TaskItem task,
         string markdown,
         string track,
@@ -662,16 +662,28 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
     {
         return
         [
-            ("Description", task.Description),
-            ("Title", task.Title),
-            ("ID", task.Id),
-            ("Track", track),
-            ("Milestone", task.Milestone ?? string.Empty),
-            ("State", state),
-            ("Priority", priority),
-            ("Dependencies", string.Join(' ', task.DependencyIds)),
-            ("Markdown", markdown),
+            ("Description", task.Description, false),
+            ("Title", task.Title, false),
+            ("ID", task.Id, false),
+            ("Track", track, false),
+            ("Milestone", task.Milestone ?? string.Empty, false),
+            ("State", state, false),
+            ("Priority", priority, false),
+            ("Dependencies", string.Join(' ', task.DependencyIds), false),
+            ("Markdown", markdown, true),
         ];
+    }
+
+    private static int CountSearchMatches(
+        IReadOnlyList<(string Label, string Value, bool IsFallback)> fields,
+        string query)
+    {
+        var semanticMatchCount = fields
+            .Where(field => !field.IsFallback)
+            .Sum(field => CountMatches(field.Value, query));
+        return semanticMatchCount > 0
+            ? semanticMatchCount
+            : fields.Where(field => field.IsFallback).Sum(field => CountMatches(field.Value, query));
     }
 
     private static int CountMatches(string value, string query)
@@ -687,7 +699,9 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         }
     }
 
-    private static string BuildSnippet(IReadOnlyList<(string Label, string Value)> fields, string query)
+    private static string BuildSnippet(
+        IReadOnlyList<(string Label, string Value, bool IsFallback)> fields,
+        string query)
     {
         var field = fields.FirstOrDefault(field =>
             !string.IsNullOrWhiteSpace(field.Value) &&

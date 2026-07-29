@@ -31,6 +31,8 @@ import {
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskOptionsResource } from '../task-options.resource';
 import { StaticModeService } from '../../static/static-mode.service';
+import { AgentRunLaunch } from '../../agent-runs/agent-run-launch';
+import type { AgentRunRemoteStart } from '../../agent-runs/agent-runs-api.service';
 
 export type TaskWorkspacePresentation = 'dialog' | 'page';
 export type TaskWorkspaceMode = 'detail' | 'create';
@@ -57,6 +59,7 @@ type ConfirmKind = 'discard' | 'remove' | null;
   selector: 'pm-task-workspace',
   imports: [
     DatePipe,
+    AgentRunLaunch,
     ExternalChangeBanner,
     FormField,
     MarkdownDisplay,
@@ -95,6 +98,7 @@ export class TaskWorkspace {
   protected readonly noteFormOpen = signal(false);
   protected readonly noteDraft = signal('');
   protected readonly noteError = signal<string | null>(null);
+  protected readonly launchOpen = signal(false);
   protected readonly recommendationReason = this.navigation.recommendationReason();
   protected readonly model = signal<DraftModel>({
     title: '',
@@ -166,6 +170,13 @@ export class TaskWorkspace {
       ? `Inherited (${this.detail.task()?.priority ?? this.creationPriority()})`
       : this.label(this.model().priority),
   );
+
+  protected openRun(result: AgentRunRemoteStart): void {
+    this.launchOpen.set(false);
+    void this.router.navigate(['/tasks/runs', result.run.runId], {
+      state: { returnUrl: this.router.url },
+    });
+  }
 
   constructor() {
     effect(() => {

@@ -79,9 +79,42 @@ public sealed record AgentRunRuntimeProfile(
     string Revision,
     string ImageReference,
     AgentRunResourceLimits Limits,
-    string NetworkProfileId,
+    AgentRunNetworkPolicy Network,
+    AgentRunContainerPolicy Container,
     IReadOnlyList<AgentRunValidationStep> Validation,
     AgentRunOutputPolicy Output);
+
+public sealed record AgentRunNetworkPolicy(string ProfileId, AgentRunNetworkMode Mode);
+
+[JsonConverter(typeof(JsonStringEnumConverter<AgentRunNetworkMode>))]
+public enum AgentRunNetworkMode
+{
+    [JsonStringEnumMemberName("offline")]
+    Offline,
+
+    [JsonStringEnumMemberName("open")]
+    Open,
+}
+
+public sealed record AgentRunContainerPolicy(
+    string WorkspacePath,
+    string CodexHomePath,
+    string TemporaryPath,
+    long TemporaryBytes,
+    IReadOnlyList<string> EnvironmentAllowlist,
+    IReadOnlyList<AgentRunCacheMount> ReadOnlyCaches,
+    AgentRunContainerSecurityPolicy Security);
+
+public sealed record AgentRunCacheMount(string CacheId, string ContainerPath);
+
+public sealed record AgentRunContainerSecurityPolicy(
+    bool ReadOnlyRootFilesystem,
+    string UserNamespace,
+    bool NoNewPrivileges,
+    bool DropAllCapabilities,
+    bool PrivateNamespaces,
+    string SeccompProfile,
+    string LsmProfile);
 
 public sealed record AgentRunResourceLimits(
     int CpuMillicores,
@@ -180,10 +213,20 @@ public sealed record AgentRunnerCapabilities(
     IReadOnlyList<AgentRunProtocolVersion> ProtocolVersions,
     string OperatingSystem,
     string Architecture,
-    bool DockerAvailable,
+    AgentContainerRuntimeCapability ContainerRuntime,
     AgentRunnerCapacity Capacity,
     IReadOnlyList<AgentRunnerProviderCapability> AgentProviders,
     IReadOnlyList<AgentRunRuntimeProfile> RuntimeProfiles);
+
+public sealed record AgentContainerRuntimeCapability(
+    string EngineId,
+    string Version,
+    bool Rootless,
+    string CgroupVersion,
+    string CgroupManager,
+    bool SeccompEnabled,
+    bool SelinuxEnabled,
+    bool AppArmorEnabled);
 
 public sealed record AgentRunnerCapacity(int MaximumRuns, int ActiveRuns, long MemoryBytes);
 
@@ -206,9 +249,34 @@ public enum AgentRunnerConnectivity
 
 public static class AgentRunJson
 {
-    public static JsonSerializerOptions Options { get; } = new()
+    public static JsonSerializerOptions Options { get; } = CreateOptions();
+
+    private static JsonSerializerOptions CreateOptions()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+        };
+        options.Converters.Add(new AgentRunTimestampJsonConverter());
+        return options;
+    }
+}
+
+public sealed class AgentRunTimestampJsonConverter : JsonConverter<DateTimeOffset>
+{
+    public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+        return DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
+            ? timestamp
+            : throw new JsonException("Agent run timestamps must use ISO 8601 format.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTimeOffset value,
+        JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
+            System.Globalization.CultureInfo.InvariantCulture));
 }

@@ -18,7 +18,7 @@ export function loadTlsMaterial(certificatePath: string, keyPath: string): TlsMa
   const options: SecureContextOptions = {
     cert: certificate,
     key,
-    minVersion: 'TLSv1.3',
+    minVersion: 'TLSv1.2',
   };
   createSecureContext(options);
   const parsed = new X509Certificate(certificate);

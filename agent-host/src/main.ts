@@ -6,9 +6,20 @@ import { RetentionService } from './retention.js';
 import { CredentialStore } from './auth/credential-store.js';
 import { certificateFingerprint, loadTlsMaterial } from './auth/tls.js';
 import { generatePairingCode, hashPairingCode } from './auth/crypto.js';
+import { formatPairingInstructions } from './auth/pairing.js';
 import { CapabilityService, loadCapabilityManifest } from './capabilities.js';
 import { AgentHostServer } from './server.js';
-import { QueueOnlyExecutionController, RunCoordinator } from './run-coordinator.js';
+import { RunCoordinator } from './run-coordinator.js';
+import { RunnerLayout } from './execution/layout.js';
+import { RepositoryPolicy } from './execution/repository-policy.js';
+import { GitWorkspaceService } from './execution/workspace.js';
+import { NodePodmanClient, PodmanRuntimeDriver } from './oci/podman-runtime.js';
+import { CodexAgentDriver } from './codex/agent-driver.js';
+import { ValidationRunner } from './execution/validation.js';
+import { ArtifactCollector } from './execution/artifacts.js';
+import { DriverRunProcessor, RunScheduler } from './scheduler.js';
+import { formatDoctorReport, runDoctor } from './doctor.js';
+import { loadReleaseInfo } from './release-info.js';
 
 const retentionIntervalMilliseconds = 60 * 60 * 1000;
 const pairingLifetimeMilliseconds = 10 * 60 * 1000;
@@ -21,6 +32,23 @@ async function main(): Promise<void> {
   }
 
   switch (parsed.command) {
+    case 'version': {
+      const release = loadReleaseInfo(parsed.config.releaseManifestPath);
+      process.stdout.write(
+        parsed.json
+          ? `${JSON.stringify(release)}\n`
+          : `pm-agent-host ${release.packageVersion} (${release.sourceRevision}) protocol ${release.protocolVersion}\n`,
+      );
+      return;
+    }
+    case 'doctor': {
+      const report = runDoctor(parsed.config);
+      process.stdout.write(
+        parsed.json ? `${JSON.stringify(report)}\n` : formatDoctorReport(report),
+      );
+      if (!report.ok) process.exitCode = 1;
+      return;
+    }
     case 'pair':
       openPairingWindow(parsed.config);
       return;
@@ -43,7 +71,12 @@ function openPairingWindow(config: HostConfig): void {
       new Date(Date.now() + pairingLifetimeMilliseconds),
     );
     process.stdout.write(
-      `Runner: ${store.runnerId}\nPairing code: ${code}\nTLS fingerprint: ${fingerprint}\nExpires in: 10 minutes\n`,
+      formatPairingInstructions({
+        runnerId: store.runnerId,
+        code,
+        tlsFingerprint: fingerprint,
+        expiresIn: '10 minutes',
+      }),
     );
   } finally {
     credentials.close();
@@ -69,25 +102,40 @@ async function serve(config: HostConfig): Promise<void> {
   const credentials = new CredentialStore(config.dataRoot);
   let timer: NodeJS.Timeout | undefined;
   let server: AgentHostServer | undefined;
+  let scheduler: RunScheduler | undefined;
   try {
+    const release = loadReleaseInfo(config.releaseManifestPath);
+    const manifest = loadCapabilityManifest(config.capabilityManifestPath!);
+    const layout = new RunnerLayout(config.dataRoot);
+    const repositoryPolicy = RepositoryPolicy.load(config.repositoryPolicyPath!);
+    const workspace = new GitWorkspaceService(layout, repositoryPolicy, config.codexAuthPath!);
+    const runtime = new PodmanRuntimeDriver(new NodePodmanClient(), {
+      dataRoot: config.dataRoot,
+      runnerId: store.runnerId,
+      minimumFreeDiskBytes: config.minimumFreeDiskBytes,
+    });
+    const removedContainers = await runtime.reconcile();
     const recovery = store.recover();
+    const reconciledRuns = await workspace.reconcile();
     if (recovery.failed + recovery.queued > 0)
-      logger.warn('runner.recovered', { recoveredRuns: recovery.failed + recovery.queued });
+      logger.warn('runner.recovered', {
+        recoveredRuns: recovery.failed + recovery.queued,
+        removedContainers,
+        reconciledRuns,
+      });
     const retention = new RetentionService(store, config.dataRoot, config.retentionDays, logger);
     retention.prune();
     timer = setInterval(() => retention.prune(), retentionIntervalMilliseconds);
     const tls = loadTlsMaterial(config.tlsCertificatePath!, config.tlsKeyPath!);
-    const capabilities = new CapabilityService(
-      store,
-      loadCapabilityManifest(config.capabilityManifestPath!),
-      config.maxConcurrency,
-    );
-    const runCoordinator = new RunCoordinator(
-      store,
-      capabilities,
-      config.queueCapacity,
-      new QueueOnlyExecutionController(),
-    );
+    const capabilities = new CapabilityService(store, manifest, config.maxConcurrency);
+    const agent = new CodexAgentDriver(runtime);
+    const processor = new DriverRunProcessor(store, runtime, agent, {
+      workspace,
+      validation: new ValidationRunner(runtime),
+      artifacts: new ArtifactCollector(store, layout),
+    });
+    scheduler = new RunScheduler(store, processor, config.maxConcurrency);
+    const runCoordinator = new RunCoordinator(store, capabilities, config.queueCapacity, scheduler);
     server = new AgentHostServer({
       listenAddress: config.listenAddress!,
       port: config.port,
@@ -98,8 +146,10 @@ async function serve(config: HostConfig): Promise<void> {
       runStore: store,
       runCoordinator,
       logger,
+      release,
     });
     await server.start();
+    scheduler.start();
     logger.info('runner.ready', {
       queueDepth: store.queueDepth(),
       activeRuns: store.activeRunCount(),
@@ -108,6 +158,7 @@ async function serve(config: HostConfig): Promise<void> {
   } finally {
     if (timer !== undefined) clearInterval(timer);
     if (server !== undefined) await server.stop();
+    if (scheduler !== undefined) await scheduler.stop();
     credentials.close();
     store.close();
     logger.info('runner.stopped');

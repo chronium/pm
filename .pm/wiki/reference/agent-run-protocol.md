@@ -1,7 +1,7 @@
 ---
 title: Agent Run Protocol
 createdAt: 2026-07-27T09:18:00.7240920Z
-modifiedAt: 2026-07-27T10:46:42.2502110Z
+modifiedAt: 2026-07-28T17:43:00.2203540Z
 ---
 
 Agent run protocol 1.0 defines the durable contract between PM's control plane and a runner. The contract is transport-neutral and is exposed by the TypeScript agent host over authenticated HTTPS with durable event replay.
@@ -61,6 +61,8 @@ The HTTPS runner exposes paged history and replayable server-sent events using t
 Protocol 1.0 event types use the `run.*`, `runner.*`, `runtime.*`, `agent.*`, `command.*`, `mcp.*`, `validation.*`, and `artifact.*` namespaces. Summaries and payloads are stripped of unsafe terminal controls, common credentials are redacted, and depth and payload size are bounded before persistence.
 
 Run start is idempotent by run ID and canonical specification hash. Queued cancellation settles immediately; active cancellation is journaled first and settles after execution stops. Artifact routes expose validated metadata in this slice, with byte transfer deferred.
+
+The Codex SDK adapter executes through a one-shot worker designed for the isolated runtime. It converts SDK thread, turn, message, command, file-change, MCP, usage, and failure activity into provider-neutral events. Command output is incremental, changed paths are workspace-relative, and MCP arguments and results are not journaled. The provider thread ID is recorded separately for diagnostics and future continuation without making Codex's local transport part of this protocol.
 
 ## Authority boundaries
 

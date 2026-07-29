@@ -8,7 +8,7 @@ dependsOn:
 - AGENT-0003
 - AGENT-0005
 createdAt: 2026-07-27T06:57:01.1030050Z
-modifiedAt: 2026-07-27T06:57:21.3442530Z
+modifiedAt: 2026-07-28T17:49:12.5657750Z
 ---
 
 ## Goal
@@ -38,3 +38,7 @@ Execute one Codex task inside the run environment and convert SDK activity into 
 - Add mocked SDK lifecycle, error, cancellation, MCP failure, and redaction tests.
 - Add an opt-in credentialed smoke test that is excluded from normal CI.
 - Run runner formatting, strict checks, and tests.
+
+## Notes
+
+- 2026-07-28 17:49 UTC - Implemented the isolated Codex SDK worker and host-side driver seam with required scoped PM MCP, immutable run configuration, workspace-write/no-approval execution, normalized and sanitized JSONL events, durable Codex thread IDs, cancellation, bounded output handling, and an opt-in credentialed smoke test. Added protocol and runner documentation, pinned @openai/codex-sdk through Socket, and set the advertised/default reasoning effort to medium (with xhigh supported only when explicitly selected). Validation passed: agent-host formatting/type checks/build and 37 tests, live credentialed smoke, .NET build, 305 .NET tests, and pm doctor.

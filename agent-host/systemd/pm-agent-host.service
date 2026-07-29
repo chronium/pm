@@ -1,0 +1,25 @@
+[Unit]
+Description=PM agent host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/pm-agent-host/host.env
+ExecStartPre=/usr/bin/podman info
+ExecStartPre=%h/.local/share/pm-agent-host/current/bin/pm-agent-host doctor
+ExecStart=%h/.local/share/pm-agent-host/current/bin/pm-agent-host serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillMode=mixed
+UMask=0077
+# Rootless Podman needs newuidmap and its own namespaces; harden worker containers instead.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pm-agent-host
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=default.target

@@ -1,24 +1,29 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 
-export type HostCommand = 'serve' | 'pair' | 'revoke-client';
+export type HostCommand = 'serve' | 'pair' | 'revoke-client' | 'doctor' | 'version';
 
 export interface HostConfig {
   dataRoot: string;
   maxConcurrency: number;
   queueCapacity: number;
   retentionDays: number;
+  minimumFreeDiskBytes: number;
   listenAddress: string | null;
   port: number;
   tlsCertificatePath: string | null;
   tlsKeyPath: string | null;
   capabilityManifestPath: string | null;
+  repositoryPolicyPath: string | null;
+  codexAuthPath: string | null;
+  releaseManifestPath: string | null;
 }
 
 export interface ParsedHostConfig {
   command: HostCommand;
   config: HostConfig;
   help: boolean;
+  json: boolean;
 }
 
 const defaults = {
@@ -26,6 +31,7 @@ const defaults = {
   maxConcurrency: 1,
   queueCapacity: 32,
   retentionDays: 30,
+  minimumFreeDiskBytes: 5 * 1024 * 1024 * 1024,
   port: 7443,
 } as const;
 
@@ -34,11 +40,15 @@ const environmentNames = {
   maxConcurrency: 'PM_AGENT_HOST_MAX_CONCURRENCY',
   queueCapacity: 'PM_AGENT_HOST_QUEUE_CAPACITY',
   retentionDays: 'PM_AGENT_HOST_RETENTION_DAYS',
+  minimumFreeDiskBytes: 'PM_AGENT_HOST_MIN_FREE_DISK_BYTES',
   listenAddress: 'PM_AGENT_HOST_LISTEN_ADDRESS',
   port: 'PM_AGENT_HOST_PORT',
   tlsCertificatePath: 'PM_AGENT_HOST_TLS_CERT_PATH',
   tlsKeyPath: 'PM_AGENT_HOST_TLS_KEY_PATH',
   capabilityManifestPath: 'PM_AGENT_HOST_CAPABILITIES_PATH',
+  repositoryPolicyPath: 'PM_AGENT_HOST_REPOSITORIES_PATH',
+  codexAuthPath: 'PM_AGENT_HOST_CODEX_AUTH_PATH',
+  releaseManifestPath: 'PM_AGENT_HOST_RELEASE_MANIFEST_PATH',
 } as const;
 
 export function parseHostConfig(
@@ -47,26 +57,42 @@ export function parseHostConfig(
 ): ParsedHostConfig {
   const first = args[0];
   const command: HostCommand =
-    first === 'serve' || first === 'pair' || first === 'revoke-client' ? first : 'serve';
+    first === 'serve' ||
+    first === 'pair' ||
+    first === 'revoke-client' ||
+    first === 'doctor' ||
+    first === 'version'
+      ? first
+      : 'serve';
   const optionArgs = command === first ? args.slice(1) : args;
   const values = {
     dataRoot: environment[environmentNames.dataRoot] ?? defaults.dataRoot,
     maxConcurrency: environment[environmentNames.maxConcurrency] ?? String(defaults.maxConcurrency),
     queueCapacity: environment[environmentNames.queueCapacity] ?? String(defaults.queueCapacity),
     retentionDays: environment[environmentNames.retentionDays] ?? String(defaults.retentionDays),
+    minimumFreeDiskBytes:
+      environment[environmentNames.minimumFreeDiskBytes] ?? String(defaults.minimumFreeDiskBytes),
     listenAddress: environment[environmentNames.listenAddress] ?? null,
     port: environment[environmentNames.port] ?? String(defaults.port),
     tlsCertificatePath: environment[environmentNames.tlsCertificatePath] ?? null,
     tlsKeyPath: environment[environmentNames.tlsKeyPath] ?? null,
     capabilityManifestPath: environment[environmentNames.capabilityManifestPath] ?? null,
+    repositoryPolicyPath: environment[environmentNames.repositoryPolicyPath] ?? null,
+    codexAuthPath: environment[environmentNames.codexAuthPath] ?? null,
+    releaseManifestPath: environment[environmentNames.releaseManifestPath] ?? null,
   };
   const seen = new Set<string>();
   let help = false;
+  let json = false;
 
   for (let index = 0; index < optionArgs.length; index += 1) {
     const argument = optionArgs[index];
     if (argument === '--help' || argument === '-h') {
       help = true;
+      continue;
+    }
+    if (argument === '--json') {
+      json = true;
       continue;
     }
 
@@ -89,6 +115,9 @@ export function parseHostConfig(
       case '--retention-days':
         values.retentionDays = option.value;
         break;
+      case '--min-free-disk-bytes':
+        values.minimumFreeDiskBytes = option.value;
+        break;
       case '--listen-address':
         values.listenAddress = option.value;
         break;
@@ -104,6 +133,15 @@ export function parseHostConfig(
       case '--capabilities':
         values.capabilityManifestPath = option.value;
         break;
+      case '--repositories':
+        values.repositoryPolicyPath = option.value;
+        break;
+      case '--codex-auth':
+        values.codexAuthPath = option.value;
+        break;
+      case '--release-manifest':
+        values.releaseManifestPath = option.value;
+        break;
       default:
         throw new Error(`Unknown option: ${option.name}.`);
     }
@@ -116,48 +154,65 @@ export function parseHostConfig(
     maxConcurrency: positiveInteger(values.maxConcurrency, '--max-concurrency'),
     queueCapacity: positiveInteger(values.queueCapacity, '--queue-capacity'),
     retentionDays: nonNegativeInteger(values.retentionDays, '--retention-days'),
+    minimumFreeDiskBytes: nonNegativeInteger(values.minimumFreeDiskBytes, '--min-free-disk-bytes'),
     listenAddress: values.listenAddress,
     port: portNumber(values.port),
     tlsCertificatePath: absoluteOptionalPath(values.tlsCertificatePath, '--tls-cert'),
     tlsKeyPath: absoluteOptionalPath(values.tlsKeyPath, '--tls-key'),
     capabilityManifestPath: absoluteOptionalPath(values.capabilityManifestPath, '--capabilities'),
+    repositoryPolicyPath: absoluteOptionalPath(values.repositoryPolicyPath, '--repositories'),
+    codexAuthPath: absoluteOptionalPath(values.codexAuthPath, '--codex-auth'),
+    releaseManifestPath: absoluteOptionalPath(values.releaseManifestPath, '--release-manifest'),
   };
 
   if (!help) validateCommandConfig(command, config);
-  return { command, config, help };
+  return { command, config, help, json };
 }
 
-export const helpText = `Usage: pm-agent-host <serve|pair|revoke-client> [options]
+export const helpText = `Usage: pm-agent-host <serve|pair|revoke-client|doctor|version> [options]
 
 Commands:
   serve          Start the authenticated HTTPS runner service
   pair           Open a one-use pairing window and print its code and TLS fingerprint
   revoke-client  Remove the paired PM client using local runner access
+  doctor         Validate the installed host, configuration, storage, and runtime
+  version        Print package, source, runtime-image, and protocol versions
 
 Options:
   --data-root <path>          Host-owned state directory (default: /var/lib/pm-runner)
   --max-concurrency <count>  Maximum active runs (default: 1)
   --queue-capacity <count>   Maximum queued runs (default: 32)
   --retention-days <days>    Terminal run retention; 0 disables pruning (default: 30)
+  --min-free-disk-bytes <n>  Stop runs below this host free-space floor (default: 5368709120)
   --listen-address <ip>      Explicit non-wildcard HTTPS interface
   --port <port>              HTTPS port (default: 7443)
   --tls-cert <path>          Operator-provided PEM certificate
   --tls-key <path>           Protected PEM private key
   --capabilities <path>      Static runner capability manifest
+  --repositories <path>      Owner-only exact repository allowlist
+  --codex-auth <path>        Dedicated owner-only Codex auth.json
+  --release-manifest <path>  Installed release information
+  --json                     Print doctor or version output as JSON
   --help                     Show this help
 `;
 
 function validateCommandConfig(command: HostCommand, config: HostConfig): void {
-  if (command === 'serve') {
-    if (config.listenAddress === null) throw new Error('--listen-address is required for serve.');
+  if (command === 'serve' || command === 'doctor') {
+    if (config.listenAddress === null)
+      throw new Error('--listen-address is required for serve and doctor.');
     if (isIP(config.listenAddress) === 0)
       throw new Error('--listen-address must be an explicit IP address.');
     if (config.listenAddress === '0.0.0.0' || config.listenAddress === '::')
       throw new Error('--listen-address cannot be a wildcard interface.');
-    if (config.tlsCertificatePath === null) throw new Error('--tls-cert is required for serve.');
-    if (config.tlsKeyPath === null) throw new Error('--tls-key is required for serve.');
+    if (config.tlsCertificatePath === null)
+      throw new Error('--tls-cert is required for serve and doctor.');
+    if (config.tlsKeyPath === null) throw new Error('--tls-key is required for serve and doctor.');
     if (config.capabilityManifestPath === null)
-      throw new Error('--capabilities is required for serve.');
+      throw new Error('--capabilities is required for serve and doctor.');
+    if (config.repositoryPolicyPath === null)
+      throw new Error('--repositories is required for serve and doctor.');
+    if (config.codexAuthPath === null)
+      throw new Error('--codex-auth is required for serve and doctor.');
   }
   if (command === 'pair' && config.tlsCertificatePath === null)
     throw new Error('--tls-cert is required for pair.');

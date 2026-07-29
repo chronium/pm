@@ -25,6 +25,7 @@ export interface StoredRun {
   updatedAt: string;
   terminalAt: string | null;
   cancellationRequestedAt: string | null;
+  agentThreadId: string | null;
 }
 
 export type AcceptRunResult =
@@ -40,8 +41,7 @@ export interface EventDraft {
   data?: unknown;
 }
 
-const eventType =
-  /^(?:run|runner|runtime|agent|command|mcp|validation|artifact)\.[a-z0-9][a-z0-9._-]*$/;
+const eventType = /^[a-z][a-z0-9_-]*\.[a-z0-9][a-z0-9._-]*$/;
 
 export interface RecoveryResult {
   queued: number;
@@ -87,6 +87,7 @@ interface RunRow {
   updated_at: string;
   terminal_at: string | null;
   cancellation_requested_at: string | null;
+  agent_thread_id: string | null;
 }
 
 interface EventRow {
@@ -186,13 +187,33 @@ export class RunStore {
     return row === undefined ? undefined : toStoredRun(row);
   }
 
+  recordAgentThreadId(runId: string, threadId: string): void {
+    if (
+      threadId.length === 0 ||
+      threadId.length > 256 ||
+      threadId !== threadId.trim() ||
+      hasControlCharacters(threadId)
+    )
+      throw new Error('Agent thread ID is invalid.');
+    this.transaction(() => {
+      const current = this.requireRun(runId);
+      if (current.agentThreadId !== null && current.agentThreadId !== threadId)
+        throw new Error('Agent thread ID cannot be changed after it is recorded.');
+      if (current.agentThreadId === threadId) return;
+      this.database
+        .prepare('UPDATE runs SET agent_thread_id = ?, updated_at = ? WHERE run_id = ?')
+        .run(threadId, this.timestamp(), runId);
+    });
+  }
+
   listActiveRuns(limit: number, cursor: ActiveRunCursor | null = null): ActiveRunPage {
     validatePageLimit(limit);
     const rows = (cursor === null
       ? this.database
           .prepare(
             `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
-                      accepted_at, updated_at, terminal_at, cancellation_requested_at
+                      accepted_at, updated_at, terminal_at, cancellation_requested_at,
+                      agent_thread_id
                FROM runs WHERE terminal_at IS NULL
                ORDER BY accepted_at, run_id LIMIT ?`,
           )
@@ -200,7 +221,8 @@ export class RunStore {
       : this.database
           .prepare(
             `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
-                      accepted_at, updated_at, terminal_at, cancellation_requested_at
+                      accepted_at, updated_at, terminal_at, cancellation_requested_at,
+                      agent_thread_id
                FROM runs WHERE terminal_at IS NULL
                  AND (accepted_at > ? OR (accepted_at = ? AND run_id > ?))
                ORDER BY accepted_at, run_id LIMIT ?`,
@@ -523,7 +545,8 @@ export class RunStore {
     return this.database
       .prepare(
         `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
-                accepted_at, updated_at, terminal_at, cancellation_requested_at
+                accepted_at, updated_at, terminal_at, cancellation_requested_at,
+                agent_thread_id
          FROM runs WHERE run_id = ?`,
       )
       .get(runId) as RunRow | undefined;
@@ -545,7 +568,8 @@ export class RunStore {
     const rows = this.database
       .prepare(
         `SELECT run_id, specification_hash, specification_json, state, last_event_sequence,
-                accepted_at, updated_at, terminal_at, cancellation_requested_at
+                accepted_at, updated_at, terminal_at, cancellation_requested_at,
+                agent_thread_id
          FROM runs ORDER BY run_id`,
       )
       .all() as unknown as RunRow[];
@@ -603,6 +627,7 @@ function toStoredRun(row: RunRow, validateSpecification = false): StoredRun {
     updatedAt: row.updated_at,
     terminalAt: row.terminal_at,
     cancellationRequestedAt: row.cancellation_requested_at,
+    agentThreadId: row.agent_thread_id,
   };
 }
 
