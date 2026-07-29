@@ -77,6 +77,23 @@
           [class.host-actions--clean-page]="presentation() === 'page' && !dirty()"
           aria-label="Task actions"
         >
+          @if (mode() === 'detail' && !staticMode.enabled) {
+            <button
+              type="button"
+              class="pm-button pm-button--secondary run-action"
+              [disabled]="
+                dirty() ||
+                noteDirty() ||
+                noteFormOpen() ||
+                activeField() !== null ||
+                pending() ||
+                blocked()
+              "
+              (click)="launchOpen.set(true)"
+            >
+              Run with Codex
+            </button>
+          }
           @if (dirty()) {
             <button
               type="button"
@@ -427,3 +444,12 @@
   (confirmed)="confirm()"
   (cancelled)="cancelConfirm()"
 />
+
+@if (mode() === 'detail' && detail.task(); as task) {
+  <pm-agent-run-launch
+    [open]="launchOpen()"
+    [taskId]="task.id"
+    [taskTitle]="task.title"
+    (openChange)="launchOpen.set($event)"
+  />
+}

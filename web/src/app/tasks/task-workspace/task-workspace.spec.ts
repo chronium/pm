@@ -100,6 +100,20 @@ describe('TaskWorkspace', () => {
     expect(close.title).toBe('Close');
   });
 
+  it('offers runner launch only for a clean saved task and disables it during inline edits', async () => {
+    const { fixture, element } = await render('detail');
+    const launch = element.querySelector('.run-action') as HTMLButtonElement;
+    expect(launch.textContent?.trim()).toBe('Run with Codex');
+    expect(launch.disabled).toBe(false);
+
+    (element.querySelector('[aria-label="Edit task title"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const title = element.querySelector('#workspace-title') as HTMLInputElement;
+    input(title, 'Unsaved task title');
+    fixture.detectChanges();
+    expect(launch.disabled).toBe(true);
+  });
+
   it('uses configured display names and activates one stable inline field at a time', async () => {
     const { fixture, element } = await render('detail');
     expect(element.textContent).toContain('To do');

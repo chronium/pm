@@ -1,0 +1,235 @@
+<section id="agent-runners" class="runner-section" aria-labelledby="agent-runners-heading">
+  <div class="section-heading">
+    <div>
+      <h2 id="agent-runners-heading">Agent runners</h2>
+      <p>Paired execution hosts available to this user.</p>
+    </div>
+    <div class="section-actions">
+      <button
+        type="button"
+        class="pm-button pm-button--ghost"
+        [disabled]="loading() || refreshing() || pending()"
+        (click)="reload()"
+      >
+        {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
+      </button>
+      <button
+        type="button"
+        class="pm-button pm-button--secondary"
+        [disabled]="pending()"
+        (click)="openPairing()"
+      >
+        Pair runner
+      </button>
+    </div>
+  </div>
+
+  @if (actionError()) {
+    <p class="section-error" role="alert">{{ actionError() }}</p>
+  }
+  @if (loading()) {
+    <pm-loading-state>Loading agent runners…</pm-loading-state>
+  } @else if (error()) {
+    <pm-error-state>
+      <p>{{ error() }}</p>
+      <button type="button" class="pm-button pm-button--secondary" (click)="reload(false)">
+        Retry
+      </button>
+    </pm-error-state>
+  } @else if (!runners().length) {
+    <pm-empty-state>
+      <p>No agent runners are paired.</p>
+      <button type="button" class="pm-button pm-button--secondary" (click)="openPairing()">
+        Pair runner
+      </button>
+    </pm-empty-state>
+  } @else {
+    <ul class="runner-list">
+      @for (runner of runners(); track runner.runnerId) {
+        <li class="runner-row">
+          <div class="runner-summary">
+            <div class="runner-identity">
+              <h3>{{ runner.displayName }}</h3>
+              <code>{{ runner.runnerId }}</code>
+            </div>
+            @if (status(runner.runnerId).loading) {
+              <span class="runner-state runner-state--pending" role="status">Checking…</span>
+            } @else if (status(runner.runnerId).error) {
+              <span class="runner-state runner-state--offline">Offline</span>
+            } @else {
+              <span class="runner-state runner-state--online">{{
+                status(runner.runnerId).value?.health?.status || 'Online'
+              }}</span>
+            }
+          </div>
+
+          @if (status(runner.runnerId).value; as runnerStatus) {
+            <div class="runner-facts" aria-label="Runner summary">
+              <span>{{ runnerStatus.capabilities.operatingSystem }}</span>
+              <span>{{ runnerStatus.capabilities.architecture }}</span>
+              <span>{{ runnerStatus.capabilities.containerRuntime.engineId }}</span>
+              <span>
+                {{ runnerStatus.capabilities.capacity.activeRuns }}/{{
+                  runnerStatus.capabilities.capacity.maximumRuns
+                }}
+                active
+              </span>
+              <span>{{ formatBytes(runnerStatus.capabilities.capacity.memoryBytes) }} memory</span>
+            </div>
+            <div class="profile-list" aria-label="Installed profiles">
+              @for (profile of runnerStatus.capabilities.runtimeProfiles; track profile.profileId) {
+                <code>{{ profile.profileId }}</code>
+              } @empty {
+                <span>No runtime profiles</span>
+              }
+            </div>
+          } @else if (status(runner.runnerId).error) {
+            <p class="runner-error" role="status">{{ status(runner.runnerId).error }}</p>
+          }
+
+          <details>
+            <summary>Connection details</summary>
+            <dl class="connection-details">
+              <div>
+                <dt>Endpoint</dt>
+                <dd>{{ runner.endpoint }}</dd>
+              </div>
+              <div>
+                <dt>TLS fingerprint</dt>
+                <dd>
+                  <code>{{ runner.tlsFingerprint }}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Client fingerprint</dt>
+                <dd>
+                  <code>{{ runner.clientFingerprint }}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Protocol</dt>
+                <dd>{{ runner.protocolVersion }}</dd>
+              </div>
+              <div>
+                <dt>Paired</dt>
+                <dd>{{ runner.pairedAt | date: 'medium' }}</dd>
+              </div>
+            </dl>
+          </details>
+
+          <div class="runner-actions">
+            @if (status(runner.runnerId).error) {
+              <button
+                type="button"
+                class="pm-button pm-button--ghost"
+                [disabled]="status(runner.runnerId).loading || pending()"
+                (click)="reloadStatus(runner.runnerId)"
+              >
+                Retry status
+              </button>
+            }
+            <button
+              type="button"
+              class="pm-button pm-button--ghost"
+              [disabled]="pending() || !!status(runner.runnerId).error"
+              (click)="requestAction('rotate', runner)"
+            >
+              Rotate credential
+            </button>
+            <button
+              type="button"
+              class="remove-action"
+              [disabled]="pending()"
+              (click)="requestAction('remove', runner)"
+            >
+              Remove
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>
+
+<dialog
+  #pairingDialog
+  class="pairing-dialog"
+  aria-labelledby="pair-runner-heading"
+  (cancel)="$event.preventDefault(); closePairing()"
+>
+  <form class="pairing-form" (submit)="pair($event)" novalidate>
+    <header>
+      <h2 id="pair-runner-heading">Pair agent runner</h2>
+      <p>Enter the identity details printed by the runner's one-use pairing command.</p>
+    </header>
+    <label for="runner-endpoint">HTTPS endpoint</label>
+    <input
+      id="runner-endpoint"
+      type="url"
+      autocomplete="off"
+      [formField]="pairForm.endpoint"
+      placeholder="https://100.64.0.2:7443"
+      autofocus
+    />
+    @if (pairForm.endpoint().touched() && formError(pairForm.endpoint())) {
+      <p class="field-error">{{ formError(pairForm.endpoint()) }}</p>
+    }
+    <label for="runner-id">Runner ID</label>
+    <input id="runner-id" autocomplete="off" [formField]="pairForm.runnerId" />
+    @if (pairForm.runnerId().touched() && formError(pairForm.runnerId())) {
+      <p class="field-error">{{ formError(pairForm.runnerId()) }}</p>
+    }
+    <label for="runner-fingerprint">TLS SHA-256 fingerprint</label>
+    <input
+      id="runner-fingerprint"
+      class="mono-input"
+      autocomplete="off"
+      spellcheck="false"
+      [formField]="pairForm.tlsFingerprint"
+      placeholder="sha256:…"
+    />
+    @if (pairForm.tlsFingerprint().touched() && formError(pairForm.tlsFingerprint())) {
+      <p class="field-error">{{ formError(pairForm.tlsFingerprint()) }}</p>
+    }
+    <label for="runner-code">One-time pairing code</label>
+    <input id="runner-code" type="password" autocomplete="off" [formField]="pairForm.pairingCode" />
+    @if (pairForm.pairingCode().touched() && formError(pairForm.pairingCode())) {
+      <p class="field-error">{{ formError(pairForm.pairingCode()) }}</p>
+    }
+    <label class="replace-option">
+      <input type="checkbox" [formField]="pairForm.replaceExisting" />
+      Replace an existing registration with the same runner ID
+    </label>
+    @if (pairError()) {
+      <p class="dialog-error" role="alert">{{ pairError() }}</p>
+    }
+    <footer>
+      <button
+        type="button"
+        class="pm-button pm-button--secondary"
+        [disabled]="pending()"
+        (click)="closePairing()"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        class="pm-button pm-button--primary"
+        [disabled]="pending() || !pairForm().valid()"
+      >
+        {{ pending() ? 'Pairing…' : 'Pair runner' }}
+      </button>
+    </footer>
+  </form>
+</dialog>
+
+<pm-confirm-dialog
+  [open]="!!action()"
+  [pending]="pending()"
+  [heading]="actionHeading()"
+  [message]="actionMessage()"
+  [confirmLabel]="action()?.kind === 'rotate' ? 'Rotate credential' : 'Remove runner'"
+  (confirmed)="confirmAction()"
+  (cancelled)="action.set(null)"
+  (openChange)="$event || action.set(null)"
+/>

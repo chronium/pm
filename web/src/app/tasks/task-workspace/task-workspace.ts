@@ -31,6 +31,7 @@ import {
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskOptionsResource } from '../task-options.resource';
 import { StaticModeService } from '../../static/static-mode.service';
+import { AgentRunLaunch } from '../../agent-runs/agent-run-launch';
 
 export type TaskWorkspacePresentation = 'dialog' | 'page';
 export type TaskWorkspaceMode = 'detail' | 'create';
@@ -57,6 +58,7 @@ type ConfirmKind = 'discard' | 'remove' | null;
   selector: 'pm-task-workspace',
   imports: [
     DatePipe,
+    AgentRunLaunch,
     ExternalChangeBanner,
     FormField,
     MarkdownDisplay,
@@ -95,6 +97,7 @@ export class TaskWorkspace {
   protected readonly noteFormOpen = signal(false);
   protected readonly noteDraft = signal('');
   protected readonly noteError = signal<string | null>(null);
+  protected readonly launchOpen = signal(false);
   protected readonly recommendationReason = this.navigation.recommendationReason();
   protected readonly model = signal<DraftModel>({
     title: '',

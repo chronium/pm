@@ -3,6 +3,12 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { projectRoot, resetFixture } from '../scripts/e2e-fixture.mjs';
+import {
+  acceptedRun,
+  readyPreflight,
+  runnerRegistration,
+  runnerStatus,
+} from '../src/app/agent-runs/agent-runs.fixtures';
 
 test.beforeEach(async () => {
   await resetFixture('small');
@@ -382,6 +388,81 @@ test('shows settings validation and protects required configuration', async ({ p
   await page.locator('#status-name').fill('Review');
   await page.getByRole('button', { name: 'Add status', exact: true }).last().click();
   await expect(page.getByText('Review', { exact: true })).toBeVisible();
+});
+
+test('pairs a runner and starts one immutable task run through explicit preflight', async ({
+  page,
+}) => {
+  let paired = false;
+  let starts = 0;
+  await page.route('**/api/v1/runners**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/v1/runners/pair' && request.method() === 'POST') {
+      expect(request.postDataJSON()).toMatchObject({
+        runnerId: runnerRegistration.runnerId,
+        pairingCode: 'one-use-code',
+      });
+      paired = true;
+      await route.fulfill({ status: 201, json: runnerRegistration });
+      return;
+    }
+    if (path.endsWith('/status')) {
+      await route.fulfill({ json: runnerStatus });
+      return;
+    }
+    if (path === '/api/v1/runners') {
+      await route.fulfill({ json: paired ? [runnerRegistration] : [] });
+      return;
+    }
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/v1/runs/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/v1/runs/preflight') {
+      expect(request.postDataJSON()).toMatchObject({
+        taskId: 'E2E-0001',
+        runnerId: runnerRegistration.runnerId,
+        profileId: 'pm-development',
+        providerId: 'codex',
+        modelId: 'gpt-5.4',
+        effortId: 'medium',
+      });
+      await route.fulfill({ json: readyPreflight, headers: { ETag: '"draft-r1"' } });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/start') {
+      starts += 1;
+      expect(request.headers()['if-match']).toBe('"draft-r1"');
+      await route.fulfill({ status: 202, json: acceptedRun });
+      return;
+    }
+    await route.fulfill({ status: 404 });
+  });
+
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Pair runner' }).first().click();
+  const pairing = page.getByRole('dialog', { name: 'Pair agent runner' });
+  await pairing.getByLabel('HTTPS endpoint').fill(runnerRegistration.endpoint);
+  await pairing.getByLabel('Runner ID', { exact: true }).fill(runnerRegistration.runnerId);
+  await pairing.getByLabel('TLS SHA-256 fingerprint').fill(runnerRegistration.tlsFingerprint);
+  await pairing.getByLabel('One-time pairing code').fill('one-use-code');
+  await pairing.getByRole('button', { name: 'Pair runner' }).click();
+  await expect(page.getByText('Linux workstation')).toBeVisible();
+  await expect(page.getByText('1/3 active')).toBeVisible();
+
+  await page.goto('/tasks/E2E-0001');
+  await page.getByRole('button', { name: 'Run with Codex' }).click();
+  const launch = page.getByRole('dialog', { name: 'Run with Codex' });
+  await expect(launch.getByText('Open network profile')).toBeVisible();
+  await launch.getByRole('button', { name: 'Check readiness' }).click();
+  await expect(launch.getByText('Ready to start.')).toBeVisible();
+  await expect(launch.getByText('1234567890abcdef1234567890abcdef12345678')).toBeVisible();
+  await launch.getByRole('button', { name: 'Start run' }).click();
+  await expect(launch.getByText('Run accepted')).toBeVisible();
+  await expect(launch.getByRole('button', { name: 'Start run' })).toHaveCount(0);
+  expect(starts).toBe(1);
 });
 
 test('large project remains dense, navigable, and free of horizontal page overflow', async ({
