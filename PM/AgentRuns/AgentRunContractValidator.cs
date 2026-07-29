@@ -80,7 +80,9 @@ public static partial class AgentRunContractValidator
             container.EnvironmentAllowlist == null || container.EnvironmentAllowlist.Count > 32 ||
             container.EnvironmentAllowlist.Any(name => name == null || !EnvironmentNamePattern().IsMatch(name) ||
                 SensitiveEnvironmentNamePattern().IsMatch(name) ||
-                name is not ("CODEX_HOME" or "HOME" or "PATH" or "TMPDIR")) ||
+                name is not ("CODEX_HOME" or "DOTNET_CLI_HOME" or "DOTNET_CLI_TELEMETRY_OPTOUT" or
+                    "DOTNET_NOLOGO" or "DOTNET_SKIP_FIRST_TIME_EXPERIENCE" or "HOME" or "NUGET_PACKAGES" or
+                    "PATH" or "TMPDIR")) ||
             container.EnvironmentAllowlist.Distinct(StringComparer.Ordinal).Count() !=
             container.EnvironmentAllowlist.Count || container.ReadOnlyCaches == null ||
             container.ReadOnlyCaches.Count > 16 || container.Security == null)

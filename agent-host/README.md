@@ -15,20 +15,21 @@ Tests require OpenSSL to generate temporary loopback certificates.
 
 The host uses CLI options with matching `PM_AGENT_HOST_*` environment variables. It fails closed if `serve` is missing its listen address, certificate, key, capability manifest, repository policy, or dedicated Codex authentication file.
 
-| Option                  | Environment                         | Default                         |
-| ----------------------- | ----------------------------------- | ------------------------------- |
-| `--data-root`           | `PM_AGENT_HOST_DATA_ROOT`           | `/var/lib/pm-runner`            |
-| `--max-concurrency`     | `PM_AGENT_HOST_MAX_CONCURRENCY`     | `1`                             |
-| `--queue-capacity`      | `PM_AGENT_HOST_QUEUE_CAPACITY`      | `32`                            |
-| `--retention-days`      | `PM_AGENT_HOST_RETENTION_DAYS`      | `30`; `0` disables pruning      |
-| `--min-free-disk-bytes` | `PM_AGENT_HOST_MIN_FREE_DISK_BYTES` | `5368709120`                    |
-| `--listen-address`      | `PM_AGENT_HOST_LISTEN_ADDRESS`      | required for `serve`            |
-| `--port`                | `PM_AGENT_HOST_PORT`                | `7443`                          |
-| `--tls-cert`            | `PM_AGENT_HOST_TLS_CERT_PATH`       | required for `serve` and `pair` |
-| `--tls-key`             | `PM_AGENT_HOST_TLS_KEY_PATH`        | required for `serve`            |
-| `--capabilities`        | `PM_AGENT_HOST_CAPABILITIES_PATH`   | required for `serve`            |
-| `--repositories`        | `PM_AGENT_HOST_REPOSITORIES_PATH`   | required for `serve`            |
-| `--codex-auth`          | `PM_AGENT_HOST_CODEX_AUTH_PATH`     | required for `serve`            |
+| Option                  | Environment                           | Default                         |
+| ----------------------- | ------------------------------------- | ------------------------------- |
+| `--data-root`           | `PM_AGENT_HOST_DATA_ROOT`             | `/var/lib/pm-runner`            |
+| `--max-concurrency`     | `PM_AGENT_HOST_MAX_CONCURRENCY`       | `1`                             |
+| `--queue-capacity`      | `PM_AGENT_HOST_QUEUE_CAPACITY`        | `32`                            |
+| `--retention-days`      | `PM_AGENT_HOST_RETENTION_DAYS`        | `30`; `0` disables pruning      |
+| `--min-free-disk-bytes` | `PM_AGENT_HOST_MIN_FREE_DISK_BYTES`   | `5368709120`                    |
+| `--listen-address`      | `PM_AGENT_HOST_LISTEN_ADDRESS`        | required for `serve`            |
+| `--port`                | `PM_AGENT_HOST_PORT`                  | `7443`                          |
+| `--tls-cert`            | `PM_AGENT_HOST_TLS_CERT_PATH`         | required for `serve` and `pair` |
+| `--tls-key`             | `PM_AGENT_HOST_TLS_KEY_PATH`          | required for `serve`            |
+| `--capabilities`        | `PM_AGENT_HOST_CAPABILITIES_PATH`     | required for `serve`            |
+| `--repositories`        | `PM_AGENT_HOST_REPOSITORIES_PATH`     | required for `serve`            |
+| `--codex-auth`          | `PM_AGENT_HOST_CODEX_AUTH_PATH`       | required for `serve`            |
+| `--release-manifest`    | `PM_AGENT_HOST_RELEASE_MANIFEST_PATH` | optional development fallback   |
 
 The listen address must be an explicit non-wildcard IP. The operator provides the certificate and an owner-only private key, normally for a Tailscale or trusted private-network route. The server permits TLS 1.2 and 1.3 so the .NET control plane remains compatible across macOS and Linux TLS stacks. The capability manifest is host-owned and changes require restart; `capabilities.example.json` shows the validated shape.
 
@@ -60,7 +61,8 @@ pm runner pair https://100.64.0.2:7443 \
   --fingerprint sha256:<certificate-fingerprint>
 ```
 
-PM prompts for the pairing code without placing it in the process argument list. Start the service with:
+PM prompts for the pairing code without placing it in the process argument list. Development
+checkouts may start the service with:
 
 ```sh
 node dist/src/main.js serve \
@@ -72,6 +74,11 @@ node dist/src/main.js serve \
   --repositories /etc/pm-runner/repositories.json \
   --codex-auth /etc/pm-runner/codex-auth.json
 ```
+
+Packaged installations use `pm-agent-host serve` through the systemd user service. Run
+`pm-agent-host doctor` before starting it; `doctor --json` provides machine-readable checks without
+mutating runner state. `pm-agent-host version --json` reports the installed package, source
+revision, protocol, and immutable worker-image digest.
 
 Use `revoke-client --data-root /var/lib/pm-runner` for local recovery when the paired PM identity is unavailable. Normal rotation and revocation are authenticated HTTPS operations.
 
@@ -87,6 +94,7 @@ The environment-gated .NET smoke exercises this API against a real paired runner
 
 ```sh
 PM_AGENT_RUN_API_SMOKE=1 \
+PM_AGENT_RUN_API_SMOKE_PROJECT_ROOT=/path/to/clean/smoke-checkout \
 PM_AGENT_RUN_API_SMOKE_RUNNER=<runner-id> \
 PM_AGENT_RUN_API_SMOKE_TASK=<task-id> \
 PM_AGENT_RUN_API_SMOKE_PROFILE=<profile-id> \
@@ -137,11 +145,11 @@ The worker requires `pm mcp --profile run-worker --task-id <TASK-ID>`, uses `app
 
 For v1 ChatGPT authentication, the runtime will copy only the dedicated runner's owner-only `auth.json` into a fresh per-run `CODEX_HOME`. Run-local Codex sessions, logs, and refreshed authentication are deleted with the runtime and are never copied back to the host source.
 
-## Development worker image
+## Worker images
 
 `container/Containerfile.development` is intentionally not a production image. It pins its Node base by digest and pins installed Debian package versions, but exists only to exercise the complete v1 flow while AGENT-0012 owns production image hardening and publication. It contains Git, the built Codex SDK worker, and a self-contained Linux PM CLI/MCP; it contains no repository, runner configuration, or credential.
 
-Build it on the Linux runner with the .NET 10 SDK, Node 26, npm 11, Socket, and rootless Podman available:
+Build it on the Linux runner with the .NET 10 SDK, Node 26, npm 11 or 12, Socket, and rootless Podman available:
 
 ```sh
 agent-host/container/build-development-image.sh
@@ -172,6 +180,15 @@ npm run test:lifecycle-smoke
 ```
 
 It validates that only the requested marker changed, validation passed in a fresh container, retained evidence is complete, and transient workspace, runtime, and Codex-auth state was removed.
+
+`container/Containerfile.production` is the packaged v1 reference image. It adds the pinned .NET 10
+SDK used for repository validation, is labeled with the exact source revision, and is distributed as
+a local OCI archive by `npm run package:linux`. The release script runs only from a clean Linux x64
+checkout, requires Node 26.5.0 and npm 11 or 12, performs every dependency install through Socket, and
+records the resulting local image by digest in the generated capability snapshot.
+
+See [OPERATIONS.md](OPERATIONS.md) for verified installation, explicit service activation, health,
+upgrades, rollback, backup, credential rotation, incident response, and the v1 trust boundary.
 
 ## Persistence and security
 
