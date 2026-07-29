@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using PM.AgentRuns;
 using PM.Application;
 using PM.Project;
@@ -193,6 +194,151 @@ public class AgentRunOrchestrationTests
             check => check.Id == "upstream" && check.Status == AgentRunPreflightCheckStatus.Failed);
     }
 
+    [Fact]
+    public async Task PatchCollectionPreservesNonOverlappingWorkAndRecordsVerifiedApplication()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await Project(workspace);
+        const string remoteUrl = "https://github.com/chronium/pm.git";
+        var target = Path.Combine(workspace.Path, "sample.txt");
+        await File.WriteAllTextAsync(target, "before\n");
+        InitializeRepository(workspace.Path, remoteUrl);
+        var head = GitOutput(workspace.Path, "rev-parse", "HEAD").Trim();
+        await File.WriteAllTextAsync(target, "after\n");
+        var patch = GitBytes(workspace.Path, "diff", "--binary", "--full-index");
+        await File.WriteAllTextAsync(target, "before\n");
+        await File.WriteAllTextAsync(Path.Combine(workspace.Path, "local-notes.txt"), "keep me\n");
+
+        var runner = new FakeRunnerClient("runner-test", patch);
+        var cache = await CompletedRunCache(workspace, root, runner, remoteUrl, head);
+        var service = new AgentRunService(root, new BoardService(root), new FakeGitInspector(), cache,
+            runner, TimeProvider.System);
+
+        var preflight = await service.PreflightPatchCollection("run-patch-test");
+
+        Assert.True(preflight.Success, preflight.Message);
+        Assert.True(preflight.Payload!.Ready);
+        Assert.Contains(preflight.Payload.Paths, path => path.Path == "sample.txt");
+        Assert.Contains(preflight.Payload.Warnings, warning => warning.Contains("non-overlapping"));
+
+        var collected = await service.CollectPatch("run-patch-test", preflight.Payload.Revision,
+            preflight.Payload.ArtifactSha256);
+
+        Assert.True(collected.Success, collected.Message);
+        Assert.Equal("after\n", await File.ReadAllTextAsync(target));
+        Assert.Equal("keep me\n", await File.ReadAllTextAsync(Path.Combine(workspace.Path, "local-notes.txt")));
+        Assert.NotNull((await cache.Get("run-patch-test")).Payload!.PatchCollection);
+        var repeated = await service.CollectPatch("run-patch-test", preflight.Payload.Revision,
+            preflight.Payload.ArtifactSha256);
+        Assert.False(repeated.Success);
+        Assert.Equal("patch_already_collected", repeated.ErrorCode);
+        Assert.True(root.TryGetById("PM-0001", out _));
+        Assert.True(root.TryGetState(root.GetAllTasks().Single(), out var state));
+        Assert.Equal("todo", state);
+    }
+
+    [Fact]
+    public async Task PatchCollectionRejectsOverlappingLocalChangesBeforeMutation()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await Project(workspace);
+        const string remoteUrl = "https://github.com/chronium/pm.git";
+        var target = Path.Combine(workspace.Path, "sample.txt");
+        await File.WriteAllTextAsync(target, "before\n");
+        InitializeRepository(workspace.Path, remoteUrl);
+        var head = GitOutput(workspace.Path, "rev-parse", "HEAD").Trim();
+        await File.WriteAllTextAsync(target, "agent change\n");
+        var patch = GitBytes(workspace.Path, "diff", "--binary", "--full-index");
+        await File.WriteAllTextAsync(target, "local change\n");
+
+        var runner = new FakeRunnerClient("runner-test", patch);
+        var cache = await CompletedRunCache(workspace, root, runner, remoteUrl, head);
+        var service = new AgentRunService(root, new BoardService(root), new FakeGitInspector(), cache,
+            runner, TimeProvider.System);
+
+        var preflight = await service.PreflightPatchCollection("run-patch-test");
+
+        Assert.True(preflight.Success, preflight.Message);
+        Assert.False(preflight.Payload!.Ready);
+        Assert.Contains(preflight.Payload.Checks,
+            check => check.Id == "worktree_overlap" && check.Status == AgentRunPreflightCheckStatus.Failed);
+        Assert.Equal("local change\n", await File.ReadAllTextAsync(target));
+    }
+
+    [Fact]
+    public async Task PatchCollectionRejectsCorruptContentAndPmAuthorityPaths()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await Project(workspace);
+        const string remoteUrl = "https://github.com/chronium/pm.git";
+        var stateRef = Path.Combine(workspace.Path, ".pm", "states", "todo", "PM-0001.ref");
+        var originalStateRef = await File.ReadAllTextAsync(stateRef);
+        InitializeRepository(workspace.Path, remoteUrl);
+        var head = GitOutput(workspace.Path, "rev-parse", "HEAD").Trim();
+        await File.WriteAllTextAsync(stateRef, "PM-0001\nchanged\n");
+        var patch = GitBytes(workspace.Path, "diff", "--binary", "--full-index");
+        await File.WriteAllTextAsync(stateRef, originalStateRef);
+
+        var authorityRunner = new FakeRunnerClient("runner-test", patch);
+        var authorityCache = await CompletedRunCache(workspace, root, authorityRunner, remoteUrl, head);
+        var authorityService = new AgentRunService(root, new BoardService(root), new FakeGitInspector(),
+            authorityCache, authorityRunner, TimeProvider.System);
+        var authority = await authorityService.PreflightPatchCollection("run-patch-test");
+
+        Assert.True(authority.Success, authority.Message);
+        Assert.False(authority.Payload!.Ready);
+        Assert.Contains(authority.Payload.Checks,
+            check => check.Id == "patch_safety" && check.Status == AgentRunPreflightCheckStatus.Failed);
+
+        Directory.Delete(Path.Combine(workspace.Path, ".git", "pm-run-cache"), true);
+        var corrupt = patch.ToArray();
+        corrupt[^1] ^= 0x01;
+        var corruptRunner = new FakeRunnerClient("runner-test", patch, corrupt);
+        var corruptCache = await CompletedRunCache(workspace, root, corruptRunner, remoteUrl, head);
+        var corruptService = new AgentRunService(root, new BoardService(root), new FakeGitInspector(),
+            corruptCache, corruptRunner, TimeProvider.System);
+        var corruptResult = await corruptService.PreflightPatchCollection("run-patch-test");
+
+        Assert.False(corruptResult.Success);
+        Assert.Equal("artifact_corrupt", corruptResult.ErrorCode);
+        Assert.Equal(originalStateRef, await File.ReadAllTextAsync(stateRef));
+    }
+
+    private static async Task<AgentRunCache> CompletedRunCache(
+        TempWorkingDirectory workspace,
+        ProjectRoot root,
+        FakeRunnerClient runner,
+        string remoteUrl,
+        string head)
+    {
+        var cache = new AgentRunCache(root, TimeProvider.System,
+            new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, ".git", "pm-run-cache") });
+        var request = Request("run-patch-test", "runner-test", "project-test");
+        var taskRevision = Convert.ToHexString(SHA256.HashData(
+            await File.ReadAllBytesAsync(root.GetTaskFilePath("PM-0001")))).ToLowerInvariant();
+        var specification = request.Specification with
+        {
+            Repository = new AgentRunRepository(remoteUrl, head),
+            Task = request.Specification.Task with { TaskId = "PM-0001", Revision = taskRevision },
+        };
+        request = new AgentRunRequest(AgentRunCanonicalJson.ComputeSpecificationHash(specification), specification);
+        Assert.True((await cache.SaveDraft(Selection("runner-test"), request)).Success);
+        Assert.True((await cache.UpdateRemote(request.Specification.RunId,
+            RemoteRun(request, AgentRunState.Completed, 10))).Success);
+        runner.SetRun(RemoteRun(request, AgentRunState.Completed, 10));
+        return cache;
+    }
+
+    private static void InitializeRepository(string path, string remoteUrl)
+    {
+        Git(path, "init", "-b", "main");
+        Git(path, "config", "user.name", "PM tests");
+        Git(path, "config", "user.email", "pm-tests@example.test");
+        Git(path, "remote", "add", "origin", remoteUrl);
+        Git(path, "add", ".");
+        Git(path, "commit", "-m", "fixture");
+    }
+
     private static async Task<ProjectRoot> Project(TempWorkingDirectory workspace)
     {
         var root = await workspace.CreateProject();
@@ -219,6 +365,28 @@ public class AgentRunOrchestrationTests
         using var process = Process.Start(start)!;
         process.WaitForExit();
         Assert.True(process.ExitCode == 0, process.StandardError.ReadToEnd());
+    }
+
+    private static string GitOutput(string directory, params string[] arguments) =>
+        System.Text.Encoding.UTF8.GetString(GitBytes(directory, arguments));
+
+    private static byte[] GitBytes(string directory, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = directory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        using var output = new MemoryStream();
+        process.StandardOutput.BaseStream.CopyTo(output);
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, error);
+        return output.ToArray();
     }
 
     private static AgentRunRequest Request(string runId, string runnerId, string projectId)
@@ -265,8 +433,10 @@ public class AgentRunOrchestrationTests
         private readonly AgentRunnerRegistration _registration;
         private readonly AgentRunnerCapabilities _capabilities;
         private readonly Dictionary<string, AgentRunnerRun> _runs = [];
+        private readonly AgentRunArtifact? _artifact;
+        private readonly byte[]? _artifactBytes;
 
-        public FakeRunnerClient(string runnerId)
+        public FakeRunnerClient(string runnerId, byte[]? artifactBytes = null, byte[]? contentBytes = null)
         {
             _registration = new AgentRunnerRegistration(runnerId, "Test runner", new Uri("https://runner.test/"),
                 $"sha256:{new string('a', 64)}", AgentRunProtocol.Current, "client-test",
@@ -274,7 +444,15 @@ public class AgentRunOrchestrationTests
             _capabilities = JsonSerializer.Deserialize<AgentRunnerCapabilities>(File.ReadAllText(
                 Path.Combine(AppContext.BaseDirectory, "AgentRunContracts", "v1", "runner-capabilities.json")),
                 AgentRunJson.Options)! with { RunnerId = runnerId };
+            _artifactBytes = contentBytes ?? artifactBytes;
+            if (artifactBytes != null)
+                _artifact = new AgentRunArtifact("changes-patch", "patch", "changes.patch", "text/x-diff",
+                    artifactBytes.Length,
+                    Convert.ToHexString(SHA256.HashData(artifactBytes)).ToLowerInvariant(),
+                    DateTimeOffset.Parse("2026-07-29T08:10:00Z"));
         }
+
+        public void SetRun(AgentRunnerRun run) => _runs[run.RunId] = run;
 
         public int HealthCalls { get; private set; }
         public int StartCalls { get; private set; }
@@ -326,12 +504,28 @@ public class AgentRunOrchestrationTests
         public Task<AppResult<AgentRunCancellation>> Cancel(string runnerId, string runId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult<IReadOnlyList<AgentRunArtifact>>> Artifacts(string runnerId, string runId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) => Task.FromResult(
+            AppResult<IReadOnlyList<AgentRunArtifact>>.Ok(_artifact == null ? [] : [_artifact]));
         public Task<AppResult<AgentRunArtifact>> Artifact(string runnerId, string runId, string artifactId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) => Task.FromResult(
+            _artifact != null && artifactId == _artifact.ArtifactId
+                ? AppResult<AgentRunArtifact>.Ok(_artifact)
+                : AppResult<AgentRunArtifact>.Fail("artifact_not_found", "Artifact not found."));
+        public Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(string runnerId, string runId,
+            string artifactId, CancellationToken cancellationToken = default) => Task.FromResult(
+            _artifact != null && _artifactBytes != null && artifactId == _artifact.ArtifactId
+                ? AppResult<IAgentRunArtifactContent>.Ok(new TestArtifactContent(_artifact, _artifactBytes))
+                : AppResult<IAgentRunArtifactContent>.Fail("artifact_not_found", "Artifact not found."));
         public Task<AppResult<AgentRunnerRegistration>> Rotate(string runnerId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AppResult> Revoke(string runnerId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class TestArtifactContent(AgentRunArtifact artifact, byte[] bytes) : IAgentRunArtifactContent
+    {
+        public AgentRunArtifact Artifact { get; } = artifact;
+        public Stream Content { get; } = new MemoryStream(bytes, writable: false);
+        public async ValueTask DisposeAsync() => await Content.DisposeAsync();
     }
 }

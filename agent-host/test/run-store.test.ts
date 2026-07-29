@@ -124,7 +124,13 @@ test('restart recovery preserves queued work and fails interrupted work once', (
     assert.deepEqual(failedEvents[0]?.data, {
       previousState: 'preparing_workspace',
       nextState: 'failed',
-      reason: 'runner_restarted',
+      failure: {
+        code: 'runner_restarted',
+        stage: 'system',
+        summary: 'The runner restarted before the run completed.',
+        recommendedAction: 'Confirm the runner is healthy, then launch a new run.',
+        retryable: true,
+      },
     });
 
     assert.deepEqual(store.recover(), { queued: 1, failed: 0 });

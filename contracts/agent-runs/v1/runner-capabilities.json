@@ -1,7 +1,7 @@
 {
   "runnerId": "linux-workstation",
   "displayName": "Linux workstation",
-  "protocolVersions": ["1.0"],
+  "protocolVersions": ["1.1", "1.0"],
   "operatingSystem": "linux",
   "architecture": "x64",
   "containerRuntime": {

@@ -89,6 +89,12 @@ public sealed record AgentRunStreamMessage(AgentRunEvent? Event, AgentRunStreamE
 
 public sealed record AgentRunCancellation(string Disposition, AgentRunnerRun Run);
 
+public interface IAgentRunArtifactContent : IAsyncDisposable
+{
+    AgentRunArtifact Artifact { get; }
+    Stream Content { get; }
+}
+
 public sealed record AgentRunnerTransportFailure(
     string ErrorCode,
     string Message,

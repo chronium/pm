@@ -186,7 +186,7 @@ test('capability manifest validates profile revisions and combines dynamic host 
     assert.equal(capabilities.capacity.activeRuns, 0);
     assert.equal(capabilities.containerRuntime.engineId, 'podman');
     assert.equal(capabilities.containerRuntime.rootless, true);
-    assert.deepEqual(capabilities.protocolVersions, ['1.0']);
+    assert.deepEqual(capabilities.protocolVersions, ['1.1', '1.0']);
 
     const invalid = structuredClone(
       JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>,

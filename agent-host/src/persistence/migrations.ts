@@ -58,6 +58,9 @@ const migrations = [
   `
   ALTER TABLE runs ADD COLUMN agent_thread_id TEXT;
   `,
+  `
+  ALTER TABLE run_events ADD COLUMN protocol_version TEXT NOT NULL DEFAULT '1.0';
+  `,
 ];
 
 export function applyMigrations(database: DatabaseSync): void {

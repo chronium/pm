@@ -5,6 +5,8 @@ import type { RuntimeUsage } from './drivers.js';
 import type { GitWorkspaceService } from './execution/workspace.js';
 import { ValidationRunner, type ValidationResult } from './execution/validation.js';
 import type { ArtifactCollector } from './execution/artifacts.js';
+import type { RunFailure, RunFailureStage } from './protocol/types.js';
+import { classifyRunFailure, RunFailureError, runFailure } from './run-failure.js';
 
 export interface RunLifecycleServices {
   workspace: GitWorkspaceService;
@@ -30,8 +32,9 @@ export class DriverRunProcessor implements RunProcessor {
     let runtime: RuntimeHandle | undefined;
     let mirror: string | undefined;
     let agentResponse: string | null = null;
-    let executionError: string | null = null;
+    let executionFailure: RunFailure | null = null;
     let executionStatus: 'succeeded' | 'failed' | 'cancelled' = 'succeeded';
+    let stage: RunFailureStage = 'workspace';
     let validation: ValidationResult = ValidationRunner.skipped(
       run.specification.runtime.profile.validation,
     );
@@ -41,16 +44,20 @@ export class DriverRunProcessor implements RunProcessor {
     try {
       const prepared = await this.lifecycle.workspace.prepare(run.specification, signal);
       mirror = prepared.mirror;
+      stage = 'runtime';
       this.store.transition(run.runId, 'starting_runtime', 'Starting runtime');
       runtime = await this.runtimeDriver.create(run.specification, signal);
+      stage = 'agent';
       this.store.transition(run.runId, 'starting_agent', 'Starting agent');
       this.store.transition(run.runId, 'running', 'Agent running');
+      let agentProducedEvent = false;
       try {
         for await (const event of this.agentDriver.execute(
           { specificationHash: run.specificationHash, specification: run.specification },
           runtime,
           signal,
         )) {
+          agentProducedEvent = true;
           if (event.agentThreadId !== undefined)
             this.store.recordAgentThreadId(run.runId, event.agentThreadId);
           if (event.type === 'agent.message')
@@ -65,7 +72,14 @@ export class DriverRunProcessor implements RunProcessor {
       } catch (error) {
         executionStatus =
           signal.aborted || this.store.isCancellationRequested(run.runId) ? 'cancelled' : 'failed';
-        executionError = safeError(error);
+        executionFailure = classifyRunFailure(
+          error,
+          'agent',
+          executionStatus === 'cancelled',
+          signal.reason,
+        );
+        if (!agentProducedEvent && executionFailure.code === 'agent_execution_failed')
+          executionFailure = runFailure('agent_start_failed');
       } finally {
         if (runtime !== undefined) {
           try {
@@ -76,12 +90,13 @@ export class DriverRunProcessor implements RunProcessor {
             );
           } catch {
             executionStatus = executionStatus === 'cancelled' ? 'cancelled' : 'failed';
-            executionError = 'runtime_cleanup_failed';
+            executionFailure ??= runFailure('runtime_cleanup_failed');
           }
           runtime = undefined;
         }
       }
       await this.lifecycle.workspace.resetCodexHome(run.runId);
+      stage = 'validation';
       this.store.transition(run.runId, 'validating', 'Validating run');
       if (executionStatus === 'succeeded') {
         try {
@@ -104,12 +119,23 @@ export class DriverRunProcessor implements RunProcessor {
                 outputTruncated: step.outputTruncated,
               },
             });
+          if (validation.status === 'failed') {
+            executionStatus = 'failed';
+            executionFailure = validation.steps.some((step) => step.timedOut)
+              ? runFailure('validation_timeout')
+              : runFailure('validation_failed');
+          }
         } catch (error) {
           executionStatus =
             signal.aborted || this.store.isCancellationRequested(run.runId)
               ? 'cancelled'
               : 'failed';
-          executionError = safeError(error);
+          executionFailure = classifyRunFailure(
+            error,
+            'validation',
+            executionStatus === 'cancelled',
+            signal.reason,
+          );
         } finally {
           if (runtime !== undefined) {
             try {
@@ -120,12 +146,13 @@ export class DriverRunProcessor implements RunProcessor {
               );
             } catch {
               executionStatus = executionStatus === 'cancelled' ? 'cancelled' : 'failed';
-              executionError = 'runtime_cleanup_failed';
+              executionFailure ??= runFailure('runtime_cleanup_failed');
             }
             runtime = undefined;
           }
         }
       }
+      stage = 'artifacts';
       this.store.transition(run.runId, 'collecting_artifacts', 'Collecting artifacts');
       const collectionController = new AbortController();
       const collectionTimeout = setTimeout(
@@ -133,19 +160,25 @@ export class DriverRunProcessor implements RunProcessor {
         120_000,
       );
       try {
-        await this.lifecycle.artifacts.collect(
-          {
-            run,
-            mirror,
-            validation,
-            agentResponse,
-            executionStatus,
-            executionError,
-            startedAt,
-            resourceUsage: { agent: agentUsage, validation: validationUsage },
-          },
-          collectionController.signal,
-        );
+        try {
+          await this.lifecycle.artifacts.collect(
+            {
+              run,
+              mirror,
+              validation,
+              agentResponse,
+              executionStatus,
+              executionFailure,
+              startedAt,
+              resourceUsage: { agent: agentUsage, validation: validationUsage },
+            },
+            collectionController.signal,
+          );
+        } catch (error) {
+          throw new RunFailureError(
+            classifyRunFailure(error, 'artifacts', false, collectionController.signal.reason),
+          );
+        }
       } finally {
         clearTimeout(collectionTimeout);
       }
@@ -156,8 +189,19 @@ export class DriverRunProcessor implements RunProcessor {
       this.store.transition(
         run.runId,
         cancelled ? 'cancelled' : executionStatus === 'failed' ? 'failed' : 'completed',
-        cancelled ? 'Run cancelled' : executionStatus === 'failed' ? 'Run failed' : 'Run completed',
-        { validationStatus: validation.status, reason: executionError },
+        cancelled
+          ? runFailure('run_cancelled').summary
+          : (executionFailure?.summary ?? 'Run completed'),
+        { validationStatus: validation.status, failure: executionFailure },
+      );
+    } catch (error) {
+      throw new RunFailureError(
+        classifyRunFailure(
+          error,
+          stage,
+          signal.aborted || this.store.isCancellationRequested(run.runId),
+          signal.reason,
+        ),
       );
     } finally {
       try {
@@ -172,7 +216,13 @@ export class DriverRunProcessor implements RunProcessor {
           await this.runtimeDriver.destroy(runtime, reason);
         }
       } finally {
-        if (!cleaned) await this.lifecycle.workspace.cleanup(run.runId);
+        if (!cleaned) {
+          try {
+            await this.lifecycle.workspace.cleanup(run.runId);
+          } catch {
+            // The scheduler records the primary bounded failure; private logs retain cleanup detail.
+          }
+        }
       }
     }
   }
@@ -211,11 +261,6 @@ function responseText(data: unknown): string | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) return null;
   const text = (data as Record<string, unknown>)['text'];
   return typeof text === 'string' ? text : null;
-}
-
-function safeError(error: unknown): string {
-  if (error instanceof Error && error.name === 'AbortError') return 'operation_cancelled';
-  return 'run_phase_failed';
 }
 
 async function measureUsage(
@@ -313,31 +358,28 @@ export class RunScheduler {
       const current = this.store.getRun(run.runId);
       if (current !== undefined && !isTerminal(current.state)) {
         const cancelled = this.store.isCancellationRequested(run.runId);
-        this.store.transition(
-          run.runId,
-          cancelled ? 'cancelled' : 'failed',
-          cancelled ? 'Run cancelled' : 'Run processor ended before completion',
-          {
-            previousState: current.state,
-            nextState: cancelled ? 'cancelled' : 'failed',
-            reason: cancelled ? 'client_requested' : 'run_processor_incomplete',
-          },
-        );
+        const failure = cancelled ? runFailure('run_cancelled') : runFailure('internal_failure');
+        this.store.transition(run.runId, cancelled ? 'cancelled' : 'failed', failure.summary, {
+          previousState: current.state,
+          nextState: cancelled ? 'cancelled' : 'failed',
+          failure,
+        });
       }
-    } catch {
+    } catch (error) {
       const current = this.store.getRun(run.runId);
       if (current !== undefined && !isTerminal(current.state)) {
         const cancelled = this.store.isCancellationRequested(run.runId);
-        this.store.transition(
-          run.runId,
-          cancelled ? 'cancelled' : 'failed',
-          cancelled ? 'Run cancelled' : 'Run processor failed',
-          {
-            previousState: current.state,
-            nextState: cancelled ? 'cancelled' : 'failed',
-            reason: cancelled ? 'client_requested' : 'run_processor_failed',
-          },
+        const failure = classifyRunFailure(
+          error,
+          'system',
+          cancelled || signal.aborted,
+          signal.reason,
         );
+        this.store.transition(run.runId, cancelled ? 'cancelled' : 'failed', failure.summary, {
+          previousState: current.state,
+          nextState: cancelled ? 'cancelled' : 'failed',
+          failure,
+        });
       }
     }
   }

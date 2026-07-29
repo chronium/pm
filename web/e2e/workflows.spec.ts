@@ -398,6 +398,13 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
 }, testInfo) => {
   let paired = false;
   let starts = 0;
+  let collections = 0;
+  const artifactContent = 'hello';
+  const downloadableArtifact = {
+    ...runArtifacts[0]!,
+    byteLength: artifactContent.length,
+    sha256: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+  };
   const journal = [
     ...runEvents,
     ...Array.from({ length: 1989 }, (_, index) => ({
@@ -503,7 +510,72 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
       return;
     }
     if (path === '/api/v1/runs/run-01K123/artifacts') {
-      await route.fulfill({ json: runArtifacts });
+      await route.fulfill({ json: [downloadableArtifact] });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/artifacts/changes-patch/content') {
+      await route.fulfill({
+        body: artifactContent,
+        contentType: downloadableArtifact.mediaType,
+        headers: {
+          'Content-Length': String(downloadableArtifact.byteLength),
+          'PM-Artifact-Id': downloadableArtifact.artifactId,
+          'PM-Artifact-SHA256': downloadableArtifact.sha256,
+          ETag: `"sha256:${downloadableArtifact.sha256}"`,
+        },
+      });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/patch-collection/preflight') {
+      await route.fulfill({
+        headers: { ETag: '"patch-r1"' },
+        json: {
+          ready: true,
+          revision: 'patch-r1',
+          artifactId: downloadableArtifact.artifactId,
+          artifactSha256: downloadableArtifact.sha256,
+          baseCommit: completedInspection.run.specification.repository.baseCommit,
+          currentHead: completedInspection.run.specification.repository.baseCommit,
+          taskRevision: completedInspection.run.specification.task.revision,
+          currentTaskRevision: completedInspection.run.specification.task.revision,
+          checks: [
+            {
+              id: 'base',
+              label: 'Exact base commit',
+              status: 'passed',
+              summary: 'Base matches.',
+            },
+          ],
+          warnings: [],
+          paths: [
+            {
+              path: 'PM/TaskService.cs',
+              status: 'modified',
+              insertions: 3,
+              deletions: 1,
+              binary: false,
+            },
+          ],
+          statistics: { filesChanged: 1, insertions: 3, deletions: 1, binaryFiles: 0 },
+        },
+      });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/patch-collection/apply') {
+      expect(request.headers()['if-match']).toBe('"patch-r1"');
+      expect(request.postDataJSON()).toEqual({ artifactSha256: downloadableArtifact.sha256 });
+      collections += 1;
+      await route.fulfill({
+        json: {
+          runId: 'run-01K123',
+          artifactId: downloadableArtifact.artifactId,
+          artifactSha256: downloadableArtifact.sha256,
+          baseCommit: completedInspection.run.specification.repository.baseCommit,
+          headCommit: completedInspection.run.specification.repository.baseCommit,
+          paths: ['PM/TaskService.cs'],
+          appliedAt: '2026-07-29T08:11:00.000Z',
+        },
+      });
       return;
     }
     await route.fulfill({ status: 404 });
@@ -531,6 +603,18 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   await expect(page).toHaveURL(/\/tasks\/runs\/run-01K123$/);
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('changes.patch')).toBeVisible();
+  const artifactDownload = page.waitForEvent('download');
+  await page
+    .getByRole('region', { name: 'Artifacts' })
+    .getByRole('button', { name: 'Download', exact: true })
+    .click();
+  expect((await artifactDownload).suggestedFilename()).toBe('changes.patch');
+  await expect(page.getByText('Download verified.')).toBeVisible();
+  await page.getByRole('button', { name: 'Review & collect' }).click();
+  const collection = page.getByRole('dialog', { name: 'Review patch collection' });
+  await expect(collection.getByText('PM/TaskService.cs')).toBeVisible();
+  await collection.getByRole('button', { name: 'Collect patch' }).click();
+  await expect(page.getByText('Collected 1 changed path into the local worktree.')).toBeVisible();
   if (testInfo.project.name.includes('mobile')) {
     await page.getByRole('tab', { name: 'Output' }).click();
   }
@@ -544,6 +628,63 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   }));
   expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
   expect(starts).toBe(1);
+  expect(collections).toBe(1);
+});
+
+test('shows actionable diagnostics for a failed remote run', async ({ page }, testInfo) => {
+  const failure = {
+    code: 'repository_fetch_failed',
+    stage: 'workspace',
+    summary: 'The runner could not fetch the repository.',
+    recommendedAction:
+      'Check runner network access and repository credentials, then launch a new run.',
+    retryable: true,
+  };
+  const failedEvent = {
+    ...runEvents[0]!,
+    sequence: 4,
+    state: 'failed' as const,
+    summary: failure.summary,
+    data: { failure },
+  };
+  await page.route('**/api/v1/runs/run-failed**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/events')) {
+      await route.fulfill({
+        json: {
+          events: [...runEvents.slice(0, 3), failedEvent],
+          nextAfterSequence: 4,
+          hasMore: false,
+          terminal: true,
+        },
+      });
+      return;
+    }
+    if (path.endsWith('/artifacts')) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        ...runInspection,
+        run: {
+          ...runInspection.run,
+          runId: 'run-failed',
+          state: 'failed',
+          lastEventSequence: 4,
+          terminalAt: '2026-07-29T08:10:00.000Z',
+        },
+      },
+    });
+  });
+
+  await page.goto('/tasks/runs/run-failed');
+  await expect(page.getByText('repository_fetch_failed', { exact: true })).toBeVisible();
+  await expect(page.getByText(failure.recommendedAction, { exact: true })).toBeVisible();
+  if (testInfo.project.name.includes('mobile')) {
+    await page.getByRole('tab', { name: 'Output' }).click();
+  }
+  await expect(page.getByText(/Recommended action: Check runner network access/)).toBeVisible();
 });
 
 test('large project remains dense, navigable, and free of horizontal page overflow', async ({

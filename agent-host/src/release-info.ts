@@ -7,7 +7,7 @@ export interface ReleaseInfo {
   builtAt: string;
   platform: 'linux-x64' | 'development';
   nodeVersion: string;
-  protocolVersion: '1.0';
+  protocolVersion: '1.1';
   workerImageReference: string | null;
   workerImageDigest: string | null;
 }
@@ -19,7 +19,7 @@ export const developmentReleaseInfo: ReleaseInfo = {
   builtAt: 'development',
   platform: 'development',
   nodeVersion: '26.5.0',
-  protocolVersion: '1.0',
+  protocolVersion: '1.1',
   workerImageReference: null,
   workerImageDigest: null,
 };
@@ -52,7 +52,7 @@ export function parseReleaseInfo(value: unknown): ReleaseInfo {
   if (platform !== 'linux-x64' && platform !== 'development')
     throw new Error('Runner release platform is invalid.');
   const nodeVersion = boundedString(record['nodeVersion'], 'Node version', 32);
-  if (record['protocolVersion'] !== '1.0')
+  if (record['protocolVersion'] !== '1.1')
     throw new Error('Runner release protocol version is unsupported.');
   const workerImageReference = optionalString(record['workerImageReference'], 'Image reference');
   const workerImageDigest = optionalString(record['workerImageDigest'], 'Image digest');
@@ -67,7 +67,7 @@ export function parseReleaseInfo(value: unknown): ReleaseInfo {
     builtAt,
     platform,
     nodeVersion,
-    protocolVersion: '1.0',
+    protocolVersion: '1.1',
     workerImageReference,
     workerImageDigest,
   };

@@ -5,13 +5,14 @@ import type { CapabilityService } from './capabilities.js';
 import type { JsonLogger } from './logging.js';
 import type { CredentialStore } from './auth/credential-store.js';
 import { hashPairingCode, validateClientIdentity, verifyRotationProof } from './auth/crypto.js';
-import { RequestAuthenticator } from './auth/authentication.js';
+import { RequestAuthenticator, supportedProtocolVersions } from './auth/authentication.js';
 import type { TlsMaterial } from './auth/tls.js';
 import type { ActiveRunCursor, RunStore, StoredRun } from './persistence/run-store.js';
 import { RunCoordinator } from './run-coordinator.js';
 import { EventStreamManager, StreamCapacityError } from './event-stream.js';
 import { ProtocolValidationError, parseRunRequest } from './protocol/validation.js';
 import type { ReleaseInfo } from './release-info.js';
+import { ArtifactContentError, streamArtifactContent } from './artifact-content.js';
 
 const maximumBodyBytes = 1_048_576;
 const defaultPageLimit = 100;
@@ -98,7 +99,7 @@ export class AgentHostServer {
       );
       if (!authentication.authenticated) {
         if (authentication.status === 426)
-          response.setHeader('PM-Runner-Supported-Protocols', '1.0');
+          response.setHeader('PM-Runner-Supported-Protocols', supportedProtocolVersions.join(', '));
         if (authentication.serverTime !== undefined)
           response.setHeader('PM-Runner-Server-Time', authentication.serverTime);
         writeError(
@@ -161,6 +162,8 @@ export class AgentHostServer {
           'stream_capacity_reached',
           'Runner event stream capacity is full.',
         );
+      } else if (error instanceof ArtifactContentError) {
+        writeError(response, error.status, error.errorCode, error.message);
       } else {
         this.options.logger.error('request.failed', { errorCode: 'request_failed' });
         writeError(response, 500, 'runner_error', 'The runner could not process the request.');
@@ -264,6 +267,14 @@ export class AgentHostServer {
       writeJson(response, 200, { artifacts: this.options.runStore.listArtifacts(route.runId) });
       return true;
     }
+    const contentMatch = /^\/artifacts\/([^/]+)\/content$/.exec(route.suffix);
+    if (contentMatch !== null && method === 'GET') {
+      const artifactId = contentMatch[1] ?? '';
+      if (!safeIdentifier(artifactId))
+        throw new HttpInputError(400, 'invalid_artifact_id', 'Artifact ID is invalid.');
+      await streamArtifactContent(this.options.runStore, route.runId, artifactId, response);
+      return true;
+    }
     if (route.suffix.startsWith('/artifacts/') && method === 'GET') {
       const artifactId = route.suffix.slice('/artifacts/'.length);
       if (!safeIdentifier(artifactId))
@@ -282,8 +293,9 @@ export class AgentHostServer {
   private completePairing(body: Buffer, response: ServerResponse): void {
     const input = objectBody(body);
     const versions = stringArray(input['protocolVersions'], 'protocolVersions');
-    if (!versions.includes('1.0')) {
-      response.setHeader('PM-Runner-Supported-Protocols', '1.0');
+    const protocolVersion = supportedProtocolVersions.find((version) => versions.includes(version));
+    if (protocolVersion === undefined) {
+      response.setHeader('PM-Runner-Supported-Protocols', supportedProtocolVersions.join(', '));
       writeError(
         response,
         426,
@@ -316,7 +328,7 @@ export class AgentHostServer {
         this.options.logger.info('client.paired');
         writeJson(response, 201, {
           runnerId: this.options.runnerId,
-          protocolVersion: '1.0',
+          protocolVersion,
           tlsFingerprint: this.options.tls.fingerprint,
           client: {
             clientId: result.client.clientId,

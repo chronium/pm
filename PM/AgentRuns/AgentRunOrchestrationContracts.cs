@@ -43,6 +43,42 @@ public sealed record AgentRunInspection(
     string? CurrentTaskRevision,
     string Revision);
 
+public sealed record AgentRunPatchPath(
+    string Path,
+    string Status,
+    long? Insertions,
+    long? Deletions,
+    bool Binary);
+
+public sealed record AgentRunPatchStatistics(
+    int FilesChanged,
+    long Insertions,
+    long Deletions,
+    int BinaryFiles);
+
+public sealed record AgentRunPatchPreflightResult(
+    bool Ready,
+    string Revision,
+    string ArtifactId,
+    string ArtifactSha256,
+    string BaseCommit,
+    string CurrentHead,
+    string TaskRevision,
+    string? CurrentTaskRevision,
+    IReadOnlyList<AgentRunPreflightCheck> Checks,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<AgentRunPatchPath> Paths,
+    AgentRunPatchStatistics Statistics);
+
+public sealed record AgentRunPatchCollectionResult(
+    string RunId,
+    string ArtifactId,
+    string ArtifactSha256,
+    string BaseCommit,
+    string HeadCommit,
+    IReadOnlyList<string> Paths,
+    DateTimeOffset AppliedAt);
+
 public sealed record AgentRunGitSnapshot(
     string RepositoryRoot,
     string Branch,
@@ -103,5 +139,17 @@ public interface IAgentRunService
     Task<AppResult<AgentRunArtifact>> Artifact(
         string runId,
         string artifactId,
+        CancellationToken cancellationToken = default);
+    Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(
+        string runId,
+        string artifactId,
+        CancellationToken cancellationToken = default);
+    Task<AppResult<AgentRunPatchPreflightResult>> PreflightPatchCollection(
+        string runId,
+        CancellationToken cancellationToken = default);
+    Task<AppResult<AgentRunPatchCollectionResult>> CollectPatch(
+        string runId,
+        string expectedRevision,
+        string expectedArtifactSha256,
         CancellationToken cancellationToken = default);
 }

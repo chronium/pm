@@ -3,9 +3,16 @@ import type { CredentialStore, PairedClient } from './credential-store.js';
 import { validateNonce, verifySignedRequest } from './crypto.js';
 
 const allowedClockSkewSeconds = 300;
+export const supportedProtocolVersions = ['1.1', '1.0'] as const;
+export type SupportedProtocolVersion = (typeof supportedProtocolVersions)[number];
 
 export type AuthenticationResult =
-  | { authenticated: true; client: PairedClient; nonce: string; protocolVersion: '1.0' }
+  | {
+      authenticated: true;
+      client: PairedClient;
+      nonce: string;
+      protocolVersion: SupportedProtocolVersion;
+    }
   | {
       authenticated: false;
       status: 401 | 426;
@@ -57,7 +64,7 @@ export class RequestAuthenticator {
       )
     )
       return unauthorized();
-    if (protocolVersion !== '1.0')
+    if (!supportedProtocolVersions.includes(protocolVersion as SupportedProtocolVersion))
       return {
         authenticated: false,
         status: 426,
@@ -66,7 +73,12 @@ export class RequestAuthenticator {
       };
     const nonceExpiresAt = new Date((timestampSeconds + allowedClockSkewSeconds + 1) * 1000);
     if (!this.credentials.useNonce(clientId, nonce, nonceExpiresAt)) return unauthorized();
-    return { authenticated: true, client, nonce, protocolVersion: '1.0' };
+    return {
+      authenticated: true,
+      client,
+      nonce,
+      protocolVersion: protocolVersion as SupportedProtocolVersion,
+    };
   }
 }
 

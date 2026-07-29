@@ -13,6 +13,7 @@ import type {
   RunSpecification,
   RunState,
 } from '../protocol/types.js';
+import { runFailure } from '../run-failure.js';
 import { applyMigrations } from './migrations.js';
 
 export interface StoredRun {
@@ -51,6 +52,11 @@ export interface RecoveryResult {
 export interface ExpiredRun {
   runId: string;
   artifactLocations: string[];
+}
+
+export interface StoredArtifact {
+  artifact: RunArtifact;
+  absoluteLocation: string;
 }
 
 export interface ActiveRunCursor {
@@ -93,6 +99,7 @@ interface RunRow {
 interface EventRow {
   run_id: string;
   sequence: number;
+  protocol_version: string;
   timestamp: string;
   type: string;
   state: string | null;
@@ -300,7 +307,7 @@ export class RunStore {
     return (
       this.database
         .prepare(
-          `SELECT run_id, sequence, timestamp, type, state, summary, data_json
+          `SELECT run_id, sequence, protocol_version, timestamp, type, state, summary, data_json
            FROM run_events WHERE run_id = ? AND sequence > ? ORDER BY sequence`,
         )
         .all(runId, afterSequence) as unknown as EventRow[]
@@ -312,7 +319,7 @@ export class RunStore {
     validatePageLimit(limit);
     const rows = this.database
       .prepare(
-        `SELECT run_id, sequence, timestamp, type, state, summary, data_json
+        `SELECT run_id, sequence, protocol_version, timestamp, type, state, summary, data_json
          FROM run_events WHERE run_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`,
       )
       .all(runId, afterSequence, limit + 1) as unknown as EventRow[];
@@ -344,10 +351,11 @@ export class RunStore {
         data: { reason: 'client_requested' },
       });
       if (current.state === 'accepted' || current.state === 'queued') {
+        const failure = runFailure('run_cancelled');
         this.transitionInTransaction(runId, 'cancelled', 'Run cancelled', {
           previousState: current.state,
           nextState: 'cancelled',
-          reason: 'client_requested',
+          failure,
         });
         return { disposition: 'cancelled', run: this.requireRun(runId) };
       }
@@ -387,10 +395,11 @@ export class RunStore {
           this.ensureQueued(row.run_id);
           requeued += 1;
         } else if (activeRunStates.includes(row.state)) {
-          this.transitionInTransaction(row.run_id, 'failed', 'Run interrupted by runner restart', {
+          const failure = runFailure('runner_restarted');
+          this.transitionInTransaction(row.run_id, 'failed', failure.summary, {
             previousState: row.state,
             nextState: 'failed',
-            reason: 'runner_restarted',
+            failure,
           });
           failed += 1;
         }
@@ -427,6 +436,21 @@ export class RunStore {
       .prepare('SELECT metadata_json FROM run_artifacts WHERE run_id = ? AND artifact_id = ?')
       .get(runId, artifactId) as { metadata_json: string } | undefined;
     return row === undefined ? undefined : parseStoredArtifact(row.metadata_json);
+  }
+
+  getStoredArtifact(runId: string, artifactId: string): StoredArtifact | undefined {
+    const row = this.database
+      .prepare(
+        'SELECT metadata_json, relative_location FROM run_artifacts WHERE run_id = ? AND artifact_id = ?',
+      )
+      .get(runId, artifactId) as { metadata_json: string; relative_location: string } | undefined;
+    if (row === undefined) return undefined;
+    validateArtifactLocation(runId, row.relative_location);
+    const absoluteLocation = join(this.dataRoot, row.relative_location);
+    const artifactRoot = join(this.dataRoot, 'runs', runId, 'artifacts');
+    if (!absoluteLocation.startsWith(`${artifactRoot}/`))
+      throw new Error('Artifact location escaped its run directory.');
+    return { artifact: parseStoredArtifact(row.metadata_json), absoluteLocation };
   }
 
   expiredTerminalRuns(cutoff: Date): ExpiredRun[] {
@@ -497,7 +521,7 @@ export class RunStore {
     const sequence = current.lastEventSequence + 1;
     const timestamp = this.timestamp();
     const event: RunEvent = {
-      protocolVersion: '1.0',
+      protocolVersion: current.specification.protocolVersion,
       runId,
       sequence,
       timestamp,
@@ -508,12 +532,14 @@ export class RunStore {
     };
     this.database
       .prepare(
-        `INSERT INTO run_events (run_id, sequence, timestamp, type, state, summary, data_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO run_events
+           (run_id, sequence, protocol_version, timestamp, type, state, summary, data_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         runId,
         sequence,
+        event.protocolVersion,
         timestamp,
         event.type,
         event.state,
@@ -635,7 +661,7 @@ function toRunEvent(row: EventRow): RunEvent {
   if (row.state !== null && !isRunState(row.state))
     throw new Error(`Persisted event ${row.run_id}/${row.sequence} has an invalid state.`);
   return {
-    protocolVersion: '1.0',
+    protocolVersion: row.protocol_version,
     runId: row.run_id,
     sequence: row.sequence,
     timestamp: row.timestamp,

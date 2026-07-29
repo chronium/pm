@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, sign } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { request } from 'node:https';
 import type { ClientRequest, IncomingHttpHeaders } from 'node:http';
 import type { TLSSocket } from 'node:tls';
@@ -105,7 +105,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
 
     const pairingBody = JSON.stringify({
       code: 'ABCD-EFGH-JKMP',
-      protocolVersions: ['1.0'],
+      protocolVersions: ['1.1', '1.0'],
       client: {
         clientId: identity.clientId,
         displayName: identity.displayName,
@@ -121,6 +121,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
       pairingBody,
     );
     assert.equal(pairing.status, 201);
+    assert.equal(JSON.parse(pairing.body).protocolVersion, '1.1');
     assert.equal(JSON.parse(pairing.body).tlsFingerprint, tls.fingerprint);
 
     const nonce = 'nonce_1234567890123456';
@@ -299,6 +300,10 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     assert.equal(active.status, 200);
     assert.equal(JSON.parse(active.body).runs[0].runId, runRequest.specification.runId);
 
+    const artifactBytes = Buffer.from('hello patch\n', 'utf8');
+    const artifactDirectory = join(temporary.path, 'runs', 'run-http-contract', 'artifacts');
+    mkdirSync(artifactDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(join(artifactDirectory, 'result.patch'), artifactBytes, { mode: 0o600 });
     runStore.recordArtifact(
       runRequest.specification.runId,
       {
@@ -306,8 +311,8 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
         kind: 'git_patch',
         fileName: 'result.patch',
         mediaType: 'text/x-diff',
-        byteLength: 12,
-        sha256: 'a'.repeat(64),
+        byteLength: artifactBytes.length,
+        sha256: createHash('sha256').update(artifactBytes).digest('hex'),
         createdAt: '2026-07-27T12:00:00.000Z',
       },
       'runs/run-http-contract/artifacts/result.patch',
@@ -324,6 +329,90 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     );
     assert.equal(artifacts.status, 200);
     assert.equal(JSON.parse(artifacts.body).artifacts[0].artifactId, 'result-patch');
+
+    const contentPath = `${inspectPath}/artifacts/result-patch/content`;
+    const content = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      contentPath,
+      '',
+      signedHeaders(identity, 'GET', contentPath, '', 'nonce_artifact_1234567', '1.1'),
+    );
+    assert.equal(content.status, 200);
+    assert.equal(content.body, artifactBytes.toString('utf8'));
+    assert.equal(content.headers['content-length'], String(artifactBytes.length));
+    assert.equal(
+      content.headers['pm-artifact-sha256'],
+      createHash('sha256').update(artifactBytes).digest('hex'),
+    );
+    assert.equal(content.headers['cache-control'], 'no-store');
+
+    writeFileSync(join(artifactDirectory, 'result.patch'), 'corrupt', { mode: 0o600 });
+    const corrupt = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      contentPath,
+      '',
+      signedHeaders(identity, 'GET', contentPath, '', 'nonce_artifact_2234567', '1.1'),
+    );
+    assert.equal(corrupt.status, 409);
+    assert.equal(JSON.parse(corrupt.body).errorCode, 'artifact_corrupt');
+
+    symlinkSync('result.patch', join(artifactDirectory, 'linked.patch'));
+    runStore.recordArtifact(
+      runRequest.specification.runId,
+      {
+        artifactId: 'linked-patch',
+        kind: 'git_patch',
+        fileName: 'linked.patch',
+        mediaType: 'text/x-diff',
+        byteLength: artifactBytes.length,
+        sha256: createHash('sha256').update(artifactBytes).digest('hex'),
+        createdAt: '2026-07-27T12:00:00.000Z',
+      },
+      'runs/run-http-contract/artifacts/linked.patch',
+    );
+    const linkedPath = `${inspectPath}/artifacts/linked-patch/content`;
+    const linked = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      linkedPath,
+      '',
+      signedHeaders(identity, 'GET', linkedPath, '', 'nonce_artifact_3234567', '1.1'),
+    );
+    assert.equal(linked.status, 404);
+    assert.equal(JSON.parse(linked.body).errorCode, 'artifact_unavailable');
+
+    runStore.recordArtifact(
+      runRequest.specification.runId,
+      {
+        artifactId: 'oversized',
+        kind: 'report',
+        fileName: 'oversized.bin',
+        mediaType: 'application/octet-stream',
+        byteLength: 64 * 1024 * 1024 + 1,
+        sha256: 'a'.repeat(64),
+        createdAt: '2026-07-27T12:00:00.000Z',
+      },
+      'runs/run-http-contract/artifacts/oversized.bin',
+    );
+    const oversizedPath = `${inspectPath}/artifacts/oversized/content`;
+    const oversized = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      oversizedPath,
+      '',
+      signedHeaders(identity, 'GET', oversizedPath, '', 'nonce_artifact_4234567', '1.1'),
+    );
+    assert.equal(oversized.status, 413);
 
     const eventPagePath = `${inspectPath}/events?afterSequence=0&limit=1`;
     const eventPage = await send(

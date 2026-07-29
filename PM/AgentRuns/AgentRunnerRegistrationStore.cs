@@ -187,7 +187,7 @@ public sealed partial class AgentRunnerRegistrationStore(AgentRunnerRegistration
             string.IsNullOrWhiteSpace(registration.DisplayName) || registration.DisplayName.Length > 512 ||
             !TryNormalizeEndpoint(registration.Endpoint, out var endpoint) || endpoint.AbsoluteUri != registration.Endpoint ||
             !FingerprintPattern().IsMatch(registration.TlsFingerprint ?? string.Empty) ||
-            registration.ProtocolVersion != AgentRunProtocol.Current ||
+            !AgentRunProtocol.Supported.Contains(registration.ProtocolVersion) ||
             registration.Credential == null ||
             string.IsNullOrWhiteSpace(registration.Credential.ClientId) ||
             registration.Credential.ClientId.Length > 256 ||

@@ -41,6 +41,15 @@
           @if (checkpoint.summary) {
             <p>{{ checkpoint.summary }}</p>
           }
+          @if (checkpoint.failure; as failure) {
+            <div class="failure-detail" role="alert">
+              <code>{{ failure.code }}</code>
+              <p>{{ failure.recommendedAction }}</p>
+              <span>{{
+                failure.retryable ? 'A new run may be retried.' : 'Review required before retrying.'
+              }}</span>
+            </div>
+          }
         </div>
       </li>
     }
@@ -85,11 +94,57 @@
     <ul class="artifact-list">
       @for (artifact of artifacts(); track artifact.artifactId) {
         <li>
-          <div>
-            <strong>{{ artifact.fileName }}</strong>
-            <span>{{ artifact.kind }} · {{ formatBytes(artifact.byteLength) }}</span>
+          <div class="artifact-heading">
+            <div>
+              <strong>{{ artifact.fileName }}</strong>
+              <span>{{ artifact.kind }} · {{ formatBytes(artifact.byteLength) }}</span>
+            </div>
+            <div class="artifact-actions">
+              @if (
+                artifact.artifactId === 'changes-patch' && inspection().run.state === 'completed'
+              ) {
+                <button
+                  type="button"
+                  class="artifact-download artifact-collect"
+                  (click)="collectRequested.emit()"
+                >
+                  Review & collect
+                </button>
+              }
+              <button
+                type="button"
+                class="artifact-download"
+                [disabled]="downloadState(artifact.artifactId).status === 'downloading'"
+                [attr.aria-describedby]="'artifact-status-' + artifact.artifactId"
+                (click)="downloadRequested.emit(artifact)"
+              >
+                @switch (downloadState(artifact.artifactId).status) {
+                  @case ('downloading') {
+                    Downloading…
+                  }
+                  @case ('downloaded') {
+                    Download again
+                  }
+                  @case ('error') {
+                    Retry
+                  }
+                  @default {
+                    Download
+                  }
+                }
+              </button>
+            </div>
           </div>
           <code title="SHA-256">{{ artifact.sha256 }}</code>
+          @if (downloadState(artifact.artifactId).message; as message) {
+            <span
+              class="artifact-download-status"
+              [class.error]="downloadState(artifact.artifactId).status === 'error'"
+              [attr.id]="'artifact-status-' + artifact.artifactId"
+              role="status"
+              >{{ message }}</span
+            >
+          }
         </li>
       }
     </ul>

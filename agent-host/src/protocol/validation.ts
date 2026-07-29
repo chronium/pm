@@ -275,8 +275,11 @@ function containerPath(value: unknown, name: string): string {
 
 function validateCanonicalHashes(request: RunRequest): void {
   const specification = request.specification;
-  if (specification.protocolVersion !== '1.0')
-    throw new ProtocolValidationError('incompatible_protocol', 'Only protocol 1.0 is supported.');
+  if (specification.protocolVersion !== '1.0' && specification.protocolVersion !== '1.1')
+    throw new ProtocolValidationError(
+      'incompatible_protocol',
+      'Only protocol 1.0 and 1.1 are supported.',
+    );
   if (!runId.test(specification.runId)) invalid('Run ID is not URL-safe.');
   if (!taskId.test(specification.task.taskId)) invalid('Task ID is not path-safe.');
   if (!sha256.test(specification.task.revision)) invalid('Task revision must be a SHA-256 hash.');

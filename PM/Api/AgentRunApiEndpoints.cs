@@ -31,6 +31,8 @@ public sealed record AgentRunPreflightRequest(
 
 public sealed record AgentRunActionRequest;
 
+public sealed record AgentRunPatchCollectionRequest(string ArtifactSha256);
+
 public static class AgentRunApiEndpoints
 {
     private static readonly JsonSerializerOptions StreamJson = new(AgentRunJson.Options)
@@ -302,6 +304,57 @@ public static class AgentRunApiEndpoints
             .Produces<AgentRunArtifact>()
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
+        api.MapGet("/runs/{runId}/artifacts/{artifactId}/content", StreamArtifactContent)
+            .WithName("DownloadAgentRunArtifact")
+            .WithSummary("Download verified agent run artifact content")
+            .Produces(StatusCodes.Status200OK, contentType: "application/octet-stream")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status413PayloadTooLarge, "application/problem+json");
+
+        api.MapPost("/runs/{runId}/patch-collection/preflight", async (
+                HttpRequest request, string runId, CancellationToken cancellationToken) =>
+            {
+                var (_, error) = await ApiJsonRequest.Read<AgentRunActionRequest>(request, cancellationToken);
+                if (error != null) return error;
+                var result = await runs.PreflightPatchCollection(runId, cancellationToken);
+                if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                ApiPreconditions.SetETag(request.HttpContext.Response, result.Payload!.Revision);
+                return Results.Ok(result.Payload);
+            })
+            .WithName("PreflightAgentRunPatchCollection")
+            .WithSummary("Verify an agent patch against the current local worktree")
+            .WithClientHeaderMetadata()
+            .Accepts<AgentRunActionRequest>("application/json")
+            .Produces<AgentRunPatchPreflightResult>()
+            .WithResponseETagMetadata(StatusCodes.Status200OK)
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json");
+
+        api.MapPost("/runs/{runId}/patch-collection/apply", async (
+                HttpRequest request, string runId, CancellationToken cancellationToken) =>
+            {
+                var (input, error) = await ApiJsonRequest.Read<AgentRunPatchCollectionRequest>(
+                    request, cancellationToken);
+                if (error != null) return error;
+                var revision = ReadStrongIfMatch(request);
+                if (!revision.Success) return ApiResults.Problem(revision.Status, revision.ErrorCode,
+                    revision.Message, request.Path);
+                var result = await runs.CollectPatch(runId, revision.Value!, input!.ArtifactSha256,
+                    cancellationToken);
+                return result.Success
+                    ? Results.Ok(result.Payload)
+                    : ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            })
+            .WithName("CollectAgentRunPatch")
+            .WithSummary("Apply a preflighted agent patch to the local worktree")
+            .WithClientHeaderMetadata()
+            .Accepts<AgentRunPatchCollectionRequest>("application/json")
+            .Produces<AgentRunPatchCollectionResult>()
+            .WithRevisionedMutationMetadata()
+            .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status412PreconditionFailed, "application/problem+json");
+
         return;
 
         async Task StreamEvents(HttpContext context, string runId, long afterSequence = 0)
@@ -345,6 +398,33 @@ public static class AgentRunApiEndpoints
             catch (AgentRunnerStreamException)
             {
             }
+        }
+
+        async Task StreamArtifactContent(HttpContext context, string runId, string artifactId)
+        {
+            var result = await runs.ArtifactContent(runId, artifactId, context.RequestAborted);
+            if (!result.Success)
+            {
+                await ApiResults.Failure(result.ErrorCode, result.Message, context.Request.Path).ExecuteAsync(context);
+                return;
+            }
+
+            await using var content = result.Payload!;
+            var artifact = content.Artifact;
+            var disposition = new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+            {
+                FileNameStar = artifact.FileName,
+            };
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.ContentType = artifact.MediaType;
+            context.Response.ContentLength = artifact.ByteLength;
+            context.Response.Headers.ContentDisposition = disposition.ToString();
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            context.Response.Headers["PM-Artifact-Id"] = artifact.ArtifactId;
+            context.Response.Headers["PM-Artifact-SHA256"] = artifact.Sha256;
+            context.Response.Headers.ETag = $"\"sha256:{artifact.Sha256}\"";
+            await content.Content.CopyToAsync(context.Response.Body, context.RequestAborted);
         }
     }
 

@@ -13,9 +13,14 @@ import { Router, RouterLink } from '@angular/router';
 
 import { AgentRunLaunch } from './agent-run-launch';
 import { AgentRunOutput } from './agent-run-output';
+import { AgentRunPatchCollection } from './agent-run-patch-collection';
 import { AgentRunProgress } from './agent-run-progress';
 import { AgentRunSupervisionStore } from './agent-run-supervision.store';
-import type { AgentRunRemoteStart } from './agent-runs-api.service';
+import type {
+  AgentRunArtifact,
+  AgentRunPatchCollectionResult,
+  AgentRunRemoteStart,
+} from './agent-runs-api.service';
 import type { AgentRunConnectivity } from './agent-run-events';
 import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
@@ -27,6 +32,7 @@ type MobileRunPane = 'progress' | 'output';
   imports: [
     AgentRunLaunch,
     AgentRunOutput,
+    AgentRunPatchCollection,
     AgentRunProgress,
     PmConfirmDialog,
     PmErrorState,
@@ -47,6 +53,8 @@ export class AgentRunWorkspace {
   protected readonly mobilePane = signal<MobileRunPane>('progress');
   protected readonly cancelOpen = signal(false);
   protected readonly retryOpen = signal(false);
+  protected readonly patchCollectionOpen = signal(false);
+  protected readonly collectionMessage = signal<string | null>(null);
   private readonly output = viewChild(AgentRunOutput);
   private readonly now = signal(Date.now());
   private returnUrl = '/tasks';
@@ -139,5 +147,23 @@ export class AgentRunWorkspace {
     anchor.download = `${this.runId()}-events.jsonl`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  protected async downloadArtifact(artifact: AgentRunArtifact): Promise<void> {
+    const blob = await this.store.downloadArtifact(artifact);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const anchor = this.document.createElement('a');
+    anchor.href = url;
+    anchor.download = artifact.fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  protected patchCollected(result: AgentRunPatchCollectionResult): void {
+    this.patchCollectionOpen.set(false);
+    this.collectionMessage.set(
+      `Collected ${result.paths.length} changed path${result.paths.length === 1 ? '' : 's'} into the local worktree.`,
+    );
   }
 }

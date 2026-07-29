@@ -26,6 +26,7 @@ import {
   computeSpecificationHash,
 } from '../src/protocol/canonical-json.js';
 import { DriverRunProcessor, RunScheduler } from '../src/scheduler.js';
+import { RunFailureError } from '../src/run-failure.js';
 import { createRequest, createTempDirectory } from './helpers.js';
 
 test('repository policy is exact, owner-only, and rejects local or credentialed remotes', () => {
@@ -105,7 +106,8 @@ test('workspace preparation rejects task revision drift and unsupported Git feat
         revisionFixture.request.specification,
         new AbortController().signal,
       ),
-      /Task revision/,
+      (error) =>
+        error instanceof RunFailureError && error.failure.code === 'task_revision_mismatch',
     );
   } finally {
     revisionFixture.dispose();
@@ -118,7 +120,8 @@ test('workspace preparation rejects task revision drift and unsupported Git feat
         submoduleFixture.request.specification,
         new AbortController().signal,
       ),
-      /submodules/,
+      (error) =>
+        error instanceof RunFailureError && error.failure.code === 'workspace_policy_unsupported',
     );
   } finally {
     submoduleFixture.dispose();
@@ -149,7 +152,8 @@ test('workspace preparation rejects task revision drift and unsupported Git feat
         lfsPointerFixture.request.specification,
         new AbortController().signal,
       ),
-      /Git LFS/,
+      (error) =>
+        error instanceof RunFailureError && error.failure.code === 'workspace_policy_unsupported',
     );
   } finally {
     lfsPointerFixture.dispose();
@@ -198,7 +202,7 @@ test('driver lifecycle uses separate agent and validation runtimes and retains b
     await scheduler.waitForIdle();
     await scheduler.stop();
 
-    assert.equal(store.getRun(fixture.request.specification.runId)?.state, 'completed');
+    assert.equal(store.getRun(fixture.request.specification.runId)?.state, 'failed');
     assert.deepEqual(runtime.authAtCreate, [true, false]);
     assert.equal(runtime.destroyCount, 2);
     assert.equal(existsSync(runtime.paths.workspace), false);
@@ -212,6 +216,17 @@ test('driver lifecycle uses separate agent and validation runtimes and retains b
       readFileSync(join(runtime.paths.artifacts, 'validation.json'), 'utf8'),
     ) as { status: string };
     assert.equal(validation.status, 'failed');
+    assert.deepEqual(store.eventsAfter(fixture.request.specification.runId).at(-1)?.data, {
+      validationStatus: 'failed',
+      failure: {
+        code: 'validation_failed',
+        stage: 'validation',
+        summary: 'Run validation failed.',
+        recommendedAction:
+          'Review the failed validation step and collected patch before deciding whether to retry.',
+        retryable: false,
+      },
+    });
   } finally {
     store.close();
     fixture.dispose();
@@ -249,7 +264,7 @@ test('artifact collection omits an oversized patch while retaining change metada
         validation: ValidationRunner.skipped(profile.validation),
         agentResponse: null,
         executionStatus: 'succeeded',
-        executionError: null,
+        executionFailure: null,
         startedAt: new Date().toISOString(),
         resourceUsage: { agent: null, validation: null },
       },

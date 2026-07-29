@@ -191,6 +191,17 @@ public sealed partial class AgentRunService(
             : AppResult<AgentRunArtifact>.Fail(cached.ErrorCode!, cached.Message!);
     }
 
+    public async Task<AppResult<IAgentRunArtifactContent>> ArtifactContent(
+        string runId,
+        string artifactId,
+        CancellationToken cancellationToken = default)
+    {
+        var cached = await cache.Get(runId);
+        return cached.Success
+            ? await runners.ArtifactContent(cached.Payload!.Selection.RunnerId, runId, artifactId, cancellationToken)
+            : AppResult<IAgentRunArtifactContent>.Fail(cached.ErrorCode!, cached.Message!);
+    }
+
     private async Task<AppResult<EnvironmentSnapshot>> InspectEnvironment(
         AgentRunSelection selection,
         CancellationToken cancellationToken)
@@ -272,8 +283,12 @@ public sealed partial class AgentRunService(
 
     private AgentRunRequest BuildRequest(string runId, DateTimeOffset requestedAt, EnvironmentSnapshot environment)
     {
+        var registration = runners.Registration(environment.Selection.RunnerId);
+        var protocolVersion = registration.Success
+            ? registration.Payload!.ProtocolVersion
+            : AgentRunProtocol.Current;
         var specification = new AgentRunSpecification(
-            AgentRunProtocol.Current,
+            protocolVersion,
             runId,
             requestedAt,
             new AgentRunProject(environment.ProjectId, projectRoot.Config!.Name),

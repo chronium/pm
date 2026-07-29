@@ -713,6 +713,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{runId}/artifacts/{artifactId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download verified agent run artifact content */
+        get: operations["DownloadAgentRunArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/patch-collection/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify an agent patch against the current local worktree */
+        post: operations["PreflightAgentRunPatchCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{runId}/patch-collection/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a preflighted agent patch to the local worktree */
+        post: operations["CollectAgentRunPatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -906,6 +957,52 @@ export interface components {
             /** Format: int64 */
             maxPatchBytes: number | string;
             includeEventLog: boolean;
+        };
+        AgentRunPatchCollectionRequest: {
+            artifactSha256: string;
+        };
+        AgentRunPatchCollectionResult: {
+            runId: string;
+            artifactId: string;
+            artifactSha256: string;
+            baseCommit: string;
+            headCommit: string;
+            paths: string[];
+            /** Format: date-time */
+            appliedAt: string;
+        };
+        AgentRunPatchPath: {
+            path: string;
+            status: string;
+            /** Format: int64 */
+            insertions: null | number | string;
+            /** Format: int64 */
+            deletions: null | number | string;
+            binary: boolean;
+        };
+        AgentRunPatchPreflightResult: {
+            ready: boolean;
+            revision: string;
+            artifactId: string;
+            artifactSha256: string;
+            baseCommit: string;
+            currentHead: string;
+            taskRevision: string;
+            currentTaskRevision: null | string;
+            checks: components["schemas"]["AgentRunPreflightCheck"][];
+            warnings: string[];
+            paths: components["schemas"]["AgentRunPatchPath"][];
+            statistics: components["schemas"]["AgentRunPatchStatistics"];
+        };
+        AgentRunPatchStatistics: {
+            /** Format: int32 */
+            filesChanged: number | string;
+            /** Format: int64 */
+            insertions: number | string;
+            /** Format: int64 */
+            deletions: number | string;
+            /** Format: int32 */
+            binaryFiles: number | string;
         };
         AgentRunPreflightCheck: {
             id: string;
@@ -4235,6 +4332,163 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    DownloadAgentRunArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Payload Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    PreflightAgentRunPatchCollection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunActionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunPatchPreflightResult"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    CollectAgentRunPatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+            };
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunPatchCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunPatchCollectionResult"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

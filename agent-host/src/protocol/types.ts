@@ -15,6 +15,50 @@ export const runStates = [
 
 export type RunState = (typeof runStates)[number];
 
+export const runFailureStages = [
+  'workspace',
+  'runtime',
+  'agent',
+  'validation',
+  'artifacts',
+  'cancellation',
+  'system',
+] as const;
+
+export type RunFailureStage = (typeof runFailureStages)[number];
+
+export const runFailureCodes = [
+  'repository_not_allowed',
+  'repository_fetch_failed',
+  'base_revision_unavailable',
+  'task_revision_mismatch',
+  'workspace_policy_unsupported',
+  'workspace_preparation_failed',
+  'runtime_start_failed',
+  'runtime_resource_limit',
+  'runtime_timeout',
+  'runtime_cleanup_failed',
+  'agent_start_failed',
+  'agent_execution_failed',
+  'validation_failed',
+  'validation_timeout',
+  'artifact_collection_failed',
+  'artifact_collection_timeout',
+  'run_cancelled',
+  'runner_restarted',
+  'internal_failure',
+] as const;
+
+export type RunFailureCode = (typeof runFailureCodes)[number];
+
+export interface RunFailure {
+  code: RunFailureCode;
+  stage: RunFailureStage;
+  summary: string;
+  recommendedAction: string;
+  retryable: boolean;
+}
+
 export interface RunRequest {
   specificationHash: string;
   specification: RunSpecification;
