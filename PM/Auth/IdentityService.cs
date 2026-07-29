@@ -55,14 +55,7 @@ public sealed class IdentityService(IdentityServiceOptions? options = null) : II
         var overridePath = Environment.GetEnvironmentVariable("PM_IDENTITY_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath)) return Path.GetFullPath(overridePath);
 
-        var appDirectory = OperatingSystem.IsWindows()
-            ? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-            : OperatingSystem.IsMacOS()
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support")
-                : Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
-                  ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-
-        return Path.Combine(appDirectory, "pm", "identity.json");
+        return Path.Combine(UserConfigurationPaths.GetPmDirectory(), "identity.json");
     }
 
     private static string Base64Url(byte[] bytes)

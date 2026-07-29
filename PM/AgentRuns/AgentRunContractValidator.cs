@@ -80,7 +80,9 @@ public static partial class AgentRunContractValidator
             container.EnvironmentAllowlist == null || container.EnvironmentAllowlist.Count > 32 ||
             container.EnvironmentAllowlist.Any(name => name == null || !EnvironmentNamePattern().IsMatch(name) ||
                 SensitiveEnvironmentNamePattern().IsMatch(name) ||
-                name is not ("CODEX_HOME" or "HOME" or "PATH" or "TMPDIR")) ||
+                name is not ("CODEX_HOME" or "DOTNET_CLI_HOME" or "DOTNET_CLI_TELEMETRY_OPTOUT" or
+                    "DOTNET_NOLOGO" or "DOTNET_SKIP_FIRST_TIME_EXPERIENCE" or "HOME" or "NUGET_PACKAGES" or
+                    "PATH" or "TMPDIR")) ||
             container.EnvironmentAllowlist.Distinct(StringComparer.Ordinal).Count() !=
             container.EnvironmentAllowlist.Count || container.ReadOnlyCaches == null ||
             container.ReadOnlyCaches.Count > 16 || container.Security == null)
@@ -189,6 +191,7 @@ public static partial class AgentRunContractValidator
             !AgentRunProtocol.IsCompatible(runEvent.ProtocolVersion, AgentRunProtocol.Current) ||
             !RunIdPattern().IsMatch(runEvent.RunId ?? string.Empty) || runEvent.Sequence <= 0 ||
             !IsCanonicalTimestamp(runEvent.Timestamp) || !IsEventType(runEvent.Type) ||
+            runEvent.State.HasValue && !Enum.IsDefined(runEvent.State.Value) ||
             !IsText(runEvent.Summary, 4096))
             return AppResult.Fail("invalid_run_event", "The durable run event envelope is invalid.");
         return AppResult.Ok();
@@ -226,7 +229,7 @@ public static partial class AgentRunContractValidator
     private static bool IsIdentifier(string? value) => IsText(value, 256);
 
     private static bool IsEventType(string? value) =>
-        IsText(value, 256) && value!.Contains('.', StringComparison.Ordinal);
+        IsText(value, 256) && EventTypePattern().IsMatch(value!);
 
     private static bool IsDistinctIdentifiers(IReadOnlyList<string>? values) =>
         values != null && values.All(IsIdentifier) && values.Distinct(StringComparer.Ordinal).Count() == values.Count;
@@ -271,6 +274,9 @@ public static partial class AgentRunContractValidator
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex TaskIdPattern();
+
+    [GeneratedRegex("^[a-z][a-z0-9_-]*\\.[a-z0-9][a-z0-9._-]*$", RegexOptions.CultureInvariant)]
+    private static partial Regex EventTypePattern();
 
     [GeneratedRegex("^[0-9a-f]{40}([0-9a-f]{24})?$", RegexOptions.CultureInvariant)]
     private static partial Regex GitCommitPattern();

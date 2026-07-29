@@ -6,6 +6,7 @@ import { RetentionService } from './retention.js';
 import { CredentialStore } from './auth/credential-store.js';
 import { certificateFingerprint, loadTlsMaterial } from './auth/tls.js';
 import { generatePairingCode, hashPairingCode } from './auth/crypto.js';
+import { formatPairingInstructions } from './auth/pairing.js';
 import { CapabilityService, loadCapabilityManifest } from './capabilities.js';
 import { AgentHostServer } from './server.js';
 import { RunCoordinator } from './run-coordinator.js';
@@ -17,6 +18,8 @@ import { CodexAgentDriver } from './codex/agent-driver.js';
 import { ValidationRunner } from './execution/validation.js';
 import { ArtifactCollector } from './execution/artifacts.js';
 import { DriverRunProcessor, RunScheduler } from './scheduler.js';
+import { formatDoctorReport, runDoctor } from './doctor.js';
+import { loadReleaseInfo } from './release-info.js';
 
 const retentionIntervalMilliseconds = 60 * 60 * 1000;
 const pairingLifetimeMilliseconds = 10 * 60 * 1000;
@@ -29,6 +32,23 @@ async function main(): Promise<void> {
   }
 
   switch (parsed.command) {
+    case 'version': {
+      const release = loadReleaseInfo(parsed.config.releaseManifestPath);
+      process.stdout.write(
+        parsed.json
+          ? `${JSON.stringify(release)}\n`
+          : `pm-agent-host ${release.packageVersion} (${release.sourceRevision}) protocol ${release.protocolVersion}\n`,
+      );
+      return;
+    }
+    case 'doctor': {
+      const report = runDoctor(parsed.config);
+      process.stdout.write(
+        parsed.json ? `${JSON.stringify(report)}\n` : formatDoctorReport(report),
+      );
+      if (!report.ok) process.exitCode = 1;
+      return;
+    }
     case 'pair':
       openPairingWindow(parsed.config);
       return;
@@ -51,7 +71,12 @@ function openPairingWindow(config: HostConfig): void {
       new Date(Date.now() + pairingLifetimeMilliseconds),
     );
     process.stdout.write(
-      `Runner: ${store.runnerId}\nPairing code: ${code}\nTLS fingerprint: ${fingerprint}\nExpires in: 10 minutes\n`,
+      formatPairingInstructions({
+        runnerId: store.runnerId,
+        code,
+        tlsFingerprint: fingerprint,
+        expiresIn: '10 minutes',
+      }),
     );
   } finally {
     credentials.close();
@@ -79,6 +104,7 @@ async function serve(config: HostConfig): Promise<void> {
   let server: AgentHostServer | undefined;
   let scheduler: RunScheduler | undefined;
   try {
+    const release = loadReleaseInfo(config.releaseManifestPath);
     const manifest = loadCapabilityManifest(config.capabilityManifestPath!);
     const layout = new RunnerLayout(config.dataRoot);
     const repositoryPolicy = RepositoryPolicy.load(config.repositoryPolicyPath!);
@@ -120,6 +146,7 @@ async function serve(config: HostConfig): Promise<void> {
       runStore: store,
       runCoordinator,
       logger,
+      release,
     });
     await server.start();
     scheduler.start();

@@ -24,7 +24,7 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Worker dev server: `npm run dev` in `next-id-worker/`.
 - Worker deploy: `npm run deploy` in `next-id-worker/`.
 - Worker D1 migrations: `npm run migrate:local` or `npm run migrate:remote` in `next-id-worker/`.
-- Agent-host prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11.
+- Agent-host prerequisites: use Node `26.5.0` from the root `.node-version` and npm 11 or 12.
 - Agent-host dependencies: run `socket npm install` in `agent-host/`.
 - Agent-host formatting: run `npm run format` before completing and committing agent-host changes, then verify with `npm run format:check`.
 - Agent-host strict check: run `npm run check` in `agent-host/`.

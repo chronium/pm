@@ -3,7 +3,8 @@ import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { CredentialStore } from '../src/auth/credential-store.js';
-import { hashPairingCode } from '../src/auth/crypto.js';
+import { canonicalSignedRequest, hashPairingCode } from '../src/auth/crypto.js';
+import { formatPairingInstructions } from '../src/auth/pairing.js';
 import { CapabilityService, loadCapabilityManifest } from '../src/capabilities.js';
 import { RunStore } from '../src/persistence/run-store.js';
 import { createIdentity, createRuntimeProbe, createTempDirectory } from './helpers.js';
@@ -46,6 +47,14 @@ test('pairing challenges are one-use, bounded, and credentials persist privately
       ),
       false,
     );
+    assert.equal(
+      credentials.useNonce(
+        'usr_other',
+        'nonce_1234567890123456',
+        new Date(now.getTime() + 600_000),
+      ),
+      true,
+    );
 
     credentials.close();
     credentials = new CredentialStore(temporary.path, () => now);
@@ -78,6 +87,41 @@ test('pairing challenges are one-use, bounded, and credentials persist privately
     runStore.close();
     temporary.dispose();
   }
+});
+
+test('signed request hashes cover exact body bytes', () => {
+  const canonical = (body: Buffer): string =>
+    canonicalSignedRequest({
+      method: 'POST',
+      pathAndQuery: '/v1/runs',
+      protocolVersion: '1.0',
+      timestamp: '1785146400',
+      nonce: 'nonce_1234567890123456',
+      clientId: 'usr_test',
+      body,
+    });
+
+  assert.notEqual(canonical(Buffer.from('{"value":1}')), canonical(Buffer.from('{ "value": 1 }')));
+  assert.notEqual(
+    canonical(Buffer.from('line one\nline two')),
+    canonical(Buffer.from('line one\r\nline two')),
+  );
+  assert.notEqual(
+    canonical(Buffer.from('caf\u00e9', 'utf8')),
+    canonical(Buffer.from('cafe\u0301', 'utf8')),
+  );
+});
+
+test('pairing presentation includes runner identity and verification details', () => {
+  assert.equal(
+    formatPairingInstructions({
+      runnerId: 'runner-test',
+      code: 'ABCD-EFGH-JKMP',
+      tlsFingerprint: `sha256:${'a'.repeat(64)}`,
+      expiresIn: '10 minutes',
+    }),
+    `Runner: runner-test\nPairing code: ABCD-EFGH-JKMP\nTLS fingerprint: sha256:${'a'.repeat(64)}\nExpires in: 10 minutes\n`,
+  );
 });
 
 test('pairing locks after five invalid attempts', () => {

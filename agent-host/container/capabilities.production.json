@@ -1,0 +1,88 @@
+{
+  "displayName": "Linux workstation",
+  "agentProviders": [
+    {
+      "providerId": "codex",
+      "modelIds": ["gpt-5.6-sol"],
+      "defaultModelId": "gpt-5.6-sol",
+      "effortIds": ["low", "medium", "high"],
+      "defaultEffortId": "medium"
+    }
+  ],
+  "runtimeProfiles": [
+    {
+      "profileId": "dotnet-10",
+      "revision": "0000000000000000000000000000000000000000000000000000000000000000",
+      "imageReference": "localhost/pm-agent-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "limits": {
+        "cpuMillicores": 6000,
+        "memoryBytes": 12884901888,
+        "pids": 1024,
+        "diskBytes": 21474836480,
+        "timeoutSeconds": 10800
+      },
+      "network": {
+        "profileId": "development-open",
+        "mode": "open"
+      },
+      "container": {
+        "workspacePath": "/workspace",
+        "codexHomePath": "/home/pm/.codex",
+        "temporaryPath": "/tmp",
+        "temporaryBytes": 4294967296,
+        "environmentAllowlist": [
+          "CODEX_HOME",
+          "DOTNET_CLI_HOME",
+          "DOTNET_CLI_TELEMETRY_OPTOUT",
+          "DOTNET_NOLOGO",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE",
+          "HOME",
+          "NUGET_PACKAGES",
+          "PATH",
+          "TMPDIR"
+        ],
+        "readOnlyCaches": [],
+        "security": {
+          "readOnlyRootFilesystem": true,
+          "userNamespace": "keep-id",
+          "noNewPrivileges": true,
+          "dropAllCapabilities": true,
+          "privateNamespaces": true,
+          "seccompProfile": "runtime-default",
+          "lsmProfile": "none"
+        }
+      },
+      "validation": [
+        {
+          "stepId": "restore",
+          "displayName": "Restore",
+          "executable": "dotnet",
+          "arguments": ["restore", "-m:1"],
+          "workingDirectory": ".",
+          "timeoutSeconds": 900
+        },
+        {
+          "stepId": "build",
+          "displayName": "Build",
+          "executable": "dotnet",
+          "arguments": ["build", "-m:1", "--no-restore"],
+          "workingDirectory": ".",
+          "timeoutSeconds": 900
+        },
+        {
+          "stepId": "test",
+          "displayName": "Test",
+          "executable": "dotnet",
+          "arguments": ["test", "-m:1", "--no-restore"],
+          "workingDirectory": ".",
+          "timeoutSeconds": 1200
+        }
+      ],
+      "output": {
+        "mode": "patch",
+        "maxPatchBytes": 10485760,
+        "includeEventLog": true
+      }
+    }
+  ]
+}

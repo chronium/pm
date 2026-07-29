@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, sign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { request } from 'node:https';
-import type { ClientRequest } from 'node:http';
+import type { ClientRequest, IncomingHttpHeaders } from 'node:http';
 import type { TLSSocket } from 'node:tls';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -29,6 +29,7 @@ import {
 interface Response {
   status: number;
   body: string;
+  headers: IncomingHttpHeaders;
 }
 
 interface OpenStream {
@@ -40,6 +41,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
   const temporary = createTempDirectory();
   const tlsFiles = createTestCertificate(temporary.path);
   const tls = loadTlsMaterial(tlsFiles.certificatePath, tlsFiles.keyPath);
+  assert.equal(tls.options.minVersion, 'TLSv1.2');
   const runStore = new RunStore(temporary.path);
   const credentials = new CredentialStore(temporary.path);
   const manifestFixture = JSON.parse(
@@ -63,6 +65,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
   );
   const logLines: string[] = [];
   const logger = new JsonLogger((line) => logLines.push(line));
+  let serverNowSeconds = Math.floor(Date.now() / 1000);
   const server = new AgentHostServer({
     listenAddress: '127.0.0.1',
     port: 0,
@@ -73,6 +76,7 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     runStore,
     runCoordinator,
     logger,
+    now: () => new Date(serverNowSeconds * 1000),
     eventStreamOptions: {
       maximumStreams: 1,
       heartbeatMilliseconds: 20,
@@ -144,6 +148,39 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     );
     assert.equal(replay.status, 401);
 
+    const futureTimestamp = String(serverNowSeconds + 300);
+    const boundaryHeaders = signedHeaders(
+      identity,
+      'GET',
+      '/v1/health',
+      '',
+      'nonce_1284567890123456',
+      '1.0',
+      futureTimestamp,
+    );
+    const boundaryAccepted = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      '/v1/health',
+      '',
+      boundaryHeaders,
+    );
+    assert.equal(boundaryAccepted.status, 200);
+    serverNowSeconds += 600;
+    const boundaryReplay = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      '/v1/health',
+      '',
+      boundaryHeaders,
+    );
+    assert.equal(boundaryReplay.status, 401);
+    serverNowSeconds -= 600;
+
     const queryTampering = await send(
       port,
       tlsFiles.certificatePath,
@@ -169,10 +206,27 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
         '',
         'nonce_1434567890123456',
         '1.0',
-        String(Math.floor(Date.now() / 1000) - 301),
+        String(serverNowSeconds - 301),
       ),
     );
     assert.equal(stale.status, 401);
+    assert.equal(stale.headers['pm-runner-server-time'], String(serverNowSeconds));
+    assert.deepEqual(JSON.parse(stale.body), {
+      errorCode: 'unauthorized',
+      message: 'Authentication failed.',
+    });
+
+    const malformedTimestamp = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'GET',
+      '/v1/health',
+      '',
+      signedHeaders(identity, 'GET', '/v1/health', '', 'nonce_1534567890123456', '1.0', 'invalid'),
+    );
+    assert.equal(malformedTimestamp.status, 401);
+    assert.equal(malformedTimestamp.headers['pm-runner-server-time'], undefined);
 
     const runPath = '/v1/runs';
     const runRequest = createRequest('run-http-contract', runStore.runnerId);
@@ -535,6 +589,7 @@ function send(
           resolve({
             status: response.statusCode ?? 0,
             body: Buffer.concat(chunks).toString('utf8'),
+            headers: response.headers,
           }),
         );
       },

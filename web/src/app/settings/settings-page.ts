@@ -8,6 +8,7 @@ import { PmFormField } from '../ui/form-field/form-field';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import { ProjectHealth } from './project-health';
 import { ProjectMembers } from './project-members';
+import { AgentRunners } from './agent-runners';
 import type { SettingsCollection, SettingsOperation } from './settings.store';
 import { SettingsStore } from './settings.store';
 import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
@@ -43,6 +44,7 @@ interface SettingsDraft {
     PmLoadingState,
     ProjectHealth,
     ProjectMembers,
+    AgentRunners,
     ExternalChangeBanner,
   ],
   providers: [SettingsStore, PollingCoordinator, provideIcons({ cssPen, cssTrash })],

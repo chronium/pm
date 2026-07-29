@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.OpenApi;
 using PM.Api;
+using PM.AgentRuns;
 using PM.Application;
 using PM.Auth;
 using PM.Project;
@@ -25,7 +27,9 @@ public class WebCommand(
     ProjectConfigService configService,
     WikiService wikiService,
     ProjectValidationService validationService,
-    IProjectMembershipService membershipService) : AsyncCommand<WebCommand.Settings>
+    IProjectMembershipService membershipService,
+    IAgentRunService? agentRunService,
+    IAgentRunnerClient? agentRunnerClient) : AsyncCommand<WebCommand.Settings>
 {
     public WebCommand(
         ProjectRoot projectRoot,
@@ -35,7 +39,8 @@ public class WebCommand(
         WikiService wikiService,
         ProjectValidationService validationService)
         : this(projectRoot, boardService, taskService, configService, wikiService, validationService,
-            new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())))
+            new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
+            null, null)
     {
     }
 
@@ -76,7 +81,7 @@ public class WebCommand(
 
         var app = builder.Build();
         MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService,
-            membershipService);
+            membershipService, agentRunService, agentRunnerClient);
         if (!settings.Api) app.MapAngularWeb(angularAssets!);
 
         await app.StartAsync(cancellationToken);
@@ -116,8 +121,16 @@ public class WebCommand(
         services.ConfigureHttpJsonOptions(options =>
             options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
         services.AddOpenApi("v1", options =>
+        {
             options.ShouldInclude = description =>
-                description.RelativePath?.StartsWith("api/v1", StringComparison.Ordinal) == true);
+                description.RelativePath?.StartsWith("api/v1", StringComparison.Ordinal) == true;
+            options.AddSchemaTransformer((schema, context, _) =>
+            {
+                if (context.JsonTypeInfo.Type == typeof(AgentRunProtocolVersion))
+                    schema.Type = JsonSchemaType.String;
+                return Task.CompletedTask;
+            });
+        });
     }
 
     public static void MapApiEndpoints(
@@ -128,11 +141,15 @@ public class WebCommand(
         BoardService boardService,
         TaskService taskService,
         WikiService wikiService,
-        IProjectMembershipService? membershipService = null)
+        IProjectMembershipService? membershipService = null,
+        IAgentRunService? agentRunService = null,
+        IAgentRunnerClient? agentRunnerClient = null)
     {
         endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
             wikiService, new ResourceRevisionService(projectRoot, boardService),
-            membershipService: membershipService);
+            membershipService: membershipService,
+            agentRunService: agentRunService,
+            agentRunnerClient: agentRunnerClient);
         endpoints.MapOpenApi("/openapi/{documentName}.json");
     }
 
