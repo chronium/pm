@@ -1,7 +1,9 @@
 import { HttpClient, HttpErrorResponse, HttpResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
 import type { components } from '../api/generated/pm-api';
+import { sanitizeRunEvent } from './agent-run-events';
 
 export type AgentRunnerRegistration = components['schemas']['AgentRunnerRegistration'];
 export type AgentRunnerStatus = components['schemas']['AgentRunnerStatusResponse'];
@@ -11,6 +13,12 @@ export type AgentRunPreflightResult = components['schemas']['AgentRunPreflightRe
 export type AgentRunRemoteStart = components['schemas']['AgentRunRemoteStart'];
 export type AgentRunRuntimeProfile = components['schemas']['AgentRunRuntimeProfile'];
 export type AgentRunnerProvider = components['schemas']['AgentRunnerProviderCapability'];
+export type AgentRunInspection = components['schemas']['AgentRunInspection'];
+export type AgentRunEvent = components['schemas']['AgentRunEvent'];
+export type AgentRunEventPage = components['schemas']['AgentRunEventPage'];
+export type AgentRunArtifact = components['schemas']['AgentRunArtifact'];
+export type AgentRunCancellation = components['schemas']['AgentRunCancellation'];
+export type AgentRunState = components['schemas']['AgentRunState'];
 
 export interface AgentRunsApiError {
   status: number;
@@ -79,6 +87,54 @@ export class AgentRunsApiService {
     );
   }
 
+  inspect(runId: string) {
+    return this.http.get<AgentRunInspection>(this.runUrl(runId), {
+      observe: 'response' as const,
+    });
+  }
+
+  events(runId: string, afterSequence: number, limit = 500) {
+    return this.http.get<AgentRunEventPage>(`${this.runUrl(runId)}/events`, {
+      observe: 'response' as const,
+      params: { afterSequence, limit },
+    });
+  }
+
+  cancel(runId: string) {
+    return this.http.post<AgentRunCancellation>(
+      `${this.runUrl(runId)}/cancel`,
+      {},
+      {
+        observe: 'response' as const,
+        headers: this.mutationHeaders,
+      },
+    );
+  }
+
+  artifacts(runId: string) {
+    return this.http.get<AgentRunArtifact[]>(`${this.runUrl(runId)}/artifacts`, {
+      observe: 'response' as const,
+    });
+  }
+
+  async eventJournal(runId: string): Promise<Blob> {
+    const lines: string[] = [];
+    let afterSequence = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await firstValueFrom(this.events(runId, afterSequence));
+      const page = response.body;
+      if (!page) throw new Error('The run event journal returned an empty page.');
+      for (const event of page.events) lines.push(JSON.stringify(sanitizeRunEvent(event)) + '\n');
+      const next = Number(page.nextAfterSequence);
+      if (page.hasMore && next <= afterSequence)
+        throw new Error('The run event journal did not advance its sequence cursor.');
+      afterSequence = next;
+      hasMore = page.hasMore;
+    }
+    return new Blob(lines, { type: 'application/x-ndjson' });
+  }
+
   etag(response: HttpResponse<unknown>): string {
     return response.headers.get('ETag') ?? '';
   }
@@ -104,6 +160,10 @@ export class AgentRunsApiService {
 
   private runnerUrl(runnerId: string): string {
     return `/api/v1/runners/${encodeURIComponent(runnerId)}`;
+  }
+
+  private runUrl(runId: string): string {
+    return `/api/v1/runs/${encodeURIComponent(runId)}`;
   }
 
   private isProblem(value: unknown): value is components['schemas']['ApiProblemDetails'] {

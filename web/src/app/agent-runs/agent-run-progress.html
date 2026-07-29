@@ -1,0 +1,97 @@
+@if (inspection().taskChanged) {
+  <div class="drift-notice" role="status">
+    <strong>Task changed after launch</strong>
+    <span>
+      This run uses revision <code>{{ inspection().run.specification.task.revision }}</code>
+      @if (inspection().currentTaskRevision) {
+        while the task is now <code>{{ inspection().currentTaskRevision }}</code>
+      }
+      .
+    </span>
+  </div>
+}
+
+<section class="progress-section" aria-labelledby="run-progress-heading">
+  <h2 id="run-progress-heading">Progress</h2>
+  <ol class="checkpoint-list">
+    @for (checkpoint of checkpoints(); track checkpoint.id) {
+      <li [attr.data-status]="checkpoint.status">
+        <span class="checkpoint-mark" aria-hidden="true">
+          @switch (checkpoint.status) {
+            @case ('complete') {
+              ✓
+            }
+            @case ('failed') {
+              ×
+            }
+            @case ('cancelled') {
+              –
+            }
+            @case ('active') {
+              •
+            }
+            @default {
+              ○
+            }
+          }
+        </span>
+        <div>
+          <strong>{{ checkpoint.label }}</strong>
+          <span>{{ checkpoint.status | titlecase }}</span>
+          @if (checkpoint.summary) {
+            <p>{{ checkpoint.summary }}</p>
+          }
+        </div>
+      </li>
+    }
+  </ol>
+</section>
+
+<section class="progress-section" aria-labelledby="run-context-heading">
+  <h2 id="run-context-heading">Run context</h2>
+  <dl class="context-list">
+    <div>
+      <dt>Runner</dt>
+      <dd>{{ inspection().run.specification.runtime.runnerId }}</dd>
+    </div>
+    <div>
+      <dt>Profile</dt>
+      <dd>{{ inspection().run.specification.runtime.profile.profileId }}</dd>
+    </div>
+    <div>
+      <dt>Model</dt>
+      <dd>{{ inspection().run.specification.agent.modelId }}</dd>
+    </div>
+    <div>
+      <dt>Effort</dt>
+      <dd>{{ inspection().run.specification.agent.effortId }}</dd>
+    </div>
+    <div>
+      <dt>Base</dt>
+      <dd>
+        <code>{{ inspection().run.specification.repository.baseCommit }}</code>
+      </dd>
+    </div>
+    <div>
+      <dt>Accepted</dt>
+      <dd>{{ inspection().run.acceptedAt | date: 'medium' }}</dd>
+    </div>
+  </dl>
+</section>
+
+@if (artifacts().length) {
+  <section class="progress-section" aria-labelledby="run-artifacts-heading">
+    <h2 id="run-artifacts-heading">Artifacts</h2>
+    <ul class="artifact-list">
+      @for (artifact of artifacts(); track artifact.artifactId) {
+        <li>
+          <div>
+            <strong>{{ artifact.fileName }}</strong>
+            <span>{{ artifact.kind }} · {{ formatBytes(artifact.byteLength) }}</span>
+          </div>
+          <code title="SHA-256">{{ artifact.sha256 }}</code>
+        </li>
+      }
+    </ul>
+  </section>
+}

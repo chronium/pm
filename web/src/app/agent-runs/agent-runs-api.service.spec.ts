@@ -97,4 +97,53 @@ describe('AgentRunsApiService', () => {
       stale: true,
     });
   });
+
+  it('uses encoded run URLs for inspection, replay, cancellation, and artifacts', () => {
+    api.inspect('run/one').subscribe();
+    http.expectOne('/api/v1/runs/run%2Fone').flush({});
+
+    api.events('run/one', 42, 250).subscribe();
+    const events = http.expectOne((request) => request.url.includes('/events'));
+    expect(events.request.params.get('afterSequence')).toBe('42');
+    expect(events.request.params.get('limit')).toBe('250');
+    events.flush({ events: [], nextAfterSequence: 42, hasMore: false, terminal: false });
+
+    api.cancel('run/one').subscribe();
+    const cancel = http.expectOne('/api/v1/runs/run%2Fone/cancel');
+    expect(cancel.request.headers.get('X-PM-Client')).toBe('angular-web');
+    cancel.flush({});
+
+    api.artifacts('run/one').subscribe();
+    http.expectOne('/api/v1/runs/run%2Fone/artifacts').flush([]);
+  });
+
+  it('downloads the complete event journal through paginated replay', async () => {
+    const journal = api.eventJournal('run-one');
+    const first = http.expectOne((request) => request.url.includes('/events'));
+    expect(first.request.params.get('afterSequence')).toBe('0');
+    first.flush({
+      events: [
+        {
+          protocolVersion: '1.0',
+          runId: 'run-one',
+          sequence: 1,
+          timestamp: '2026-07-29T08:00:00Z',
+          type: 'command.output',
+          state: 'running',
+          summary: 'Output',
+          data: { output: '\u001b[31mhello\u001b[0m' },
+        },
+      ],
+      nextAfterSequence: 1,
+      hasMore: true,
+      terminal: false,
+    });
+    await Promise.resolve();
+    const second = http.expectOne((request) => request.url.includes('/events'));
+    expect(second.request.params.get('afterSequence')).toBe('1');
+    second.flush({ events: [], nextAfterSequence: 1, hasMore: false, terminal: true });
+    const text = await (await journal).text();
+    expect(text).toContain('hello');
+    expect(text).not.toContain('\u001b');
+  });
 });

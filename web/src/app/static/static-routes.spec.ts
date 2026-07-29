@@ -8,6 +8,7 @@ describe('static routes', () => {
 
     expect(children.find((route) => route.path === 'settings')?.redirectTo).toBe('');
     expect(children.find((route) => route.path === 'new')?.redirectTo).toBe('');
+    expect(children.find((route) => route.path === 'runs/:runId')?.redirectTo).toBe('');
     expect(board.children?.find((route) => route.path === 'dialog/new')?.redirectTo).toBe('');
     expect(children.find((route) => route.path === ':taskId')?.data?.['mode']).toBe('detail');
   });

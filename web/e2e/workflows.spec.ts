@@ -6,6 +6,9 @@ import { projectRoot, resetFixture } from '../scripts/e2e-fixture.mjs';
 import {
   acceptedRun,
   readyPreflight,
+  runArtifacts,
+  runEvents,
+  runInspection,
   runnerRegistration,
   runnerStatus,
 } from '../src/app/agent-runs/agent-runs.fixtures';
@@ -390,11 +393,57 @@ test('shows settings validation and protects required configuration', async ({ p
   await expect(page.getByText('Review', { exact: true })).toBeVisible();
 });
 
-test('pairs a runner and starts one immutable task run through explicit preflight', async ({
+test('pairs a runner, starts one immutable task run, and supervises its durable output', async ({
   page,
-}) => {
+}, testInfo) => {
   let paired = false;
   let starts = 0;
+  const journal = [
+    ...runEvents,
+    ...Array.from({ length: 1989 }, (_, index) => ({
+      ...runEvents[0]!,
+      sequence: index + 9,
+      timestamp: '2026-07-29T08:04:00.000Z',
+      type: 'command.output',
+      state: 'running' as const,
+      summary: 'Command output',
+      data: { output: `Structured output ${index + 9}` },
+    })),
+    {
+      ...runEvents[0]!,
+      sequence: 1998,
+      timestamp: '2026-07-29T08:03:09.000Z',
+      type: 'run.state_changed',
+      state: 'validating' as const,
+      summary: 'Validating changes',
+    },
+    {
+      ...runEvents[0]!,
+      sequence: 1999,
+      timestamp: '2026-07-29T08:03:10.000Z',
+      type: 'run.state_changed',
+      state: 'collecting_artifacts' as const,
+      summary: 'Collecting artifacts',
+    },
+    {
+      ...runEvents[0]!,
+      sequence: 2000,
+      timestamp: '2026-07-29T08:03:11.000Z',
+      type: 'run.state_changed',
+      state: 'completed' as const,
+      summary: 'Run completed',
+    },
+  ];
+  const completedInspection = {
+    ...runInspection,
+    run: {
+      ...runInspection.run,
+      state: 'completed' as const,
+      lastEventSequence: journal.length,
+      updatedAt: '2026-07-29T08:10:00.000Z',
+      terminalAt: '2026-07-29T08:10:00.000Z',
+    },
+  };
   await page.route('**/api/v1/runners**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -438,6 +487,25 @@ test('pairs a runner and starts one immutable task run through explicit prefligh
       await route.fulfill({ status: 202, json: acceptedRun });
       return;
     }
+    if (path === '/api/v1/runs/run-01K123') {
+      await route.fulfill({ json: completedInspection });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/events') {
+      await route.fulfill({
+        json: {
+          events: journal,
+          nextAfterSequence: journal.length,
+          hasMore: false,
+          terminal: false,
+        },
+      });
+      return;
+    }
+    if (path === '/api/v1/runs/run-01K123/artifacts') {
+      await route.fulfill({ json: runArtifacts });
+      return;
+    }
     await route.fulfill({ status: 404 });
   });
 
@@ -460,8 +528,21 @@ test('pairs a runner and starts one immutable task run through explicit prefligh
   await expect(launch.getByText('Ready to start.')).toBeVisible();
   await expect(launch.getByText('1234567890abcdef1234567890abcdef12345678')).toBeVisible();
   await launch.getByRole('button', { name: 'Start run' }).click();
-  await expect(launch.getByText('Run accepted')).toBeVisible();
-  await expect(launch.getByRole('button', { name: 'Start run' })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/tasks\/runs\/run-01K123$/);
+  await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('changes.patch')).toBeVisible();
+  if (testInfo.project.name.includes('mobile')) {
+    await page.getByRole('tab', { name: 'Output' }).click();
+  }
+  await expect(page.getByText('Structured output 1997')).toBeVisible();
+  const virtualRows = page.locator('.log-row');
+  await expect(virtualRows).not.toHaveCount(0);
+  expect(await virtualRows.count()).toBeLessThan(100);
+  const scroll = await page.locator('.log-viewport').evaluate((viewport) => ({
+    clientHeight: viewport.clientHeight,
+    scrollHeight: viewport.scrollHeight,
+  }));
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
   expect(starts).toBe(1);
 });
 

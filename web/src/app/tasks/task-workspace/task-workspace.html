@@ -451,5 +451,6 @@
     [taskId]="task.id"
     [taskTitle]="task.title"
     (openChange)="launchOpen.set($event)"
+    (runStarted)="openRun($event)"
   />
 }
