@@ -328,7 +328,7 @@
   }
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-dialog {
+:host .launch-dialog {
   --pm-frosted-surface-radius: var(--pm-radius-md);
 
   width: min(1080px, calc(100vw - 40px));
@@ -342,47 +342,47 @@
   -webkit-backdrop-filter: blur(var(--pm-frosted-surface-blur));
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-dialog::backdrop {
+:host .launch-dialog::backdrop {
   background: color-mix(in oklch, var(--pm-overlay-backdrop) 88%, transparent);
   backdrop-filter: blur(2px);
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-shell {
+:host .launch-shell {
   position: relative;
   z-index: 1;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-header {
+:host .launch-header {
   min-height: 92px;
   padding: var(--pm-space-4) var(--pm-space-5);
   background: transparent;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-header h2 {
+:host .launch-header h2 {
   margin-top: 2px;
   font-size: 1.15rem;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-header p {
+:host .launch-header p {
   margin-top: 2px;
   font-size: var(--pm-font-size-sm);
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-body {
+:host .launch-body {
   padding-inline: var(--pm-space-5);
   scrollbar-color: color-mix(in srgb, var(--pm-accent) 34%, transparent) transparent;
   scrollbar-width: thin;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-body::-webkit-scrollbar {
+:host .launch-body::-webkit-scrollbar {
   width: 10px;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-body::-webkit-scrollbar-track {
+:host .launch-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-body::-webkit-scrollbar-thumb {
+:host .launch-body::-webkit-scrollbar-thumb {
   min-height: 32px;
   border: 3px solid transparent;
   border-radius: 999px;
@@ -390,42 +390,42 @@
   background-clip: padding-box;
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-section {
+:host .launch-section {
   gap: var(--pm-space-4);
   padding-block: var(--pm-space-4);
 }
 
-:host-context(html[data-visual-style='exploration']) .section-heading p {
+:host .section-heading p {
   margin-top: 2px;
   font-size: var(--pm-font-size-sm);
 }
 
-:host-context(html[data-visual-style='exploration']) .selection-grid {
+:host .selection-grid {
   grid-template-columns: 1.15fr repeat(4, minmax(0, 1fr));
   gap: var(--pm-space-2);
 }
 
-:host-context(html[data-visual-style='exploration']) .selection-grid label {
+:host .selection-grid label {
   gap: var(--pm-space-1);
 }
 
-:host-context(html[data-visual-style='exploration']) .selection-grid select {
+:host .selection-grid select {
   min-height: 38px;
   border-color: var(--pm-border-subtle);
   background: color-mix(in oklch, var(--pm-surface-raised) 38%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .selection-grid select:hover:not(:disabled) {
+:host .selection-grid select:hover:not(:disabled) {
   border-color: var(--pm-border-strong);
 }
 
-:host-context(html[data-visual-style='exploration']) .selection-grid select:focus-visible {
+:host .selection-grid select:focus-visible {
   border-color: var(--pm-accent);
   outline: none;
   box-shadow: var(--pm-focus-ring);
 }
 
-:host-context(html[data-visual-style='exploration']) .trust-notice {
+:host .trust-notice {
   grid-template-columns: 150px minmax(0, 1fr);
   align-items: center;
   padding: var(--pm-space-3);
@@ -433,27 +433,27 @@
   background: color-mix(in oklch, var(--pm-success-soft) 62%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .trust-notice--warning {
+:host .trust-notice--warning {
   background: color-mix(in oklch, var(--pm-warning-soft) 62%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .readiness-state {
+:host .readiness-state {
   min-width: 68px;
   padding-block: 3px;
 }
 
-:host-context(html[data-visual-style='exploration']) .check-list {
+:host .check-list {
   border-top-color: var(--pm-border-subtle);
 }
 
-:host-context(html[data-visual-style='exploration']) .check-list li {
+:host .check-list li {
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
   min-height: 50px;
   padding: var(--pm-space-2) 0;
 }
 
-:host-context(html[data-visual-style='exploration']) .check-list .check-mark {
+:host .check-list .check-mark {
   display: grid;
   place-items: center;
   width: 20px;
@@ -463,57 +463,51 @@
   font-size: var(--pm-font-size-xs);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  .check-list
-  li[data-status='passed']
-  .check-mark {
+:host .check-list li[data-status='passed'] .check-mark {
   border-color: var(--pm-success);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  .check-list
-  li[data-status='failed']
-  .check-mark {
+:host .check-list li[data-status='failed'] .check-mark {
   border-color: var(--pm-danger);
 }
 
-:host-context(html[data-visual-style='exploration']) .check-list li strong {
+:host .check-list li strong {
   font-size: var(--pm-font-size-sm);
 }
 
-:host-context(html[data-visual-style='exploration']) .check-list li span:not(.check-mark) {
+:host .check-list li span:not(.check-mark) {
   color: var(--pm-text-subtle);
   font-size: var(--pm-font-size-xs);
 }
 
-:host-context(html[data-visual-style='exploration']) .specification-grid {
+:host .specification-grid {
   gap: var(--pm-space-2) var(--pm-space-5);
 }
 
-:host-context(html[data-visual-style='exploration']) .validation-list code {
+:host .validation-list code {
   border: 1px solid var(--pm-border-subtle);
   border-radius: var(--pm-radius-sm);
   background: color-mix(in oklch, var(--pm-surface-canvas) 48%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .launch-actions {
+:host .launch-actions {
   padding: var(--pm-space-3) var(--pm-space-5);
   background: color-mix(in oklch, var(--pm-surface-raised) 26%, transparent);
 }
 
 @media (max-width: 900px) {
-  :host-context(html[data-visual-style='exploration']) .selection-grid {
+  :host .selection-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 767px) {
-  :host-context(html[data-visual-style='exploration']) .launch-dialog {
+  :host .launch-dialog {
     width: 100vw;
     height: 100dvh;
   }
 
-  :host-context(html[data-visual-style='exploration']) .selection-grid {
+  :host .selection-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

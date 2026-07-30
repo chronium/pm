@@ -137,38 +137,37 @@ h2 {
   font-size: 18px;
 }
 
-:host-context(html[data-visual-style='exploration']) :is(.new-task-action, .next-task-action) {
+:host :is(.new-task-action, .next-task-action) {
   min-height: 30px;
   border: 1px solid transparent;
   background: color-mix(in oklch, var(--pm-surface-raised) 28%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  :is(.new-task-action, .next-task-action):is(:hover, :focus-visible):not(:disabled) {
+:host :is(.new-task-action, .next-task-action):is(:hover, :focus-visible):not(:disabled) {
   border-color: color-mix(in oklch, var(--pm-border-subtle) 72%, transparent);
   background: color-mix(in oklch, var(--pm-surface-hover) 72%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .scope-scroll section {
+:host .scope-scroll section {
   margin-top: var(--pm-space-2);
 }
 
-:host-context(html[data-visual-style='exploration']) .scope-scroll section::before {
+:host .scope-scroll section::before {
   content: '';
   display: block;
   margin: 0 var(--pm-space-2) var(--pm-space-2);
   border-top: 1px solid color-mix(in oklch, var(--pm-border-subtle) 72%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .scope-scroll section + section {
+:host .scope-scroll section + section {
   margin-top: var(--pm-space-3);
 }
 
-:host-context(html[data-visual-style='exploration']) .settings-link {
+:host .settings-link {
   position: relative;
 }
 
-:host-context(html[data-visual-style='exploration']) .settings-link::before {
+:host .settings-link::before {
   content: '';
   position: absolute;
   right: var(--pm-space-2);

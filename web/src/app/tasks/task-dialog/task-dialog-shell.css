@@ -85,7 +85,7 @@ h2 {
   overscroll-behavior: contain;
 }
 
-:host-context(html[data-visual-style='exploration']) .task-dialog {
+:host .task-dialog {
   width: min(1180px, calc(100vw - 48px));
   border-color: var(--pm-frosted-surface-border);
   background: var(--pm-frosted-surface-fill);
@@ -94,17 +94,16 @@ h2 {
     0 18px 48px rgb(0 0 0 / 24%);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  .task-dialog:has(pm-task-workspace.task-workspace-host--create) {
+:host .task-dialog:has(pm-task-workspace.task-workspace-host--create) {
   height: min(610px, calc(100dvh - 64px));
   max-height: min(610px, calc(100dvh - 64px));
 }
 
-:host-context(html[data-visual-style='exploration']) .task-dialog::backdrop {
+:host .task-dialog::backdrop {
   background: oklch(0% 0 0 / 64%);
 }
 
-:host-context(html[data-visual-style='exploration']) .task-dialog-scroll {
+:host .task-dialog-scroll {
   padding: var(--pm-space-4);
 }
 @media (max-width: 600px) {

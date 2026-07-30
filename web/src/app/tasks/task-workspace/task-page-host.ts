@@ -34,7 +34,7 @@ import { TaskWorkspace } from './task-workspace';
       box-sizing: border-box;
       padding: var(--pm-space-5);
     }
-    :host-context(html[data-visual-style='exploration']) .task-page {
+    :host .task-page {
       --pm-frosted-surface-radius: var(--pm-radius-md);
 
       width: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
@@ -43,7 +43,7 @@ import { TaskWorkspace } from './task-workspace';
       padding: var(--pm-space-4);
       background: var(--pm-frosted-surface-fill);
     }
-    :host-context(html[data-visual-style='exploration']) .task-page > * {
+    :host .task-page > * {
       position: relative;
       z-index: 1;
     }
@@ -57,7 +57,7 @@ import { TaskWorkspace } from './task-workspace';
         min-height: 100%;
         padding: var(--pm-space-3);
       }
-      :host-context(html[data-visual-style='exploration']) .task-page {
+      :host .task-page {
         width: 100%;
         height: auto;
         min-height: 100%;

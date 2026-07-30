@@ -76,17 +76,17 @@ a:hover {
 }
 
 @media (min-width: 821px) {
-  :host-context(html[data-visual-style='exploration']) {
+  :host {
     border-top-color: color-mix(in srgb, var(--pm-border-subtle) 46%, transparent);
     background: color-mix(in srgb, var(--pm-surface-raised) 36%, transparent);
   }
 
-  :host-context(html[data-visual-style='exploration']).selected {
+  :host.selected {
     box-shadow: inset 2px 0 var(--pm-accent);
     background: color-mix(in srgb, var(--pm-accent-soft) 72%, transparent);
   }
 
-  :host-context(html[data-visual-style='exploration']) a {
+  :host a {
     grid-template-columns:
       var(--pm-task-selection-slot) 104px minmax(240px, 1fr) minmax(180px, 0.58fr)
       180px;
@@ -95,43 +95,43 @@ a:hover {
     padding: 0 var(--pm-space-3);
   }
 
-  :host-context(html[data-visual-style='exploration']) a::before {
+  :host a::before {
     content: '';
     grid-column: 1;
   }
 
-  :host-context(html[data-visual-style='exploration']) a:hover {
+  :host a:hover {
     background: color-mix(in srgb, var(--pm-surface-hover) 68%, transparent);
   }
 
-  :host-context(html[data-visual-style='exploration']) .task-identity {
+  :host .task-identity {
     display: contents;
   }
 
-  :host-context(html[data-visual-style='exploration']) .task-id {
+  :host .task-id {
     grid-column: 2;
   }
 
-  :host-context(html[data-visual-style='exploration']) .task-title {
+  :host .task-title {
     grid-column: 3;
   }
 
-  :host-context(html[data-visual-style='exploration']) .task-context {
+  :host .task-context {
     grid-column: 4;
   }
 
-  :host-context(html[data-visual-style='exploration']) .task-badges {
+  :host .task-badges {
     grid-column: 5;
     display: grid;
     grid-template-columns: 112px 64px;
     gap: var(--pm-space-1);
   }
 
-  :host-context(html[data-visual-style='exploration']) :is(.priority-badge, .dependency-badge) {
+  :host :is(.priority-badge, .dependency-badge) {
     width: auto;
   }
 
-  :host-context(html[data-visual-style='exploration']) .task-preview {
+  :host .task-preview {
     display: none;
   }
 }

@@ -7,6 +7,7 @@ import { SettingsPage } from './settings-page';
 
 const settings: SettingsResponse = {
   projectName: 'Atlas',
+  accent: 'teal',
   statuses: [
     { key: 'todo', name: 'To do' },
     { key: 'done', name: 'Done' },
@@ -85,6 +86,7 @@ describe('SettingsPage', () => {
       [...element.querySelectorAll('section h2')].map((heading) => heading.textContent),
     ).toEqual([
       'Project health',
+      'Appearance',
       'Project members',
       'Agent runners',
       'Statuses',
@@ -98,6 +100,28 @@ describe('SettingsPage', () => {
     expect(
       element.querySelector('button[aria-label="Edit milestone title"]')?.getAttribute('title'),
     ).toBe('Edit milestone title');
+  });
+
+  it('saves a project-wide accent from General settings', async () => {
+    document.documentElement.dataset['accent'] = 'teal';
+    const { fixture, element, http } = await render();
+    const purple = [...element.querySelectorAll('pm-accent-picker button')].find(
+      (button) => button.textContent?.trim() === 'Purple',
+    ) as HTMLButtonElement;
+
+    purple.click();
+    fixture.detectChanges();
+    await Promise.resolve();
+    const request = http.expectOne('/api/v1/settings/accent');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.headers.get('If-Match')).toBe('"r1"');
+    request.flush({ ...settings, accent: 'purple', revision: 'r2' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    http.expectOne('/api/v1/validation').flush(validation);
+
+    expect(document.documentElement.dataset['accent']).toBe('purple');
+    expect(purple.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('validates create forms, cancels without mutation, and creates a status with retained input on failure', async () => {

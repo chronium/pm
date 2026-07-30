@@ -1,6 +1,7 @@
 name: Project Model
 idWidth: 4
 idPrefix: PM
+accent: amber
 nextIdServiceUrl: https://pm-next-id.chronium.workers.dev
 taskStates:
   todo: To Do

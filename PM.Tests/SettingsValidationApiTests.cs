@@ -27,6 +27,7 @@ public partial class ApiContractTests
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("Settings API", settings!.ProjectName);
+            Assert.Equal("teal", settings.Accent);
             Assert.Equal(["todo", "review", "done"], settings.Statuses.Select(item => item.Key));
             Assert.Equal(["PM", "BUILD"], settings.Tracks.Select(item => item.Key));
             Assert.Equal(["m1", "m2"], settings.Milestones.Select(item => item.Key));
@@ -52,6 +53,11 @@ public partial class ApiContractTests
         using (client)
         {
             var revision = (await client.GetFromJsonAsync<SettingsResponse>("/api/v1/settings"))!.Revision;
+
+            var accentUpdated = await SendSettingsMutation(client, HttpMethod.Put, "/api/v1/settings/accent",
+                new { accent = "purple" }, revision);
+            Assert.Equal("purple", accentUpdated.Accent);
+            revision = accentUpdated.Revision;
 
             var statusCreated = await SendSettingsMutation(client, HttpMethod.Post, "/api/v1/settings/statuses",
                 new { key = "blocked", name = "Blocked" }, revision);
@@ -99,6 +105,7 @@ public partial class ApiContractTests
             Assert.DoesNotContain(milestoneDeleted.Milestones, item => item.Key == "m1");
 
             var persisted = ProjectConfig.ReadConfig(root);
+            Assert.Equal("purple", persisted.Accent);
             Assert.DoesNotContain("blocked", persisted.TaskStates.Keys);
             Assert.DoesNotContain("BUILD", persisted.Tracks.Keys);
             Assert.DoesNotContain("m1", persisted.Milestones.Keys);
@@ -185,6 +192,8 @@ public partial class ApiContractTests
                 null, revision, "milestone_in_use", HttpStatusCode.Conflict);
             await AssertSettingsFailure(client, HttpMethod.Put, "/api/v1/settings/milestones/m1/priority",
                 new { priority = "later" }, revision, "invalid_priority", HttpStatusCode.BadRequest);
+            await AssertSettingsFailure(client, HttpMethod.Put, "/api/v1/settings/accent",
+                new { accent = "infrared" }, revision, "invalid_accent", HttpStatusCode.BadRequest);
             await AssertSettingsFailure(client, HttpMethod.Delete, "/api/v1/settings/milestones/missing",
                 null, revision, "missing_milestone", HttpStatusCode.NotFound);
         }

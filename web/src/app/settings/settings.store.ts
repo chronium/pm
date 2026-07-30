@@ -10,15 +10,16 @@ import {
   type RenameMilestoneRequest,
   type RenameSettingsOptionRequest,
   type SetMilestonePriorityRequest,
+  type SetProjectAccentRequest,
   type SettingsApiError,
   type SettingsMutationResponse,
   type SettingsResponse,
   type ValidationResponse,
 } from './settings-api.service';
 
-export type SettingsCollection = 'status' | 'track' | 'milestone';
+export type SettingsCollection = 'project' | 'status' | 'track' | 'milestone';
 export interface SettingsOperation {
-  kind: 'create' | 'rename' | 'priority' | 'remove';
+  kind: 'create' | 'rename' | 'update' | 'priority' | 'remove';
   collection: SettingsCollection;
   key: string | null;
 }
@@ -94,6 +95,12 @@ export class SettingsStore {
         this.pollSession.start();
       });
     });
+  }
+
+  setAccent(request: SetProjectAccentRequest) {
+    return this.enqueue({ kind: 'update', collection: 'project', key: 'accent' }, (revision) =>
+      this.api.setAccent(request, revision),
+    );
   }
 
   createStatus(request: CreateSettingsOptionRequest) {

@@ -6,49 +6,36 @@
   background: transparent;
 }
 .milestone-summary {
-  margin: 0;
-  padding: var(--pm-space-3) var(--pm-space-2) var(--pm-space-1);
-  color: var(--pm-text-muted);
-  font-size: var(--pm-font-size-sm);
-  font-weight: 700;
-  cursor: pointer;
-}
-.milestone-count {
-  display: none;
-}
-.milestone-disclosure {
-  display: none;
-}
-
-:host-context(html[data-visual-style='exploration']) .milestone-summary {
   display: grid;
   grid-template-columns: var(--pm-task-selection-slot) minmax(0, 1fr) 3ch;
   column-gap: var(--pm-space-3);
   align-items: center;
   min-height: 38px;
+  margin: 0;
   padding: 0 var(--pm-space-3);
   border-bottom: 1px solid var(--pm-border-subtle);
   background: color-mix(in srgb, var(--pm-surface-raised) 42%, transparent);
   color: var(--pm-text-primary);
   font-size: var(--pm-font-size-sm);
   font-weight: 680;
+  cursor: pointer;
   list-style: none;
 }
 
-:host-context(html[data-visual-style='exploration']) .milestone-summary::-webkit-details-marker {
+.milestone-summary::-webkit-details-marker {
   display: none;
 }
 
-:host-context(html[data-visual-style='exploration']) .milestone-summary::marker {
+.milestone-summary::marker {
   content: '';
 }
 
-:host-context(html[data-visual-style='exploration']) .milestone-summary::after {
+.milestone-summary::after {
   content: none;
   display: none;
 }
 
-:host-context(html[data-visual-style='exploration']) .milestone-disclosure {
+.milestone-disclosure {
   display: block;
   justify-self: center;
   width: 14px;
@@ -57,18 +44,18 @@
   transition: transform var(--pm-motion-fast) var(--pm-ease-standard);
 }
 
-:host-context(html[data-visual-style='exploration'])[open] .milestone-disclosure {
+:host[open] .milestone-disclosure {
   transform: rotate(90deg);
 }
 
-:host-context(html[data-visual-style='exploration']).completed .milestone-name {
+:host.completed .milestone-name {
   color: var(--pm-text-muted);
   text-decoration-line: line-through;
   text-decoration-color: color-mix(in oklch, currentColor 34%, transparent);
   text-decoration-thickness: 1px;
 }
 
-:host-context(html[data-visual-style='exploration']) .milestone-count {
+.milestone-count {
   display: inline;
   justify-self: end;
   color: var(--pm-text-subtle);

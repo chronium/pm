@@ -9,7 +9,7 @@ using PM.Project;
 
 namespace PM.Api;
 
-public sealed record ProjectResponse(string Name, string Revision);
+public sealed record ProjectResponse(string Name, string Accent, string Revision);
 
 public sealed class ApiProblemDetails : ProblemDetails
 {
@@ -54,7 +54,10 @@ public static class ApiV1Endpoints
                 if (notModified != null) return notModified;
 
                 ApiPreconditions.SetETag(request.HttpContext.Response, revision);
-                return Results.Ok(new ProjectResponse(result.Payload!.ProjectName, revision));
+                return Results.Ok(new ProjectResponse(
+                    result.Payload!.ProjectName,
+                    result.Payload.Accent,
+                    revision));
             })
             .WithName("GetProject")
             .WithSummary("Get project metadata")

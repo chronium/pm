@@ -1222,6 +1222,19 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task ProjectAccentDefaultsValidatesAndPersists()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new ProjectConfigService(projectRoot);
+
+        Assert.Equal(ProjectAccent.Default, service.GetSettings().Payload!.Accent);
+        Assert.Equal("invalid_accent", service.SetAccent("infrared").ErrorCode);
+        Assert.True(service.SetAccent(" PURPLE ").Success);
+        Assert.Equal("purple", ProjectConfig.ReadConfig(projectRoot).Accent);
+    }
+
+    [Fact]
     public async Task MilestonePriorityAddSetAndRemovePersist()
     {
         using var workspace = new TempWorkingDirectory();

@@ -11,6 +11,7 @@ public class ProjectConfig
     public required string Name { get; set; }
     public required int IdWidth { get; set; }
     public required string IdPrefix { get; set; }
+    public string Accent { get; set; } = ProjectAccent.Default;
     public string NextIdServiceUrl { get; set; } = DefaultNextIdServiceUrl;
     public required Dictionary<string, string> TaskStates { get; set; } = new();
     public Dictionary<string, string> Tracks

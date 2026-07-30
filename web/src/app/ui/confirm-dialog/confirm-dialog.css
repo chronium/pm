@@ -35,16 +35,16 @@ p {
   background: var(--pm-surface-sidebar);
 }
 
-:host-context(html[data-visual-style='exploration']) .dialog {
+:host .dialog {
   --pm-frosted-surface-radius: var(--pm-radius-md);
 
   background: var(--pm-frosted-surface-fill);
 }
 
-:host-context(html[data-visual-style='exploration']) .dialog-body {
+:host .dialog-body {
   padding: var(--pm-space-5);
 }
 
-:host-context(html[data-visual-style='exploration']) .dialog-actions {
+:host .dialog-actions {
   background: color-mix(in oklch, var(--pm-surface-raised) 26%, transparent);
 }

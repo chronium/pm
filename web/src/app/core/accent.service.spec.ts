@@ -1,31 +1,10 @@
-import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 
 import { AccentService } from './accent.service';
 
 describe('AccentService', () => {
-  let values: Record<string, string>;
-  let storage: Pick<Storage, 'getItem' | 'setItem'>;
-
   beforeEach(() => {
-    values = {};
-    storage = {
-      getItem: vi.fn((key: string) => values[key] ?? null),
-      setItem: vi.fn((key: string, value: string) => {
-        values[key] = value;
-      }),
-    };
-    TestBed.configureTestingModule({
-      providers: [
-        {
-          provide: DOCUMENT,
-          useValue: {
-            defaultView: { sessionStorage: storage },
-            documentElement: document.documentElement,
-          },
-        },
-      ],
-    });
+    TestBed.configureTestingModule({});
     document.documentElement.removeAttribute('data-accent');
   });
 
@@ -42,33 +21,24 @@ describe('AccentService', () => {
     expect(document.documentElement.dataset['accent']).toBe('teal');
   });
 
-  it('restores a valid per-tab accent preference', () => {
-    storage.setItem('pm.accent', 'purple');
-
+  it('applies the project accent without writing browser storage', () => {
     const service = TestBed.inject(AccentService);
+    const storage = vi.spyOn(Storage.prototype, 'setItem');
+
+    service.applyProjectPreference('purple');
 
     expect(service.preference()).toBe('purple');
     expect(service.label()).toBe('Purple');
+    expect(document.documentElement.dataset['accent']).toBe('purple');
+    expect(storage).not.toHaveBeenCalled();
   });
 
-  it('persists and applies a selected accent', () => {
+  it('falls back to teal for an unknown project accent', () => {
     const service = TestBed.inject(AccentService);
 
-    service.select('amber');
+    service.applyProjectPreference('infrared');
 
-    expect(storage.setItem).toHaveBeenCalledWith('pm.accent', 'amber');
-    expect(document.documentElement.dataset['accent']).toBe('amber');
-  });
-
-  it('ignores invalid storage and continues when storage is unavailable', () => {
-    storage.setItem('pm.accent', 'infrared');
-    const service = TestBed.inject(AccentService);
     expect(service.preference()).toBe('teal');
-
-    vi.spyOn(storage, 'setItem').mockImplementation(() => {
-      throw new Error('full');
-    });
-    expect(() => service.select('rose')).not.toThrow();
-    expect(service.preference()).toBe('rose');
+    expect(document.documentElement.dataset['accent']).toBe('teal');
   });
 });

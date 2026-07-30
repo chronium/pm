@@ -20,9 +20,11 @@ describe('ProjectApiService', () => {
 
     const request = TestBed.inject(HttpTestingController).expectOne('/api/v1/project');
     expect(request.request.method).toBe('GET');
-    request.flush({ name: 'Typed Project', revision: 'project-revision' });
+    request.flush({ name: 'Typed Project', accent: 'amber', revision: 'project-revision' });
     await TestBed.tick();
+    TestBed.flushEffects();
 
     expect(service.projectName()).toBe('Typed Project');
+    expect(document.documentElement.dataset['accent']).toBe('amber');
   });
 });

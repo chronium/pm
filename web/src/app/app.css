@@ -4,7 +4,6 @@
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  background: var(--pm-surface-canvas);
   color: var(--pm-text-primary);
 }
 
@@ -18,8 +17,6 @@
   min-width: 0;
   height: var(--pm-topbar-height);
   padding: 0 var(--pm-space-3);
-  border-bottom: 1px solid var(--pm-border-subtle);
-  background: var(--pm-surface-raised);
 }
 
 .brand {
@@ -56,10 +53,6 @@
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   white-space: nowrap;
-}
-
-.components-label-compact {
-  display: none;
 }
 
 .mode-navigation a:hover {
@@ -187,14 +180,6 @@
   .topbar-actions {
     gap: var(--pm-space-1);
     margin-left: 0;
-  }
-
-  .components-label-full {
-    display: none;
-  }
-
-  .components-label-compact {
-    display: inline;
   }
 
   .snapshot-context time {

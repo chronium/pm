@@ -15,6 +15,12 @@ import { SettingsStore } from './settings.store';
 import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
 import type { DirtyRoute } from '../core/dirty-route';
 import { PollingCoordinator } from '../core/polling-coordinator';
+import {
+  AccentService,
+  normalizeAccentPreference,
+  type AccentPreference,
+} from '../core/accent.service';
+import { AccentPicker } from '../shared/accent-picker/accent-picker';
 
 interface Editor {
   collection: SettingsCollection;
@@ -47,6 +53,7 @@ type SettingsSection = 'overview' | 'members' | 'runners' | 'statuses' | 'milest
     ProjectHealth,
     ProjectMembers,
     AgentRunners,
+    AccentPicker,
     ExternalChangeBanner,
   ],
   providers: [SettingsStore, PollingCoordinator, provideIcons({ cssPen, cssTrash })],
@@ -57,6 +64,7 @@ export class SettingsPage implements DirtyRoute {
   protected readonly store = inject(SettingsStore);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
+  private readonly accent = inject(AccentService);
   protected readonly activeSection = signal<SettingsSection>(
     this.document.defaultView?.location.hash === '#agent-runners' ? 'runners' : 'overview',
   );
@@ -107,10 +115,24 @@ export class SettingsPage implements DirtyRoute {
     effect(() => {
       if (this.store.pendingExternal()) this.conflictPhase.set('pending');
     });
+    effect(() => {
+      const settings = this.store.settings();
+      if (settings) this.accent.applyProjectPreference(settings.accent);
+    });
   }
 
   protected selectSection(section: SettingsSection): void {
     this.activeSection.set(section);
+  }
+
+  protected projectAccent(accent: string): AccentPreference {
+    return normalizeAccentPreference(accent);
+  }
+
+  protected async selectAccent(accent: AccentPreference): Promise<void> {
+    if (this.store.pending() || this.store.stale() || accent === this.store.settings()?.accent)
+      return;
+    await this.store.setAccent({ accent });
   }
 
   canDeactivate(): boolean | Promise<boolean> {

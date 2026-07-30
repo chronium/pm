@@ -13,7 +13,6 @@ describe('application shell', () => {
   beforeEach(async () => {
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-theme-preference');
-    document.documentElement.removeAttribute('data-visual-style');
     document.documentElement.removeAttribute('data-accent');
     sessionStorage.clear();
     await TestBed.configureTestingModule({
@@ -35,6 +34,7 @@ describe('application shell', () => {
     fixture.detectChanges();
     TestBed.inject(HttpTestingController).expectOne('/api/v1/project').flush({
       name: projectName,
+      accent: 'purple',
       revision: 'project-revision',
     });
     const boardRequest = TestBed.inject(HttpTestingController).match(
@@ -206,20 +206,11 @@ describe('application shell', () => {
     expect(indicator().getAttribute('aria-label')).toBe('Project data synced');
   });
 
-  it('renders an independent visual style switch in the top bar', async () => {
+  it('applies the project accent without showing a top-bar picker', async () => {
     const { fixture } = await renderAt('/tasks');
-    const switchElement = fixture.nativeElement.querySelector('pm-visual-style-switch');
 
-    expect(switchElement).toBeTruthy();
-    expect(document.documentElement.dataset['visualStyle']).toBe('current');
-  });
-
-  it('renders the accent picker with teal as the default palette', async () => {
-    const { fixture } = await renderAt('/tasks');
-    const picker = fixture.nativeElement.querySelector('pm-accent-picker');
-
-    expect(picker).toBeTruthy();
-    expect(document.documentElement.dataset['accent']).toBe('teal');
+    expect(fixture.nativeElement.querySelector('pm-accent-picker')).toBeNull();
+    expect(document.documentElement.dataset['accent']).toBe('purple');
   });
 
   it('shows the remaining task count in the Tasks mode header', async () => {

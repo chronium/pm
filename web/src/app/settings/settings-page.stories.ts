@@ -16,6 +16,7 @@ import { SettingsPage } from './settings-page';
 
 const settings: SettingsResponse = {
   projectName: 'Atlas workspace',
+  accent: 'teal',
   statuses: [
     { key: 'todo', name: 'To do' },
     { key: 'review', name: 'Review' },
