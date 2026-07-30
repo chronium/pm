@@ -159,15 +159,18 @@ describe('TaskWorkspace', () => {
 
   it('computes dirty state from draft differences and cancel restores the accepted task', async () => {
     const { fixture, element } = await render('detail');
+    expect(fixture.componentInstance.backdropDismissible()).toBe(true);
     (element.querySelector('[aria-label="Edit task title"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     const title = element.querySelector('#workspace-title') as HTMLInputElement;
     input(title, 'Changed');
     fixture.detectChanges();
+    expect(fixture.componentInstance.backdropDismissible()).toBe(false);
     expect(element.textContent).toContain('Save and close');
 
     input(title, task.title);
     fixture.detectChanges();
+    expect(fixture.componentInstance.backdropDismissible()).toBe(true);
     expect(element.textContent).not.toContain('Save and close');
 
     input(title, 'Changed again');

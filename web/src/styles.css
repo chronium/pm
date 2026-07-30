@@ -428,6 +428,26 @@
   mix-blend-mode: soft-light;
 }
 
+:root[data-visual-style='exploration'] .pm-frosted-dialog {
+  border-color: var(--pm-frosted-surface-border);
+  background: var(--pm-frosted-surface-fill);
+  box-shadow:
+    inset 0 1px 0 var(--pm-frosted-surface-inner-edge),
+    var(--pm-overlay-elevation);
+  backdrop-filter: blur(var(--pm-frosted-surface-blur));
+  -webkit-backdrop-filter: blur(var(--pm-frosted-surface-blur));
+}
+
+:root[data-visual-style='exploration'] .pm-frosted-dialog::backdrop {
+  background: color-mix(in oklch, var(--pm-overlay-backdrop) 88%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+:root[data-visual-style='exploration'] .pm-frosted-dialog > * {
+  position: relative;
+  z-index: 1;
+}
+
 :root[data-visual-style='exploration'] .pm-search-surface > input {
   height: 28px;
   border-color: transparent;
@@ -501,6 +521,16 @@
 
 :root[data-visual-style='exploration'] .content:has(pm-settings-page) {
   overflow: hidden;
+}
+
+:root[data-visual-style='exploration'] .content:has(pm-agent-run-workspace) {
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  :root[data-visual-style='exploration'] .content:has(pm-task-page-host) {
+    overflow: hidden;
+  }
 }
 
 :root[data-visual-style='exploration'] pm-settings-page {

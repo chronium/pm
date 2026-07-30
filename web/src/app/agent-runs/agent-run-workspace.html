@@ -1,4 +1,4 @@
-<article class="run-workspace">
+<article class="run-workspace pm-frosted-surface">
   @if (store.loading()) {
     <pm-loading-state>Loading agent run…</pm-loading-state>
   } @else if (store.error() && !store.inspection()) {
@@ -14,7 +14,10 @@
   } @else if (store.inspection(); as inspection) {
     <header class="run-header">
       <div class="run-identity">
-        <button type="button" class="back-action" (click)="back()">Back</button>
+        <button type="button" class="back-action" (click)="back()" aria-label="Back to tasks">
+          <span aria-hidden="true">←</span>
+          Back
+        </button>
         <div>
           <span class="run-id">{{ inspection.run.runId }}</span>
           <h1>
@@ -102,7 +105,7 @@
     <div class="supervision-grid" [attr.data-mobile-pane]="mobilePane()">
       <div
         id="run-progress-panel"
-        class="progress-pane"
+        class="progress-pane pm-scroll-surface"
         role="tabpanel"
         aria-labelledby="run-progress-tab"
       >

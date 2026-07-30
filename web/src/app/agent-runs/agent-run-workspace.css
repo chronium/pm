@@ -54,6 +54,9 @@
   text-decoration: none;
 }
 .back-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pm-space-1);
   flex: 0 0 auto;
   min-height: 32px;
   padding: var(--pm-space-1) var(--pm-space-2);
@@ -139,7 +142,7 @@
 }
 .supervision-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 30%) minmax(0, 1fr);
+  grid-template-columns: minmax(340px, 34%) minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
@@ -164,6 +167,77 @@
   display: flex;
   gap: var(--pm-space-2);
   margin-top: var(--pm-space-3);
+}
+
+:host-context(html[data-visual-style='exploration']) {
+  padding: var(--pm-content-surface-margin);
+}
+
+:host-context(html[data-visual-style='exploration']) .run-workspace {
+  --pm-frosted-surface-radius: var(--pm-radius-md);
+
+  height: 100%;
+  background: var(--pm-frosted-surface-fill);
+}
+
+:host-context(html[data-visual-style='exploration']) .run-workspace > * {
+  position: relative;
+  z-index: 1;
+}
+
+:host-context(html[data-visual-style='exploration']) .run-header {
+  min-height: 68px;
+  padding: var(--pm-space-3) var(--pm-space-4);
+  border-bottom-color: var(--pm-border-subtle);
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .run-identity {
+  gap: var(--pm-space-4);
+}
+
+:host-context(html[data-visual-style='exploration']) .run-id {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+
+:host-context(html[data-visual-style='exploration']) .run-header h1 {
+  margin-top: var(--pm-space-1);
+  font-size: var(--pm-font-size-lg);
+  font-weight: 600;
+}
+
+:host-context(html[data-visual-style='exploration']) .back-action {
+  border-color: transparent;
+  color: var(--pm-text-muted);
+}
+
+:host-context(html[data-visual-style='exploration']) .back-action:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+:host-context(html[data-visual-style='exploration']) :is(.run-state, .connectivity) {
+  min-width: 0;
+  padding: 3px var(--pm-space-2);
+}
+
+:host-context(html[data-visual-style='exploration']) .workspace-alert {
+  border-bottom-color: color-mix(in oklch, var(--pm-warning) 45%, transparent);
+  background: color-mix(in oklch, var(--pm-warning-soft) 70%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .supervision-grid {
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .progress-pane {
+  border-right-color: var(--pm-border-subtle);
+  background: color-mix(in oklch, var(--pm-surface-raised) 22%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .output-pane {
+  background: color-mix(in oklch, var(--pm-surface-canvas) 38%, transparent);
 }
 @media (max-width: 900px) {
   .run-header {

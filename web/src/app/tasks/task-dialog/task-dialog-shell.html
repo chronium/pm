@@ -3,6 +3,7 @@
   class="task-dialog pm-frosted-surface"
   [attr.aria-labelledby]="headingId"
   (cancel)="cancel($event)"
+  (click)="backdropClick($event)"
 >
   <div
     class="task-dialog-frame"

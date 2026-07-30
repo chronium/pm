@@ -10,7 +10,7 @@ import { TaskWorkspace } from './task-workspace';
   selector: 'pm-task-page-host',
   imports: [TaskWorkspace],
   template: `
-    <section class="task-page" aria-label="Task workspace">
+    <section class="task-page pm-frosted-surface" aria-label="Task workspace">
       <pm-task-workspace
         #workspaceView
         presentation="page"
@@ -28,10 +28,24 @@ import { TaskWorkspace } from './task-workspace';
       min-width: 0;
     }
     .task-page {
+      position: relative;
       width: 100%;
       height: 100%;
       box-sizing: border-box;
       padding: var(--pm-space-5);
+    }
+    :host-context(html[data-visual-style='exploration']) .task-page {
+      --pm-frosted-surface-radius: var(--pm-radius-md);
+
+      width: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
+      height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
+      margin: var(--pm-content-surface-margin);
+      padding: var(--pm-space-4);
+      background: var(--pm-frosted-surface-fill);
+    }
+    :host-context(html[data-visual-style='exploration']) .task-page > * {
+      position: relative;
+      z-index: 1;
     }
     @media (max-width: 767px) {
       :host {
@@ -41,6 +55,15 @@ import { TaskWorkspace } from './task-workspace';
       .task-page {
         height: auto;
         min-height: 100%;
+        padding: var(--pm-space-3);
+      }
+      :host-context(html[data-visual-style='exploration']) .task-page {
+        width: 100%;
+        height: auto;
+        min-height: 100%;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
         padding: var(--pm-space-3);
       }
     }
