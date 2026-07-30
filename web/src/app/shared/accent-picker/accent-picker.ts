@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { ACCENT_OPTIONS, AccentService, type AccentPreference } from '../../core/accent.service';
+import { ACCENT_OPTIONS, type AccentPreference } from '../../core/accent.service';
 
 @Component({
   selector: 'pm-accent-picker',
@@ -9,12 +9,12 @@ import { ACCENT_OPTIONS, AccentService, type AccentPreference } from '../../core
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AccentPicker {
-  protected readonly accent = inject(AccentService);
+  readonly preference = input.required<AccentPreference>();
+  readonly disabled = input(false);
+  readonly selection = output<AccentPreference>();
   protected readonly options = ACCENT_OPTIONS;
-  private readonly menu = viewChild<ElementRef<HTMLElement>>('menu');
 
   protected select(preference: AccentPreference): void {
-    this.accent.select(preference);
-    this.menu()?.nativeElement.hidePopover?.();
+    if (!this.disabled() && preference !== this.preference()) this.selection.emit(preference);
   }
 }

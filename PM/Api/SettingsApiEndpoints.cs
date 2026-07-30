@@ -11,6 +11,7 @@ public sealed record SettingsOptionResponse(string Key, string Name);
 public sealed record SettingsMilestoneResponse(string Key, string Title, string Priority);
 public sealed record SettingsResponse(
     string ProjectName,
+    string Accent,
     IReadOnlyList<SettingsOptionResponse> Statuses,
     IReadOnlyList<SettingsOptionResponse> Tracks,
     IReadOnlyList<SettingsMilestoneResponse> Milestones,
@@ -26,6 +27,7 @@ public sealed record CreateMilestoneRequest(
     string? Priority = null);
 public sealed record RenameMilestoneRequest([property: JsonRequired] string Title);
 public sealed record SetMilestonePriorityRequest([property: JsonRequired] string Priority);
+public sealed record SetProjectAccentRequest([property: JsonRequired] string Accent);
 
 public static class SettingsApiEndpoints
 {
@@ -38,6 +40,10 @@ public static class SettingsApiEndpoints
             .Produces<SettingsResponse>()
             .WithRevisionedReadMetadata()
             .WithSettingsReadProblems();
+
+        MapCreateMutation<SetProjectAccentRequest>(api, "/settings/accent",
+            "SetProjectAccent", "Set the project accent color", configService, revisions,
+            (service, input) => service.SetAccent(input.Accent), HttpMethods.Put);
 
         MapCreateMutation<CreateSettingsOptionRequest>(api, "/settings/statuses",
             "CreateStatus", "Create a status", configService, revisions,
@@ -73,10 +79,10 @@ public static class SettingsApiEndpoints
 
     private static void MapCreateMutation<TRequest>(RouteGroupBuilder api, string pattern,
         string name, string summary, ProjectConfigService configService, ResourceRevisionService revisions,
-        Func<ProjectConfigService, TRequest, AppResult> mutate)
+        Func<ProjectConfigService, TRequest, AppResult> mutate, string method = "POST")
         where TRequest : class
     {
-        api.MapPost(pattern, async (HttpRequest request, CancellationToken cancellationToken) =>
+        api.MapMethods(pattern, [method], async (HttpRequest request, CancellationToken cancellationToken) =>
             {
                 var (input, error) = await ApiJsonRequest.Read<TRequest>(request, cancellationToken);
                 if (error != null) return error;
@@ -175,6 +181,7 @@ public static class SettingsApiEndpoints
         var value = settings.Payload!;
         return (new SettingsResponse(
             value.ProjectName,
+            value.Accent,
             value.Statuses.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             value.Tracks.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             value.Milestones.Select(option =>

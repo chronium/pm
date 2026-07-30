@@ -32,6 +32,7 @@ public partial class ApiContractTests
             var body = JsonDocument.Parse(json).RootElement;
             var revision = body.GetProperty("revision").GetString();
             Assert.Equal("Contract Project", body.GetProperty("name").GetString());
+            Assert.Equal("teal", body.GetProperty("accent").GetString());
             Assert.Matches("^[0-9a-f]{64}$", revision!);
             Assert.Equal(ApiPreconditions.FormatETag(revision!), response.Headers.ETag?.Tag);
         }

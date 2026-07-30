@@ -206,30 +206,27 @@
   }
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog {
+:host .membership-dialog {
   --pm-frosted-surface-radius: var(--pm-radius-md);
 
   border-color: var(--pm-frosted-surface-border);
   background: var(--pm-frosted-surface-fill);
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog > :is(form, div) {
+:host .membership-dialog > :is(form, div) {
   gap: var(--pm-space-3);
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog h2 {
+:host .membership-dialog h2 {
   font-size: var(--pm-font-size-lg);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  .membership-dialog
-  > :is(form, div)
-  > p:not(.admin-warning):not(.member-error) {
+:host .membership-dialog > :is(form, div) > p:not(.admin-warning):not(.member-error) {
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-sm);
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog :is(input, select) {
+:host .membership-dialog :is(input, select) {
   min-height: 36px;
   padding: var(--pm-space-2);
   border: 1px solid var(--pm-border-subtle);
@@ -238,26 +235,24 @@
   color: var(--pm-text-primary);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  .membership-dialog
-  :is(input, select):focus-visible {
+:host .membership-dialog :is(input, select):focus-visible {
   border-color: var(--pm-accent);
   outline: none;
   box-shadow: var(--pm-focus-ring);
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog .admin-warning {
+:host .membership-dialog .admin-warning {
   border-left-width: 2px;
   background: color-mix(in oklch, var(--pm-warning-soft) 58%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog .secret-value {
+:host .membership-dialog .secret-value {
   border: 1px solid var(--pm-border-subtle);
   border-radius: var(--pm-radius-sm);
   background: color-mix(in oklch, var(--pm-surface-canvas) 48%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .membership-dialog .dialog-actions {
+:host .membership-dialog .dialog-actions {
   margin: var(--pm-space-3) calc(-1 * var(--pm-space-5)) calc(-1 * var(--pm-space-5));
   padding: var(--pm-space-3) var(--pm-space-5);
   border-top: 1px solid var(--pm-border-subtle);

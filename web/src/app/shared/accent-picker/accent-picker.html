@@ -1,19 +1,9 @@
-<button
-  type="button"
-  class="accent-trigger"
-  popovertarget="pm-accent-menu"
-  [attr.aria-label]="'Accent: ' + accent.label()"
-  [title]="'Accent: ' + accent.label()"
->
-  <span class="swatch" [attr.data-accent]="accent.preference()" aria-hidden="true"></span>
-</button>
-
-<div #menu id="pm-accent-menu" class="accent-menu" popover aria-label="Accent color">
-  <span class="menu-label">Accent</span>
+<div class="accent-options" role="group" aria-label="Project accent color">
   @for (option of options; track option.id) {
     <button
       type="button"
-      [attr.aria-pressed]="accent.preference() === option.id"
+      [disabled]="disabled()"
+      [attr.aria-pressed]="preference() === option.id"
       (click)="select(option.id)"
     >
       <span class="swatch" [attr.data-accent]="option.id" aria-hidden="true"></span>

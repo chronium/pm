@@ -9,7 +9,7 @@ public sealed class SiteSnapshotBuilder(
     BoardService boardService,
     WikiService wikiService)
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
     private const string StaticRevision = "static-snapshot";
 
     public AppResult<SiteSnapshot> Build(DateTimeOffset generatedAt)
@@ -77,6 +77,7 @@ public sealed class SiteSnapshotBuilder(
         var settings = settingsResult.Payload!;
         var responseSettings = new SettingsResponse(
             settings.ProjectName,
+            settings.Accent,
             settings.Statuses.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             settings.Tracks.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             settings.Milestones.Select(option =>
@@ -89,7 +90,7 @@ public sealed class SiteSnapshotBuilder(
         return AppResult<SiteSnapshot>.Ok(new SiteSnapshot(
             SchemaVersion,
             generatedAt.ToUniversalTime(),
-            new ProjectResponse(settings.ProjectName, StaticRevision),
+            new ProjectResponse(settings.ProjectName, settings.Accent, StaticRevision),
             responseSettings,
             new BoardNavigationResponse(
                 navigation.RemainingCount,

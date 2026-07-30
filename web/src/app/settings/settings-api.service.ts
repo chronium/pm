@@ -13,6 +13,7 @@ export type RenameSettingsOptionRequest = components['schemas']['RenameSettingsO
 export type CreateMilestoneRequest = components['schemas']['CreateMilestoneRequest'];
 export type RenameMilestoneRequest = components['schemas']['RenameMilestoneRequest'];
 export type SetMilestonePriorityRequest = components['schemas']['SetMilestonePriorityRequest'];
+export type SetProjectAccentRequest = components['schemas']['SetProjectAccentRequest'];
 export type SettingsMutationResponse = HttpResponse<SettingsResponse>;
 
 export interface SettingsApiError {
@@ -25,6 +26,14 @@ export interface SettingsApiError {
 @Injectable({ providedIn: 'root' })
 export class SettingsApiService {
   private readonly http = inject(HttpClient);
+
+  setAccent(request: SetProjectAccentRequest, revision: string) {
+    return this.http.put<SettingsResponse>(
+      '/api/v1/settings/accent',
+      request,
+      this.options(revision),
+    );
+  }
 
   createStatus(request: CreateSettingsOptionRequest, revision: string) {
     return this.http.post<SettingsResponse>(

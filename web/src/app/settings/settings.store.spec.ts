@@ -8,6 +8,7 @@ import { PollingCoordinator } from '../core/polling-coordinator';
 
 const initial: SettingsResponse = {
   projectName: 'Atlas',
+  accent: 'teal',
   statuses: [{ key: 'todo', name: 'To do' }],
   tracks: [{ key: 'PM', name: 'Product' }],
   milestones: [{ key: 'm1', title: 'First', priority: 'none' }],
@@ -78,6 +79,22 @@ describe('SettingsStore', () => {
     http.expectOne('/api/v1/validation').flush(validation);
     expect(store.settings()?.revision).toBe('r3');
     http.expectNone('/api/v1/settings');
+  });
+
+  it('updates the project accent through the revisioned mutation queue', async () => {
+    const { store, http } = await load();
+
+    const result = store.setAccent({ accent: 'purple' });
+    await Promise.resolve();
+    const request = http.expectOne('/api/v1/settings/accent');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.headers.get('If-Match')).toBe('"r1"');
+    request.flush({ ...initial, accent: 'purple', revision: 'r2' });
+
+    expect(await result).toBe(true);
+    TestBed.flushEffects();
+    http.expectOne('/api/v1/validation').flush(validation);
+    expect(store.settings()?.accent).toBe('purple');
   });
 
   it('keeps restriction errors on the triggering row and disables mutations after a stale response', async () => {

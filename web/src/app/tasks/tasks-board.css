@@ -44,10 +44,6 @@ pm-empty-state {
 }
 
 .milestone-section + .milestone-section {
-  margin-top: var(--pm-space-2);
-}
-
-:host-context(html[data-visual-style='exploration']) .milestone-section + .milestone-section {
   margin-top: 0;
   border-top: 1px solid var(--pm-border-subtle);
 }

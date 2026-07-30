@@ -15,8 +15,6 @@
   flex-direction: column;
   min-width: 0;
   padding: var(--pm-space-3) var(--pm-space-2);
-  border-right: 1px solid var(--pm-border-subtle);
-  background: var(--pm-surface-raised);
 }
 
 .content {
@@ -24,7 +22,6 @@
   min-height: 0;
   padding: 0;
   overflow: auto;
-  background: var(--pm-surface-sidebar);
 }
 
 .backdrop {

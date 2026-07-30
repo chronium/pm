@@ -5,6 +5,7 @@ namespace PM.Application;
 
 public sealed record ProjectSettingsData(
     string ProjectName,
+    string Accent,
     IReadOnlyList<BoardOption> Statuses,
     IReadOnlyList<BoardOption> Tracks,
     IReadOnlyList<BoardOption> Milestones);
@@ -19,6 +20,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         var config = projectRoot.Config;
         return AppResult<ProjectSettingsData>.Ok(new ProjectSettingsData(
             config.Name,
+            ProjectAccent.TryNormalize(config.Accent, out var accent) ? accent : ProjectAccent.Default,
             config.TaskStates.Select(status => new BoardOption(status.Key, status.Value)).ToList(),
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
             config.Milestones
@@ -27,6 +29,21 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
                     milestone.Value,
                     PriorityLevel.Resolve(config, milestone.Key)))
                 .ToList()));
+    }
+
+    public AppResult SetAccent(string accent)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+
+        if (!ProjectAccent.TryNormalize(accent, out var normalized))
+            return AppResult.Fail("invalid_accent",
+                $"Project accent must be one of {string.Join(", ", ProjectAccent.Values)}.");
+
+        var config = projectRoot.Config!;
+        config.Accent = normalized;
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
     }
 
     public AppResult AddStatus(string key, string name)

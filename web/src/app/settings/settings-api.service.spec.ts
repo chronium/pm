@@ -6,6 +6,7 @@ import { SettingsApiService, type SettingsResponse } from './settings-api.servic
 
 const settings: SettingsResponse = {
   projectName: 'Atlas',
+  accent: 'teal',
   statuses: [{ key: 'todo', name: 'To do' }],
   tracks: [{ key: 'PM', name: 'Product' }],
   milestones: [{ key: 'm one', title: 'First', priority: 'high' }],
@@ -23,6 +24,7 @@ describe('SettingsApiService', () => {
 
   it('uses typed payloads, encoded routes, client identity, and the exact strong settings ETag', () => {
     const api = TestBed.inject(SettingsApiService);
+    api.setAccent({ accent: 'purple' }, settings.revision).subscribe();
     api.createStatus({ key: 'blocked', name: 'Blocked' }, settings.revision).subscribe();
     api.renameStatus('waiting/review', { name: 'Waiting' }, settings.revision).subscribe();
     api.removeStatus('done now', settings.revision).subscribe();
@@ -37,6 +39,7 @@ describe('SettingsApiService', () => {
     api.removeMilestone('m#old', settings.revision).subscribe();
 
     const expected = [
+      ['PUT', '/api/v1/settings/accent', { accent: 'purple' }],
       ['POST', '/api/v1/settings/statuses', { key: 'blocked', name: 'Blocked' }],
       ['PUT', '/api/v1/settings/statuses/waiting%2Freview', { name: 'Waiting' }],
       ['DELETE', '/api/v1/settings/statuses/done%20now', null],

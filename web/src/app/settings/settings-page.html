@@ -42,7 +42,7 @@
           [attr.aria-current]="activeSection() === 'overview' ? 'page' : null"
           (click)="selectSection('overview')"
         >
-          Overview
+          General
         </button>
         <button
           type="button"
@@ -95,6 +95,22 @@
             [error]="store.validationError()"
             (retry)="store.reloadValidation()"
           />
+          <section class="appearance-settings" aria-labelledby="appearance-heading">
+            <div class="section-heading">
+              <div>
+                <h2 id="appearance-heading">Appearance</h2>
+                <p>The project accent is shared by everyone who opens this project.</p>
+              </div>
+            </div>
+            <pm-accent-picker
+              [preference]="projectAccent(settings.accent)"
+              [disabled]="store.pending() || store.stale()"
+              (selection)="selectAccent($event)"
+            />
+            @if (store.errorFor('project', 'accent')) {
+              <p class="row-error" role="alert">{{ store.errorFor('project', 'accent') }}</p>
+            }
+          </section>
         </div>
 
         <div class="settings-panel" [hidden]="activeSection() !== 'members'">

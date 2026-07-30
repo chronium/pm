@@ -246,47 +246,45 @@
   }
 }
 
-:host-context(html[data-visual-style='exploration']) .pairing-dialog {
+:host .pairing-dialog {
   --pm-frosted-surface-radius: var(--pm-radius-md);
 
   background: var(--pm-frosted-surface-fill);
 }
 
-:host-context(html[data-visual-style='exploration']) .pairing-form {
+:host .pairing-form {
   gap: var(--pm-space-2);
 }
 
-:host-context(html[data-visual-style='exploration']) .pairing-form header {
+:host .pairing-form header {
   margin: calc(-1 * var(--pm-space-5)) calc(-1 * var(--pm-space-5)) var(--pm-space-2);
   padding: var(--pm-space-5);
   border-bottom: 1px solid var(--pm-border-subtle);
 }
 
-:host-context(html[data-visual-style='exploration']) .pairing-form input:not([type='checkbox']) {
+:host .pairing-form input:not([type='checkbox']) {
   border-color: var(--pm-border-subtle);
   background: color-mix(in oklch, var(--pm-surface-raised) 38%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration'])
-  .pairing-form
-  input:not([type='checkbox']):focus-visible {
+:host .pairing-form input:not([type='checkbox']):focus-visible {
   border-color: var(--pm-accent);
   outline: none;
   box-shadow: var(--pm-focus-ring);
 }
 
-:host-context(html[data-visual-style='exploration']) .replace-option {
+:host .replace-option {
   align-items: center;
 }
 
-:host-context(html[data-visual-style='exploration']) .replace-option input {
+:host .replace-option input {
   width: 15px;
   height: 15px;
   margin: 0;
   accent-color: var(--pm-accent);
 }
 
-:host-context(html[data-visual-style='exploration']) .pairing-form footer {
+:host .pairing-form footer {
   margin: var(--pm-space-3) calc(-1 * var(--pm-space-5)) calc(-1 * var(--pm-space-5));
   padding: var(--pm-space-3) var(--pm-space-5);
   border-top: 1px solid var(--pm-border-subtle);
@@ -294,12 +292,12 @@
 }
 
 @media (max-width: 767px) {
-  :host-context(html[data-visual-style='exploration']) .pairing-form header {
+  :host .pairing-form header {
     margin: calc(-1 * var(--pm-space-4)) calc(-1 * var(--pm-space-4)) var(--pm-space-2);
     padding: var(--pm-space-4);
   }
 
-  :host-context(html[data-visual-style='exploration']) .pairing-form footer {
+  :host .pairing-form footer {
     margin: var(--pm-space-3) calc(-1 * var(--pm-space-4)) calc(-1 * var(--pm-space-4));
     padding-inline: var(--pm-space-4);
   }

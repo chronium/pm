@@ -5,11 +5,12 @@ import { adaptGet, validateSnapshot } from './static-snapshot.interceptor';
 import { isStaticDocument } from './static-mode.service';
 
 const snapshot: StaticSnapshot = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: '2026-07-27T12:30:00Z',
-  project: { name: 'Static PM', revision: 'static-snapshot' },
+  project: { name: 'Static PM', accent: 'teal', revision: 'static-snapshot' },
   settings: {
     projectName: 'Static PM',
+    accent: 'teal',
     statuses: [
       { key: 'todo', name: 'To do' },
       { key: 'done', name: 'Done' },
@@ -150,7 +151,7 @@ describe('static snapshot mode', () => {
   it('validates the supported schema and reports malformed or future snapshots', () => {
     expect(validateSnapshot(snapshot)).toBe(snapshot);
     expect(() => validateSnapshot({ ...snapshot, tasks: undefined })).toThrow(/collections/);
-    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 2 })).toThrow(
+    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 3 })).toThrow(
       /Unsupported static snapshot schema version: 2/,
     );
   });

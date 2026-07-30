@@ -79,6 +79,11 @@
   padding: 0;
   border: 0;
 }
+.appearance-settings {
+  margin-top: var(--pm-space-5);
+  padding-top: var(--pm-space-4);
+  border-top: 1px solid var(--pm-border-subtle);
+}
 .section-heading {
   display: flex;
   align-items: start;

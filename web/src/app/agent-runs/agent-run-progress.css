@@ -197,37 +197,37 @@
   text-overflow: ellipsis;
 }
 
-:host-context(html[data-visual-style='exploration']) .drift-notice {
+:host .drift-notice {
   padding: var(--pm-space-3) var(--pm-space-5);
   border-bottom-color: color-mix(in oklch, var(--pm-warning) 45%, transparent);
   background: color-mix(in oklch, var(--pm-warning-soft) 70%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .progress-section {
+:host .progress-section {
   background: transparent;
 }
 
-:host-context(html[data-visual-style='exploration']) .progress-section h2 {
+:host .progress-section h2 {
   letter-spacing: 0;
 }
 
-:host-context(html[data-visual-style='exploration']) .checkpoint-mark {
+:host .checkpoint-mark {
   background: color-mix(in oklch, var(--pm-surface-raised) 72%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .context-list {
+:host .context-list {
   gap: var(--pm-space-3);
 }
 
-:host-context(html[data-visual-style='exploration']) .context-list div {
+:host .context-list div {
   grid-template-columns: 84px minmax(0, 1fr);
 }
 
-:host-context(html[data-visual-style='exploration']) .artifact-heading strong {
+:host .artifact-heading strong {
   color: var(--pm-text-primary);
 }
 
-:host-context(html[data-visual-style='exploration']) .artifact-download {
+:host .artifact-download {
   border-color: var(--pm-border-subtle);
   background: color-mix(in oklch, var(--pm-surface-raised) 32%, transparent);
 }

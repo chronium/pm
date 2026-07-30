@@ -175,7 +175,7 @@
   }
 }
 
-:root[data-visual-style='exploration'][data-theme='dark'] {
+:root[data-theme='dark'] {
   --pm-surface-canvas: color-mix(
     in oklch,
     oklch(17% 0 var(--pm-palette-hue)) 96%,
@@ -244,7 +244,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root[data-visual-style='exploration']:not([data-theme]) {
+  :root:not([data-theme]) {
     --pm-surface-canvas: color-mix(
       in oklch,
       oklch(17% 0 var(--pm-palette-hue)) 96%,
@@ -313,7 +313,7 @@
   }
 }
 
-:root[data-visual-style='exploration'] :is(body, pm-root, .topbar, .sidebar, .content) {
+:root :is(body, pm-root, .topbar, .sidebar, .content) {
   background-color: oklch(from var(--pm-satin-color) l c h / var(--pm-satin-background-opacity));
   background-image: radial-gradient(
     ellipse at center,
@@ -324,24 +324,24 @@
   background-size: 100% 100%;
 }
 
-:root[data-visual-style='exploration'] .sidebar {
+:root .sidebar {
   border-right: 0;
 }
 
-:root[data-visual-style='exploration'] .topbar {
+:root .topbar {
   border-bottom: 0;
 }
 
 @media (min-width: 768px) {
-  :root[data-visual-style='exploration'] .sidebar {
+  :root .sidebar {
     position: relative;
   }
 
-  :root[data-visual-style='exploration'] .topbar > :not(pm-task-search):not(pm-wiki-search) {
+  :root .topbar > :not(pm-task-search):not(pm-wiki-search) {
     translate: 0 var(--pm-topbar-visual-offset);
   }
 
-  :root[data-visual-style='exploration'] .topbar .brand {
+  :root .topbar .brand {
     flex: 0 0 calc(var(--pm-sidebar-width) - var(--pm-space-3) - var(--pm-space-2));
     min-width: 0;
     overflow: hidden;
@@ -350,31 +350,28 @@
     font-size: var(--pm-font-size-md);
   }
 
-  :root[data-visual-style='exploration'] .topbar .mode-navigation {
+  :root .topbar .mode-navigation {
     align-self: center;
     height: 32px;
     margin-left: var(--pm-content-surface-margin);
   }
 
-  :root[data-visual-style='exploration'] .topbar .mode-count {
+  :root .topbar .mode-count {
     transform: translateY(1px);
   }
 
-  :root[data-visual-style='exploration']
-    .topbar
-    :is(pm-task-search, pm-wiki-search)
-    pm-top-bar-search {
+  :root .topbar :is(pm-task-search, pm-wiki-search) pm-top-bar-search {
     top: calc(50% + var(--pm-topbar-visual-offset));
     left: calc(50% + var(--pm-sidebar-center-offset));
   }
 }
 
-:root[data-visual-style='exploration'] .content {
+:root .content {
   position: relative;
   isolation: isolate;
 }
 
-:root[data-visual-style='exploration'] .content::before {
+:root .content::before {
   content: var(--pm-satin-grain-content, none);
   position: absolute;
   z-index: 0;
@@ -387,12 +384,12 @@
   mix-blend-mode: soft-light;
 }
 
-:root[data-visual-style='exploration'] .content > * {
+:root .content > * {
   position: relative;
   z-index: 1;
 }
 
-:root[data-visual-style='exploration'] :is(.topbar, .sidebar)::after {
+:root :is(.topbar, .sidebar)::after {
   content: var(--pm-satin-grain-content, none);
   position: absolute;
   inset: 0;
@@ -404,7 +401,7 @@
   mix-blend-mode: soft-light;
 }
 
-:root[data-visual-style='exploration'] .pm-frosted-surface {
+:root .pm-frosted-surface {
   isolation: isolate;
   overflow: hidden;
   border: 1px solid var(--pm-frosted-surface-border);
@@ -417,7 +414,7 @@
   -webkit-backdrop-filter: blur(var(--pm-frosted-surface-blur));
 }
 
-:root[data-visual-style='exploration'] .pm-frosted-surface::after {
+:root .pm-frosted-surface::after {
   content: '';
   position: absolute;
   z-index: 0;
@@ -428,7 +425,7 @@
   mix-blend-mode: soft-light;
 }
 
-:root[data-visual-style='exploration'] .pm-frosted-dialog {
+:root .pm-frosted-dialog {
   border-color: var(--pm-frosted-surface-border);
   background: var(--pm-frosted-surface-fill);
   box-shadow:
@@ -438,45 +435,45 @@
   -webkit-backdrop-filter: blur(var(--pm-frosted-surface-blur));
 }
 
-:root[data-visual-style='exploration'] .pm-frosted-dialog::backdrop {
+:root .pm-frosted-dialog::backdrop {
   background: color-mix(in oklch, var(--pm-overlay-backdrop) 88%, transparent);
   backdrop-filter: blur(2px);
 }
 
-:root[data-visual-style='exploration'] .pm-frosted-dialog > * {
+:root .pm-frosted-dialog > * {
   position: relative;
   z-index: 1;
 }
 
-:root[data-visual-style='exploration'] .pm-search-surface > input {
+:root .pm-search-surface > input {
   height: 28px;
   border-color: transparent;
   background: transparent;
 }
 
-:root[data-visual-style='exploration'] .pm-search-surface:has(input:focus) {
+:root .pm-search-surface:has(input:focus) {
   border-color: var(--pm-accent);
   box-shadow: var(--pm-focus-ring);
 }
 
-:root[data-visual-style='exploration'] .pm-search-surface > input:focus {
+:root .pm-search-surface > input:focus {
   box-shadow: none;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface :is(.status-group > summary, .task-list) {
+:root .pm-board-surface :is(.status-group > summary, .task-list) {
   background: transparent;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface .task-list > li:not(.selected) {
+:root .pm-board-surface .task-list > li:not(.selected) {
   background: transparent;
 }
 
-:root[data-visual-style='exploration'] .pm-scroll-surface.pm-board-surface {
+:root .pm-scroll-surface.pm-board-surface {
   height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
   margin: var(--pm-content-surface-margin);
 }
 
-:root[data-visual-style='exploration'] .pm-scroll-surface.pm-wiki-surface {
+:root .pm-scroll-surface.pm-wiki-surface {
   width: min(
     calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin)),
     1040px
@@ -486,12 +483,12 @@
   margin: var(--pm-content-surface-margin) auto;
 }
 
-:root[data-visual-style='exploration'] .pm-scroll-surface.pm-wiki-surface.wiki-edit-page {
+:root .pm-scroll-surface.pm-wiki-surface.wiki-edit-page {
   width: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
   max-width: none;
 }
 
-:root[data-visual-style='exploration'] .pm-scroll-surface.pm-component-surface {
+:root .pm-scroll-surface.pm-component-surface {
   width: min(
     calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin)),
     1040px
@@ -501,7 +498,7 @@
   margin: var(--pm-content-surface-margin) auto;
 }
 
-:root[data-visual-style='exploration'] .pm-scroll-surface.pm-settings-surface {
+:root .pm-scroll-surface.pm-settings-surface {
   width: min(
     calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin)),
     1200px
@@ -511,47 +508,47 @@
   margin: var(--pm-content-surface-margin) auto;
 }
 
-:root[data-visual-style='exploration'] .content:has(pm-tasks-board) {
+:root .content:has(pm-tasks-board) {
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration'] pm-component-gallery-shell .content {
+:root pm-component-gallery-shell .content {
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration'] .content:has(pm-settings-page) {
+:root .content:has(pm-settings-page) {
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration'] .content:has(pm-agent-run-workspace) {
+:root .content:has(pm-agent-run-workspace) {
   overflow: hidden;
 }
 
 @media (min-width: 768px) {
-  :root[data-visual-style='exploration'] .content:has(pm-task-page-host) {
+  :root .content:has(pm-task-page-host) {
     overflow: hidden;
   }
 }
 
-:root[data-visual-style='exploration'] pm-settings-page {
+:root pm-settings-page {
   display: block;
   height: 100%;
   min-height: 0;
 }
 
-:root[data-visual-style='exploration'] pm-tasks-board {
+:root pm-tasks-board {
   display: block;
   height: 100%;
   min-height: 0;
 }
 
-:root[data-visual-style='exploration'] pm-tasks-board .tasks-workspace {
+:root pm-tasks-board .tasks-workspace {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration']
+:root
   .content:has(
     > :is(
       pm-wiki-index,
@@ -565,26 +562,24 @@
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration']
-  :is(pm-wiki-index, pm-wiki-workspace, pm-wiki-create, pm-wiki-edit, pm-wiki-metadata) {
+:root :is(pm-wiki-index, pm-wiki-workspace, pm-wiki-create, pm-wiki-edit, pm-wiki-metadata) {
   display: block;
   height: 100%;
   min-height: 0;
 }
 
-:root[data-visual-style='exploration'] .pm-scroll-surface {
+:root .pm-scroll-surface {
   height: 100%;
   overflow: auto;
   scrollbar-gutter: stable;
 }
 
-:root[data-visual-style='exploration']
-  :is(.pm-scroll-surface, pm-task-workspace[presentation='dialog'] .CodeMirror-scroll) {
+:root :is(.pm-scroll-surface, pm-task-workspace[presentation='dialog'] .CodeMirror-scroll) {
   scrollbar-color: color-mix(in srgb, var(--pm-accent) 34%, transparent) transparent;
   scrollbar-width: thin;
 }
 
-:root[data-visual-style='exploration']
+:root
   :is(
     .pm-scroll-surface,
     pm-task-workspace[presentation='dialog'] .CodeMirror-scroll
@@ -593,7 +588,7 @@
   height: 10px;
 }
 
-:root[data-visual-style='exploration']
+:root
   :is(
     .pm-scroll-surface,
     pm-task-workspace[presentation='dialog'] .CodeMirror-scroll
@@ -601,7 +596,7 @@
   background: transparent;
 }
 
-:root[data-visual-style='exploration']
+:root
   :is(
     .pm-scroll-surface,
     pm-task-workspace[presentation='dialog'] .CodeMirror-scroll
@@ -613,7 +608,7 @@
   background-clip: padding-box;
 }
 
-:root[data-visual-style='exploration']
+:root
   :is(
     .pm-scroll-surface,
     pm-task-workspace[presentation='dialog'] .CodeMirror-scroll
@@ -622,7 +617,7 @@
   background-clip: padding-box;
 }
 
-:root[data-visual-style='exploration']
+:root
   :is(
     .pm-scroll-surface,
     pm-task-workspace[presentation='dialog'] .CodeMirror-scroll
@@ -630,35 +625,35 @@
   background: transparent;
 }
 
-:root[data-visual-style='exploration']
+:root
   pm-task-workspace[presentation='dialog']
   pm-markdown-editor
   :is(.CodeMirror, .CodeMirror-gutters, .editor-toolbar, .editor-preview) {
   background: color-mix(in oklch, var(--pm-surface-raised) 34%, transparent);
 }
 
-:root[data-visual-style='exploration']
+:root
   pm-task-workspace.task-workspace-host--create[presentation='dialog']
   .task-workspace--create
   .workspace-columns {
   grid-template-columns: minmax(0, 1fr);
 }
 
-:root[data-visual-style='exploration']
+:root
   pm-task-workspace.task-workspace-host--create[presentation='dialog']
   .task-workspace--create
   .metadata-column {
   display: none;
 }
 
-:root[data-visual-style='exploration']
+:root
   pm-task-workspace.task-workspace-host--create[presentation='dialog']
   .task-workspace--create
   .description-section {
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration']
+:root
   pm-task-workspace.task-workspace-host--create[presentation='dialog']
   pm-markdown-editor
   .CodeMirror {

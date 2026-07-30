@@ -200,41 +200,41 @@
   white-space: nowrap;
 }
 
-:host-context(html[data-visual-style='exploration']) {
+:host {
   background: transparent;
 }
 
-:host-context(html[data-visual-style='exploration']) .output-toolbar {
+:host .output-toolbar {
   border-bottom-color: var(--pm-border-subtle);
   background: transparent;
 }
 
-:host-context(html[data-visual-style='exploration']) .output-search input {
+:host .output-search input {
   border-color: var(--pm-border-subtle);
   background: color-mix(in oklch, var(--pm-surface-canvas) 48%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .output-search input:focus {
+:host .output-search input:focus {
   border-color: var(--pm-accent);
   outline: none;
   box-shadow: var(--pm-focus-ring);
 }
 
-:host-context(html[data-visual-style='exploration']) .source-filter > div {
+:host .source-filter > div {
   background: color-mix(in oklch, var(--pm-surface-raised) 92%, transparent);
   backdrop-filter: blur(var(--pm-frosted-surface-blur));
 }
 
-:host-context(html[data-visual-style='exploration']) .log-header {
+:host .log-header {
   border-bottom-color: var(--pm-border-subtle);
   background: color-mix(in oklch, var(--pm-surface-raised) 28%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .log-row {
+:host .log-row {
   border-bottom-color: color-mix(in oklch, var(--pm-border-subtle) 70%, transparent);
 }
 
-:host-context(html[data-visual-style='exploration']) .log-row:hover {
+:host .log-row:hover {
   background: color-mix(in oklch, var(--pm-surface-hover) 62%, transparent);
 }
 @media (max-width: 767px) {

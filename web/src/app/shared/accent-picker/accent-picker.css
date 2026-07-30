@@ -1,22 +1,5 @@
 :host {
-  display: inline-flex;
-  flex: 0 0 auto;
-}
-
-.accent-trigger {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--pm-radius-sm);
-  background: transparent;
-  cursor: pointer;
-}
-
-.accent-trigger:hover {
-  background: var(--pm-surface-hover);
+  display: block;
 }
 
 .swatch {
@@ -52,57 +35,39 @@
   --swatch: light-dark(#596868, #a7b2b2);
 }
 
-.accent-menu {
-  position: fixed;
-  inset: calc(var(--pm-topbar-height) + var(--pm-space-2)) var(--pm-space-3) auto auto;
-  width: 156px;
-  margin: 0;
-  padding: var(--pm-space-2);
-  border: 1px solid var(--pm-border-strong);
-  border-radius: var(--pm-radius-md);
-  background: var(--pm-surface-raised);
-  color: var(--pm-text-primary);
-  box-shadow: var(--pm-overlay-elevation);
-}
-
-.menu-label {
-  display: block;
-  padding: var(--pm-space-1) var(--pm-space-2) var(--pm-space-2);
-  color: var(--pm-text-subtle);
-  font-size: var(--pm-font-size-xs);
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-.accent-menu button {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  align-items: center;
-  width: 100%;
-  min-height: 32px;
+.accent-options {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--pm-space-2);
-  padding: var(--pm-space-1) var(--pm-space-2);
-  border: 0;
+}
+
+.accent-options button {
+  display: grid;
+  grid-template-columns: 18px auto;
+  align-items: center;
+  min-height: 36px;
+  gap: var(--pm-space-2);
+  padding: var(--pm-space-1) var(--pm-space-3);
+  border: 1px solid var(--pm-border-subtle);
   border-radius: var(--pm-radius-sm);
   background: transparent;
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-sm);
-  text-align: left;
   cursor: pointer;
 }
 
-.accent-menu button:hover {
+.accent-options button:hover:not(:disabled) {
   background: var(--pm-surface-hover);
   color: var(--pm-text-primary);
 }
 
-.accent-menu button[aria-pressed='true'] {
+.accent-options button[aria-pressed='true'] {
+  border-color: var(--pm-accent);
   background: var(--pm-accent-soft);
   color: var(--pm-text-primary);
 }
 
-@media (max-width: 767px) {
-  .accent-menu {
-    right: var(--pm-space-2);
-  }
+.accent-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
