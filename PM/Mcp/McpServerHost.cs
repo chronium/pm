@@ -36,7 +36,16 @@ public static class McpServerHost
         builder.Services.AddSingleton<INextIdService, NextIdService>();
         builder.Services.Configure<NextIdServiceOptions>(options => options.WriteFailuresToConsole = false);
         builder.Services.AddSingleton<IIdentityService, IdentityService>();
-        builder.Services.AddSingleton<ProjectRoot>();
+        builder.Services.AddSingleton<LinkedProjectRegistryStore>();
+        builder.Services.AddSingleton<ILinkedProjectSubmoduleInspector, GitLinkedProjectSubmoduleInspector>();
+        builder.Services.AddSingleton<LinkedProjectResolver>();
+        builder.Services.AddSingleton(provider =>
+        {
+            var projectRoot = new ProjectRoot();
+            if (projectRoot.Exists)
+                _ = provider.GetRequiredService<LinkedProjectRegistryStore>().Remember(projectRoot);
+            return projectRoot;
+        });
         builder.Services.AddSingleton<TaskService>();
         builder.Services.AddSingleton<ProjectCreationService>();
         builder.Services.AddSingleton<ProjectConfigService>();

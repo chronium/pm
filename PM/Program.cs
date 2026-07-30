@@ -43,7 +43,16 @@ serviceProvider.AddSingleton<TimeProvider>(TimeProvider.System);
 serviceProvider.AddSingleton<AgentRunCache>();
 serviceProvider.AddSingleton<IAgentRunGitInspector, AgentRunGitInspector>();
 serviceProvider.AddSingleton<IAgentRunService, AgentRunService>();
-serviceProvider.AddSingleton<ProjectRoot>();
+serviceProvider.AddSingleton<LinkedProjectRegistryStore>();
+serviceProvider.AddSingleton<ILinkedProjectSubmoduleInspector, GitLinkedProjectSubmoduleInspector>();
+serviceProvider.AddSingleton<LinkedProjectResolver>();
+serviceProvider.AddSingleton(provider =>
+{
+    var projectRoot = new ProjectRoot();
+    if (projectRoot.Exists)
+        _ = provider.GetRequiredService<LinkedProjectRegistryStore>().Remember(projectRoot);
+    return projectRoot;
+});
 serviceProvider.AddSingleton<TaskService>();
 serviceProvider.AddSingleton<ProjectCreationService>();
 serviceProvider.AddSingleton<ProjectConfigService>();
@@ -76,7 +85,7 @@ app.Configure(config =>
 
     config.AddBranch(GlobalConfig.ProjectBranchName, project =>
     {
-        project.SetDescription("Inspect project identity and manage remote membership");
+        project.SetDescription("Inspect project identity, local links, and remote membership");
         project.AddCommand<ProjectIdentityCommand>("identity");
         project.AddCommand<ProjectMembersCommand>("members");
         project.AddCommand<ProjectInvitationsCommand>("invitations");
@@ -85,6 +94,9 @@ app.Configure(config =>
         project.AddCommand<ProjectRevokeInvitationCommand>("revoke-invite");
         project.AddCommand<ProjectSetRoleCommand>("set-role");
         project.AddCommand<ProjectRemoveMemberCommand>("remove-member");
+        project.AddCommand<ProjectLinksCommand>("links");
+        project.AddCommand<ProjectBindCommand>("bind");
+        project.AddCommand<ProjectUnbindCommand>("unbind");
     });
 
     config.AddBranch(GlobalConfig.RunnerBranchName, runner =>

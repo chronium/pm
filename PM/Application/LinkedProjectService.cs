@@ -7,13 +7,9 @@ public sealed record LinkedProjectManifestState(bool Exists, LinkedProjectManife
 
 public sealed class LinkedProjectService(ProjectRoot projectRoot)
 {
-    private const int MaximumProjectIdLength = 256;
     private const int MaximumAliasLength = 64;
     private const int MaximumUrlLength = 2048;
     private const int MaximumPathLength = 1024;
-
-    private static readonly Regex ProjectIdPattern = new(
-        "^[A-Za-z0-9][A-Za-z0-9_-]*$", RegexOptions.CultureInvariant);
 
     private static readonly Regex AliasPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant);
@@ -232,8 +228,7 @@ public sealed class LinkedProjectService(ProjectRoot projectRoot)
 
     private static AppResult ValidateDeclaration(LinkedProjectDeclaration declaration)
     {
-        if (!IsNormalized(declaration.ProjectId) || declaration.ProjectId.Length > MaximumProjectIdLength ||
-            !ProjectIdPattern.IsMatch(declaration.ProjectId))
+        if (!IsNormalized(declaration.ProjectId) || !ProjectIdentifiers.IsValid(declaration.ProjectId))
             return AppResult.Fail(
                 "invalid_linked_project_id", "Linked project ID is not a valid stable project identifier.");
         if (!IsNormalized(declaration.Alias) || declaration.Alias.Length > MaximumAliasLength ||
@@ -261,8 +256,7 @@ public sealed class LinkedProjectService(ProjectRoot projectRoot)
                 "missing_project_id", "This project must have a stable project ID before declaring links.");
 
         var projectId = File.ReadAllText(path).Trim();
-        if (projectId.Length == 0 || projectId.Length > MaximumProjectIdLength ||
-            !ProjectIdPattern.IsMatch(projectId))
+        if (!ProjectIdentifiers.IsValid(projectId))
             return AppResult<string>.Fail(
                 "invalid_project_id", "This project's stable project ID is invalid.");
 
