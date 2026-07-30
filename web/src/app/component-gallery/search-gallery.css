@@ -1,0 +1,14 @@
+.search-specimen {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+}
+
+.search-specimen pm-top-bar-search {
+  position: relative;
+  top: auto;
+  left: auto;
+  justify-content: flex-start;
+  width: min(100%, 560px);
+  transform: none;
+}

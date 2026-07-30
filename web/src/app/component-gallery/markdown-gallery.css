@@ -1,0 +1,35 @@
+.markdown-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  gap: var(--pm-space-5);
+}
+
+.markdown-pair > section {
+  min-width: 0;
+}
+
+.markdown-pair h3 {
+  margin: 0 0 var(--pm-space-2);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 650;
+}
+
+.markdown-preview {
+  padding-left: var(--pm-space-5);
+  border-left: 1px solid var(--pm-border-subtle);
+}
+
+@media (max-width: 900px) {
+  .markdown-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .markdown-preview {
+    padding: var(--pm-space-4) 0 0;
+    border-top: 1px solid var(--pm-border-subtle);
+    border-left: 0;
+  }
+}

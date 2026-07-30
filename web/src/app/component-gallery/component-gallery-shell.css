@@ -1,0 +1,40 @@
+.component-navigation {
+  display: grid;
+  gap: 2px;
+}
+
+.component-navigation p {
+  margin: var(--pm-space-3) 0 0;
+  padding: var(--pm-space-1) var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.component-navigation p:first-child {
+  margin-top: 0;
+}
+
+.component-navigation a {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--pm-space-2);
+  border-radius: var(--pm-radius-sm);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  text-decoration: none;
+}
+
+.component-navigation a:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+.component-navigation a.active {
+  background: var(--pm-accent-soft);
+  color: var(--pm-accent-strong);
+  font-weight: 600;
+}

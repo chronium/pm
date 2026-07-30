@@ -1,4 +1,12 @@
-<h2 [id]="headingId()">{{ milestone().name }}</h2>
+<summary class="milestone-summary" [id]="headingId()">
+  <ng-icon class="milestone-disclosure" name="cssChevronRight" aria-hidden="true" />
+  <span class="milestone-name">{{ milestone().name }}</span>
+  <span
+    class="milestone-count"
+    [attr.aria-label]="taskCount() + (taskCount() === 1 ? ' task' : ' tasks')"
+    >{{ taskCount() }}</span
+  >
+</summary>
 <div class="status-groups">
   @for (state of milestone().states; track state.key) {
     @if (state.tasks.length > 0) {

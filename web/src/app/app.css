@@ -58,6 +58,10 @@
   white-space: nowrap;
 }
 
+.components-label-compact {
+  display: none;
+}
+
 .mode-navigation a:hover {
   color: var(--pm-text-primary);
   background: var(--pm-surface-hover);
@@ -154,6 +158,14 @@
 
   .mode-count-suffix {
     display: none;
+  }
+
+  .components-label-full {
+    display: none;
+  }
+
+  .components-label-compact {
+    display: inline;
   }
 
   .snapshot-context time {

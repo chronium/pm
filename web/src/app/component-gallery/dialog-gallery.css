@@ -1,0 +1,11 @@
+.gallery-outcome {
+  margin: var(--pm-space-3) 0 0 164px;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+
+@media (max-width: 640px) {
+  .gallery-outcome {
+    margin-left: 0;
+  }
+}

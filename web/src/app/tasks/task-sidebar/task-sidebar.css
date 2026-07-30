@@ -19,12 +19,17 @@ a,
   text-decoration: none;
 }
 
+.new-task-action,
 .next-task-action {
   width: 100%;
   gap: var(--pm-space-2);
+}
+
+.next-task-action {
   border: 0;
   background: transparent;
   font: inherit;
+  justify-content: flex-start;
   text-align: left;
   cursor: pointer;
 }
@@ -41,6 +46,7 @@ a:hover,
   opacity: 0.65;
 }
 
+.new-task-action ng-icon,
 .next-task-action ng-icon {
   flex: 0 0 auto;
   font-size: 16px;
@@ -129,4 +135,45 @@ h2 {
 .settings-link ng-icon {
   flex: 0 0 auto;
   font-size: 18px;
+}
+
+:host-context(html[data-visual-style='exploration']) :is(.new-task-action, .next-task-action) {
+  min-height: 30px;
+  border: 1px solid transparent;
+  background: color-mix(in oklch, var(--pm-surface-raised) 28%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration'])
+  :is(.new-task-action, .next-task-action):is(:hover, :focus-visible):not(:disabled) {
+  border-color: color-mix(in oklch, var(--pm-border-subtle) 72%, transparent);
+  background: color-mix(in oklch, var(--pm-surface-hover) 72%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .scope-scroll section {
+  margin-top: var(--pm-space-2);
+}
+
+:host-context(html[data-visual-style='exploration']) .scope-scroll section::before {
+  content: '';
+  display: block;
+  margin: 0 var(--pm-space-2) var(--pm-space-2);
+  border-top: 1px solid color-mix(in oklch, var(--pm-border-subtle) 72%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .scope-scroll section + section {
+  margin-top: var(--pm-space-3);
+}
+
+:host-context(html[data-visual-style='exploration']) .settings-link {
+  position: relative;
+}
+
+:host-context(html[data-visual-style='exploration']) .settings-link::before {
+  content: '';
+  position: absolute;
+  right: var(--pm-space-2);
+  bottom: calc(100% + var(--pm-space-2));
+  left: var(--pm-space-2);
+  border-top: 1px solid color-mix(in oklch, var(--pm-border-subtle) 72%, transparent);
+  pointer-events: none;
 }

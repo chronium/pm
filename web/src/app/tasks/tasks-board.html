@@ -62,7 +62,7 @@
     >
       @for (milestone of currentBoard.milestoneGroups; track milestone.key ?? 'unassigned') {
         @if (board.milestoneTaskCount(milestone) > 0) {
-          <section
+          <details
             pmTaskMilestone
             class="milestone-section"
             [attr.aria-labelledby]="'milestone-' + $index"
@@ -70,8 +70,10 @@
             [milestone]="milestone"
             [selectedTaskId]="board.selectedTaskId()"
             [openStates]="board.groupOpenStates(milestone)"
+            [milestoneOpen]="board.isMilestoneOpen(milestone)"
+            (milestoneOpenChange)="board.rememberMilestoneOpen($event)"
             (statusOpenChange)="board.rememberGroupOpen($event)"
-          ></section>
+          ></details>
         }
       }
     </div>

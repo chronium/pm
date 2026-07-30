@@ -140,7 +140,9 @@ describe('TasksBoard', () => {
   it('renders server milestone/status order, counts, and hides empty groups and sections', async () => {
     const { element } = await render();
     expect(
-      [...element.querySelectorAll('.milestone-section h2')].map((item) => item.textContent),
+      [...element.querySelectorAll('.milestone-summary .milestone-name')].map(
+        (item) => item.textContent,
+      ),
     ).toEqual(['Second milestone']);
     expect(
       [...element.querySelectorAll('.status-group summary')].map((item) =>
@@ -153,7 +155,7 @@ describe('TasksBoard', () => {
       ),
     ).toBe(false);
     expect(
-      [...element.querySelectorAll('.milestone-section h2')].some((item) =>
+      [...element.querySelectorAll('.milestone-summary')].some((item) =>
         item.textContent?.includes('First milestone'),
       ),
     ).toBe(false);

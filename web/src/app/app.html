@@ -39,6 +39,15 @@
       [attr.aria-current]="wikiLink.isActive ? 'page' : null"
       >Wiki</a
     >
+    <a
+      routerLink="/components"
+      routerLinkActive="active"
+      #componentsLink="routerLinkActive"
+      [attr.aria-current]="componentsLink.isActive ? 'page' : null"
+    >
+      <span class="components-label-full">Components</span>
+      <span class="components-label-compact">UI</span>
+    </a>
   </nav>
 
   @if (layout.activeShell() === AppShell.Tasks) {

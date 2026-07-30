@@ -1,6 +1,7 @@
 <summary>
-  <span>{{ state().name }}</span
-  ><span
+  <ng-icon class="disclosure-icon" name="cssChevronRight" aria-hidden="true" />
+  <span class="status-name">{{ state().name }}</span>
+  <span
     class="task-count"
     [attr.aria-label]="state().tasks.length + (state().tasks.length === 1 ? ' task' : ' tasks')"
     >{{ state().tasks.length }}</span
