@@ -14,7 +14,7 @@ import { WikiSearch } from './wiki/wiki-search';
 import { StaticModeService } from './static/static-mode.service';
 import { VisualStyleSwitch } from './shared/visual-style-switch/visual-style-switch';
 import { AccentPicker } from './shared/accent-picker/accent-picker';
-import { VisualTuningPanel } from './shared/visual-tuning-panel/visual-tuning-panel';
+import { VisualTuningService } from './core/visual-tuning.service';
 
 @Component({
   selector: 'pm-root',
@@ -27,7 +27,6 @@ import { VisualTuningPanel } from './shared/visual-tuning-panel/visual-tuning-pa
     RouterOutlet,
     TaskSearch,
     VisualStyleSwitch,
-    VisualTuningPanel,
     WikiSearch,
   ],
   providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],
@@ -42,6 +41,10 @@ export class App {
   protected readonly taskNavigation = inject(TaskNavigationService);
   protected readonly staticMode = inject(StaticModeService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
+
+  constructor() {
+    inject(VisualTuningService);
+  }
 
   protected toggleNavigation(): void {
     const trigger = this.menuButton()?.nativeElement;

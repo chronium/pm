@@ -19,6 +19,8 @@
   background: var(--pm-overlay-backdrop);
 }
 .task-dialog-frame {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
@@ -81,6 +83,29 @@ h2 {
   padding: var(--pm-space-3);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+:host-context(html[data-visual-style='exploration']) .task-dialog {
+  width: min(1180px, calc(100vw - 48px));
+  border-color: var(--pm-frosted-surface-border);
+  background: var(--pm-frosted-surface-fill);
+  box-shadow:
+    inset 0 1px 0 var(--pm-frosted-surface-inner-edge),
+    0 18px 48px rgb(0 0 0 / 24%);
+}
+
+:host-context(html[data-visual-style='exploration'])
+  .task-dialog:has(pm-task-workspace.task-workspace-host--create) {
+  height: min(610px, calc(100dvh - 64px));
+  max-height: min(610px, calc(100dvh - 64px));
+}
+
+:host-context(html[data-visual-style='exploration']) .task-dialog::backdrop {
+  background: oklch(0% 0 0 / 64%);
+}
+
+:host-context(html[data-visual-style='exploration']) .task-dialog-scroll {
+  padding: var(--pm-space-4);
 }
 @media (max-width: 600px) {
   .task-dialog {

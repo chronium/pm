@@ -10,7 +10,7 @@
 .wiki-workspace-panes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  height: clamp(360px, calc(100dvh - 300px), 720px);
+  height: var(--pm-wiki-workspace-height, clamp(360px, calc(100dvh - 300px), 720px));
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--pm-border-strong);
