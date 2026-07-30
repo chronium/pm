@@ -34,3 +34,17 @@ p {
   border-top: 1px solid var(--pm-border-subtle);
   background: var(--pm-surface-sidebar);
 }
+
+:host-context(html[data-visual-style='exploration']) .dialog {
+  --pm-frosted-surface-radius: var(--pm-radius-md);
+
+  background: var(--pm-frosted-surface-fill);
+}
+
+:host-context(html[data-visual-style='exploration']) .dialog-body {
+  padding: var(--pm-space-5);
+}
+
+:host-context(html[data-visual-style='exploration']) .dialog-actions {
+  background: color-mix(in oklch, var(--pm-surface-raised) 26%, transparent);
+}

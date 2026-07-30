@@ -11,6 +11,7 @@ export class TaskDialogShell implements AfterViewInit {
   readonly eyebrow = input('Task');
   readonly pending = input(false);
   readonly chrome = input(true);
+  readonly backdropDismissible = input(false);
   readonly closeIntent = output<void>();
   protected readonly headingId = `pm-task-dialog-${TaskDialogShell.nextId++}`;
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
@@ -24,5 +25,15 @@ export class TaskDialogShell implements AfterViewInit {
   protected cancel(event: Event): void {
     event.preventDefault();
     if (!this.pending()) this.closeIntent.emit();
+  }
+
+  protected backdropClick(event: MouseEvent): void {
+    if (
+      event.target === this.dialog().nativeElement &&
+      this.backdropDismissible() &&
+      !this.pending()
+    ) {
+      this.closeIntent.emit();
+    }
   }
 }

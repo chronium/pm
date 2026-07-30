@@ -15,6 +15,7 @@
 .patch-header,
 .patch-actions {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: var(--pm-space-3);
@@ -159,4 +160,67 @@ h3 {
   .path-list li span:last-child {
     grid-column: 2;
   }
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-dialog {
+  --pm-frosted-surface-radius: var(--pm-radius-md);
+
+  background: var(--pm-frosted-surface-fill);
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-header {
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-body {
+  gap: var(--pm-space-4);
+  scrollbar-color: color-mix(in srgb, var(--pm-accent) 34%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-body::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pm-accent) 42%, transparent);
+  background-clip: padding-box;
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-warnings {
+  background: color-mix(in oklch, var(--pm-warning-soft) 58%, transparent);
+  padding: var(--pm-space-3);
+  border-left-width: 2px;
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-error {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .check-list li {
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+}
+
+:host-context(html[data-visual-style='exploration']) .check-list li > span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: var(--pm-font-size-xs);
+}
+
+:host-context(html[data-visual-style='exploration']) .patch-actions {
+  background: color-mix(in oklch, var(--pm-surface-raised) 26%, transparent);
 }

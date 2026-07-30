@@ -157,6 +157,7 @@ export class TaskWorkspace {
   });
   protected readonly noteDirty = computed(() => this.noteDraft().length > 0);
   protected readonly hasUnsavedChanges = computed(() => this.dirty() || this.noteDirty());
+  readonly backdropDismissible = computed(() => !this.hasUnsavedChanges());
   protected readonly blocked = computed(
     () =>
       this.detail.unavailable() ||

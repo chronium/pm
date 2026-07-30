@@ -10,7 +10,7 @@
   align-items: flex-end;
   gap: var(--pm-space-2);
   min-width: 0;
-  padding: var(--pm-space-2) var(--pm-space-3);
+  padding: var(--pm-space-3) var(--pm-space-4);
   border-bottom: 1px solid var(--pm-border-subtle);
   background: var(--pm-surface-raised);
 }
@@ -77,6 +77,37 @@
   font-size: var(--pm-font-size-sm);
   white-space: nowrap;
 }
+.toggle-control {
+  min-height: 32px;
+  line-height: 1;
+  cursor: pointer;
+}
+.source-filter input[type='checkbox'],
+.toggle-control input[type='checkbox'] {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  border: 1px solid var(--pm-border-strong);
+  border-radius: 3px;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 11px;
+  cursor: pointer;
+}
+.source-filter input[type='checkbox']:checked,
+.toggle-control input[type='checkbox']:checked {
+  border-color: var(--pm-accent);
+  background-color: var(--pm-accent);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m3.5 8 3 3 6-7' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.source-filter input[type='checkbox']:focus-visible,
+.toggle-control input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: var(--pm-focus-ring);
+}
 .toolbar-action:hover,
 .source-filter summary:hover {
   background: var(--pm-surface-hover);
@@ -92,7 +123,7 @@
   gap: var(--pm-space-3);
   min-height: 28px;
   align-items: center;
-  padding: var(--pm-space-1) var(--pm-space-3);
+  padding: var(--pm-space-1) var(--pm-space-4);
   border-bottom: 1px solid var(--pm-border-subtle);
   color: var(--pm-text-subtle);
   font-size: var(--pm-font-size-xs);
@@ -110,7 +141,7 @@
   grid-template-columns: 72px 72px 82px minmax(0, 1fr);
   align-items: center;
   gap: var(--pm-space-2);
-  padding-inline: var(--pm-space-3);
+  padding-inline: var(--pm-space-4);
 }
 .log-header {
   min-height: 28px;
@@ -131,7 +162,7 @@
   box-shadow: var(--pm-focus-ring);
 }
 .log-row {
-  height: 30px;
+  height: 32px;
   border-bottom: 1px solid var(--pm-border-subtle);
   font-family: var(--pm-font-family-mono);
   font-size: var(--pm-font-size-xs);
@@ -167,6 +198,44 @@
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+:host-context(html[data-visual-style='exploration']) {
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .output-toolbar {
+  border-bottom-color: var(--pm-border-subtle);
+  background: transparent;
+}
+
+:host-context(html[data-visual-style='exploration']) .output-search input {
+  border-color: var(--pm-border-subtle);
+  background: color-mix(in oklch, var(--pm-surface-canvas) 48%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .output-search input:focus {
+  border-color: var(--pm-accent);
+  outline: none;
+  box-shadow: var(--pm-focus-ring);
+}
+
+:host-context(html[data-visual-style='exploration']) .source-filter > div {
+  background: color-mix(in oklch, var(--pm-surface-raised) 92%, transparent);
+  backdrop-filter: blur(var(--pm-frosted-surface-blur));
+}
+
+:host-context(html[data-visual-style='exploration']) .log-header {
+  border-bottom-color: var(--pm-border-subtle);
+  background: color-mix(in oklch, var(--pm-surface-raised) 28%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .log-row {
+  border-bottom-color: color-mix(in oklch, var(--pm-border-subtle) 70%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .log-row:hover {
+  background: color-mix(in oklch, var(--pm-surface-hover) 62%, transparent);
 }
 @media (max-width: 767px) {
   .output-toolbar {

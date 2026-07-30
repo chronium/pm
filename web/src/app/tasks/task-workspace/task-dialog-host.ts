@@ -15,6 +15,7 @@ import { TaskWorkspace } from './task-workspace';
       dialogTitle="Task workspace"
       [chrome]="false"
       [pending]="workspace()?.pending() ?? false"
+      [backdropDismissible]="workspace()?.backdropDismissible() ?? false"
       (closeIntent)="close()"
     >
       <pm-task-workspace

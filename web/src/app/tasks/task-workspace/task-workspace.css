@@ -380,12 +380,25 @@ h2 {
   gap: var(--pm-space-2);
 }
 
+:host-context(html[data-visual-style='exploration']):host([presentation='page']) .task-workspace {
+  gap: var(--pm-space-2);
+}
+
 :host-context(html[data-visual-style='exploration']):host([presentation='dialog'])
   .workspace-header {
   gap: 2px;
 }
 
+:host-context(html[data-visual-style='exploration']):host([presentation='page']) .workspace-header {
+  gap: 2px;
+}
+
 :host-context(html[data-visual-style='exploration']):host([presentation='dialog'])
+  .task-context-line {
+  min-height: 28px;
+}
+
+:host-context(html[data-visual-style='exploration']):host([presentation='page'])
   .task-context-line {
   min-height: 28px;
 }
@@ -395,7 +408,16 @@ h2 {
   background: color-mix(in oklch, var(--pm-surface-raised) 34%, transparent);
 }
 
+:host-context(html[data-visual-style='exploration']):host([presentation='page']) .title-input,
+:host-context(html[data-visual-style='exploration']):host([presentation='page']) .title-value {
+  background: color-mix(in oklch, var(--pm-surface-raised) 34%, transparent);
+}
+
 :host-context(html[data-visual-style='exploration']):host([presentation='dialog']) .property-row {
+  gap: var(--pm-space-3) var(--pm-space-4);
+}
+
+:host-context(html[data-visual-style='exploration']):host([presentation='page']) .property-row {
   gap: var(--pm-space-3) var(--pm-space-4);
 }
 
