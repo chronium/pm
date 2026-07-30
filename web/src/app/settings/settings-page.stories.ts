@@ -101,6 +101,7 @@ export const Default: Story = {};
 export const Create: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Statuses' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Add status' }));
     await expect(canvas.getByLabelText('Key')).toBeVisible();
   },
@@ -108,6 +109,7 @@ export const Create: Story = {
 export const Edit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Milestones' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Edit milestone title' }));
     await expect(canvas.getByLabelText('Milestone title')).toHaveValue(
       settings.milestones[0]!.title,
@@ -117,6 +119,7 @@ export const Edit: Story = {
 export const Pending: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Statuses' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Add status' }));
     await userEvent.type(canvas.getByLabelText('Key'), 'pending');
     await userEvent.type(canvas.getByLabelText('Name'), 'Pending state');
@@ -127,6 +130,7 @@ export const Pending: Story = {
 export const Error: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Statuses' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Add status' }));
     await userEvent.type(canvas.getByLabelText('Key'), 'duplicate');
     await userEvent.type(canvas.getByLabelText('Name'), 'Duplicate state');

@@ -15,9 +15,6 @@
   box-shadow: var(--pm-overlay-elevation);
   overflow: hidden;
 }
-.task-dialog::backdrop {
-  background: var(--pm-overlay-backdrop);
-}
 .task-dialog-frame {
   position: relative;
   z-index: 1;
@@ -87,11 +84,13 @@ h2 {
 
 :host .task-dialog {
   width: min(1180px, calc(100vw - 48px));
-  border-color: var(--pm-frosted-surface-border);
-  background: var(--pm-frosted-surface-fill);
+  border-color: var(--pm-frosted-dialog-border);
+  background: var(--pm-frosted-dialog-fill);
   box-shadow:
-    inset 0 1px 0 var(--pm-frosted-surface-inner-edge),
+    inset 0 1px 0 var(--pm-frosted-dialog-inner-edge),
     0 18px 48px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(var(--pm-frosted-dialog-blur));
+  -webkit-backdrop-filter: blur(var(--pm-frosted-dialog-blur));
 }
 
 :host .task-dialog:has(pm-task-workspace.task-workspace-host--create) {
@@ -100,7 +99,8 @@ h2 {
 }
 
 :host .task-dialog::backdrop {
-  background: oklch(0% 0 0 / 64%);
+  background: color-mix(in oklch, var(--pm-overlay-backdrop) 76%, transparent);
+  backdrop-filter: blur(2px);
 }
 
 :host .task-dialog-scroll {
