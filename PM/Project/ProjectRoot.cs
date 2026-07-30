@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using PM.Files;
 using PM.Tasks;
 using PM.Wiki;
+using YamlDotNet.Core;
 
 namespace PM.Project;
 
@@ -43,17 +44,70 @@ public class ProjectRoot : IProjectRoot
             Config = ProjectConfig.ReadConfig(this);
     }
 
+    private ProjectRoot(string pmRootPath)
+    {
+        Exists = true;
+        RootPath = pmRootPath;
+        Config = ProjectConfig.ReadConfig(this);
+    }
+
     public string TasksPath => Path.Combine(RootPath!, GlobalConfig.TasksDirName);
     public string StatesPath => Path.Combine(RootPath!, GlobalConfig.StatesDirName);
     public string WikiPath => Path.Combine(RootPath!, GlobalConfig.WikiDirName);
     public string TaskOrderPath => Path.Combine(RootPath!, GlobalConfig.TaskOrderFile);
     public string ConfigPath => Path.Combine(RootPath!, GlobalConfig.PmConfigFile);
     public string LinkedProjectsPath => Path.Combine(RootPath!, GlobalConfig.LinkedProjectsFile);
+    public string RepositoryPath => Directory.GetParent(RootPath!)!.FullName;
 
     public bool Exists { get; private set; }
     public string RootPath { get; private set; }
 
     public ProjectConfig? Config { get; private set; }
+
+    public static bool TryOpenExact(
+        string repositoryPath,
+        [MaybeNullWhen(false)] out ProjectRoot projectRoot)
+    {
+        projectRoot = null;
+        if (string.IsNullOrWhiteSpace(repositoryPath)) return false;
+
+        try
+        {
+            var canonicalRepositoryPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(repositoryPath));
+            var pmRootPath = Path.Combine(canonicalRepositoryPath, GlobalConfig.PmDirName);
+            if (!Directory.Exists(pmRootPath)) return false;
+
+            projectRoot = new ProjectRoot(pmRootPath);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                           ArgumentException or InvalidDataException or YamlException)
+        {
+            return false;
+        }
+    }
+
+    public bool TryReadProjectId([MaybeNullWhen(false)] out string projectId)
+    {
+        projectId = null;
+        if (!Exists) return false;
+
+        try
+        {
+            var path = Path.Combine(RootPath, GlobalConfig.ProjectIdFile);
+            if (!File.Exists(path)) return false;
+
+            var value = File.ReadAllText(path).Trim();
+            if (!ProjectIdentifiers.IsValid(value)) return false;
+
+            projectId = value;
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     public bool TryReloadConfig()
     {
