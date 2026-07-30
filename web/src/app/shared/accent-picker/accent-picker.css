@@ -1,0 +1,108 @@
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.accent-trigger {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--pm-radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.accent-trigger:hover {
+  background: var(--pm-surface-hover);
+}
+
+.swatch {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 50%;
+  background: var(--swatch);
+}
+
+.swatch[data-accent='teal'] {
+  --swatch: light-dark(#167a76, #49aaa4);
+}
+
+.swatch[data-accent='blue'] {
+  --swatch: light-dark(#2563a6, #6aa9e9);
+}
+
+.swatch[data-accent='purple'] {
+  --swatch: light-dark(#6f4ab7, #a98ce3);
+}
+
+.swatch[data-accent='rose'] {
+  --swatch: light-dark(#a94761, #e5849d);
+}
+
+.swatch[data-accent='amber'] {
+  --swatch: light-dark(#9a6518, #d8a653);
+}
+
+.swatch[data-accent='neutral'] {
+  --swatch: light-dark(#596868, #a7b2b2);
+}
+
+.accent-menu {
+  position: fixed;
+  inset: calc(var(--pm-topbar-height) + var(--pm-space-2)) var(--pm-space-3) auto auto;
+  width: 156px;
+  margin: 0;
+  padding: var(--pm-space-2);
+  border: 1px solid var(--pm-border-strong);
+  border-radius: var(--pm-radius-md);
+  background: var(--pm-surface-raised);
+  color: var(--pm-text-primary);
+  box-shadow: var(--pm-overlay-elevation);
+}
+
+.menu-label {
+  display: block;
+  padding: var(--pm-space-1) var(--pm-space-2) var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.accent-menu button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  gap: var(--pm-space-2);
+  padding: var(--pm-space-1) var(--pm-space-2);
+  border: 0;
+  border-radius: var(--pm-radius-sm);
+  background: transparent;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.accent-menu button:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+.accent-menu button[aria-pressed='true'] {
+  background: var(--pm-accent-soft);
+  color: var(--pm-text-primary);
+}
+
+@media (max-width: 767px) {
+  .accent-menu {
+    right: var(--pm-space-2);
+  }
+}
