@@ -8,24 +8,26 @@
 </button>
 
 <div class="search" [class.mobile-expanded]="mobileExpanded()">
-  <ng-icon class="search-icon" name="cssSearch" aria-hidden="true" />
-  <input
-    #searchInput
-    type="search"
-    role="combobox"
-    [attr.aria-label]="ariaLabel()"
-    aria-autocomplete="list"
-    [attr.aria-controls]="popupOpen() ? listboxId : null"
-    [attr.aria-expanded]="popupOpen()"
-    [attr.aria-activedescendant]="options().length ? optionId(activeIndex()) : null"
-    [value]="query()"
-    [placeholder]="placeholder()"
-    autocomplete="off"
-    (focus)="onFocus()"
-    (blur)="onBlur()"
-    (input)="onInput($event)"
-    (keydown)="onKeydown($event)"
-  />
+  <div class="search-field pm-frosted-surface pm-search-surface">
+    <ng-icon class="search-icon" name="cssSearch" aria-hidden="true" />
+    <input
+      #searchInput
+      type="search"
+      role="combobox"
+      [attr.aria-label]="ariaLabel()"
+      aria-autocomplete="list"
+      [attr.aria-controls]="popupOpen() ? listboxId : null"
+      [attr.aria-expanded]="popupOpen()"
+      [attr.aria-activedescendant]="options().length ? optionId(activeIndex()) : null"
+      [value]="query()"
+      [placeholder]="placeholder()"
+      autocomplete="off"
+      (focus)="onFocus()"
+      (blur)="onBlur()"
+      (input)="onInput($event)"
+      (keydown)="onKeydown($event)"
+    />
+  </div>
   @if (mobileExpanded()) {
     <button
       class="close-search"

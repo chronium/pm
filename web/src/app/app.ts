@@ -14,6 +14,7 @@ import { WikiSearch } from './wiki/wiki-search';
 import { StaticModeService } from './static/static-mode.service';
 import { VisualStyleSwitch } from './shared/visual-style-switch/visual-style-switch';
 import { AccentPicker } from './shared/accent-picker/accent-picker';
+import { VisualTuningPanel } from './shared/visual-tuning-panel/visual-tuning-panel';
 
 @Component({
   selector: 'pm-root',
@@ -26,6 +27,7 @@ import { AccentPicker } from './shared/accent-picker/accent-picker';
     RouterOutlet,
     TaskSearch,
     VisualStyleSwitch,
+    VisualTuningPanel,
     WikiSearch,
   ],
   providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],

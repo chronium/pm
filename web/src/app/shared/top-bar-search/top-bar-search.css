@@ -12,6 +12,12 @@
   position: relative;
   width: min(100%, 560px);
 }
+.search-field {
+  --pm-frosted-surface-radius: var(--pm-radius-sm);
+
+  position: relative;
+  width: 100%;
+}
 .search-icon {
   position: absolute;
   top: 50%;
