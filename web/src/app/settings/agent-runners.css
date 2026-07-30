@@ -4,8 +4,8 @@
 .runner-section {
   display: grid;
   gap: var(--pm-space-3);
-  padding-block: var(--pm-space-5);
-  border-bottom: 1px solid var(--pm-border-subtle);
+  padding: 0;
+  border: 0;
 }
 .section-heading,
 .section-actions,
@@ -24,7 +24,7 @@
   margin: 0;
 }
 .section-heading h2 {
-  font-size: var(--pm-font-size-lg);
+  font-size: 1rem;
 }
 .section-heading p,
 .runner-summary code,
@@ -101,15 +101,30 @@
   border-radius: var(--pm-radius-sm);
   background: var(--pm-surface-canvas);
 }
-details summary {
-  width: fit-content;
+.runner-row details {
+  overflow: hidden;
+  border: 1px solid var(--pm-border-strong);
+  border-radius: var(--pm-radius-sm);
+  background: transparent;
+}
+.runner-row details summary {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--pm-space-4);
+  border: 0;
   color: var(--pm-text-muted);
   cursor: pointer;
+}
+.runner-row details[open] summary {
+  border-bottom: 1px solid var(--pm-border-subtle);
 }
 .connection-details {
   display: grid;
   gap: var(--pm-space-2);
-  margin: var(--pm-space-3) 0 0;
+  margin: 0;
+  padding: var(--pm-space-3) var(--pm-space-4);
   font-size: var(--pm-font-size-sm);
 }
 .connection-details div {

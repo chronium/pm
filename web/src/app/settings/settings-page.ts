@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { Component, effect, HostListener, inject, Injector, signal } from '@angular/core';
 import { FormField, form, required } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
@@ -32,6 +33,7 @@ interface SettingsDraft {
   milestone: { key: string; title: string; priority: string };
   edit: { value: string };
 }
+type SettingsSection = 'overview' | 'members' | 'runners' | 'statuses' | 'milestones' | 'tracks';
 
 @Component({
   selector: 'pm-settings-page',
@@ -54,6 +56,10 @@ interface SettingsDraft {
 export class SettingsPage implements DirtyRoute {
   protected readonly store = inject(SettingsStore);
   private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
+  protected readonly activeSection = signal<SettingsSection>(
+    this.document.defaultView?.location.hash === '#agent-runners' ? 'runners' : 'overview',
+  );
   protected readonly adding = signal<SettingsCollection | null>(null);
   protected readonly editor = signal<Editor | null>(null);
   protected readonly removal = signal<Removal | null>(null);
@@ -101,6 +107,10 @@ export class SettingsPage implements DirtyRoute {
     effect(() => {
       if (this.store.pendingExternal()) this.conflictPhase.set('pending');
     });
+  }
+
+  protected selectSection(section: SettingsSection): void {
+    this.activeSection.set(section);
   }
 
   canDeactivate(): boolean | Promise<boolean> {

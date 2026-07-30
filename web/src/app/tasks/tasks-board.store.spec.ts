@@ -23,7 +23,15 @@ describe('TasksBoardStore', () => {
       providers: [
         TasksBoardStore,
         PollingCoordinator,
-        provideRouter([{ path: 'tasks', children: [{ path: ':taskId', children: [] }] }]),
+        provideRouter([
+          {
+            path: 'tasks',
+            children: [
+              { path: 'dialog/:taskId', children: [] },
+              { path: ':taskId', children: [] },
+            ],
+          },
+        ]),
         provideHttpClient(),
         provideHttpClientTesting(),
       ],
@@ -88,6 +96,17 @@ describe('TasksBoardStore', () => {
     await TestBed.tick();
 
     expect(store.filters()).toEqual({ state: 'todo' });
+  });
+
+  it('does not reload the board when task dialog navigation leaves filters unchanged', async () => {
+    const { router, http } = await createAt('/tasks?track=PM');
+    http.expectOne((candidate) => candidate.params.get('track') === 'PM').flush(emptyBoard);
+    await TestBed.tick();
+
+    await router.navigateByUrl('/tasks/dialog/PM-0049?track=PM');
+    await TestBed.tick();
+
+    http.expectNone((candidate) => candidate.url === '/api/v1/board');
   });
 
   it('retains loaded content during reload and exposes readable API errors and retry', async () => {

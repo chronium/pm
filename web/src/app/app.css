@@ -72,13 +72,37 @@
   color: var(--pm-text-primary);
 }
 
-.topbar > .mode-navigation + pm-visual-style-switch {
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pm-space-2);
   margin-left: auto;
 }
 
-@media (min-width: 768px) {
-  .topbar > :is(pm-task-search, pm-wiki-search, .snapshot-context) + pm-visual-style-switch {
-    margin-left: auto;
+.sync-status {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  color: color-mix(in srgb, var(--pm-success) 72%, var(--pm-text-subtle));
+}
+
+.sync-status ng-icon {
+  font-size: 16px;
+}
+
+.sync-status--active {
+  color: var(--pm-text-subtle);
+}
+
+.sync-status--active ng-icon {
+  animation: pm-sync-spin 800ms linear infinite;
+}
+
+@keyframes pm-sync-spin {
+  to {
+    transform: rotate(1turn);
   }
 }
 
@@ -160,6 +184,11 @@
     display: none;
   }
 
+  .topbar-actions {
+    gap: var(--pm-space-1);
+    margin-left: 0;
+  }
+
   .components-label-full {
     display: none;
   }
@@ -178,5 +207,11 @@
 
   .snapshot-label-compact {
     display: inline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-status--active ng-icon {
+    animation-duration: 1.6s;
   }
 }

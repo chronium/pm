@@ -3,8 +3,8 @@
 }
 .settings-section {
   min-width: 0;
-  padding: var(--pm-space-5) 0;
-  border-bottom: 1px solid var(--pm-border-subtle);
+  padding: 0;
+  border: 0;
 }
 .section-heading {
   display: flex;

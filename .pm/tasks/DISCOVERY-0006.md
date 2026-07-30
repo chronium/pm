@@ -4,7 +4,7 @@ title: Explore an alternative web UI visual direction
 track: DISCOVERY
 priority: low
 createdAt: 2026-07-28T21:00:05.2812540Z
-modifiedAt: 2026-07-30T07:26:35.3309000Z
+modifiedAt: 2026-07-30T11:09:07.7857510Z
 ---
 
 ## Goal
@@ -40,3 +40,4 @@ This task is deliberately very low priority. It should not interrupt functional 
 ## Notes
 
 - 2026-07-30 07:26 UTC - UI exploration workflow: keep the current A/B comparison available while iterating. Make coherent checkpoint commits as the background, accent system, and other visual layers evolve. Once the direction is settled, consolidate the chosen design, remove visual style A and the temporary comparison controls, clean up experimental infrastructure, and run the full validation suite. The initial checkpoint is commit 5ef68c4.
+- 2026-07-30 11:09 UTC - Checkpoint: refined the experimental settings workspace into focused Overview, Members, Agent runners, Statuses, Milestones, and Tracks panes; normalized the runner connection disclosure; removed intrusive task-open loading feedback; added a shared top-bar HTTP sync indicator; and prevented task dialog navigation from unnecessarily reloading the board. Added DISCOVERY-0007 for app-level navigation and run history, and DISCOVERY-0008 for local Codex project chat and thread history. Angular formatting, strict build, and all 177 unit tests pass.

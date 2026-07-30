@@ -1,6 +1,27 @@
 :host {
   display: block;
 }
+.settings-section {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+  margin-bottom: var(--pm-space-3);
+}
+.section-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.section-heading p {
+  margin: 2px 0 0;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
 .member-heading-actions,
 .member-actions,
 .dialog-actions {
@@ -13,8 +34,14 @@
   grid-template-columns: auto minmax(100px, 0.5fr) minmax(160px, 0.8fr);
   gap: var(--pm-space-2) var(--pm-space-3);
   align-items: baseline;
-  padding: var(--pm-space-3);
-  background: var(--pm-surface-sidebar);
+  padding: var(--pm-space-3) 0;
+  border-block: 1px solid var(--pm-border-subtle);
+  background: transparent;
+}
+.identity-summary code,
+.member-identity code {
+  padding: 0;
+  background: transparent;
 }
 .identity-summary > span:first-child,
 .fingerprint {
@@ -145,6 +172,10 @@
   user-select: all;
 }
 @media (max-width: 760px) {
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
   .member-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
