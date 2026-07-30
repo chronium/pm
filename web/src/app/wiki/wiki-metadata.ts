@@ -25,7 +25,9 @@ import type { UpdateWikiPageMetadataRequest } from './wiki-api.service';
     WikiBreadcrumbs,
     ExternalChangeBanner,
   ],
-  template: ` <section class="wiki-page wiki-form-page">
+  template: ` <section
+      class="wiki-page wiki-form-page pm-frosted-surface pm-scroll-surface pm-wiki-surface"
+    >
       @if (store.pageLoading()) {
         <pm-loading-state>Loading metadata…</pm-loading-state>
       } @else if (store.pageError()) {

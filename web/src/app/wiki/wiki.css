@@ -44,6 +44,9 @@
   font-size: var(--pm-font-size-sm);
 }
 .wiki-page {
+  --pm-frosted-surface-radius: var(--pm-radius-md);
+
+  position: relative;
   width: min(100%, 1040px);
   min-height: 100%;
   margin: 0 auto;

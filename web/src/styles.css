@@ -94,6 +94,9 @@
   --pm-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --pm-topbar-height: 44px;
   --pm-sidebar-width: 240px;
+  --pm-sidebar-center-offset: 120px;
+  --pm-content-surface-margin: var(--pm-space-3);
+  --pm-topbar-visual-offset: calc(var(--pm-content-surface-margin) / 2);
   --pm-frosted-surface-fill-opacity: 6%;
   --pm-frosted-surface-fill: rgb(255 255 255 / var(--pm-frosted-surface-fill-opacity));
   --pm-frosted-surface-border: rgb(255 255 255 / 18%);
@@ -209,6 +212,62 @@
   border-bottom: 0;
 }
 
+@media (min-width: 768px) {
+  :root[data-visual-style='exploration'] .topbar > :not(pm-task-search):not(pm-wiki-search) {
+    translate: 0 var(--pm-topbar-visual-offset);
+  }
+
+  :root[data-visual-style='exploration'] .topbar .brand {
+    flex: 0 0 calc(var(--pm-sidebar-width) - var(--pm-space-3) - var(--pm-space-2));
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--pm-font-size-md);
+  }
+
+  :root[data-visual-style='exploration'] .topbar .mode-navigation {
+    align-self: center;
+    height: 32px;
+    margin-left: var(--pm-content-surface-margin);
+  }
+
+  :root[data-visual-style='exploration'] .topbar .mode-count {
+    transform: translateY(1px);
+  }
+
+  :root[data-visual-style='exploration']
+    .topbar
+    :is(pm-task-search, pm-wiki-search)
+    pm-top-bar-search {
+    top: calc(50% + var(--pm-topbar-visual-offset));
+    left: calc(50% + var(--pm-sidebar-center-offset));
+  }
+}
+
+:root[data-visual-style='exploration'] .content {
+  position: relative;
+  isolation: isolate;
+}
+
+:root[data-visual-style='exploration'] .content::before {
+  content: var(--pm-satin-grain-content, none);
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--pm-satin-grain-opacity, 0);
+  background-image: var(--pm-satin-grain-image);
+  background-attachment: fixed;
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+}
+
+:root[data-visual-style='exploration'] .content > * {
+  position: relative;
+  z-index: 1;
+}
+
 :root[data-visual-style='exploration'] :is(.topbar, .sidebar)::after {
   content: var(--pm-satin-grain-content, none);
   position: absolute;
@@ -268,6 +327,21 @@
   background: transparent;
 }
 
+:root[data-visual-style='exploration'] .pm-scroll-surface.pm-board-surface {
+  height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
+  margin: var(--pm-content-surface-margin);
+}
+
+:root[data-visual-style='exploration'] .pm-scroll-surface.pm-wiki-surface {
+  width: min(
+    calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin)),
+    1040px
+  );
+  height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
+  min-height: 0;
+  margin: var(--pm-content-surface-margin) auto;
+}
+
 :root[data-visual-style='exploration'] .content:has(pm-tasks-board) {
   overflow: hidden;
 }
@@ -284,7 +358,21 @@
   overflow: hidden;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface {
+:root[data-visual-style='exploration']
+  .content:has(
+    > :is(pm-wiki-index, pm-wiki-workspace, pm-wiki-create, pm-wiki-edit, pm-wiki-metadata)
+  ) {
+  overflow: hidden;
+}
+
+:root[data-visual-style='exploration']
+  :is(pm-wiki-index, pm-wiki-workspace, pm-wiki-create, pm-wiki-edit, pm-wiki-metadata) {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+:root[data-visual-style='exploration'] .pm-scroll-surface {
   height: 100%;
   overflow: auto;
   scrollbar-color: color-mix(in srgb, var(--pm-accent) 34%, transparent) transparent;
@@ -292,16 +380,16 @@
   scrollbar-width: thin;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface::-webkit-scrollbar {
+:root[data-visual-style='exploration'] .pm-scroll-surface::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface::-webkit-scrollbar-track {
+:root[data-visual-style='exploration'] .pm-scroll-surface::-webkit-scrollbar-track {
   background: transparent;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface::-webkit-scrollbar-thumb {
+:root[data-visual-style='exploration'] .pm-scroll-surface::-webkit-scrollbar-thumb {
   min-height: 32px;
   border: 3px solid transparent;
   border-radius: 999px;
@@ -309,12 +397,12 @@
   background-clip: padding-box;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface::-webkit-scrollbar-thumb:hover {
+:root[data-visual-style='exploration'] .pm-scroll-surface::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--pm-accent) 58%, transparent);
   background-clip: padding-box;
 }
 
-:root[data-visual-style='exploration'] .pm-board-surface::-webkit-scrollbar-corner {
+:root[data-visual-style='exploration'] .pm-scroll-surface::-webkit-scrollbar-corner {
   background: transparent;
 }
 

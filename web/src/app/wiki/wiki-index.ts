@@ -9,7 +9,7 @@ import { StaticModeService } from '../static/static-mode.service';
 @Component({
   selector: 'pm-wiki-index',
   imports: [DatePipe, RouterLink, PmEmptyState, PmErrorState, PmLoadingState],
-  template: ` <section class="wiki-page">
+  template: ` <section class="wiki-page pm-frosted-surface pm-scroll-surface pm-wiki-surface">
     <header class="wiki-page-header">
       <div>
         <p class="wiki-eyebrow">Workspace</p>

@@ -11,7 +11,7 @@ import { StaticModeService } from '../static/static-mode.service';
 @Component({
   selector: 'pm-wiki-workspace',
   imports: [DatePipe, MarkdownDisplay, RouterLink, PmErrorState, PmLoadingState, WikiBreadcrumbs],
-  template: ` <section class="wiki-page">
+  template: ` <section class="wiki-page pm-frosted-surface pm-scroll-surface pm-wiki-surface">
     @if (store.indexLoading()) {
       <pm-loading-state>Resolving wiki path…</pm-loading-state>
     } @else if (store.indexError()) {
