@@ -8,6 +8,7 @@ import { AppShell, routes } from './app.routes';
 import { LayoutService } from './core/layout.service';
 import { TaskNavigationService } from './tasks/task-navigation.service';
 import { SyncStatusService } from './core/sync-status.service';
+import { StaticModeService } from './static/static-mode.service';
 
 describe('application shell', () => {
   beforeEach(async () => {
@@ -204,6 +205,17 @@ describe('application shell', () => {
     finish();
     fixture.detectChanges();
     expect(indicator().getAttribute('aria-label')).toBe('Project data synced');
+  });
+
+  it('hides backend sync status from read-only static snapshots', () => {
+    TestBed.overrideProvider(StaticModeService, {
+      useValue: { enabled: true, generatedAt: null, snapshotUrl: './pm-snapshot.json' },
+    });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.sync-status')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.snapshot-context')).not.toBeNull();
   });
 
   it('applies the project accent without showing a top-bar picker', async () => {
