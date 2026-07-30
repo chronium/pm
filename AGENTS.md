@@ -13,6 +13,8 @@ In Codex/sandboxed sessions, any .NET command that needs NuGet package access or
 - Do not manually edit `.pm/tasks/`, `.pm/states/`, `.pm/task_order.yaml`, or `.pm/wiki/` during ordinary work. The MCP/application services maintain cross-file invariants such as task ordering. Direct edits are reserved for MCP-unavailable recovery, bootstrapping, or repairing the MCP implementation itself; after any direct edit, run `pm doctor` and resolve all reported inconsistencies before completing the work.
 - Commit each completed PM task before beginning the next task. Keep the task implementation, tests, documentation, and associated `.pm` state update in the same commit; do not combine implementations for multiple task IDs in one commit.
 - Prefix every task commit subject with its task ID using the format `<TASK-ID>: <imperative summary>`, for example `PM-0048: Add Angular component Storybook`.
+- Keep branch history linear. Rebase a feature branch onto its target branch before opening or updating a pull request; do not merge the target branch into the feature branch and do not create merge commits.
+- Merge pull requests with GitHub's rebase strategy. When a rebase changes an already-pushed branch, update it with `git push --force-with-lease`, never an unconditional force push. For stacked branches, rebase onto the immediate parent branch until the stack is ready to retarget onto `main`.
 - Restore .NET dependencies with elevated shell: `dotnet restore PM.slnx`.
 - Build the .NET solution: `dotnet build PM.slnx -m:1 --no-restore`.
 - Run .NET tests: `dotnet test PM.slnx -m:1 --no-restore`.
