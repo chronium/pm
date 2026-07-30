@@ -37,6 +37,12 @@ pm-empty-state {
   margin-top: var(--pm-space-2);
 }
 
+.board-sections {
+  --pm-frosted-surface-radius: var(--pm-radius-md);
+
+  position: relative;
+}
+
 .milestone-section + .milestone-section {
   margin-top: var(--pm-space-2);
 }

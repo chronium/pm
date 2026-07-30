@@ -4,8 +4,12 @@
 }
 
 .style-switch {
+  --pm-frosted-surface-radius: var(--pm-radius-md);
+  --pm-style-switch-inner-radius: calc(var(--pm-frosted-surface-radius) - 3px);
+
   display: inline-grid;
-  grid-template-columns: repeat(2, 26px);
+  position: relative;
+  grid-template-columns: repeat(2, 22px);
   height: 26px;
   padding: 2px;
   border: 1px solid var(--pm-border-subtle);
@@ -20,7 +24,7 @@ button {
   height: 20px;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--pm-style-switch-inner-radius);
   background: transparent;
   color: var(--pm-text-subtle);
   font-size: var(--pm-font-size-xs);

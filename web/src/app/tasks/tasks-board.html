@@ -56,7 +56,10 @@
       </div>
     </pm-empty-state>
   } @else if (board.board(); as currentBoard) {
-    <div class="board-sections" [attr.aria-busy]="board.refreshing()">
+    <div
+      class="board-sections pm-frosted-surface pm-board-surface"
+      [attr.aria-busy]="board.refreshing()"
+    >
       @for (milestone of currentBoard.milestoneGroups; track milestone.key ?? 'unassigned') {
         @if (board.milestoneTaskCount(milestone) > 0) {
           <section
