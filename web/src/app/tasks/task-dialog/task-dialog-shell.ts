@@ -7,7 +7,7 @@ import { AfterViewInit, Component, ElementRef, input, output, viewChild } from '
 })
 export class TaskDialogShell implements AfterViewInit {
   private static nextId = 0;
-  readonly title = input.required<string>();
+  readonly dialogTitle = input.required<string>();
   readonly eyebrow = input('Task');
   readonly pending = input(false);
   readonly chrome = input(true);

@@ -1,4 +1,9 @@
-<dialog #dialog class="task-dialog" [attr.aria-labelledby]="headingId" (cancel)="cancel($event)">
+<dialog
+  #dialog
+  class="task-dialog pm-frosted-surface"
+  [attr.aria-labelledby]="headingId"
+  (cancel)="cancel($event)"
+>
   <div
     class="task-dialog-frame"
     [class.task-dialog-frame--plain]="!chrome()"
@@ -8,7 +13,7 @@
       <header class="task-dialog-header">
         <div>
           <span class="task-dialog-eyebrow">{{ eyebrow() }}</span>
-          <h2 [id]="headingId">{{ title() }}</h2>
+          <h2 [id]="headingId">{{ dialogTitle() }}</h2>
         </div>
         <button
           type="button"

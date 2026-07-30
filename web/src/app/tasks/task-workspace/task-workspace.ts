@@ -74,6 +74,10 @@ type ConfirmKind = 'discard' | 'remove' | null;
   providers: [TaskDetailResource, provideIcons({ cssClose, cssMaximize, cssNotes, cssPen })],
   templateUrl: './task-workspace.html',
   styleUrl: './task-workspace.css',
+  host: {
+    '[class.task-workspace-host--create]': "mode() === 'create'",
+    '[class.task-workspace-host--detail]': "mode() === 'detail'",
+  },
 })
 export class TaskWorkspace {
   readonly presentation = input.required<TaskWorkspacePresentation>();

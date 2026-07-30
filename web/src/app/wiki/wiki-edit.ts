@@ -26,7 +26,7 @@ import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
     ExternalChangeBanner,
   ],
   template: ` <section
-      class="wiki-page wiki-form-page pm-frosted-surface pm-scroll-surface pm-wiki-surface"
+      class="wiki-page wiki-form-page wiki-edit-page pm-frosted-surface pm-scroll-surface pm-wiki-surface"
     >
       @if (store.pageLoading()) {
         <pm-loading-state>Loading editor…</pm-loading-state>

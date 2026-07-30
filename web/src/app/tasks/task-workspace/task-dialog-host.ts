@@ -12,7 +12,7 @@ import { TaskWorkspace } from './task-workspace';
   imports: [TaskDialogShell, TaskWorkspace],
   template: `
     <pm-task-dialog-shell
-      title="Task workspace"
+      dialogTitle="Task workspace"
       [chrome]="false"
       [pending]="workspace()?.pending() ?? false"
       (closeIntent)="close()"

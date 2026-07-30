@@ -19,7 +19,12 @@
     </div>
   </pm-error-state>
 } @else if (options.options()) {
-  <form class="task-workspace" (submit)="$event.preventDefault(); save(false)" novalidate>
+  <form
+    class="task-workspace"
+    [class.task-workspace--create]="mode() === 'create'"
+    (submit)="$event.preventDefault(); save(false)"
+    novalidate
+  >
     @if (detail.liveUpdateUnavailable()) {
       <p class="workspace-notice" role="status">Live updates unavailable; retrying</p>
     }
@@ -285,9 +290,8 @@
     <hr />
 
     <div class="workspace-columns">
-      <section class="description-section" aria-labelledby="description-heading">
+      <section class="description-section pm-scroll-surface" aria-label="Task description">
         <div class="section-heading">
-          <h2 id="description-heading">Description</h2>
           <div class="section-actions">
             @if (mode() === 'detail' && activeField() !== 'description' && !staticMode.enabled) {
               <button
@@ -353,7 +357,6 @@
             pmControl
             [formField]="workspaceForm.description"
             label="Description"
-            aria-labelledby="description-heading"
           />
         } @else {
           <pm-markdown-display [markdown]="model().description || '_No description provided._'" />

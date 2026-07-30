@@ -132,7 +132,7 @@ export const DialogRead: Story = {
   render: (args) => ({
     props: args,
     template: `
-      <pm-task-dialog-shell title="Task workspace" [chrome]="false">
+      <pm-task-dialog-shell dialogTitle="Task workspace" [chrome]="false">
         <pm-task-workspace presentation="dialog" [mode]="mode" [taskId]="taskId" />
       </pm-task-dialog-shell>
     `,
