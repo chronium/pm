@@ -29,9 +29,78 @@ summary:hover {
   font-size: var(--pm-font-size-xs);
   font-variant-numeric: tabular-nums;
 }
+.disclosure-icon {
+  display: none;
+}
 .task-list {
   margin: 0;
   padding: 0;
   background: var(--pm-surface-raised);
   list-style: none;
+}
+
+:host-context(html[data-visual-style='exploration']) {
+  border: 0;
+}
+
+:host-context(html[data-visual-style='exploration']) + :host {
+  border-top: 0;
+}
+
+:host-context(html[data-visual-style='exploration']) summary {
+  display: grid;
+  grid-template-columns: var(--pm-task-selection-slot) minmax(0, 1fr) 3ch;
+  column-gap: var(--pm-space-3);
+  min-height: 30px;
+  padding: 0 var(--pm-space-3);
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--pm-surface-canvas) 34%, transparent);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 650;
+  list-style: none;
+}
+
+:host-context(html[data-visual-style='exploration']) summary::-webkit-details-marker {
+  display: none;
+}
+
+:host-context(html[data-visual-style='exploration']) summary::marker {
+  content: '';
+}
+
+:host-context(html[data-visual-style='exploration']) summary::after {
+  content: none;
+  display: none;
+}
+
+:host-context(html[data-visual-style='exploration']) .disclosure-icon {
+  display: block;
+}
+
+:host-context(html[data-visual-style='exploration']) .disclosure-icon {
+  justify-self: center;
+  width: 14px;
+  height: 14px;
+  color: var(--pm-text-subtle);
+  transition: transform var(--pm-motion-fast) var(--pm-ease-standard);
+}
+
+:host-context(html[data-visual-style='exploration'])[open] .disclosure-icon {
+  transform: rotate(90deg);
+}
+
+:host-context(html[data-visual-style='exploration']) summary:hover {
+  background: color-mix(in srgb, var(--pm-surface-hover) 58%, transparent);
+}
+
+:host-context(html[data-visual-style='exploration']) .task-count {
+  justify-self: end;
+  margin-left: 0;
+  font-family: var(--pm-font-family-mono);
+  font-weight: 500;
+}
+
+:host-context(html[data-visual-style='exploration']) .task-list {
+  background: transparent;
 }

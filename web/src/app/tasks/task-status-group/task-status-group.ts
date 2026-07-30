@@ -1,13 +1,16 @@
 import { Component, input, output } from '@angular/core';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { cssChevronRight } from '@ng-icons/css.gg';
 
 import { TaskRow } from '../task-row/task-row';
 import type { BoardStateGroup } from '../tasks-board.store';
 
 @Component({
   selector: 'details[pmTaskStatusGroup]',
-  imports: [TaskRow],
+  imports: [NgIcon, TaskRow],
   templateUrl: './task-status-group.html',
   styleUrl: './task-status-group.css',
+  providers: [provideIcons({ cssChevronRight })],
   host: { '[open]': 'open()', '(toggle)': 'toggled($event)' },
 })
 export class TaskStatusGroup {

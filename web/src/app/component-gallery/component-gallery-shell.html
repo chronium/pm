@@ -1,0 +1,62 @@
+<div class="shell" [class.drawer-open]="layout.mobileSidebarOpen()">
+  <aside id="pm-sidebar" class="sidebar" aria-label="Component navigation">
+    <nav class="component-navigation" aria-label="Component categories">
+      <p>Foundation</p>
+      <a
+        routerLink="/components/buttons"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Buttons</a
+      >
+      <a
+        routerLink="/components/badges"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Badges</a
+      >
+      <a
+        routerLink="/components/forms"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Form fields</a
+      >
+      <a
+        routerLink="/components/states"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Status states</a
+      >
+      <a
+        routerLink="/components/dialogs"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Dialogs</a
+      >
+      <p>Content</p>
+      <a
+        routerLink="/components/markdown"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Markdown</a
+      >
+      <a
+        routerLink="/components/search"
+        routerLinkActive="active"
+        (click)="layout.closeMobileSidebar()"
+        >Search</a
+      >
+    </nav>
+  </aside>
+
+  <button
+    class="backdrop"
+    type="button"
+    aria-label="Close navigation"
+    tabindex="-1"
+    (click)="layout.closeMobileSidebar()"
+  ></button>
+
+  <main class="content" [attr.inert]="layout.mobileSidebarOpen() ? '' : null">
+    <router-outlet />
+  </main>
+</div>

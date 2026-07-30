@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssOptions, cssPlayTrackNext } from '@ng-icons/css.gg';
+import { cssAdd, cssOptions, cssPlayTrackNext } from '@ng-icons/css.gg';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
@@ -13,7 +13,7 @@ import { StaticModeService } from '../../static/static-mode.service';
 @Component({
   selector: 'pm-task-sidebar',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ cssOptions, cssPlayTrackNext })],
+  providers: [provideIcons({ cssAdd, cssOptions, cssPlayTrackNext })],
   templateUrl: './task-sidebar.html',
   styleUrl: './task-sidebar.css',
 })

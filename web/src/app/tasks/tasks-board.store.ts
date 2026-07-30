@@ -19,6 +19,10 @@ export interface StatusOpenIntent {
   state: BoardStateGroup;
   open: boolean;
 }
+export interface MilestoneOpenIntent {
+  milestone: BoardMilestoneGroup;
+  open: boolean;
+}
 
 @Injectable()
 export class TasksBoardStore {
@@ -147,6 +151,26 @@ export class TasksBoardStore {
     return group.states.reduce((total, state) => total + state.tasks.length, 0);
   }
 
+  isMilestoneComplete(milestone: BoardMilestoneGroup): boolean {
+    return (
+      this.milestoneTaskCount(milestone) > 0 &&
+      milestone.states.every((state) => state.tasks.length === 0 || state.key === 'done')
+    );
+  }
+
+  isMilestoneOpen(milestone: BoardMilestoneGroup): boolean {
+    const stored = this.readMilestoneCollapsePreference(milestone);
+    return stored === null ? !this.isMilestoneComplete(milestone) : stored;
+  }
+
+  rememberMilestoneOpen({ milestone, open }: MilestoneOpenIntent): void {
+    try {
+      sessionStorage.setItem(this.milestoneCollapseKey(milestone), String(open));
+    } catch {
+      // The board remains usable when storage is disabled or unavailable.
+    }
+  }
+
   isGroupOpen(milestone: BoardMilestoneGroup, state: BoardStateGroup): boolean {
     const stored = this.readCollapsePreference(milestone, state);
     return stored === null ? state.key !== 'done' : stored;
@@ -204,12 +228,27 @@ export class TasksBoardStore {
     return `pm.tasks-board.v1.${project}.${milestoneKey}.${encodeURIComponent(state.key)}.open`;
   }
 
+  private milestoneCollapseKey(milestone: BoardMilestoneGroup): string {
+    const project = encodeURIComponent(this.board()?.projectName ?? 'unknown-project');
+    const milestoneKey = encodeURIComponent(milestone.key ?? 'unassigned');
+    return `pm.tasks-board.v1.${project}.${milestoneKey}.__milestone__.open`;
+  }
+
   private readCollapsePreference(
     milestone: BoardMilestoneGroup,
     state: BoardStateGroup,
   ): boolean | null {
     try {
       const stored = sessionStorage.getItem(this.collapseKey(milestone, state));
+      return stored === null ? null : stored === 'true';
+    } catch {
+      return null;
+    }
+  }
+
+  private readMilestoneCollapsePreference(milestone: BoardMilestoneGroup): boolean | null {
+    try {
+      const stored = sessionStorage.getItem(this.milestoneCollapseKey(milestone));
       return stored === null ? null : stored === 'true';
     } catch {
       return null;

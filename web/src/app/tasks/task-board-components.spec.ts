@@ -65,11 +65,12 @@ describe('Task board components', () => {
     fixture.componentRef.setInput('headingId', 'milestone-angular');
     fixture.componentRef.setInput('selectedTaskId', null);
     fixture.componentRef.setInput('openStates', { todo: true, review: true });
+    fixture.componentRef.setInput('milestoneOpen', true);
     const intents: unknown[] = [];
     fixture.componentInstance.statusOpenChange.subscribe((intent) => intents.push(intent));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('h2')?.id).toBe('milestone-angular');
+    expect(fixture.nativeElement.querySelector('.milestone-summary')?.id).toBe('milestone-angular');
     expect(fixture.nativeElement.querySelectorAll('details')).toHaveLength(1);
     expect(fixture.nativeElement.textContent).not.toContain('Review');
     const details = fixture.nativeElement.querySelector('details') as HTMLDetailsElement;

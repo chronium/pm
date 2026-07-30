@@ -10,6 +10,7 @@ import { wikiEditMatcher, wikiMetaMatcher, wikiPathMatcher } from './wiki/wiki.r
 export enum AppShell {
   Tasks = 'tasks',
   Wiki = 'wiki',
+  Components = 'components',
 }
 
 export const routes: Routes = [
@@ -97,6 +98,52 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    path: 'components',
+    loadComponent: () =>
+      import('./component-gallery/component-gallery-shell').then(
+        (module) => module.ComponentGalleryShell,
+      ),
+    data: { shell: AppShell.Components },
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'buttons' },
+      {
+        path: 'buttons',
+        loadComponent: () =>
+          import('./component-gallery/button-gallery').then((module) => module.ButtonGallery),
+      },
+      {
+        path: 'badges',
+        loadComponent: () =>
+          import('./component-gallery/badge-gallery').then((module) => module.BadgeGallery),
+      },
+      {
+        path: 'forms',
+        loadComponent: () =>
+          import('./component-gallery/form-gallery').then((module) => module.FormGallery),
+      },
+      {
+        path: 'states',
+        loadComponent: () =>
+          import('./component-gallery/state-gallery').then((module) => module.StateGallery),
+      },
+      {
+        path: 'dialogs',
+        loadComponent: () =>
+          import('./component-gallery/dialog-gallery').then((module) => module.DialogGallery),
+      },
+      {
+        path: 'markdown',
+        loadComponent: () =>
+          import('./component-gallery/markdown-gallery').then((module) => module.MarkdownGallery),
+      },
+      {
+        path: 'search',
+        loadComponent: () =>
+          import('./component-gallery/search-gallery').then((module) => module.SearchGallery),
+      },
+    ],
+  },
   { path: 'settings', redirectTo: 'tasks/settings' },
   { path: '**', redirectTo: 'tasks' },
 ];
@@ -146,6 +193,52 @@ export const staticRoutes: Routes = [
       {
         matcher: wikiPathMatcher,
         loadComponent: () => import('./wiki/wiki-workspace').then((module) => module.WikiWorkspace),
+      },
+    ],
+  },
+  {
+    path: 'components',
+    loadComponent: () =>
+      import('./component-gallery/component-gallery-shell').then(
+        (module) => module.ComponentGalleryShell,
+      ),
+    data: { shell: AppShell.Components },
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'buttons' },
+      {
+        path: 'buttons',
+        loadComponent: () =>
+          import('./component-gallery/button-gallery').then((module) => module.ButtonGallery),
+      },
+      {
+        path: 'badges',
+        loadComponent: () =>
+          import('./component-gallery/badge-gallery').then((module) => module.BadgeGallery),
+      },
+      {
+        path: 'forms',
+        loadComponent: () =>
+          import('./component-gallery/form-gallery').then((module) => module.FormGallery),
+      },
+      {
+        path: 'states',
+        loadComponent: () =>
+          import('./component-gallery/state-gallery').then((module) => module.StateGallery),
+      },
+      {
+        path: 'dialogs',
+        loadComponent: () =>
+          import('./component-gallery/dialog-gallery').then((module) => module.DialogGallery),
+      },
+      {
+        path: 'markdown',
+        loadComponent: () =>
+          import('./component-gallery/markdown-gallery').then((module) => module.MarkdownGallery),
+      },
+      {
+        path: 'search',
+        loadComponent: () =>
+          import('./component-gallery/search-gallery').then((module) => module.SearchGallery),
       },
     ],
   },
