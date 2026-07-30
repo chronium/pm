@@ -20,7 +20,7 @@ import { ExternalChangeBanner, type ExternalChangePhase } from '../../core/exter
 import { MarkdownDisplay } from '../../markdown/markdown-display';
 import { MarkdownEditor } from '../../markdown/markdown-editor';
 import { PmConfirmDialog } from '../../ui/confirm-dialog/confirm-dialog';
-import { PmErrorState, PmLoadingState } from '../../ui/state/state';
+import { PmErrorState } from '../../ui/state/state';
 import {
   TaskApiService,
   TaskDetailResource,
@@ -67,7 +67,6 @@ type ConfirmKind = 'discard' | 'remove' | null;
     NgIcon,
     PmConfirmDialog,
     PmErrorState,
-    PmLoadingState,
     RouterLink,
     TitleCasePipe,
   ],

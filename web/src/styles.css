@@ -481,12 +481,32 @@
   margin: var(--pm-content-surface-margin) auto;
 }
 
+:root[data-visual-style='exploration'] .pm-scroll-surface.pm-settings-surface {
+  width: min(
+    calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin)),
+    1200px
+  );
+  height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
+  min-height: 0;
+  margin: var(--pm-content-surface-margin) auto;
+}
+
 :root[data-visual-style='exploration'] .content:has(pm-tasks-board) {
   overflow: hidden;
 }
 
 :root[data-visual-style='exploration'] pm-component-gallery-shell .content {
   overflow: hidden;
+}
+
+:root[data-visual-style='exploration'] .content:has(pm-settings-page) {
+  overflow: hidden;
+}
+
+:root[data-visual-style='exploration'] pm-settings-page {
+  display: block;
+  height: 100%;
+  min-height: 0;
 }
 
 :root[data-visual-style='exploration'] pm-tasks-board {

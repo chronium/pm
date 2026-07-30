@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, ElementRef, HostListener, inject, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssMenu, cssMoon, cssScreen, cssSun } from '@ng-icons/css.gg';
+import { cssCheck, cssMenu, cssMoon, cssScreen, cssSpinner, cssSun } from '@ng-icons/css.gg';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { LayoutService } from './core/layout.service';
@@ -15,6 +15,7 @@ import { StaticModeService } from './static/static-mode.service';
 import { VisualStyleSwitch } from './shared/visual-style-switch/visual-style-switch';
 import { AccentPicker } from './shared/accent-picker/accent-picker';
 import { VisualTuningService } from './core/visual-tuning.service';
+import { SyncStatusService } from './core/sync-status.service';
 
 @Component({
   selector: 'pm-root',
@@ -29,7 +30,7 @@ import { VisualTuningService } from './core/visual-tuning.service';
     VisualStyleSwitch,
     WikiSearch,
   ],
-  providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],
+  providers: [provideIcons({ cssCheck, cssMenu, cssScreen, cssSpinner, cssSun, cssMoon })],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -40,6 +41,7 @@ export class App {
   protected readonly projectApi = inject(ProjectApiService);
   protected readonly taskNavigation = inject(TaskNavigationService);
   protected readonly staticMode = inject(StaticModeService);
+  protected readonly syncStatus = inject(SyncStatusService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
 
   constructor() {

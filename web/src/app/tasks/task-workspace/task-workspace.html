@@ -1,5 +1,5 @@
 @if (options.loading() || (mode() === 'detail' && detail.loading())) {
-  <pm-loading-state>Loading task workspace…</pm-loading-state>
+  <span class="visually-hidden" role="status">Loading task workspace…</span>
 } @else if (options.error(); as optionsError) {
   <pm-error-state>
     <div>

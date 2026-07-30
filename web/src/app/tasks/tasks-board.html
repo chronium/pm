@@ -1,9 +1,6 @@
 <section class="tasks-workspace" aria-labelledby="tasks-heading">
   <h1 id="tasks-heading" class="visually-hidden">Tasks</h1>
 
-  @if (board.refreshing()) {
-    <span class="refresh-status" role="status">Refreshing…</span>
-  }
   @if (board.liveUpdateUnavailable()) {
     <span class="refresh-status" role="status">Live updates unavailable; retrying</span>
   }

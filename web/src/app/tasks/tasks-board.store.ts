@@ -39,11 +39,14 @@ export class TasksBoardStore {
     ),
     { initialValue: this.router.currentNavigation()?.finalUrl?.toString() ?? this.router.url },
   );
+  private readonly trackFilter = computed(() => this.queryValue('track'));
+  private readonly milestoneFilter = computed(() => this.queryValue('milestone'));
+  private readonly stateFilter = computed(() => this.queryValue('state'));
 
   readonly filters = computed<BoardQuery>(() => ({
-    ...(this.queryValue('track') ? { track: this.queryValue('track')! } : {}),
-    ...(this.queryValue('milestone') ? { milestone: this.queryValue('milestone')! } : {}),
-    ...(this.queryValue('state') ? { state: this.queryValue('state')! } : {}),
+    ...(this.trackFilter() ? { track: this.trackFilter()! } : {}),
+    ...(this.milestoneFilter() ? { milestone: this.milestoneFilter()! } : {}),
+    ...(this.stateFilter() ? { state: this.stateFilter()! } : {}),
   }));
 
   readonly resource = httpResource<BoardResponse>(() => ({

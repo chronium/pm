@@ -90,6 +90,24 @@ describe('TaskWorkspace', () => {
     element.dispatchEvent(new Event('input'));
   }
 
+  it('keeps initial task loading visual noise out of the workspace', async () => {
+    const fixture = TestBed.createComponent(TaskWorkspace);
+    fixture.componentRef.setInput('presentation', 'dialog');
+    fixture.componentRef.setInput('mode', 'detail');
+    fixture.componentRef.setInput('taskId', task.id);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('pm-loading-state')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'Loading task workspace',
+    );
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/settings').flush(settings);
+    http.expectOne(`/api/v1/tasks/${task.id}`).flush(task, { headers: { ETag: '"task-r1"' } });
+    await fixture.whenStable();
+  });
+
   it('uses compact icon-only actions in dialog hosts', async () => {
     const { element } = await render('detail', 'dialog');
     const fullscreen = element.querySelector('[aria-label="Full screen"]') as HTMLButtonElement;

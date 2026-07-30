@@ -7,6 +7,7 @@ import { App } from './app';
 import { AppShell, routes } from './app.routes';
 import { LayoutService } from './core/layout.service';
 import { TaskNavigationService } from './tasks/task-navigation.service';
+import { SyncStatusService } from './core/sync-status.service';
 
 describe('application shell', () => {
   beforeEach(async () => {
@@ -187,6 +188,22 @@ describe('application shell', () => {
   it('shows the loaded project name in the top bar', async () => {
     const { fixture } = await renderAt('/tasks', 'Project Atlas');
     expect(fixture.nativeElement.querySelector('.brand')?.textContent).toBe('Project Atlas');
+  });
+
+  it('reports shared sync activity from the top bar without shifting the page', async () => {
+    const { fixture } = await renderAt('/tasks');
+    const syncStatus = TestBed.inject(SyncStatusService);
+    const indicator = () => fixture.nativeElement.querySelector('.sync-status') as HTMLElement;
+
+    expect(indicator().getAttribute('aria-label')).toBe('Project data synced');
+    const finish = syncStatus.begin();
+    fixture.detectChanges();
+    expect(indicator().getAttribute('aria-label')).toBe('Syncing project data');
+    expect(indicator().classList).toContain('sync-status--active');
+
+    finish();
+    fixture.detectChanges();
+    expect(indicator().getAttribute('aria-label')).toBe('Project data synced');
   });
 
   it('renders an independent visual style switch in the top bar', async () => {
