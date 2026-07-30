@@ -13,7 +13,9 @@ import { WikiStore } from './wiki.store';
 @Component({
   selector: 'pm-wiki-create',
   imports: [FormField, PmConfirmDialog, PmFormField, RouterLink, WikiMarkdownWorkspace],
-  template: ` <section class="wiki-page wiki-form-page">
+  template: ` <section
+      class="wiki-page wiki-form-page pm-frosted-surface pm-scroll-surface pm-wiki-surface"
+    >
       <header class="wiki-form-header">
         <div>
           <p class="wiki-eyebrow">Wiki</p>
