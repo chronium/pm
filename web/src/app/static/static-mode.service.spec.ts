@@ -152,7 +152,7 @@ describe('static snapshot mode', () => {
     expect(validateSnapshot(snapshot)).toBe(snapshot);
     expect(() => validateSnapshot({ ...snapshot, tasks: undefined })).toThrow(/collections/);
     expect(() => validateSnapshot({ ...snapshot, schemaVersion: 3 })).toThrow(
-      /Unsupported static snapshot schema version: 2/,
+      /Unsupported static snapshot schema version: 3/,
     );
   });
 

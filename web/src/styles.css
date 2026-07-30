@@ -104,14 +104,28 @@
   --pm-content-surface-margin: var(--pm-space-3);
   --pm-task-selection-slot: 20px;
   --pm-topbar-visual-offset: calc(var(--pm-content-surface-margin) / 2);
-  --pm-frosted-surface-fill-opacity: 6%;
-  --pm-frosted-surface-fill: rgb(255 255 255 / var(--pm-frosted-surface-fill-opacity));
-  --pm-frosted-surface-border: rgb(255 255 255 / 18%);
-  --pm-frosted-surface-inner-edge: rgb(255 255 255 / 6%);
-  --pm-frosted-surface-shadow: rgb(0 0 0 / 8%);
-  --pm-frosted-surface-blur: 14px;
+  --pm-satin-color: color-mix(
+    in oklch,
+    oklch(97% 0 var(--pm-palette-hue)) 98%,
+    var(--pm-palette-light)
+  );
+  --pm-satin-background-opacity: 100%;
+  --pm-satin-edge-opacity: 4%;
+  --pm-satin-grain-opacity: 0.14;
+  --pm-satin-grain-content: '';
+  --pm-satin-grain-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.75'/%3E%3C/svg%3E");
+  --pm-frosted-surface-fill-opacity: 72%;
+  --pm-frosted-surface-fill: oklch(100% 0 0 / var(--pm-frosted-surface-fill-opacity));
+  --pm-frosted-surface-border: oklch(30% 0 var(--pm-palette-hue) / 10%);
+  --pm-frosted-surface-inner-edge: oklch(100% 0 0 / 55%);
+  --pm-frosted-surface-shadow: rgb(13 20 20 / 10%);
+  --pm-frosted-surface-blur: 12px;
   --pm-frosted-surface-noise-opacity: 0.02;
   --pm-frosted-surface-noise-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.65'/%3E%3C/svg%3E");
+  --pm-frosted-dialog-fill: oklch(100% 0 0 / 92%);
+  --pm-frosted-dialog-border: oklch(30% 0 var(--pm-palette-hue) / 14%);
+  --pm-frosted-dialog-inner-edge: oklch(100% 0 0 / 70%);
+  --pm-frosted-dialog-blur: 13px;
 }
 
 :root[data-theme='light'] {
@@ -241,6 +255,14 @@
   --pm-satin-grain-opacity: 0.26;
   --pm-satin-grain-content: '';
   --pm-satin-grain-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.75'/%3E%3C/svg%3E");
+  --pm-frosted-surface-fill-opacity: 4%;
+  --pm-frosted-surface-fill: rgb(255 255 255 / var(--pm-frosted-surface-fill-opacity));
+  --pm-frosted-surface-border: rgb(255 255 255 / 8%);
+  --pm-frosted-surface-inner-edge: rgb(255 255 255 / 4%);
+  --pm-frosted-surface-shadow: rgb(0 0 0 / 13%);
+  --pm-frosted-dialog-fill: rgb(255 255 255 / 7%);
+  --pm-frosted-dialog-border: rgb(255 255 255 / 12%);
+  --pm-frosted-dialog-inner-edge: rgb(255 255 255 / 6%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -310,6 +332,14 @@
     --pm-satin-grain-opacity: 0.26;
     --pm-satin-grain-content: '';
     --pm-satin-grain-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.75'/%3E%3C/svg%3E");
+    --pm-frosted-surface-fill-opacity: 4%;
+    --pm-frosted-surface-fill: rgb(255 255 255 / var(--pm-frosted-surface-fill-opacity));
+    --pm-frosted-surface-border: rgb(255 255 255 / 8%);
+    --pm-frosted-surface-inner-edge: rgb(255 255 255 / 4%);
+    --pm-frosted-surface-shadow: rgb(0 0 0 / 13%);
+    --pm-frosted-dialog-fill: rgb(255 255 255 / 7%);
+    --pm-frosted-dialog-border: rgb(255 255 255 / 12%);
+    --pm-frosted-dialog-inner-edge: rgb(255 255 255 / 6%);
   }
 }
 
@@ -409,7 +439,7 @@
   background: var(--pm-frosted-surface-fill);
   box-shadow:
     inset 0 1px 0 var(--pm-frosted-surface-inner-edge),
-    0 10px 30px var(--pm-frosted-surface-shadow);
+    0 6px 18px var(--pm-frosted-surface-shadow);
   backdrop-filter: blur(var(--pm-frosted-surface-blur));
   -webkit-backdrop-filter: blur(var(--pm-frosted-surface-blur));
 }
@@ -426,13 +456,13 @@
 }
 
 :root .pm-frosted-dialog {
-  border-color: var(--pm-frosted-surface-border);
-  background: var(--pm-frosted-surface-fill);
+  border-color: var(--pm-frosted-dialog-border);
+  background: var(--pm-frosted-dialog-fill);
   box-shadow:
-    inset 0 1px 0 var(--pm-frosted-surface-inner-edge),
+    inset 0 1px 0 var(--pm-frosted-dialog-inner-edge),
     var(--pm-overlay-elevation);
-  backdrop-filter: blur(var(--pm-frosted-surface-blur));
-  -webkit-backdrop-filter: blur(var(--pm-frosted-surface-blur));
+  backdrop-filter: blur(var(--pm-frosted-dialog-blur));
+  -webkit-backdrop-filter: blur(var(--pm-frosted-dialog-blur));
 }
 
 :root .pm-frosted-dialog::backdrop {

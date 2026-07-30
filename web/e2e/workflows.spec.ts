@@ -41,6 +41,10 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'light');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'light');
+  await page.getByRole('button', { name: /Theme:/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
 });
 
 test('task search follows sidebar scope, supports in:all, and preserves board context', async ({
@@ -355,8 +359,12 @@ test('wiki Markdown workspace splits on desktop and preserves mobile pane state'
 test('shows settings validation and protects required configuration', async ({ page }) => {
   await page.goto('/tasks/settings');
   await expect(page.getByRole('heading', { name: 'Project settings' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Members' }).click();
   await expect(page.getByRole('heading', { name: 'Project members' })).toBeVisible();
   await expect(page.getByText('Authenticated with the project service')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Statuses' }).click();
   await expect(page.getByRole('heading', { name: 'Statuses' })).toBeVisible();
 
   const expectInUseRemovalRejected = async (
@@ -382,9 +390,14 @@ test('shows settings validation and protects required configuration', async ({ p
   };
 
   await expectInUseRemovalRejected('Statuses', 'todo', 'To Do', 'status');
+
+  await page.getByRole('button', { name: 'Tracks' }).click();
   await expectInUseRemovalRejected('Tracks', 'E2E', 'Product', 'track');
+
+  await page.getByRole('button', { name: 'Milestones' }).click();
   await expectInUseRemovalRejected('Milestones', 'current', 'Current Release', 'milestone');
 
+  await page.getByRole('button', { name: 'Statuses' }).click();
   await page.getByRole('button', { name: 'Add status' }).click();
   await expect(page.getByRole('button', { name: 'Add status', exact: true }).last()).toBeDisabled();
   await page.getByLabel('Key').fill('review');
@@ -582,6 +595,7 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   });
 
   await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Agent runners' }).click();
   await page.getByRole('button', { name: 'Pair runner' }).first().click();
   const pairing = page.getByRole('dialog', { name: 'Pair agent runner' });
   await pairing.getByLabel('HTTPS endpoint').fill(runnerRegistration.endpoint);

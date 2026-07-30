@@ -20,17 +20,17 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  gap: var(--pm-space-3);
+  gap: var(--pm-space-2);
 }
 .workspace-header {
   display: grid;
-  gap: var(--pm-space-1);
+  gap: 2px;
 }
 .task-context-line {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  min-height: 30px;
+  min-height: 28px;
   gap: var(--pm-space-2);
 }
 .task-id,
@@ -67,6 +67,7 @@
   font-size: var(--pm-font-size-lg);
   font-weight: 650;
   line-height: 1.2;
+  background: color-mix(in oklch, var(--pm-surface-raised) 34%, transparent);
 }
 .title-input {
   border: 1px solid var(--pm-accent-strong);
@@ -138,7 +139,7 @@
   grid-template-columns: repeat(3, max-content);
   align-items: start;
   justify-content: start;
-  gap: var(--pm-space-3) var(--pm-space-5);
+  gap: var(--pm-space-3) var(--pm-space-4);
 }
 .property-field {
   display: grid;
@@ -374,48 +375,6 @@ h2 {
 .workspace-notice,
 .field-error {
   font-size: var(--pm-font-size-sm);
-}
-
-:host([presentation='dialog']) .task-workspace {
-  gap: var(--pm-space-2);
-}
-
-:host([presentation='page']) .task-workspace {
-  gap: var(--pm-space-2);
-}
-
-:host([presentation='dialog']) .workspace-header {
-  gap: 2px;
-}
-
-:host([presentation='page']) .workspace-header {
-  gap: 2px;
-}
-
-:host([presentation='dialog']) .task-context-line {
-  min-height: 28px;
-}
-
-:host([presentation='page']) .task-context-line {
-  min-height: 28px;
-}
-
-:host([presentation='dialog']) .title-input,
-:host([presentation='dialog']) .title-value {
-  background: color-mix(in oklch, var(--pm-surface-raised) 34%, transparent);
-}
-
-:host([presentation='page']) .title-input,
-:host([presentation='page']) .title-value {
-  background: color-mix(in oklch, var(--pm-surface-raised) 34%, transparent);
-}
-
-:host([presentation='dialog']) .property-row {
-  gap: var(--pm-space-3) var(--pm-space-4);
-}
-
-:host([presentation='page']) .property-row {
-  gap: var(--pm-space-3) var(--pm-space-4);
 }
 
 @media (min-width: 768px) and (max-width: 900px) {

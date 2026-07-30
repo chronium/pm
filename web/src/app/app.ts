@@ -12,7 +12,6 @@ import { AppShell } from './app.routes';
 import { TaskSearch } from './tasks/task-search/task-search';
 import { WikiSearch } from './wiki/wiki-search';
 import { StaticModeService } from './static/static-mode.service';
-import { VisualTuningService } from './core/visual-tuning.service';
 import { SyncStatusService } from './core/sync-status.service';
 
 @Component({
@@ -31,10 +30,6 @@ export class App {
   protected readonly staticMode = inject(StaticModeService);
   protected readonly syncStatus = inject(SyncStatusService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
-
-  constructor() {
-    inject(VisualTuningService);
-  }
 
   protected toggleNavigation(): void {
     const trigger = this.menuButton()?.nativeElement;
