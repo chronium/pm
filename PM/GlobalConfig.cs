@@ -6,6 +6,7 @@ public static class GlobalConfig
     public static string PmConfigFile = "pm_config.yaml";
 
     public static string ProjectIdFile = "project_id.txt";
+    public static string LinkedProjectsFile = "linked_projects.yaml";
 
     public static string TasksDirName = "tasks";
     public static string StatesDirName = "states";

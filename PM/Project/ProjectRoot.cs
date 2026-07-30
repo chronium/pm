@@ -48,6 +48,7 @@ public class ProjectRoot : IProjectRoot
     public string WikiPath => Path.Combine(RootPath!, GlobalConfig.WikiDirName);
     public string TaskOrderPath => Path.Combine(RootPath!, GlobalConfig.TaskOrderFile);
     public string ConfigPath => Path.Combine(RootPath!, GlobalConfig.PmConfigFile);
+    public string LinkedProjectsPath => Path.Combine(RootPath!, GlobalConfig.LinkedProjectsFile);
 
     public bool Exists { get; private set; }
     public string RootPath { get; private set; }
@@ -267,6 +268,25 @@ public class ProjectRoot : IProjectRoot
     public void WriteTaskOrder(TaskOrderFile order)
     {
         FileSystem.WriteAllText(TaskOrderPath, YamlSerde.Serialize(order));
+    }
+
+    public LinkedProjectManifest? ReadLinkedProjectsManifest()
+    {
+        if (!FileSystem.FileExists(LinkedProjectsPath))
+            return null;
+
+        return YamlSerde.Deserialize<LinkedProjectManifest>(FileSystem.ReadAllText(LinkedProjectsPath));
+    }
+
+    public void WriteLinkedProjectsManifest(LinkedProjectManifest manifest)
+    {
+        FileSystem.WriteAllText(LinkedProjectsPath, YamlSerde.Serialize(manifest));
+    }
+
+    public void DeleteLinkedProjectsManifest()
+    {
+        if (FileSystem.FileExists(LinkedProjectsPath))
+            FileSystem.DeleteFile(LinkedProjectsPath);
     }
 
     public IReadOnlyList<string> GetTaskOrder(TaskOrderScope scope)

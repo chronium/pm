@@ -15,8 +15,22 @@ public sealed record ProjectValidationIssue(
 
 public sealed record ProjectValidationResult(bool Valid, IReadOnlyList<ProjectValidationIssue> Issues);
 
-public sealed class ProjectValidationService(ProjectRoot projectRoot)
+public sealed class ProjectValidationService
 {
+    private readonly ProjectRoot projectRoot;
+    private readonly LinkedProjectService linkedProjects;
+
+    public ProjectValidationService(ProjectRoot projectRoot)
+        : this(projectRoot, new LinkedProjectService(projectRoot))
+    {
+    }
+
+    public ProjectValidationService(ProjectRoot projectRoot, LinkedProjectService linkedProjects)
+    {
+        this.projectRoot = projectRoot;
+        this.linkedProjects = linkedProjects;
+    }
+
     public AppResult<ProjectValidationResult> ValidateProject()
     {
         if (!projectRoot.Exists || projectRoot.Config == null)
@@ -24,6 +38,7 @@ public sealed class ProjectValidationService(ProjectRoot projectRoot)
 
         var issues = new List<ProjectValidationIssue>();
         ValidateConfigMetadata(issues);
+        ValidateLinkedProjects(issues);
         var tasksById = ValidateTaskFiles(issues);
         ValidateTaskDependencies(issues, tasksById);
         ValidateStateRefs(issues, tasksById);
@@ -31,6 +46,19 @@ public sealed class ProjectValidationService(ProjectRoot projectRoot)
         ValidateTaskOrder(issues, tasksById);
 
         return AppResult<ProjectValidationResult>.Ok(new ProjectValidationResult(issues.Count == 0, issues));
+    }
+
+    private void ValidateLinkedProjects(List<ProjectValidationIssue> issues)
+    {
+        var result = linkedProjects.GetManifest();
+        if (result.Success)
+            return;
+
+        issues.Add(new ProjectValidationIssue(
+            "error",
+            result.ErrorCode ?? "invalid_linked_projects_manifest",
+            result.Message ?? "Linked-project manifest is invalid.",
+            projectRoot.LinkedProjectsPath));
     }
 
     private void ValidateConfigMetadata(List<ProjectValidationIssue> issues)
