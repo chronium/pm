@@ -1,0 +1,38 @@
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.style-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 26px);
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--pm-border-subtle);
+  border-radius: var(--pm-radius-sm);
+  background: var(--pm-surface-sidebar);
+}
+
+button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+button:hover {
+  color: var(--pm-text-primary);
+}
+
+button[aria-pressed='true'] {
+  background: var(--pm-accent-soft);
+  color: var(--pm-accent-strong);
+}

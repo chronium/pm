@@ -68,8 +68,14 @@
   color: var(--pm-text-primary);
 }
 
-.topbar > :is(pm-task-search, pm-wiki-search, .snapshot-context) + .icon-button {
+.topbar > .mode-navigation + pm-visual-style-switch {
   margin-left: auto;
+}
+
+@media (min-width: 768px) {
+  .topbar > :is(pm-task-search, pm-wiki-search, .snapshot-context) + pm-visual-style-switch {
+    margin-left: auto;
+  }
 }
 
 .snapshot-context {

@@ -12,6 +12,9 @@ describe('application shell', () => {
   beforeEach(async () => {
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-theme-preference');
+    document.documentElement.removeAttribute('data-visual-style');
+    document.documentElement.removeAttribute('data-accent');
+    sessionStorage.clear();
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
@@ -184,6 +187,22 @@ describe('application shell', () => {
   it('shows the loaded project name in the top bar', async () => {
     const { fixture } = await renderAt('/tasks', 'Project Atlas');
     expect(fixture.nativeElement.querySelector('.brand')?.textContent).toBe('Project Atlas');
+  });
+
+  it('renders an independent visual style switch in the top bar', async () => {
+    const { fixture } = await renderAt('/tasks');
+    const switchElement = fixture.nativeElement.querySelector('pm-visual-style-switch');
+
+    expect(switchElement).toBeTruthy();
+    expect(document.documentElement.dataset['visualStyle']).toBe('current');
+  });
+
+  it('renders the accent picker with teal as the default palette', async () => {
+    const { fixture } = await renderAt('/tasks');
+    const picker = fixture.nativeElement.querySelector('pm-accent-picker');
+
+    expect(picker).toBeTruthy();
+    expect(document.documentElement.dataset['accent']).toBe('teal');
   });
 
   it('shows the remaining task count in the Tasks mode header', async () => {

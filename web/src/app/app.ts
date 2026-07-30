@@ -12,10 +12,22 @@ import { AppShell } from './app.routes';
 import { TaskSearch } from './tasks/task-search/task-search';
 import { WikiSearch } from './wiki/wiki-search';
 import { StaticModeService } from './static/static-mode.service';
+import { VisualStyleSwitch } from './shared/visual-style-switch/visual-style-switch';
+import { AccentPicker } from './shared/accent-picker/accent-picker';
 
 @Component({
   selector: 'pm-root',
-  imports: [DatePipe, NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch, WikiSearch],
+  imports: [
+    AccentPicker,
+    DatePipe,
+    NgIcon,
+    RouterLink,
+    RouterLinkActive,
+    RouterOutlet,
+    TaskSearch,
+    VisualStyleSwitch,
+    WikiSearch,
+  ],
   providers: [provideIcons({ cssMenu, cssScreen, cssSun, cssMoon })],
   templateUrl: './app.html',
   styleUrl: './app.css',
