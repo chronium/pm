@@ -306,22 +306,44 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "get_next_task", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns one deterministic recommended actionable task, optionally filtered by track and milestone. By default blocked tasks can be returned when no dependency-ready task is available; set readyOnly to true to return only dependency-ready tasks.")]
-    public McpToolResponse<NextTaskPayload> GetNextTask(string? track = null, bool readyOnly = false,
-        string? milestone = null)
+    [Description("Returns one deterministic recommended actionable task with linked dependencies resolved. Optional project and family scopes broaden candidate selection; by default only active-project tasks are candidates.")]
+    public async Task<McpToolResponse<NextTaskPayload>> GetNextTask(
+        string? track = null,
+        bool readyOnly = false,
+        string? milestone = null,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        [Description("Recommend across every available project in the linked family; cannot be combined with project.")]
+        bool family = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = boardService.GetNextTask(new NextTaskQuery(
-            NormalizeFilter(track),
-            NormalizeFilter(milestone),
-            readyOnly));
-        if (!result.Success)
-            return McpToolResponse<NextTaskPayload>.FromFailure(result);
+        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && IsImplicitCurrent(project, family))
+        {
+            var local = boardService.GetNextTask(new NextTaskQuery(
+                NormalizeFilter(track), NormalizeFilter(milestone), readyOnly));
+            if (!local.Success) return McpToolResponse<NextTaskPayload>.FromFailure(local);
+            return McpToolResponse<NextTaskPayload>.Ok(local.Payload!.Reason, new NextTaskPayload(
+                local.Payload.Found,
+                local.Payload.Task == null ? null : ToTaskSummary(local.Payload.Task),
+                local.Payload.Reason));
+        }
+
+        var denied = LinkedReadDenied<NextTaskPayload>(project, family);
+        if (denied != null) return denied;
+        var request = LinkedProjectReadRequest.FromOptions(project, family);
+        if (!request.Success) return McpToolResponse<NextTaskPayload>.FromFailure(request);
+        var result = await linkedProjectReadService.GetNextTaskAsync(
+            request.Payload!,
+            new NextTaskQuery(NormalizeFilter(track), NormalizeFilter(milestone), readyOnly),
+            cancellationToken: cancellationToken);
+        if (!result.Success) return McpToolResponse<NextTaskPayload>.FromFailure(result);
 
         var next = result.Payload!;
         var payload = new NextTaskPayload(
             next.Found,
-            next.Task == null ? null : ToTaskSummary(next.Task),
-            next.Reason);
+            next.Task == null ? null : ToTaskSummary(next.Task, next.Owner),
+            next.Reason,
+            ToWarnings(next.Warnings));
 
         return McpToolResponse<NextTaskPayload>.Ok(next.Reason, payload);
     }
@@ -924,6 +946,9 @@ public sealed class PmMcpTools(
             task.Dependencies.Summary,
             task.Dependencies.WaitingOn,
             task.Dependencies.Missing,
+            task.Dependencies.Completed,
+            task.Dependencies.Unavailable,
+            task.Dependencies.Invalid,
             task.DescriptionPreview,
             task.FilePath,
             owner == null ? null : ToOwner(owner));
@@ -946,6 +971,9 @@ public sealed class PmMcpTools(
             task.Dependencies.Summary,
             task.Dependencies.WaitingOn,
             task.Dependencies.Missing,
+            task.Dependencies.Completed,
+            task.Dependencies.Unavailable,
+            task.Dependencies.Invalid,
             task.DescriptionPreview,
             task.FilePath,
             task.MatchCount,
@@ -974,6 +1002,9 @@ public sealed class PmMcpTools(
             dependencies.Summary,
             dependencies.WaitingOn,
             dependencies.Missing,
+            dependencies.Completed,
+            dependencies.Unavailable,
+            dependencies.Invalid,
             projectRoot.GetTaskFilePath(task.Id),
             markdown,
             task.Description);
@@ -1011,6 +1042,9 @@ public sealed class PmMcpTools(
             task.Dependencies.Summary,
             task.Dependencies.WaitingOn,
             task.Dependencies.Missing,
+            task.Dependencies.Completed,
+            task.Dependencies.Unavailable,
+            task.Dependencies.Invalid,
             task.FilePath,
             task.Markdown ?? task.Task.ToMarkdown(),
             task.Task.Description,

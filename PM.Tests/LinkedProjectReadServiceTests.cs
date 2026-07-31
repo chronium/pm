@@ -241,6 +241,123 @@ public sealed class LinkedProjectReadServiceTests
     }
 
     [Fact]
+    public async Task LinkedTaskReadsClassifyCompletedWaitingMissingAndUnavailableDependencies()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateProject(Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale");
+        LinkParentAndChildren(parent, [(child, "royale")]);
+        AddTask(child, "GAME-0001", "Shared work", state: "done");
+        AddTask(parent, "PM-0001", "Completed dependency",
+            dependsOn: ["pm://project/prj_royale/task/GAME-0001"]);
+        AddTask(parent, "PM-0002", "Missing dependency",
+            dependsOn: ["pm://project/prj_royale/task/GAME-9999"]);
+        AddTask(parent, "PM-0003", "Unavailable dependency",
+            dependsOn: ["pm://project/prj_absent/task/GAME-0001"]);
+        var service = Service(parent, workspace);
+
+        var first = await service.ListTasksAsync(new LinkedProjectReadRequest());
+
+        Assert.True(first.Success);
+        var completed = first.Payload!.Items.Single(item => item.Resource.Task.Id == "PM-0001").Resource.Dependencies;
+        var missing = first.Payload.Items.Single(item => item.Resource.Task.Id == "PM-0002").Resource.Dependencies;
+        var unavailable = first.Payload.Items.Single(item => item.Resource.Task.Id == "PM-0003").Resource.Dependencies;
+        Assert.True(completed.Ready);
+        Assert.Equal(["pm://project/prj_royale/task/GAME-0001"], completed.Completed);
+        Assert.Equal(["pm://project/prj_royale/task/GAME-9999"], missing.Missing);
+        Assert.Equal(["pm://project/prj_absent/task/GAME-0001"], unavailable.Unavailable);
+        Assert.Contains(first.Payload.Warnings, warning => warning.Code == "dependency_graph_incomplete");
+        var search = await service.SearchTasksAsync("Completed dependency");
+        Assert.True(search.Payload!.Items.Single().Resource.Dependencies.Ready);
+        Assert.Equal(["pm://project/prj_royale/task/GAME-0001"],
+            search.Payload.Items.Single().Resource.Dependencies.Completed);
+
+        Assert.True(child.TryGetById("GAME-0001", out var childTask));
+        child.UpdateTaskState(childTask, "todo");
+        var second = await service.GetTaskAsync("PM-0001");
+
+        Assert.False(second.Payload!.Items.Single().Resource.Dependencies.Ready);
+        Assert.Equal(["pm://project/prj_royale/task/GAME-0001"],
+            second.Payload.Items.Single().Resource.Dependencies.WaitingOn);
+    }
+
+    [Fact]
+    public async Task CrossProjectCyclesWarnWithoutInvalidatingReads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateProject(Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale");
+        LinkParentAndChildren(parent, [(child, "royale")]);
+        AddTask(parent, "PM-0001", "Parent task",
+            dependsOn: ["pm://project/prj_royale/task/GAME-0001"]);
+        AddTask(child, "GAME-0001", "Child task",
+            dependsOn: ["pm://project/prj_games/task/PM-0001"]);
+
+        var result = await Service(parent, workspace).ListTasksAsync(new LinkedProjectReadRequest());
+
+        Assert.True(result.Success);
+        Assert.False(result.Payload!.Items.Single().Resource.Dependencies.Ready);
+        Assert.Contains(result.Payload.Warnings, warning => warning.Code == "cross_project_dependency_cycle");
+    }
+
+    [Fact]
+    public async Task RecommendationsKeepActiveCandidatesByDefaultAndRankFamilyCandidatesDeterministically()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateProject(Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale");
+        LinkParentAndChildren(parent, [(child, "royale")]);
+        AddTask(parent, "PM-0001", "Active low", priority: "low");
+        AddTask(child, "GAME-0001", "Child urgent", priority: "urgent");
+        var service = Service(parent, workspace);
+
+        var current = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(), new NextTaskQuery(ReadyOnly: true));
+        var family = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+            new NextTaskQuery(ReadyOnly: true));
+        var selected = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Project, "royale"),
+            new NextTaskQuery(ReadyOnly: true));
+
+        parent.WriteTask(TestData.Task("PM-0001", "Active urgent", priority: "urgent"));
+        var tiedFamily = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+            new NextTaskQuery(ReadyOnly: true));
+
+        Assert.Equal("PM-0001", current.Payload!.Task!.Task.Id);
+        Assert.Equal("prj_games", current.Payload.Owner!.ProjectId);
+        Assert.Equal("GAME-0001", family.Payload!.Task!.Task.Id);
+        Assert.Equal("prj_royale", family.Payload.Owner!.ProjectId);
+        Assert.Equal("GAME-0001", selected.Payload!.Task!.Task.Id);
+        Assert.Equal("PM-0001", tiedFamily.Payload!.Task!.Task.Id);
+    }
+
+    [Fact]
+    public async Task FamilyRecommendationFiltersMatchOnlyProjectsDefiningTheKey()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateProject(
+            Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale",
+            TestData.Config(name: "Royale", idPrefix: "GAME",
+                tracks: new Dictionary<string, string> { ["GAME"] = "Game", ["BUILD"] = "Build" }));
+        LinkParentAndChildren(parent, [(child, "royale")]);
+        AddTask(parent, "PM-0001", "Parent", track: "PM");
+        AddTask(child, "BUILD-0001", "Build", track: "BUILD");
+        var service = Service(parent, workspace);
+        var request = new LinkedProjectReadRequest(LinkedProjectReadScope.Family);
+
+        var filtered = await service.GetNextTaskAsync(request, new NextTaskQuery(Track: "BUILD"));
+        var invalid = await service.GetNextTaskAsync(request, new NextTaskQuery(Track: "NOPE"));
+
+        Assert.True(filtered.Success);
+        Assert.Equal("BUILD-0001", filtered.Payload!.Task!.Task.Id);
+        Assert.False(invalid.Success);
+        Assert.Equal("invalid_track", invalid.ErrorCode);
+    }
+
+    [Fact]
     public async Task GitInspectorReportsRevisionAndDirtyStateWithoutRequiringGit()
     {
         using var workspace = new TempWorkingDirectory();
@@ -367,11 +484,14 @@ public sealed class LinkedProjectReadServiceTests
         string id,
         string title,
         string description = "",
-        string? track = "PM")
+        string? track = "PM",
+        string state = "todo",
+        string? priority = null,
+        IReadOnlyList<string>? dependsOn = null)
     {
-        var task = TestData.Task(id, title, description, track);
+        var task = TestData.Task(id, title, description, track, priority: priority, dependsOn: dependsOn);
         root.WriteTask(task);
-        root.UpdateTaskState(task, "todo");
+        root.UpdateTaskState(task, state);
     }
 
     private static void AssertOwner(

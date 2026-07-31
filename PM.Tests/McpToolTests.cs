@@ -134,7 +134,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(task, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask();
+        var result = await tools.GetNextTask();
 
         Assert.True(result.Success);
         Assert.True(result.Data!.Found);
@@ -172,7 +172,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(buildTask, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask(" BUILD ");
+        var result = await tools.GetNextTask(" BUILD ");
 
         Assert.True(result.Success);
         Assert.Equal("BUILD-0001", result.Data!.Task!.Id);
@@ -192,7 +192,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(first, "todo");
         projectRoot.UpdateTaskState(second, "todo");
 
-        var result = CreateTools(projectRoot).GetNextTask(milestone: " m2 ");
+        var result = await CreateTools(projectRoot).GetNextTask(milestone: " m2 ");
 
         Assert.True(result.Success);
         Assert.Equal("PM-0002", result.Data!.Task!.Id);
@@ -209,7 +209,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(blocked, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask();
+        var result = await tools.GetNextTask();
 
         Assert.True(result.Success);
         Assert.True(result.Data!.Found);
@@ -228,7 +228,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(blocked, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask(readyOnly: true);
+        var result = await tools.GetNextTask(readyOnly: true);
 
         Assert.True(result.Success);
         Assert.False(result.Data!.Found);
@@ -250,7 +250,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(ready, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask(readyOnly: true);
+        var result = await tools.GetNextTask(readyOnly: true);
 
         Assert.True(result.Success);
         Assert.True(result.Data!.Found);
@@ -272,7 +272,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(buildBlocked, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask("BUILD", readyOnly: true);
+        var result = await tools.GetNextTask("BUILD", readyOnly: true);
 
         Assert.True(result.Success);
         Assert.False(result.Data!.Found);
@@ -290,7 +290,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(task, "done");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask();
+        var result = await tools.GetNextTask();
 
         Assert.True(result.Success);
         Assert.False(result.Data!.Found);
@@ -305,8 +305,8 @@ public class McpToolTests
         var projectRoot = await workspace.CreateProject();
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetNextTask("NOPE");
-        var readyOnly = tools.GetNextTask("NOPE", readyOnly: true);
+        var result = await tools.GetNextTask("NOPE");
+        var readyOnly = await tools.GetNextTask("NOPE", readyOnly: true);
 
         Assert.False(result.Success);
         Assert.Equal("invalid_track", result.ErrorCode);
@@ -314,9 +314,32 @@ public class McpToolTests
         Assert.False(readyOnly.Success);
         Assert.Equal("invalid_track", readyOnly.ErrorCode);
         Assert.Equal("Track NOPE not found.", readyOnly.Message);
-        var invalidMilestone = tools.GetNextTask(milestone: "missing");
+        var invalidMilestone = await tools.GetNextTask(milestone: "missing");
         Assert.False(invalidMilestone.Success);
         Assert.Equal("invalid_milestone", invalidMilestone.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetNextTaskExposesProjectScopesAndRestrictsRunWorkers()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "prj_current\n");
+        var task = TestData.Task("PM-0001", "Current task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var current = await tools.GetNextTask(project: "current");
+        var conflicting = await tools.GetNextTask(project: "current", family: true);
+        var runWorker = CreateTools(projectRoot,
+            capabilityContext: new McpCapabilityContext(McpCapabilityProfile.RunWorker, "PM-0001"));
+        var denied = await runWorker.GetNextTask(family: true);
+
+        Assert.True(current.Success);
+        Assert.Equal("prj_current", current.Data!.Task!.Project!.ProjectId);
+        Assert.Equal("invalid_project_scope", conflicting.ErrorCode);
+        Assert.Equal("mcp_project_scope_denied", denied.ErrorCode);
     }
 
     [Fact]
@@ -813,7 +836,8 @@ public class McpToolTests
         Assert.Equal("invalid_dependency", invalidDependency.ErrorCode);
         Assert.True(qualifiedDependency.Success);
         Assert.Equal([qualifiedReference], qualifiedDependency.Data!.Task.DependsOn);
-        Assert.Equal([qualifiedReference], qualifiedDependency.Data.Task.MissingDependencies);
+        Assert.Empty(qualifiedDependency.Data.Task.MissingDependencies);
+        Assert.Equal([qualifiedReference], qualifiedDependency.Data.Task.UnavailableDependencies);
         Assert.Equal("invalid_dependency_reference", malformedReference.ErrorCode);
         Assert.True(note.Success);
         Assert.Contains("MCP note", note.Data!.Task.Description);

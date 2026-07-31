@@ -152,7 +152,7 @@ public sealed class ProjectResourceReferenceTests
 
         var boardTask = new BoardService(root).GetTask("PM-0001").Payload!;
         Assert.False(boardTask.Dependencies.Ready);
-        Assert.Equal(["pm://project/prj_other/task/OTHER-0001"], boardTask.Dependencies.Missing);
+        Assert.Equal(["pm://project/prj_other/task/OTHER-0001"], boardTask.Dependencies.Unavailable);
     }
 
     [Fact]

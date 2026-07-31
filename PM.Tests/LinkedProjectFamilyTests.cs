@@ -248,6 +248,10 @@ public sealed class LinkedProjectFamilyTests
         {
             Children = [Declaration("prj_missing", "missing", "missing")],
         });
+        var task = TestData.Task("PM-0001", "Blocked by unavailable project",
+            dependsOn: ["pm://project/prj_missing/task/PM-0002"]);
+        active.WriteTask(task);
+        active.UpdateTaskState(task, "todo");
         var linkedProjects = new LinkedProjectService(active);
         var family = Family(active, workspace, linkedProjects);
 
@@ -259,6 +263,8 @@ public sealed class LinkedProjectFamilyTests
         Assert.Equal("warning", warning.Severity);
         Assert.Equal("prj_missing", warning.ProjectId);
         Assert.Null(warning.Path);
+        Assert.Contains(result.Payload.Issues, issue =>
+            issue.Code == "dependency_graph_incomplete" && issue.Severity == "warning");
     }
 
     private static LinkedProjectFamilyService Family(

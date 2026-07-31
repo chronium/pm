@@ -44,8 +44,11 @@ public sealed record BoardTask(
 public sealed record DependencyStatus(
     bool Ready,
     IReadOnlyList<string> DependsOn,
+    IReadOnlyList<string> Completed,
     IReadOnlyList<string> WaitingOn,
     IReadOnlyList<string> Missing,
+    IReadOnlyList<string> Unavailable,
+    IReadOnlyList<string> Invalid,
     string Summary);
 
 public sealed record NextTaskQuery(string? Track = null, string? Milestone = null, bool ReadyOnly = false);
@@ -300,16 +303,24 @@ public partial class BoardService(ProjectRoot projectRoot)
     {
         var dependencies = task.DependencyIds;
         if (dependencies.Count == 0)
-            return new DependencyStatus(true, [], [], [], "no dependencies");
+            return new DependencyStatus(true, [], [], [], [], [], [], "no dependencies");
 
+        var completed = new List<string>();
         var waitingOn = new List<string>();
         var missing = new List<string>();
+        var unavailable = new List<string>();
+        var invalid = new List<string>();
         foreach (var dependencyValue in dependencies)
         {
-            if (!TaskDependencyReference.TryParse(dependencyValue, out var dependency, out _) ||
-                !dependency!.IsLocalTo(activeProjectId))
+            if (!TaskDependencyReference.TryParse(dependencyValue, out var dependency, out _))
             {
-                missing.Add(dependencyValue);
+                invalid.Add(dependencyValue);
+                continue;
+            }
+
+            if (!dependency!.IsLocalTo(activeProjectId))
+            {
+                unavailable.Add(dependencyValue);
                 continue;
             }
 
@@ -323,14 +334,18 @@ public partial class BoardService(ProjectRoot projectRoot)
             if (!stateById.TryGetValue(dependencyId, out var state) ||
                 !string.Equals(state, "done", StringComparison.Ordinal))
                 waitingOn.Add(dependencyValue);
+            else
+                completed.Add(dependencyValue);
         }
 
-        var ready = waitingOn.Count == 0 && missing.Count == 0;
+        var ready = waitingOn.Count == 0 && missing.Count == 0 &&
+                    unavailable.Count == 0 && invalid.Count == 0;
         var summary = ready
             ? "all dependencies complete"
-            : BuildWaitingSummary(waitingOn, missing);
+            : BuildWaitingSummary(waitingOn, missing, unavailable, invalid);
 
-        return new DependencyStatus(ready, dependencies.ToList(), waitingOn, missing, summary);
+        return new DependencyStatus(
+            ready, dependencies.ToList(), completed, waitingOn, missing, unavailable, invalid, summary);
     }
 
     private string? GetActiveProjectId() =>
@@ -369,13 +384,21 @@ public partial class BoardService(ProjectRoot projectRoot)
             : $"No actionable task found{scope}.";
     }
 
-    private static string BuildWaitingSummary(IReadOnlyList<string> waitingOn, IReadOnlyList<string> missing)
+    internal static string BuildWaitingSummary(
+        IReadOnlyList<string> waitingOn,
+        IReadOnlyList<string> missing,
+        IReadOnlyList<string> unavailable,
+        IReadOnlyList<string> invalid)
     {
         var parts = new List<string>();
         if (waitingOn.Count > 0)
             parts.Add($"waiting on {string.Join(", ", waitingOn)}");
         if (missing.Count > 0)
             parts.Add($"missing {string.Join(", ", missing)}");
+        if (unavailable.Count > 0)
+            parts.Add($"unavailable {string.Join(", ", unavailable)}");
+        if (invalid.Count > 0)
+            parts.Add($"invalid {string.Join(", ", invalid)}");
 
         return string.Join("; ", parts);
     }

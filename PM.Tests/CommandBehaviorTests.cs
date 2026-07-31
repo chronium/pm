@@ -531,13 +531,13 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(blocked);
         projectRoot.UpdateTaskState(ready, "todo");
         projectRoot.UpdateTaskState(blocked, "todo");
-        var command = new TaskNextCommand(new BoardService(projectRoot));
+        var command = new TaskNextCommand(CreateLinkedReads(projectRoot));
 
         var (readyExit, readyOutput) = await CaptureConsole(() =>
-            command.Execute(null!, new TaskNextCommand.Settings(), CancellationToken.None));
-        var (emptyExit, emptyOutput) = await CaptureConsole(() => command.Execute(null!,
+            command.ExecuteAsync(null!, new TaskNextCommand.Settings(), CancellationToken.None));
+        var (emptyExit, emptyOutput) = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskNextCommand.Settings { Track = "BUILD", Milestone = "m1" }, CancellationToken.None));
-        var (blockedExit, blockedOutput) = await CaptureConsole(() => command.Execute(null!,
+        var (blockedExit, blockedOutput) = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskNextCommand.Settings { Track = "BUILD", Milestone = "m1", IncludeBlocked = true },
             CancellationToken.None));
 
@@ -556,13 +556,17 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new TaskNextCommand(new BoardService(projectRoot));
+        var command = new TaskNextCommand(CreateLinkedReads(projectRoot));
 
-        var (exitCode, output) = await CaptureConsole(() => command.Execute(null!,
+        var (exitCode, output) = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskNextCommand.Settings { Milestone = "missing" }, CancellationToken.None));
+        var (conflictExitCode, conflictOutput) = await CaptureConsole(() => command.ExecuteAsync(null!,
+            new TaskNextCommand.Settings { Project = "current", Family = true }, CancellationToken.None));
 
         Assert.Equal(1, exitCode);
         Assert.Contains("Milestone missing not found", output);
+        Assert.Equal(1, conflictExitCode);
+        Assert.Contains("cannot be used together", conflictOutput);
     }
 
     [Fact]

@@ -58,6 +58,7 @@ serviceProvider.AddSingleton<ProjectCreationService>();
 serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<LinkedProjectService>();
 serviceProvider.AddSingleton<LinkedProjectFamilyService>();
+serviceProvider.AddSingleton<LinkedProjectTaskGraphService>();
 serviceProvider.AddSingleton<ILinkedProjectGitInspector, LinkedProjectGitInspector>();
 serviceProvider.AddSingleton<LinkedProjectReadService>();
 serviceProvider.AddSingleton<BoardService>();

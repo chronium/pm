@@ -325,7 +325,8 @@ public class ApplicationServiceTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var task = TestData.Task("PM-0001", "Move me");
+        var task = TestData.Task("PM-0001", "Move me",
+            dependsOn: ["pm://project/prj_unavailable/task/OTHER-0001"]);
         projectRoot.WriteTask(task);
         var service = new TaskService(projectRoot, new RecordingNextIdService());
 
