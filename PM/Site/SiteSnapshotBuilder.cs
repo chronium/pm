@@ -5,14 +5,19 @@ using PM.Project;
 namespace PM.Site;
 
 public sealed class SiteSnapshotBuilder(
+    ProjectRoot projectRoot,
     ProjectConfigService configService,
     BoardService boardService,
-    WikiService wikiService)
+    WikiService wikiService,
+    LinkedProjectService linkedProjectService,
+    LinkedProjectFamilyService linkedProjectFamilyService)
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     private const string StaticRevision = "static-snapshot";
 
-    public AppResult<SiteSnapshot> Build(DateTimeOffset generatedAt)
+    public async Task<AppResult<SiteSnapshot>> BuildAsync(
+        DateTimeOffset generatedAt,
+        CancellationToken cancellationToken = default)
     {
         var settingsResult = configService.GetSettings();
         if (!settingsResult.Success)
@@ -75,6 +80,13 @@ public sealed class SiteSnapshotBuilder(
         }
 
         var settings = settingsResult.Payload!;
+        var linkedProjectsResult = await BuildLinkedProjectsAsync(cancellationToken);
+        if (!linkedProjectsResult.Success)
+            return Fail(linkedProjectsResult);
+
+        var projectId = projectRoot.TryReadProjectId(out var stableProjectId)
+            ? stableProjectId
+            : null;
         var responseSettings = new SettingsResponse(
             settings.ProjectName,
             settings.Accent,
@@ -90,6 +102,8 @@ public sealed class SiteSnapshotBuilder(
         return AppResult<SiteSnapshot>.Ok(new SiteSnapshot(
             SchemaVersion,
             generatedAt.ToUniversalTime(),
+            projectId,
+            linkedProjectsResult.Payload!,
             new ProjectResponse(settings.ProjectName, settings.Accent, StaticRevision),
             responseSettings,
             new BoardNavigationResponse(
@@ -101,6 +115,33 @@ public sealed class SiteSnapshotBuilder(
             tasks,
             wikiIndex,
             wikiPages));
+    }
+
+    private async Task<AppResult<IReadOnlyList<SiteLinkedProjectResponse>>> BuildLinkedProjectsAsync(
+        CancellationToken cancellationToken)
+    {
+        var manifestResult = linkedProjectService.GetManifest();
+        if (!manifestResult.Success)
+            return AppResult<IReadOnlyList<SiteLinkedProjectResponse>>.Fail(
+                manifestResult.ErrorCode!, manifestResult.Message!);
+        if (!manifestResult.Payload!.Exists)
+            return AppResult<IReadOnlyList<SiteLinkedProjectResponse>>.Ok([]);
+
+        var familyResult = await linkedProjectFamilyService.ResolveAsync(cancellationToken);
+        if (!familyResult.Success)
+            return AppResult<IReadOnlyList<SiteLinkedProjectResponse>>.Fail(
+                familyResult.ErrorCode!, familyResult.Message!);
+
+        var projects = familyResult.Payload!.Members
+            .Where(member => member.Relationship != LinkedProjectRelationship.Current)
+            .Select(member => new SiteLinkedProjectResponse(
+                member.ProjectId,
+                member.Name,
+                member.Alias,
+                member.Relationship.ToString().ToLowerInvariant(),
+                member.PublicSiteUrl))
+            .ToList();
+        return AppResult<IReadOnlyList<SiteLinkedProjectResponse>>.Ok(projects);
     }
 
     private static BoardResponse ToBoardResponse(BoardData board) => new(

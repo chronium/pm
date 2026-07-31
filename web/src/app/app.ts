@@ -13,10 +13,20 @@ import { TaskSearch } from './tasks/task-search/task-search';
 import { WikiSearch } from './wiki/wiki-search';
 import { StaticModeService } from './static/static-mode.service';
 import { SyncStatusService } from './core/sync-status.service';
+import { StaticProjectSwitcher } from './static/static-project-switcher';
 
 @Component({
   selector: 'pm-root',
-  imports: [DatePipe, NgIcon, RouterLink, RouterLinkActive, RouterOutlet, TaskSearch, WikiSearch],
+  imports: [
+    DatePipe,
+    NgIcon,
+    RouterLink,
+    RouterLinkActive,
+    RouterOutlet,
+    StaticProjectSwitcher,
+    TaskSearch,
+    WikiSearch,
+  ],
   providers: [provideIcons({ cssCheck, cssMenu, cssScreen, cssSpinner, cssSun, cssMoon })],
   templateUrl: './app.html',
   styleUrl: './app.css',

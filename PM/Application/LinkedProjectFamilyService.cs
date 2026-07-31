@@ -30,7 +30,8 @@ public sealed record LinkedProjectFamilyMember(
     bool WriteTrusted,
     ProjectRoot? Project,
     string? RepositoryPath,
-    LinkedProjectRepairAction? RepairAction = null);
+    LinkedProjectRepairAction? RepairAction = null,
+    string? PublicSiteUrl = null);
 
 public sealed record LinkedProjectFamily(
     string ActiveProjectId,
@@ -180,7 +181,7 @@ public sealed class LinkedProjectFamilyService(
         return new LinkedProjectFamilyMember(
             declaration.ProjectId, name, declaration.Alias, relationship, status, resolution.Source,
             readable, resolution.WriteTrusted, resolution.Project, resolution.RepositoryPath,
-            resolution.RepairAction);
+            resolution.RepairAction, declaration.PublicSiteUrl);
     }
 
     private static void AddMember(

@@ -378,12 +378,20 @@
               <div class="dependency-list">
                 <span>Depends on</span>
                 @for (id of task.dependencies.dependsOn; track id) {
-                  <a
-                    [routerLink]="['/tasks', id]"
-                    queryParamsHandling="preserve"
-                    (click)="dependencyClick($event, id)"
-                    >{{ id }}</a
-                  >
+                  @if (dependencyLink(id); as link) {
+                    @if (link.kind === 'available') {
+                      <a [href]="link.href">{{ id }}</a>
+                    } @else if (link.kind === 'unavailable') {
+                      <span class="pm-unavailable-link" [title]="link.reason">{{ id }}</span>
+                    } @else {
+                      <a
+                        [routerLink]="['/tasks', id]"
+                        queryParamsHandling="preserve"
+                        (click)="dependencyClick($event, id)"
+                        >{{ id }}</a
+                      >
+                    }
+                  }
                 }
               </div>
             }

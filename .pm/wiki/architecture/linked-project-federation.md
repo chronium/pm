@@ -1,7 +1,7 @@
 ---
 title: Linked-Project Federation
 createdAt: 2026-07-29T19:13:34.3784459Z
-modifiedAt: 2026-07-29T19:26:56.1493200Z
+modifiedAt: 2026-07-31T08:28:43.3898330Z
 ---
 
 This page is the source-of-truth design for linked PM projects. It defines how independently useful projects form a small family for navigation and read federation without sharing ownership or granting implicit write authority.
@@ -230,13 +230,15 @@ Project write trust can be granted, inspected, and revoked explicitly in local s
 
 ## Static publishing
 
-Each project publishes its own static site and sanitized snapshot independently. A static export reads only the project being exported and must succeed without any linked checkout.
+Each project publishes its own static site and sanitized snapshot independently. The exported task and wiki content comes only from the active project. Publication may opportunistically read an available parent manifest to discover sibling names, order, and public site URLs, but an unavailable parent or sibling must never block export.
 
-A linked declaration's `publicSiteUrl` is an outbound navigation hint owned by the declaring project. The target project remains authoritative for its actual publication configuration and generated site. When the target is available, PM may warn if its self-declared publication URL disagrees with the outbound hint, but an export must not rewrite either project automatically.
+A linked declaration's `publicSiteUrl` is an outbound navigation hint owned by the declaring project. The target project remains authoritative for its actual publication configuration and generated site. The static snapshot contains only stable project identity, display metadata, relationship, and public URL; it must not include checkout paths, registry bindings, write trust, repository diagnostics, or linked task and wiki content.
 
-Family navigation and canonical task or wiki references translate through the declaring project's `publicSiteUrl` hint for the target. If no public URL is declared, the renderer presents the stable project identity and a clear unavailable-link state rather than embedding a local filesystem path. Static output must not expose registry bindings, write trust, dirty working-tree paths, or private repository information.
+The static project switcher lists the current project followed by the supported family order. Projects with a public URL open their independently published site in the same tab. A project without a public URL remains visible as unavailable with an explanation.
 
-Combining multiple projects into one static artifact, synchronizing their revisions, and defining a single family URL space are future work.
+Canonical task and wiki references translate through the target's `publicSiteUrl`. Same-project references use local hash routes. Cross-project routes preserve the configured site's path and query while replacing its fragment with `#/tasks/<task-id>` or `#/wiki/<wiki-path>`. Missing, unknown, or malformed targets render as unavailable rather than falling back to local filesystem paths.
+
+A standalone project without a linked-project manifest continues to publish normally, even if it has no stable project ID. Combining multiple projects into one static artifact, synchronizing their revisions, and defining a single family URL space remain future work.
 
 ## Remote agent context
 

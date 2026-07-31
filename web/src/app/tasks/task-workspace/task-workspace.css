@@ -315,7 +315,14 @@ h2 {
   margin-top: var(--pm-space-2);
   font-size: var(--pm-font-size-sm);
 }
-.dependency-list span {
+
+.dependency-list .pm-unavailable-link {
+  color: var(--pm-text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 0.16em;
+  cursor: help;
+}
+.dependency-list > span:first-child {
   flex-basis: 100%;
   color: var(--pm-text-subtle);
 }

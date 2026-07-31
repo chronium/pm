@@ -10,9 +10,12 @@ namespace PM.Site;
 public class SiteBuildCommand(
     ProjectRoot projectRoot,
     ProjectValidationService validationService,
-    SiteExportService exportService) : Command<SiteBuildCommand.Settings>
+    SiteExportService exportService) : AsyncCommand<SiteBuildCommand.Settings>
 {
-    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken)
     {
         if (!projectRoot.Exists)
         {
@@ -20,7 +23,7 @@ public class SiteBuildCommand(
             return 1;
         }
 
-        var validation = validationService.ValidateProject();
+        var validation = await validationService.ValidateProjectAsync(cancellationToken);
         if (!validation.Success || !validation.Payload!.Valid)
         {
             var detail = validation.Success
@@ -30,7 +33,12 @@ public class SiteBuildCommand(
             return 1;
         }
 
-        var result = exportService.Build(settings.Output, settings.Force, CreateAngularAssetStore(), DateTimeOffset.UtcNow);
+        var result = await exportService.BuildAsync(
+            settings.Output,
+            settings.Force,
+            CreateAngularAssetStore(),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated($"[red]{result.Message!.EscapeMarkup()}[/]");

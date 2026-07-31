@@ -33,6 +33,10 @@ import { TaskOptionsResource } from '../task-options.resource';
 import { StaticModeService } from '../../static/static-mode.service';
 import { AgentRunLaunch } from '../../agent-runs/agent-run-launch';
 import type { AgentRunRemoteStart } from '../../agent-runs/agent-runs-api.service';
+import {
+  StaticProjectLinksService,
+  type StaticProjectLinkResolution,
+} from '../../static/static-project-links.service';
 
 export type TaskWorkspacePresentation = 'dialog' | 'page';
 export type TaskWorkspaceMode = 'detail' | 'create';
@@ -90,6 +94,7 @@ export class TaskWorkspace {
   private readonly router = inject(Router);
   private readonly api = inject(TaskApiService);
   private readonly navigation = inject(TaskNavigationService);
+  private readonly projectLinks = inject(StaticProjectLinksService);
   protected readonly staticMode = inject(StaticModeService);
   protected readonly options = inject(TaskOptionsResource);
   protected readonly detail = inject(TaskDetailResource);
@@ -356,6 +361,10 @@ export class TaskWorkspace {
 
   protected dependencyClick(event: MouseEvent, id: string): void {
     if (this.presentation() === 'dialog') this.navigation.openDialog(event, this.router, id);
+  }
+
+  protected dependencyLink(id: string): StaticProjectLinkResolution {
+    return this.projectLinks.resolve(id);
   }
 
   protected reviewLatest(): void {

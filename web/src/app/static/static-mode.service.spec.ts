@@ -5,8 +5,10 @@ import { adaptGet, validateSnapshot } from './static-snapshot.interceptor';
 import { isStaticDocument } from './static-mode.service';
 
 const snapshot: StaticSnapshot = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   generatedAt: '2026-07-27T12:30:00Z',
+  projectId: 'static-pm',
+  linkedProjects: [],
   project: { name: 'Static PM', accent: 'teal', revision: 'static-snapshot' },
   settings: {
     projectName: 'Static PM',
@@ -151,9 +153,23 @@ describe('static snapshot mode', () => {
   it('validates the supported schema and reports malformed or future snapshots', () => {
     expect(validateSnapshot(snapshot)).toBe(snapshot);
     expect(() => validateSnapshot({ ...snapshot, tasks: undefined })).toThrow(/collections/);
-    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 3 })).toThrow(
-      /Unsupported static snapshot schema version: 3/,
+    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 4 })).toThrow(
+      /Unsupported static snapshot schema version: 4/,
     );
+    expect(() =>
+      validateSnapshot({
+        ...snapshot,
+        linkedProjects: [
+          {
+            projectId: 'unsafe',
+            name: 'Unsafe',
+            alias: null,
+            relationship: 'child',
+            publicSiteUrl: 'javascript:alert(1)',
+          },
+        ],
+      }),
+    ).toThrow(/invalid linkedProjects/);
   });
 
   it('adapts project, task, wiki, and display settings GET contracts', () => {
