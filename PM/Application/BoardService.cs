@@ -38,7 +38,8 @@ public sealed record BoardTask(
     string State,
     DependencyStatus Dependencies,
     string DescriptionPreview,
-    string FilePath);
+    string FilePath,
+    string? Markdown = null);
 
 public sealed record DependencyStatus(
     bool Ready,

@@ -108,7 +108,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(wrongMilestone, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.ListTasks("BUILD", "m1", "review");
+        var result = await tools.ListTasks("BUILD", "m1", "review");
 
         Assert.True(result.Success);
         var task = Assert.Single(result.Data!.Tasks);
@@ -331,7 +331,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(task, "todo");
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetTask("PM-0001");
+        var result = await tools.GetTask("PM-0001");
 
         Assert.True(result.Success);
         Assert.Equal("PM-0001", result.Data!.Id);
@@ -343,6 +343,60 @@ public class McpToolTests
         Assert.Equal("Body text", result.Data.Description);
         Assert.Contains("title: Existing", result.Data.Markdown);
         Assert.Equal(projectRoot.GetTaskFilePath("PM-0001"), result.Data.FilePath);
+    }
+
+    [Fact]
+    public async Task LinkedReadToolsReturnOwnershipAndRejectConflictingScopes()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath!, GlobalConfig.ProjectIdFile), "prj_active\n");
+        var task = TestData.Task("PM-0001", "Linked task", "shared needle");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        Assert.True(new WikiService(projectRoot).CreatePage("guide", "Guide", "shared needle").Success);
+        var tools = CreateTools(projectRoot);
+
+        var tasks = await tools.ListTasks(family: true);
+        var taskSearch = await tools.SearchTasks("needle", project: "current");
+        var taskDetail = await tools.GetTask("PM-0001", "current");
+        var pages = await tools.ListWikiPages(family: true);
+        var wikiSearch = await tools.SearchWikiPages("needle", project: "current");
+        var wikiDetail = await tools.GetWikiPage("guide", "current");
+        var conflicting = await tools.ListTasks(project: "current", family: true);
+
+        Assert.Equal("prj_active", Assert.Single(tasks.Data!.Tasks).Project!.ProjectId);
+        Assert.Equal("prj_active", Assert.Single(taskSearch.Data!.Tasks).Project!.ProjectId);
+        Assert.Equal("prj_active", taskDetail.Data!.Project!.ProjectId);
+        Assert.Contains("title: Linked task", taskDetail.Data.Markdown);
+        Assert.Equal("prj_active", Assert.Single(pages.Data!.Pages).Project!.ProjectId);
+        Assert.Equal("prj_active", Assert.Single(wikiSearch.Data!.Pages).Project!.ProjectId);
+        Assert.Equal("prj_active", wikiDetail.Data!.Project!.ProjectId);
+        Assert.False(conflicting.Success);
+        Assert.Equal("invalid_project_scope", conflicting.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RunWorkerReadToolsRejectLinkedProjectScope()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var assigned = TestData.Task("AGENT-0002", "Assigned task");
+        projectRoot.WriteTask(assigned);
+        projectRoot.UpdateTaskState(assigned, "todo");
+        var tools = CreateTools(projectRoot,
+            capabilityContext: new McpCapabilityContext(McpCapabilityProfile.RunWorker, "AGENT-0002"));
+
+        var taskFamily = await tools.ListTasks(family: true);
+        var taskProject = await tools.GetTask("AGENT-0002", "parent");
+        var wikiFamily = await tools.ListWikiPages(family: true);
+        var wikiProject = await tools.GetWikiPage("guide", "parent");
+
+        Assert.Equal("mcp_project_scope_denied", taskFamily.ErrorCode);
+        Assert.Equal("mcp_project_scope_denied", taskProject.ErrorCode);
+        Assert.Equal("mcp_project_scope_denied", wikiFamily.ErrorCode);
+        Assert.Equal("mcp_project_scope_denied", wikiProject.ErrorCode);
     }
 
     [Fact]
@@ -366,8 +420,8 @@ public class McpToolTests
         projectRoot.UpdateTaskState(limitedOut, "todo");
         var tools = CreateTools(projectRoot);
 
-        var search = tools.SearchTasks("NEEDLE", 1);
-        var blank = tools.SearchTasks(" ");
+        var search = await tools.SearchTasks("NEEDLE", 1);
+        var blank = await tools.SearchTasks(" ");
 
         Assert.True(search.Success);
         Assert.Equal("Returned 1 task search result(s).", search.Summary);
@@ -388,9 +442,9 @@ public class McpToolTests
         Assert.Contains("needle", result.Snippet, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("invalid_task_query", blank.ErrorCode);
 
-        var structured = tools.SearchTasks("state:review milestone:m1");
+        var structured = await tools.SearchTasks("state:review milestone:m1");
         Assert.Equal("PM-0001", Assert.Single(structured.Data!.Tasks).Id);
-        Assert.Equal(3, tools.SearchTasks("in:all").Data!.Tasks.Count);
+        Assert.Equal(3, (await tools.SearchTasks("in:all")).Data!.Tasks.Count);
     }
 
     [Fact]
@@ -539,8 +593,8 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
 
         var created = tools.CreateWikiPage("architecture/rendering", "Rendering", "# Rendering");
-        var list = tools.ListWikiPages();
-        var read = tools.GetWikiPage("architecture/rendering");
+        var list = await tools.ListWikiPages();
+        var read = await tools.GetWikiPage("architecture/rendering");
         var updatedMarkdown = read.Data!.Markdown.Replace("title: Rendering", "title: Render Pipeline")
             .Replace("# Rendering", "# Updated");
         var updated = tools.UpdateWikiPageMarkdown("architecture/rendering", updatedMarkdown);
@@ -627,18 +681,52 @@ public class McpToolTests
     }
 
     [Fact]
+    public void LinkedReadToolSchemasAdvertiseProjectSelectorsAndFamilyScope()
+    {
+        var tools = CreateTools(new ProjectRoot());
+        var aggregateMethods = new[]
+        {
+            nameof(PmMcpTools.ListTasks),
+            nameof(PmMcpTools.SearchTasks),
+            nameof(PmMcpTools.ListWikiPages),
+            nameof(PmMcpTools.SearchWikiPages),
+        };
+        var detailMethods = new[]
+        {
+            nameof(PmMcpTools.GetTask),
+            nameof(PmMcpTools.GetWikiPage),
+        };
+
+        foreach (var methodName in aggregateMethods.Concat(detailMethods))
+        {
+            var method = typeof(PmMcpTools).GetMethod(methodName)!;
+            var tool = McpServerTool.Create(method, tools);
+            using var document = JsonDocument.Parse(JsonSerializer.Serialize(tool.ProtocolTool.InputSchema));
+            var project = document.RootElement.GetProperty("properties").GetProperty("project");
+
+            Assert.Contains("stable project ID", project.GetProperty("description").GetString());
+            Assert.Contains("alias", project.GetProperty("description").GetString());
+            if (aggregateMethods.Contains(methodName))
+            {
+                var family = document.RootElement.GetProperty("properties").GetProperty("family");
+                Assert.Contains("cannot be combined", family.GetProperty("description").GetString());
+            }
+        }
+    }
+
+    [Fact]
     public async Task WikiToolsReturnStableFailures()
     {
         using var workspace = new TempWorkingDirectory();
         var missingTools = CreateTools(new ProjectRoot());
 
-        Assert.Equal("missing_project", missingTools.ListWikiPages().ErrorCode);
+        Assert.Equal("missing_project", (await missingTools.ListWikiPages()).ErrorCode);
 
         var projectRoot = await workspace.CreateProject();
         var tools = CreateTools(projectRoot);
 
         Assert.Equal("invalid_wiki_path", tools.CreateWikiPage("../escape", "Escape").ErrorCode);
-        Assert.Equal("missing_wiki_page", tools.GetWikiPage("missing").ErrorCode);
+        Assert.Equal("missing_wiki_page", (await tools.GetWikiPage("missing")).ErrorCode);
         Assert.Equal("missing_wiki_page", tools.OutlineWikiPage("missing").ErrorCode);
         Assert.True(tools.CreateWikiPage("notes", "Notes").Success);
         Assert.Equal("duplicate_wiki_page", tools.CreateWikiPage("notes", "Duplicate").ErrorCode);
@@ -742,8 +830,8 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
         tools.CreateWikiPage("architecture/rendering", "Rendering", "Canvas rendering details");
 
-        var search = tools.SearchWikiPages("render", 5);
-        var invalidSearch = tools.SearchWikiPages(" ");
+        var search = await tools.SearchWikiPages("render", 5);
+        var invalidSearch = await tools.SearchWikiPages(" ");
         var validation = tools.ValidateProject();
 
         Assert.True(search.Success);
@@ -1003,7 +1091,7 @@ public class McpToolTests
         var tools = CreateTools(projectRoot,
             capabilityContext: new McpCapabilityContext(McpCapabilityProfile.RunWorker, "AGENT-0002"));
 
-        var task = tools.GetTask("AGENT-0002");
+        var task = await tools.GetTask("AGENT-0002");
         var allowed = tools.AppendTaskNote("AGENT-0002", "Allowed note");
         var denied = tools.AppendTaskNote("AGENT-0003", "Denied note");
 
@@ -1077,6 +1165,11 @@ public class McpToolTests
                     RootPath = Path.Combine(registryBasePath, ".test-project-registry"),
                 }),
                 new NullSubmoduleInspector()));
+        var linkedProjectReads = new LinkedProjectReadService(
+            projectRoot,
+            linkedProjectFamily,
+            nextIdService,
+            new LinkedProjectGitInspector());
         return new PmMcpTools(
             projectRoot,
             new TaskService(projectRoot, nextIdService),
@@ -1086,6 +1179,7 @@ public class McpToolTests
             new WikiService(projectRoot),
             new ProjectValidationService(projectRoot, linkedProjects, linkedProjectFamily),
             linkedProjectFamily,
+            linkedProjectReads,
             membershipService,
             capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal));
     }

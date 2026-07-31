@@ -16,6 +16,7 @@ public sealed class PmMcpTools(
     WikiService wikiService,
     ProjectValidationService validationService,
     LinkedProjectFamilyService linkedProjectFamilyService,
+    LinkedProjectReadService linkedProjectReadService,
     IProjectMembershipService? membershipService,
     McpCapabilityContext capabilityContext)
 {
@@ -221,41 +222,86 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "list_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Lists tasks with optional track, milestone, and state filters.")]
-    public McpToolResponse<TaskListPayload> ListTasks(
+    [Description("Lists tasks with optional track, milestone, state, linked-project selector, or family scope.")]
+    public async Task<McpToolResponse<TaskListPayload>> ListTasks(
         string? track = null,
         string? milestone = null,
-        string? state = null)
+        string? state = null,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        [Description("Read across every available project in the linked family; cannot be combined with project.")]
+        bool family = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = boardService.GetBoard(new BoardQuery(NormalizeFilter(track), NormalizeFilter(milestone),
-            NormalizeFilter(state)));
+        if (IsImplicitCurrent(project, family))
+        {
+            var local = boardService.GetBoard(new BoardQuery(
+                NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state)));
+            if (!local.Success) return McpToolResponse<TaskListPayload>.FromFailure(local);
+            var localTasks = local.Payload!.MilestoneGroups
+                .SelectMany(group => group.States)
+                .SelectMany(group => group.Tasks)
+                .Select(task => ToTaskSummary(task))
+                .ToList();
+            return McpToolResponse<TaskListPayload>.Ok(
+                $"Returned {localTasks.Count} task(s).", new TaskListPayload(localTasks));
+        }
+
+        var denied = LinkedReadDenied<TaskListPayload>(project, family);
+        if (denied != null) return denied;
+        var request = LinkedProjectReadRequest.FromOptions(project, family);
+        if (!request.Success) return McpToolResponse<TaskListPayload>.FromFailure(request);
+        var result = await linkedProjectReadService.ListTasksAsync(
+            request.Payload!,
+            new BoardQuery(NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state)),
+            cancellationToken);
         if (!result.Success)
             return McpToolResponse<TaskListPayload>.FromFailure(result);
 
-        var tasks = result.Payload!.MilestoneGroups
-            .SelectMany(group => group.States)
-            .SelectMany(group => group.Tasks)
-            .Select(ToTaskSummary)
+        var tasks = result.Payload!.Items
+            .Select(item => ToTaskSummary(item.Resource, item.Owner))
             .ToList();
 
-        return McpToolResponse<TaskListPayload>.Ok($"Returned {tasks.Count} task(s).", new TaskListPayload(tasks));
+        return McpToolResponse<TaskListPayload>.Ok($"Returned {tasks.Count} task(s).",
+            new TaskListPayload(tasks, ToWarnings(result.Payload.Warnings), result.Payload.Truncated));
     }
 
     [McpServerTool(Name = "search_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown with case-insensitive matching. Structured predicates include state:, id:, track:, milestone:, and in:selection or in:all.")]
-    public McpToolResponse<TaskSearchPayload> SearchTasks(string query, int limit = 20)
+    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown. Supports optional linked-project selection or family scope. Structured predicates include state:, id:, track:, milestone:, and in:selection or in:all.")]
+    public async Task<McpToolResponse<TaskSearchPayload>> SearchTasks(
+        string query,
+        int limit = 20,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        [Description("Search every available project in the linked family; cannot be combined with project.")]
+        bool family = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.SearchTasks(query, limit);
+        if (IsImplicitCurrent(project, family))
+        {
+            var local = taskService.SearchTasks(query, limit);
+            if (!local.Success) return McpToolResponse<TaskSearchPayload>.FromFailure(local);
+            var localTasks = local.Payload!.Select(task => ToTaskSearchResult(task)).ToList();
+            return McpToolResponse<TaskSearchPayload>.Ok(
+                $"Returned {localTasks.Count} task search result(s).", new TaskSearchPayload(localTasks));
+        }
+
+        var denied = LinkedReadDenied<TaskSearchPayload>(project, family);
+        if (denied != null) return denied;
+        var request = LinkedProjectReadRequest.FromOptions(project, family);
+        if (!request.Success) return McpToolResponse<TaskSearchPayload>.FromFailure(request);
+        var result = await linkedProjectReadService.SearchTasksAsync(
+            query, limit, request.Payload, cancellationToken: cancellationToken);
         if (!result.Success)
             return McpToolResponse<TaskSearchPayload>.FromFailure(result);
 
-        var tasks = result.Payload!
-            .Select(ToTaskSearchResult)
+        var tasks = result.Payload!.Items
+            .Select(item => ToTaskSearchResult(item.Resource, item.Owner))
             .ToList();
 
         return McpToolResponse<TaskSearchPayload>.Ok($"Returned {tasks.Count} task search result(s).",
-            new TaskSearchPayload(tasks));
+            new TaskSearchPayload(tasks, ToWarnings(result.Payload.Warnings)));
     }
 
     [McpServerTool(Name = "get_next_task", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -282,39 +328,22 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "get_task", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns a task's metadata, current state, file path, markdown, and description.")]
-    public McpToolResponse<TaskDetailPayload> GetTask(string taskId)
+    [Description("Returns a task's metadata, current state, file path, markdown, description, and owning project. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
+    public async Task<McpToolResponse<TaskDetailPayload>> GetTask(
+        string taskId,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var markdownResult = taskService.ReadTaskMarkdown(taskId);
-        if (!markdownResult.Success)
-            return McpToolResponse<TaskDetailPayload>.FromFailure(markdownResult);
+        if (string.IsNullOrWhiteSpace(project)) return GetLocalTask(taskId);
 
-        if (!projectRoot.TryGetById(taskId, out var task))
-            return McpToolResponse<TaskDetailPayload>.Fail("missing_task", $"Task {taskId} not found.");
-
-        var state = projectRoot.TryGetState(task, out var currentState) ? currentState : string.Empty;
-        var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
-        var dependencies = boardService.GetDependencyStatus(task);
-        var payload = new TaskDetailPayload(
-            task.Id,
-            task.Title,
-            projectRoot.ResolveTaskTrack(task),
-            task.Milestone,
-            priority.Priority,
-            priority.Source,
-            task.CreatedAt,
-            task.ModifiedAt,
-            state,
-            dependencies.DependsOn,
-            dependencies.Ready,
-            dependencies.Summary,
-            dependencies.WaitingOn,
-            dependencies.Missing,
-            projectRoot.GetTaskFilePath(task.Id),
-            markdownResult.Payload!,
-            task.Description);
-
-        return McpToolResponse<TaskDetailPayload>.Ok($"Task {task.Id} loaded.", payload);
+        var denied = LinkedReadDenied<TaskDetailPayload>(project, false);
+        if (denied != null) return denied;
+        var result = await linkedProjectReadService.GetTaskAsync(taskId, project, cancellationToken);
+        if (!result.Success) return McpToolResponse<TaskDetailPayload>.FromFailure(result);
+        var item = result.Payload!.Items.Single();
+        return McpToolResponse<TaskDetailPayload>.Ok($"Task {item.Resource.Task.Id} loaded.",
+            ToTaskDetailPayload(item.Resource, item.Owner, result.Payload.Warnings));
     }
 
     [McpServerTool(Name = "list_tracks", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -534,31 +563,71 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "list_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Lists wiki pages with path, title, modified timestamp, and file path.")]
-    public McpToolResponse<WikiPageListPayload> ListWikiPages()
+    [Description("Lists wiki pages with ownership and optional linked-project selection or family scope.")]
+    public async Task<McpToolResponse<WikiPageListPayload>> ListWikiPages(
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        [Description("Read every available project in the linked family; cannot be combined with project.")]
+        bool family = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.ListPages();
+        if (IsImplicitCurrent(project, family))
+        {
+            var local = wikiService.ListPages();
+            if (!local.Success) return McpToolResponse<WikiPageListPayload>.FromFailure(local);
+            var localPages = local.Payload!
+                .Select(page => new WikiPageSummaryPayload(page.Path, page.Title, page.ModifiedAt, page.FilePath))
+                .ToList();
+            return McpToolResponse<WikiPageListPayload>.Ok(
+                $"Returned {localPages.Count} wiki page(s).", new WikiPageListPayload(localPages));
+        }
+
+        var denied = LinkedReadDenied<WikiPageListPayload>(project, family);
+        if (denied != null) return denied;
+        var request = LinkedProjectReadRequest.FromOptions(project, family);
+        if (!request.Success) return McpToolResponse<WikiPageListPayload>.FromFailure(request);
+        var result = await linkedProjectReadService.ListWikiPagesAsync(request.Payload!, cancellationToken);
         if (!result.Success)
             return McpToolResponse<WikiPageListPayload>.FromFailure(result);
 
-        var pages = result.Payload!
-            .Select(page => new WikiPageSummaryPayload(page.Path, page.Title, page.ModifiedAt, page.FilePath))
+        var pages = result.Payload!.Items
+            .Select(item => new WikiPageSummaryPayload(
+                item.Resource.Path,
+                item.Resource.Title,
+                item.Resource.ModifiedAt,
+                item.Resource.FilePath,
+                ToOwner(item.Owner)))
             .ToList();
 
         return McpToolResponse<WikiPageListPayload>.Ok($"Returned {pages.Count} wiki page(s).",
-            new WikiPageListPayload(pages));
+            new WikiPageListPayload(pages, ToWarnings(result.Payload.Warnings), result.Payload.Truncated));
     }
 
     [McpServerTool(Name = "get_wiki_page", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns a wiki page's metadata, file path, full markdown, and markdown body.")]
-    public McpToolResponse<WikiPagePayload> GetWikiPage(string path)
+    [Description("Returns a wiki page's metadata, full markdown, body, and owning project. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
+    public async Task<McpToolResponse<WikiPagePayload>> GetWikiPage(
+        string path,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.ReadPage(path);
-        return result.Success
-            ? McpToolResponse<WikiPagePayload>.Ok($"Wiki page {result.Payload!.Path} loaded.",
-                ToWikiPagePayload(result.Payload))
-            : McpToolResponse<WikiPagePayload>.FromFailure(result);
+        if (string.IsNullOrWhiteSpace(project))
+        {
+            var local = wikiService.ReadPage(path);
+            return local.Success
+                ? McpToolResponse<WikiPagePayload>.Ok($"Wiki page {local.Payload!.Path} loaded.",
+                    ToWikiPagePayload(local.Payload))
+                : McpToolResponse<WikiPagePayload>.FromFailure(local);
+        }
+
+        var denied = LinkedReadDenied<WikiPagePayload>(project, false);
+        if (denied != null) return denied;
+        var result = await linkedProjectReadService.GetWikiPageAsync(path, project, cancellationToken);
+        if (!result.Success) return McpToolResponse<WikiPagePayload>.FromFailure(result);
+        var item = result.Payload!.Items.Single();
+        return McpToolResponse<WikiPagePayload>.Ok($"Wiki page {item.Resource.Path} loaded.",
+            ToWikiPagePayload(item.Resource, item.Owner, result.Payload.Warnings));
     }
 
     [McpServerTool(Name = "outline_wiki_page", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -575,24 +644,47 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "search_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Searches wiki page title, path, and body with case-insensitive matching.")]
-    public McpToolResponse<WikiSearchPayload> SearchWikiPages(string query, int limit = 20)
+    [Description("Searches wiki page title, path, and body with optional linked-project selection or family scope.")]
+    public async Task<McpToolResponse<WikiSearchPayload>> SearchWikiPages(
+        string query,
+        int limit = 20,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        [Description("Search every available project in the linked family; cannot be combined with project.")]
+        bool family = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.SearchPages(query, limit);
+        if (IsImplicitCurrent(project, family))
+        {
+            var local = wikiService.SearchPages(query, limit);
+            if (!local.Success) return McpToolResponse<WikiSearchPayload>.FromFailure(local);
+            var localPages = local.Payload!.Select(page => new WikiSearchResultPayload(
+                page.Path, page.Title, page.ModifiedAt, page.FilePath, page.MatchCount, page.Snippet)).ToList();
+            return McpToolResponse<WikiSearchPayload>.Ok(
+                $"Returned {localPages.Count} wiki search result(s).", new WikiSearchPayload(localPages));
+        }
+
+        var denied = LinkedReadDenied<WikiSearchPayload>(project, family);
+        if (denied != null) return denied;
+        var request = LinkedProjectReadRequest.FromOptions(project, family);
+        if (!request.Success) return McpToolResponse<WikiSearchPayload>.FromFailure(request);
+        var result = await linkedProjectReadService.SearchWikiPagesAsync(
+            query, limit, request.Payload, cancellationToken);
         if (!result.Success)
             return McpToolResponse<WikiSearchPayload>.FromFailure(result);
 
-        var pages = result.Payload!
-            .Select(page => new WikiSearchResultPayload(
-                page.Path,
-                page.Title,
-                page.ModifiedAt,
-                page.FilePath,
-                page.MatchCount,
-                page.Snippet))
+        var pages = result.Payload!.Items
+            .Select(item => new WikiSearchResultPayload(
+                item.Resource.Path,
+                item.Resource.Title,
+                item.Resource.ModifiedAt,
+                item.Resource.FilePath,
+                item.Resource.MatchCount,
+                item.Resource.Snippet,
+                ToOwner(item.Owner)))
             .ToList();
         return McpToolResponse<WikiSearchPayload>.Ok($"Returned {pages.Count} wiki search result(s).",
-            new WikiSearchPayload(pages));
+            new WikiSearchPayload(pages, ToWarnings(result.Payload.Warnings)));
     }
 
     [McpServerTool(Name = "create_wiki_page", Destructive = false, OpenWorld = false,
@@ -815,7 +907,9 @@ public sealed class PmMcpTools(
             .ToList();
     }
 
-    private static TaskSummaryPayload ToTaskSummary(BoardTask task)
+    private static TaskSummaryPayload ToTaskSummary(
+        BoardTask task,
+        LinkedProjectResourceOwner? owner = null)
     {
         return new TaskSummaryPayload(
             task.Task.Id,
@@ -831,10 +925,13 @@ public sealed class PmMcpTools(
             task.Dependencies.WaitingOn,
             task.Dependencies.Missing,
             task.DescriptionPreview,
-            task.FilePath);
+            task.FilePath,
+            owner == null ? null : ToOwner(owner));
     }
 
-    private static TaskSearchResultPayload ToTaskSearchResult(TaskSearchResult task)
+    private static TaskSearchResultPayload ToTaskSearchResult(
+        TaskSearchResult task,
+        LinkedProjectResourceOwner? owner = null)
     {
         return new TaskSearchResultPayload(
             task.Task.Id,
@@ -852,7 +949,8 @@ public sealed class PmMcpTools(
             task.DescriptionPreview,
             task.FilePath,
             task.MatchCount,
-            task.Snippet);
+            task.Snippet,
+            owner == null ? null : ToOwner(owner));
     }
 
     private TaskDetailPayload ToTaskDetailPayload(TaskItem task)
@@ -881,7 +979,49 @@ public sealed class PmMcpTools(
             task.Description);
     }
 
-    private static WikiPagePayload ToWikiPagePayload(WikiPageData page)
+    private McpToolResponse<TaskDetailPayload> GetLocalTask(string taskId)
+    {
+        var markdownResult = taskService.ReadTaskMarkdown(taskId);
+        if (!markdownResult.Success)
+            return McpToolResponse<TaskDetailPayload>.FromFailure(markdownResult);
+        if (!projectRoot.TryGetById(taskId, out var task))
+            return McpToolResponse<TaskDetailPayload>.Fail("missing_task", $"Task {taskId} not found.");
+
+        return McpToolResponse<TaskDetailPayload>.Ok(
+            $"Task {task.Id} loaded.", ToTaskDetailPayload(task));
+    }
+
+    private static TaskDetailPayload ToTaskDetailPayload(
+        BoardTask task,
+        LinkedProjectResourceOwner owner,
+        IReadOnlyList<LinkedProjectFamilyWarning> warnings)
+    {
+        return new TaskDetailPayload(
+            task.Task.Id,
+            task.Task.Title,
+            task.Track,
+            task.Milestone,
+            task.Priority,
+            task.PrioritySource,
+            task.Task.CreatedAt,
+            task.Task.ModifiedAt,
+            task.State,
+            task.Dependencies.DependsOn,
+            task.Dependencies.Ready,
+            task.Dependencies.Summary,
+            task.Dependencies.WaitingOn,
+            task.Dependencies.Missing,
+            task.FilePath,
+            task.Markdown ?? task.Task.ToMarkdown(),
+            task.Task.Description,
+            ToOwner(owner),
+            ToWarnings(warnings));
+    }
+
+    private static WikiPagePayload ToWikiPagePayload(
+        WikiPageData page,
+        LinkedProjectResourceOwner? owner = null,
+        IReadOnlyList<LinkedProjectFamilyWarning>? warnings = null)
     {
         return new WikiPagePayload(
             page.Path,
@@ -890,7 +1030,9 @@ public sealed class PmMcpTools(
             page.ModifiedAt,
             page.FilePath,
             page.Markdown,
-            page.Body);
+            page.Body,
+            owner == null ? null : ToOwner(owner),
+            warnings == null ? null : ToWarnings(warnings));
     }
 
     private static WikiPageOutlinePayload ToWikiPageOutlinePayload(WikiPageOutlineData page)
@@ -915,6 +1057,33 @@ public sealed class PmMcpTools(
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    private static bool IsImplicitCurrent(string? project, bool family) =>
+        !family && string.IsNullOrWhiteSpace(project);
+
+    private McpToolResponse<T>? LinkedReadDenied<T>(string? project, bool family)
+    {
+        return capabilityContext.CanReadLinkedProjects(project, family)
+            ? null
+            : McpToolResponse<T>.Fail(
+                "mcp_project_scope_denied",
+                "The run-worker MCP profile may only read the current project.");
+    }
+
+    private static LinkedProjectOwnerPayload ToOwner(LinkedProjectResourceOwner owner) =>
+        new(owner.ProjectId, owner.ProjectName, owner.Alias,
+            LinkedProjectFamilyService.Format(owner.Relationship), owner.Revision, owner.Dirty);
+
+    private static IReadOnlyList<LinkedProjectWarningPayload> ToWarnings(
+        IReadOnlyList<LinkedProjectFamilyWarning> warnings) =>
+        warnings.Select(warning => new LinkedProjectWarningPayload(
+            warning.Code,
+            warning.Message,
+            warning.DeclaringProjectId,
+            warning.TargetProjectId,
+            warning.Alias,
+            LinkedProjectFamilyService.Format(warning.Status),
+            warning.RepairAction?.DisplayCommand)).ToList();
 
     private static ProjectMemberPayload ToMembershipPayload(ProjectMember member) =>
         new(member.UserId, member.DisplayName, member.PublicKey, member.Fingerprint, member.Role, member.IsLocal);

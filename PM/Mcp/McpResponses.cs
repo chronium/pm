@@ -62,9 +62,14 @@ public sealed record ProjectInvitationsPayload(IReadOnlyList<ProjectInvitationPa
 
 public sealed record CreatedProjectInvitationPayload(ProjectInvitationPayload Invitation, string Token);
 
-public sealed record TaskListPayload(IReadOnlyList<TaskSummaryPayload> Tasks);
+public sealed record TaskListPayload(
+    IReadOnlyList<TaskSummaryPayload> Tasks,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null,
+    bool Truncated = false);
 
-public sealed record TaskSearchPayload(IReadOnlyList<TaskSearchResultPayload> Tasks);
+public sealed record TaskSearchPayload(
+    IReadOnlyList<TaskSearchResultPayload> Tasks,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
 public sealed record NextTaskPayload(bool Found, TaskSummaryPayload? Task, string Reason);
 
@@ -82,7 +87,8 @@ public sealed record TaskSummaryPayload(
     IReadOnlyList<string> WaitingOnDependencies,
     IReadOnlyList<string> MissingDependencies,
     string DescriptionPreview,
-    string FilePath);
+    string FilePath,
+    LinkedProjectOwnerPayload? Project = null);
 
 public sealed record TaskSearchResultPayload(
     string Id,
@@ -100,7 +106,8 @@ public sealed record TaskSearchResultPayload(
     string DescriptionPreview,
     string FilePath,
     int MatchCount,
-    string Snippet);
+    string Snippet,
+    LinkedProjectOwnerPayload? Project = null);
 
 public sealed record TaskDetailPayload(
     string Id,
@@ -119,7 +126,9 @@ public sealed record TaskDetailPayload(
     IReadOnlyList<string> MissingDependencies,
     string FilePath,
     string Markdown,
-    string Description);
+    string Description,
+    LinkedProjectOwnerPayload? Project = null,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
 public sealed record CreatedTaskPayload(string Id, string Title, string Track, string? Milestone, string FilePath);
 
@@ -159,13 +168,17 @@ public sealed record BulkMilestoneAssignmentPayload(
     int RequestedCount,
     int UpdatedCount);
 
-public sealed record WikiPageListPayload(IReadOnlyList<WikiPageSummaryPayload> Pages);
+public sealed record WikiPageListPayload(
+    IReadOnlyList<WikiPageSummaryPayload> Pages,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null,
+    bool Truncated = false);
 
 public sealed record WikiPageSummaryPayload(
     string Path,
     string Title,
     DateTime ModifiedAt,
-    string FilePath);
+    string FilePath,
+    LinkedProjectOwnerPayload? Project = null);
 
 public sealed record WikiPagePayload(
     string Path,
@@ -174,7 +187,9 @@ public sealed record WikiPagePayload(
     DateTime ModifiedAt,
     string FilePath,
     string Markdown,
-    string Body);
+    string Body,
+    LinkedProjectOwnerPayload? Project = null,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
 public sealed record WikiPageOutlinePayload(
     string Path,
@@ -196,7 +211,9 @@ public sealed record WikiPagePatchPayload(
     WikiPagePayload Page,
     string Version);
 
-public sealed record WikiSearchPayload(IReadOnlyList<WikiSearchResultPayload> Pages);
+public sealed record WikiSearchPayload(
+    IReadOnlyList<WikiSearchResultPayload> Pages,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
 public sealed record WikiSearchResultPayload(
     string Path,
@@ -204,7 +221,8 @@ public sealed record WikiSearchResultPayload(
     DateTime ModifiedAt,
     string FilePath,
     int MatchCount,
-    string Snippet);
+    string Snippet,
+    LinkedProjectOwnerPayload? Project = null);
 
 public sealed record ProjectValidationPayload(
     bool Valid,
@@ -239,6 +257,14 @@ public sealed record LinkedProjectWarningPayload(
     string? Alias,
     string Status,
     string? RepairCommand);
+
+public sealed record LinkedProjectOwnerPayload(
+    string ProjectId,
+    string Name,
+    string? Alias,
+    string Relationship,
+    string? Revision,
+    bool? Dirty);
 
 public sealed record LinkedProjectFamilyPayload(
     string ActiveProjectId,
