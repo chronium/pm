@@ -1,7 +1,7 @@
 ---
 title: Static Site Publishing
 createdAt: 2026-07-27T06:14:45.2936720Z
-modifiedAt: 2026-07-27T06:14:45.2936720Z
+modifiedAt: 2026-07-31T08:29:23.8605280Z
 ---
 
 PM can export the Angular UI as a backend-free, read-only project site. This is useful for public project status, documentation, demos, and GitHub Pages.
@@ -36,6 +36,14 @@ Static mode preserves:
 - themes and responsive layouts
 
 Settings and every mutation action are hidden because there is no backend.
+
+## Linked project sites
+
+Projects in a linked family still publish independent artifacts. Configure `publicSiteUrl` on parent or child declarations to make those sites available from the static project switcher and from canonical `pm://project/...` task and wiki links.
+
+Publishing never requires linked checkouts. When a child can read its parent, it may include sibling publication metadata from the parent's ordered declarations. If that parent is absent, the child still publishes with the direct parent hint it already owns. Targets without a public URL remain visible but unavailable.
+
+A published URL may include a hosting path and query. PM preserves both and replaces only its fragment with the target hash route. Static output never converts a missing public URL into a local checkout path.
 
 ## Data boundary
 

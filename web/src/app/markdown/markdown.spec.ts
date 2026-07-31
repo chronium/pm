@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MarkdownDisplay } from './markdown-display';
 import { MarkdownEditor } from './markdown-editor';
 import { MarkdownService } from './markdown.service';
+import { StaticProjectLinksService } from '../static/static-project-links.service';
 
 describe('Markdown components', () => {
   it('renders Markdown and removes unsafe markup without bypassing Angular sanitization', () => {
@@ -22,6 +23,29 @@ describe('Markdown components', () => {
     const html = renderer.render('**Bold** <a href="javascript:alert(1)">bad</a>');
     expect(html).toContain('<strong>Bold</strong>');
     expect(html).not.toContain('javascript:');
+  });
+
+  it('rewrites available project links and degrades unavailable links to safe text', () => {
+    TestBed.overrideProvider(StaticProjectLinksService, {
+      useValue: {
+        resolve: (href: string) =>
+          href.includes('available')
+            ? { kind: 'available', href: 'https://example.test/site/#/wiki/page', local: false }
+            : href.startsWith('pm://')
+              ? { kind: 'unavailable', reason: 'No published site.' }
+              : { kind: 'not-project-link' },
+      },
+    });
+    const renderer = TestBed.inject(MarkdownService);
+
+    const html = renderer.render(
+      '[Published](pm://project/available/wiki/page) [Missing](pm://project/missing/wiki/page)',
+    );
+
+    expect(html).toContain('href="https://example.test/site/#/wiki/page"');
+    expect(html).toContain('class="pm-unavailable-link"');
+    expect(html).toContain('title="No published site."');
+    expect(html).not.toContain('pm://');
   });
 
   it('initializes the editor, synchronizes external values, and restores the textarea on cleanup', async () => {

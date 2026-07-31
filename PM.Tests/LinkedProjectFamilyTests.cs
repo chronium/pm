@@ -31,7 +31,7 @@ public sealed class LinkedProjectFamilyTests
         {
             Children =
             [
-                Declaration("prj_royale", "royale", "royale"),
+                Declaration("prj_royale", "royale", "royale", "https://example.test/royale/"),
                 Declaration("prj_starfall", "starfall", "starfall"),
             ],
         });
@@ -56,6 +56,7 @@ public sealed class LinkedProjectFamilyTests
             Assert.True(member.Readable);
             Assert.False(member.WriteTrusted);
         });
+        Assert.Equal("https://example.test/royale/", result.Payload.Members[1].PublicSiteUrl);
         Assert.Empty(result.Payload.Warnings);
     }
 
@@ -283,12 +284,14 @@ public sealed class LinkedProjectFamilyTests
     private static LinkedProjectDeclaration Declaration(
         string projectId,
         string alias,
-        string pathHint) => new()
+        string pathHint,
+        string? publicSiteUrl = null) => new()
     {
         ProjectId = projectId,
         Alias = alias,
         RepositoryUrl = $"https://example.test/{projectId}.git",
         PathHint = pathHint,
+        PublicSiteUrl = publicSiteUrl,
     };
 
     private static async Task<ProjectRoot> CreateProject(

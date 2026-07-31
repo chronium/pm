@@ -19,8 +19,12 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
         WriteIndented = true,
     };
 
-    public AppResult<string> Build(string? output, bool force, IAngularAssetStore assets,
-        DateTimeOffset generatedAt)
+    public async Task<AppResult<string>> BuildAsync(
+        string? output,
+        bool force,
+        IAngularAssetStore assets,
+        DateTimeOffset generatedAt,
+        CancellationToken cancellationToken = default)
     {
         if (!projectRoot.Exists || projectRoot.RootPath == null)
             return AppResult<string>.Fail("missing_project", "Project not found. Run pm init first.");
@@ -41,7 +45,7 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
         if (File.Exists(destination))
             return AppResult<string>.Fail("site_output_exists", $"Output path '{destination}' is an existing file.");
 
-        var snapshotResult = snapshotBuilder.Build(generatedAt);
+        var snapshotResult = await snapshotBuilder.BuildAsync(generatedAt, cancellationToken);
         if (!snapshotResult.Success)
             return AppResult<string>.Fail(snapshotResult.ErrorCode!, snapshotResult.Message!);
 

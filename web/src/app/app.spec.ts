@@ -9,6 +9,8 @@ import { LayoutService } from './core/layout.service';
 import { TaskNavigationService } from './tasks/task-navigation.service';
 import { SyncStatusService } from './core/sync-status.service';
 import { StaticModeService } from './static/static-mode.service';
+import { StaticSnapshotStore } from './static/static-snapshot.interceptor';
+import { of } from 'rxjs';
 
 describe('application shell', () => {
   beforeEach(async () => {
@@ -210,6 +212,14 @@ describe('application shell', () => {
   it('hides backend sync status from read-only static snapshots', () => {
     TestBed.overrideProvider(StaticModeService, {
       useValue: { enabled: true, generatedAt: null, snapshotUrl: './pm-snapshot.json' },
+    });
+    TestBed.overrideProvider(StaticSnapshotStore, {
+      useValue: {
+        snapshot: of({
+          project: { name: 'Static PM' },
+          linkedProjects: [],
+        }),
+      },
     });
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();

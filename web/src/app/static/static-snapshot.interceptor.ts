@@ -27,6 +27,8 @@ type WikiPage = components['schemas']['WikiPageResponse'];
 export interface StaticSnapshot {
   schemaVersion: number;
   generatedAt: string;
+  projectId: string | null;
+  linkedProjects: StaticLinkedProject[];
   project: ProjectResponse;
   settings: SettingsResponse;
   navigation: NavigationResponse;
@@ -34,6 +36,14 @@ export interface StaticSnapshot {
   tasks: Omit<TaskResponse, 'localMetadata'>[];
   wikiIndex: WikiSummary[];
   wikiPages: Omit<WikiPage, 'localMetadata'>[];
+}
+
+export interface StaticLinkedProject {
+  projectId: string;
+  name: string;
+  alias: string | null;
+  relationship: 'parent' | 'child' | 'sibling';
+  publicSiteUrl: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -75,12 +85,14 @@ export function staticSnapshotInterceptor(
 
 export function validateSnapshot(value: unknown): StaticSnapshot {
   if (!isRecord(value)) throw new Error('The static snapshot is malformed.');
-  if (value['schemaVersion'] !== 2)
+  if (value['schemaVersion'] !== 3)
     throw new Error(
       `Unsupported static snapshot schema version: ${String(value['schemaVersion'])}.`,
     );
   for (const key of [
     'generatedAt',
+    'projectId',
+    'linkedProjects',
     'project',
     'settings',
     'navigation',
@@ -92,12 +104,38 @@ export function validateSnapshot(value: unknown): StaticSnapshot {
     if (!(key in value)) throw new Error(`The static snapshot is malformed: missing ${key}.`);
   }
   if (
+    !Array.isArray(value['linkedProjects']) ||
     !Array.isArray(value['tasks']) ||
     !Array.isArray(value['wikiIndex']) ||
     !Array.isArray(value['wikiPages'])
   )
     throw new Error('The static snapshot is malformed: expected snapshot collections.');
+  if (value['projectId'] !== null && typeof value['projectId'] !== 'string')
+    throw new Error('The static snapshot is malformed: invalid projectId.');
+  if (!value['linkedProjects'].every(isLinkedProject))
+    throw new Error('The static snapshot is malformed: invalid linkedProjects.');
   return value as unknown as StaticSnapshot;
+}
+
+function isLinkedProject(value: unknown): value is StaticLinkedProject {
+  if (!isRecord(value)) return false;
+  const publicSiteUrl = value['publicSiteUrl'];
+  return (
+    typeof value['projectId'] === 'string' &&
+    typeof value['name'] === 'string' &&
+    (value['alias'] === null || typeof value['alias'] === 'string') &&
+    ['parent', 'child', 'sibling'].includes(String(value['relationship'])) &&
+    (publicSiteUrl === null || (typeof publicSiteUrl === 'string' && isHttpUrl(publicSiteUrl)))
+  );
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export function adaptGet(snapshot: StaticSnapshot, request: HttpRequest<unknown>): unknown {

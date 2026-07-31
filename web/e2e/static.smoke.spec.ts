@@ -28,7 +28,32 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
     expect(headerLayout.topbarScrollWidth).toBeLessThanOrEqual(headerLayout.topbarClientWidth);
   } else {
     await expect(modeCount.locator('.mode-count-suffix')).toBeVisible();
+    const tasksLabel = await page
+      .getByRole('link', { name: /Tasks \d+ tasks left/ })
+      .getByText('Tasks', { exact: true })
+      .boundingBox();
+    const boardSurface = await page.locator('.pm-board-surface').boundingBox();
+    const workspaceInset = tasksLabel!.x - boardSurface!.x;
+    expect(workspaceInset).toBeGreaterThanOrEqual(8);
+    expect(workspaceInset).toBeLessThanOrEqual(16);
   }
+  await page.getByRole('button', { name: /switch project/i }).click();
+  const projectMenu = page.locator('.project-switcher-menu');
+  await expect(projectMenu).toBeVisible();
+  const menuReceivesPointer = await projectMenu.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const target = document.elementFromPoint(bounds.left + 8, bounds.top + 8);
+    return target !== null && element.contains(target);
+  });
+  expect(menuReceivesPointer).toBe(true);
+  const publishedProject = page.getByRole('link', { name: /published child/i });
+  await expect(publishedProject).toBeVisible();
+  await expect(publishedProject).toHaveAttribute('href', /\/published\/\?source=fixture#old$/);
+  await expect(page.locator('.project-switcher-unavailable')).toHaveAttribute(
+    'title',
+    /does not publish/,
+  );
+
   const taskSearch = page.getByRole('combobox', { name: 'Search tasks' });
   const mobileTaskSearch = page.getByRole('button', { name: 'Search tasks' });
   if (await mobileTaskSearch.isVisible()) {
@@ -78,7 +103,7 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   }
 
   await page.goto('/#/tasks/E2E-0006');
-  await page.getByRole('link', { name: 'E2E-0005' }).click();
+  await page.getByRole('link', { name: 'pm://project/playwright-project/task/E2E-0005' }).click();
   await expect(page).toHaveURL(/#\/tasks\/E2E-0005$/);
 
   await page.goto('/#/wiki/guides/section-1');
@@ -98,6 +123,17 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   await expect(page.getByRole('link', { name: 'Metadata' })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Wiki page 2' })).toBeVisible();
+
+  await page.goto('/#/wiki/welcome');
+  await expect(page.getByRole('link', { name: 'Current task' })).toHaveAttribute(
+    'href',
+    '#/tasks/E2E-0001',
+  );
+  await expect(page.getByRole('link', { name: 'Published wiki' })).toHaveAttribute(
+    'href',
+    /\/published\/\?source=fixture#\/wiki\/guide\/hello%20world$/,
+  );
+  await expect(page.getByText('Unavailable wiki')).toHaveAttribute('title', /does not publish/);
 
   const parsed = requests.map((url) => new URL(url));
   expect(parsed.every((url) => url.hostname === '127.0.0.1' || url.hostname === 'localhost')).toBe(

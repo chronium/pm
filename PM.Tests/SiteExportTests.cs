@@ -27,10 +27,11 @@ public class SiteExportTests
         projectRoot.UpdateTaskState(task, "todo");
         Assert.True(new WikiService(projectRoot).CreatePage("guide/nested", "Nested guide", "Wiki body").Success);
 
-        var snapshot = CreateSnapshotBuilder(projectRoot).Build(GeneratedAt);
+        var snapshot = await CreateSnapshotBuilder(projectRoot).BuildAsync(GeneratedAt);
 
         Assert.True(snapshot.Success);
-        var json = SiteExportService.SerializeSnapshot(snapshot.Payload!);
+        var payload = snapshot.Payload!;
+        var json = SiteExportService.SerializeSnapshot(payload);
         Assert.Contains("Private task body", json);
         Assert.Contains("PM-0001", json);
         Assert.Contains("guide/nested", json);
@@ -40,7 +41,75 @@ public class SiteExportTests
         Assert.DoesNotContain("nextId", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret-next-id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(projectRoot.RootPath, json, StringComparison.Ordinal);
-        Assert.Equal(json, SiteExportService.SerializeSnapshot(snapshot.Payload!));
+        Assert.Equal(3, payload.SchemaVersion);
+        Assert.Null(payload.ProjectId);
+        Assert.Empty(payload.LinkedProjects);
+        Assert.Equal(json, SiteExportService.SerializeSnapshot(payload));
+    }
+
+    [Fact]
+    public async Task SnapshotPublishesLinkedSiteMetadataWithoutRequiringTheLinkedCheckout()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile),
+            "prj_games\n");
+        projectRoot.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_royale",
+                    Alias = "royale",
+                    RepositoryUrl = "https://example.test/royale.git",
+                    PathHint = "missing-royale",
+                    PublicSiteUrl = "https://example.test/sites/royale/?source=games#old",
+                },
+            ],
+        });
+
+        var snapshot = await CreateSnapshotBuilder(projectRoot).BuildAsync(GeneratedAt);
+
+        Assert.True(snapshot.Success, snapshot.Message);
+        Assert.Equal("prj_games", snapshot.Payload!.ProjectId);
+        var linked = Assert.Single(snapshot.Payload.LinkedProjects);
+        Assert.Equal("prj_royale", linked.ProjectId);
+        Assert.Equal("royale", linked.Name);
+        Assert.Equal("child", linked.Relationship);
+        Assert.Equal("https://example.test/sites/royale/?source=games#old", linked.PublicSiteUrl);
+        var json = SiteExportService.SerializeSnapshot(snapshot.Payload);
+        Assert.DoesNotContain("repositoryPath", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("missing-royale", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ChildSnapshotKeepsItsParentSiteHintWhenTheParentCheckoutIsMissing()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile),
+            "prj_royale\n");
+        projectRoot.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = new LinkedProjectDeclaration
+            {
+                ProjectId = "prj_games",
+                Alias = "games",
+                RepositoryUrl = "https://example.test/games.git",
+                PathHint = "missing-games",
+                PublicSiteUrl = "https://example.test/sites/games/",
+            },
+        });
+
+        var snapshot = await CreateSnapshotBuilder(projectRoot).BuildAsync(GeneratedAt);
+
+        Assert.True(snapshot.Success, snapshot.Message);
+        var parent = Assert.Single(snapshot.Payload!.LinkedProjects);
+        Assert.Equal("parent", parent.Relationship);
+        Assert.Equal("https://example.test/sites/games/", parent.PublicSiteUrl);
     }
 
     [Fact]
@@ -54,7 +123,7 @@ public class SiteExportTests
             ["assets/main.js"] = "console.log('site')",
         });
 
-        var result = CreateExportService(projectRoot).Build("public", false, assets, GeneratedAt);
+        var result = await CreateExportService(projectRoot).BuildAsync("public", false, assets, GeneratedAt);
 
         Assert.True(result.Success, result.Message);
         var index = File.ReadAllText(Path.Combine(result.Payload!, "index.html"));
@@ -76,8 +145,8 @@ public class SiteExportTests
         File.WriteAllText(Path.Combine(output, "old.txt"), "old");
         var service = CreateExportService(projectRoot);
 
-        var rejected = service.Build(output, false, ValidAssets(), GeneratedAt);
-        var replaced = service.Build(output, true, ValidAssets(), GeneratedAt);
+        var rejected = await service.BuildAsync(output, false, ValidAssets(), GeneratedAt);
+        var replaced = await service.BuildAsync(output, true, ValidAssets(), GeneratedAt);
 
         Assert.False(rejected.Success);
         Assert.Equal("site_output_exists", rejected.ErrorCode);
@@ -100,7 +169,7 @@ public class SiteExportTests
             ["../escape.js"] = "bad",
         });
 
-        var result = CreateExportService(projectRoot).Build(output, true, invalidAssets, GeneratedAt);
+        var result = await CreateExportService(projectRoot).BuildAsync(output, true, invalidAssets, GeneratedAt);
 
         Assert.False(result.Success);
         Assert.Equal("keep", File.ReadAllText(Path.Combine(output, "keep.txt")));
@@ -116,15 +185,15 @@ public class SiteExportTests
         var projectDirectory = Directory.GetParent(projectRoot.RootPath)!.FullName;
 
         Assert.Equal("missing_angular_assets",
-            service.Build("site", false, new MemoryAssetStore(new Dictionary<string, string>()), GeneratedAt).ErrorCode);
+            (await service.BuildAsync("site", false, new MemoryAssetStore(new Dictionary<string, string>()), GeneratedAt)).ErrorCode);
         Assert.Equal("unsafe_site_output",
-            service.Build(projectDirectory, false, ValidAssets(), GeneratedAt).ErrorCode);
+            (await service.BuildAsync(projectDirectory, false, ValidAssets(), GeneratedAt)).ErrorCode);
         Assert.Equal("unsafe_site_output",
-            service.Build(projectRoot.RootPath, false, ValidAssets(), GeneratedAt).ErrorCode);
+            (await service.BuildAsync(projectRoot.RootPath, false, ValidAssets(), GeneratedAt)).ErrorCode);
         Assert.Equal("unsafe_site_output",
-            service.Build(Path.Combine(projectRoot.RootPath, "site"), false, ValidAssets(), GeneratedAt).ErrorCode);
+            (await service.BuildAsync(Path.Combine(projectRoot.RootPath, "site"), false, ValidAssets(), GeneratedAt)).ErrorCode);
         Assert.Equal("unsafe_site_output",
-            service.Build(Directory.GetParent(projectDirectory)!.FullName, false, ValidAssets(), GeneratedAt).ErrorCode);
+            (await service.BuildAsync(Directory.GetParent(projectDirectory)!.FullName, false, ValidAssets(), GeneratedAt)).ErrorCode);
     }
 
     [Fact]
@@ -137,19 +206,19 @@ public class SiteExportTests
         Directory.CreateDirectory(target);
         Directory.CreateSymbolicLink(link, target);
 
-        var result = CreateExportService(projectRoot).Build(link, true, ValidAssets(), GeneratedAt);
+        var result = await CreateExportService(projectRoot).BuildAsync(link, true, ValidAssets(), GeneratedAt);
 
         Assert.False(result.Success);
         Assert.Equal("unsafe_site_output", result.ErrorCode);
     }
 
     [Fact]
-    public void BuildOutsideProjectFailsClearly()
+    public async Task BuildOutsideProjectFailsClearly()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
 
-        var result = CreateExportService(projectRoot).Build("site", false, ValidAssets(), GeneratedAt);
+        var result = await CreateExportService(projectRoot).BuildAsync("site", false, ValidAssets(), GeneratedAt);
 
         Assert.False(result.Success);
         Assert.Equal("missing_project", result.ErrorCode);
@@ -159,7 +228,13 @@ public class SiteExportTests
         new(projectRoot, CreateSnapshotBuilder(projectRoot));
 
     private static SiteSnapshotBuilder CreateSnapshotBuilder(ProjectRoot projectRoot) =>
-        new(new ProjectConfigService(projectRoot), new BoardService(projectRoot), new WikiService(projectRoot));
+        new(
+            projectRoot,
+            new ProjectConfigService(projectRoot),
+            new BoardService(projectRoot),
+            new WikiService(projectRoot),
+            new LinkedProjectService(projectRoot),
+            LinkedProjectFamilyService.CreateDefault(projectRoot));
 
     private static MemoryAssetStore ValidAssets() => new(new Dictionary<string, string>
     {

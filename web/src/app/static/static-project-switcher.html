@@ -1,0 +1,36 @@
+@if (snapshot | async; as value) {
+  @if (value.linkedProjects.length) {
+    <details class="project-switcher">
+      <summary role="button" [attr.aria-label]="'Switch project from ' + value.project.name">
+        <span class="project-switcher-name">{{ value.project.name }}</span>
+        <ng-icon class="project-switcher-caret" name="cssChevronRight" aria-hidden="true" />
+      </summary>
+      <div class="project-switcher-menu">
+        <span class="project-switcher-current" aria-current="page">
+          <span>{{ value.project.name }}</span>
+          <small>Current project</small>
+        </span>
+        @for (project of value.linkedProjects; track project.projectId) {
+          @if (project.publicSiteUrl) {
+            <a [href]="project.publicSiteUrl">
+              <span>{{ project.name }}</span>
+              <small>{{ project.relationship }}</small>
+            </a>
+          } @else {
+            <span
+              class="project-switcher-unavailable"
+              [title]="project.name + ' does not publish a static site URL.'"
+            >
+              <span>{{ project.name }}</span>
+              <small>{{ project.relationship }} · unavailable</small>
+            </span>
+          }
+        }
+      </div>
+    </details>
+  } @else {
+    <a class="brand" routerLink="/tasks" aria-label="PM home">{{ value.project.name }}</a>
+  }
+} @else {
+  <span class="brand" aria-label="Loading project">PM</span>
+}

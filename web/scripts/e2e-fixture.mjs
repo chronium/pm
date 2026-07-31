@@ -45,6 +45,23 @@ milestonePriorities:
 `,
   );
   await writeFile(join(pm, 'project_id.txt'), 'playwright-project\n');
+  if (process.env.PM_E2E_MODE === 'static') {
+    await writeFile(
+      join(pm, 'linked_projects.yaml'),
+      `version: 1
+children:
+  - projectId: published-project
+    alias: published
+    repositoryUrl: https://example.test/published.git
+    pathHint: missing-published
+    publicSiteUrl: http://127.0.0.1:${process.env.PM_E2E_UI_PORT}/published/?source=fixture#old
+  - projectId: unavailable-project
+    alias: unavailable
+    repositoryUrl: https://example.test/unavailable.git
+    pathHint: missing-unavailable
+`,
+    );
+  }
 
   const count = size === 'large' ? 180 : 6;
   for (let number = 1; number <= count; number += 1) {
@@ -55,7 +72,11 @@ milestonePriorities:
     const milestone = number % 4 === 0 ? 'later' : 'current';
     const dependency =
       number > 1 && number % 6 === 0
-        ? `dependsOn:\n- E2E-${String(number - 1).padStart(4, '0')}\n`
+        ? `dependsOn:\n- ${
+            process.env.PM_E2E_MODE === 'static'
+              ? `pm://project/playwright-project/task/E2E-${String(number - 1).padStart(4, '0')}`
+              : `E2E-${String(number - 1).padStart(4, '0')}`
+          }\n`
         : '';
     const longDescription = [1, 3].includes(number)
       ? `\n\n${Array.from(
@@ -97,7 +118,11 @@ modifiedAt: ${timestamp}
 
 # Wiki page ${number}
 
-Local fixture content.
+Local fixture content.${
+        process.env.PM_E2E_MODE === 'static' && number === 1
+          ? '\n\n[Current task](pm://project/playwright-project/task/E2E-0001)\n\n[Published wiki](pm://project/published-project/wiki/guide/hello%20world)\n\n[Unavailable wiki](pm://project/unavailable-project/wiki/guide/missing)'
+          : ''
+      }
 `,
     );
   }

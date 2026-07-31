@@ -5,6 +5,8 @@ namespace PM.Site;
 public sealed record SiteSnapshot(
     int SchemaVersion,
     DateTimeOffset GeneratedAt,
+    string? ProjectId,
+    IReadOnlyList<SiteLinkedProjectResponse> LinkedProjects,
     ProjectResponse Project,
     SettingsResponse Settings,
     BoardNavigationResponse Navigation,
@@ -12,6 +14,13 @@ public sealed record SiteSnapshot(
     IReadOnlyList<SiteTaskResponse> Tasks,
     IReadOnlyList<WikiPageSummaryResponse> WikiIndex,
     IReadOnlyList<SiteWikiPageResponse> WikiPages);
+
+public sealed record SiteLinkedProjectResponse(
+    string ProjectId,
+    string Name,
+    string? Alias,
+    string Relationship,
+    string? PublicSiteUrl);
 
 public sealed record SiteTaskResponse(
     string Id,
