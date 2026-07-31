@@ -16,7 +16,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, _) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -160,7 +160,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -187,7 +187,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(newer);
         projectRoot.UpdateTaskState(older, "todo");
         projectRoot.UpdateTaskState(newer, "todo");
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -207,7 +207,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(review);
         projectRoot.UpdateTaskState(todo, "todo");
         projectRoot.UpdateTaskState(review, "review");
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
 
@@ -234,7 +234,7 @@ public class CommandBehaviorTests
             """);
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
 
@@ -258,7 +258,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(unassigned);
         projectRoot.UpdateTaskState(assigned, "review");
         projectRoot.UpdateTaskState(unassigned, "todo");
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -288,7 +288,7 @@ public class CommandBehaviorTests
         projectRoot.UpdateTaskState(wrongTrack, "review");
         projectRoot.UpdateTaskState(wrongMilestone, "review");
         projectRoot.UpdateTaskState(wrongState, "todo");
-        var command = new ListCommand(new BoardService(projectRoot));
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command,
             new ListCommand.Settings { Track = "BUILD", Milestone = "m1", State = "review" });
@@ -825,10 +825,10 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var service = new WikiService(projectRoot);
-        var command = new WikiListCommand(service);
+        var command = new WikiListCommand(service, CreateLinkedReads(projectRoot));
 
         var (emptyExitCode, emptyOutput) = await CaptureConsole(() =>
-            command.Execute(null!, new WikiListCommand.Settings(), CancellationToken.None));
+            command.ExecuteAsync(null!, new WikiListCommand.Settings(), CancellationToken.None));
 
         Assert.Equal(0, emptyExitCode);
         Assert.Contains("No wiki pages.", emptyOutput);
@@ -837,7 +837,7 @@ public class CommandBehaviorTests
         service.CreatePage("getting-started", "Getting Started", "Start here");
 
         var (exitCode, output) = await CaptureConsole(() =>
-            command.Execute(null!, new WikiListCommand.Settings(), CancellationToken.None));
+            command.ExecuteAsync(null!, new WikiListCommand.Settings(), CancellationToken.None));
 
         Assert.Equal(0, exitCode);
         Assert.Contains("architecture/rendering", output);
@@ -850,10 +850,11 @@ public class CommandBehaviorTests
     public async Task WikiListOutsideProjectReturnsOne()
     {
         using var workspace = new TempWorkingDirectory();
-        var command = new WikiListCommand(new WikiService(new ProjectRoot()));
+        var projectRoot = new ProjectRoot();
+        var command = new WikiListCommand(new WikiService(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await CaptureConsole(() =>
-            command.Execute(null!, new WikiListCommand.Settings(), CancellationToken.None));
+            command.ExecuteAsync(null!, new WikiListCommand.Settings(), CancellationToken.None));
 
         Assert.Equal(1, exitCode);
         Assert.Contains("Project not found", output);
@@ -868,11 +869,11 @@ public class CommandBehaviorTests
         service.CreatePage("nested/body-hit", "Body page", "Needle appears twice: needle.");
         service.CreatePage("nested/needle-path", "Path page", "No body match.");
         service.CreatePage("nested/title-hit", "Needle title", "No body match.");
-        var command = new WikiSearchCommand(service);
+        var command = new WikiSearchCommand(service, CreateLinkedReads(projectRoot));
 
-        var all = await CaptureConsole(() => command.Execute(null!,
+        var all = await CaptureConsole(() => command.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = "needle", Limit = 3 }, CancellationToken.None));
-        var limited = await CaptureConsole(() => command.Execute(null!,
+        var limited = await CaptureConsole(() => command.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = "needle", Limit = 2 }, CancellationToken.None));
 
         Assert.Equal(0, all.ExitCode);
@@ -893,11 +894,11 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new WikiSearchCommand(new WikiService(projectRoot));
+        var command = new WikiSearchCommand(new WikiService(projectRoot), CreateLinkedReads(projectRoot));
 
-        var empty = await CaptureConsole(() => command.Execute(null!,
+        var empty = await CaptureConsole(() => command.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = "missing" }, CancellationToken.None));
-        var blank = await CaptureConsole(() => command.Execute(null!,
+        var blank = await CaptureConsole(() => command.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = " " }, CancellationToken.None));
 
         Assert.Equal(0, empty.ExitCode);
@@ -906,15 +907,16 @@ public class CommandBehaviorTests
         Assert.Contains("Wiki search query is required.", blank.Output);
 
         File.WriteAllText(Path.Combine(projectRoot.WikiPath, "broken.md"), "not front matter");
-        var invalid = await CaptureConsole(() => command.Execute(null!,
+        var invalid = await CaptureConsole(() => command.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = "needle" }, CancellationToken.None));
 
         Assert.Equal(1, invalid.ExitCode);
         Assert.Contains("Wiki page broken markdown is invalid.", invalid.Output);
 
         using var outsideWorkspace = new TempWorkingDirectory();
-        var outside = new WikiSearchCommand(new WikiService(new ProjectRoot()));
-        var missingProject = await CaptureConsole(() => outside.Execute(null!,
+        var outsideRoot = new ProjectRoot();
+        var outside = new WikiSearchCommand(new WikiService(outsideRoot), CreateLinkedReads(outsideRoot));
+        var missingProject = await CaptureConsole(() => outside.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = "needle" }, CancellationToken.None));
 
         Assert.Equal(1, missingProject.ExitCode);
@@ -928,9 +930,9 @@ public class CommandBehaviorTests
         var projectRoot = await workspace.CreateProject();
         var service = new WikiService(projectRoot);
         service.CreatePage("docs/[needle]", "[Needle] <title>", "Needle [snippet] <body>");
-        var command = new WikiSearchCommand(service);
+        var command = new WikiSearchCommand(service, CreateLinkedReads(projectRoot));
 
-        var result = await CaptureConsole(() => command.Execute(null!,
+        var result = await CaptureConsole(() => command.ExecuteAsync(null!,
             new WikiSearchCommand.Settings { Query = "needle" }, CancellationToken.None));
 
         Assert.Equal(0, result.ExitCode);
@@ -947,13 +949,15 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Find [render]", "Useful <snippet>", milestone: "M1");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "review");
-        var command = new TaskSearchCommand(new TaskService(projectRoot, new RecordingNextIdService()));
+        var command = new TaskSearchCommand(
+            new TaskService(projectRoot, new RecordingNextIdService()),
+            CreateLinkedReads(projectRoot));
 
-        var found = await CaptureConsole(() => command.Execute(null!,
+        var found = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskSearchCommand.Settings { Query = "state:review", Limit = 1 }, CancellationToken.None));
-        var empty = await CaptureConsole(() => command.Execute(null!,
+        var empty = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskSearchCommand.Settings { Query = "missing" }, CancellationToken.None));
-        var invalid = await CaptureConsole(() => command.Execute(null!,
+        var invalid = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskSearchCommand.Settings { Query = "track:" }, CancellationToken.None));
 
         Assert.Equal(0, found.ExitCode);
@@ -969,16 +973,40 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task LinkedReadCommandSettingsRejectConflictingScopeAndRenderOwnership()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath!, GlobalConfig.ProjectIdFile), "prj_active\n");
+        var task = TestData.Task("PM-0001", "Selected task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+
+        var invalid = new ListCommand.Settings { Project = "current", Family = true }.Validate();
+        var selected = await ExecuteListCommand(command, new ListCommand.Settings { Project = "current" });
+
+        Assert.False(invalid.Successful);
+        Assert.Contains("cannot be used together", invalid.Message);
+        Assert.Equal(0, selected.ExitCode);
+        Assert.Contains(projectRoot.Config!.Name, selected.Output);
+        Assert.Contains("/ current", selected.Output);
+        Assert.Contains("prj_active", selected.Output);
+        Assert.Contains("Selected task", selected.Output);
+    }
+
+    [Fact]
     public async Task WikiShowRendersPageAndRejectsMissingPage()
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var service = new WikiService(projectRoot);
         service.CreatePage("architecture/rendering", "Rendering", "# Rendering\n\nDetails");
-        var command = new WikiShowCommand(service, CreateHighlighter());
+        var command = new WikiShowCommand(service, CreateLinkedReads(projectRoot), CreateHighlighter());
 
         var (exitCode, output) = await CaptureConsole(() =>
-            command.Execute(null!, new WikiShowCommand.Settings { Path = "architecture/rendering" },
+            command.ExecuteAsync(null!, new WikiShowCommand.Settings { Path = "architecture/rendering" },
                 CancellationToken.None));
 
         Assert.Equal(0, exitCode);
@@ -988,7 +1016,7 @@ public class CommandBehaviorTests
         Assert.Contains("Details", output);
 
         var (missingExitCode, missingOutput) = await CaptureConsole(() =>
-            command.Execute(null!, new WikiShowCommand.Settings { Path = "missing" }, CancellationToken.None));
+            command.ExecuteAsync(null!, new WikiShowCommand.Settings { Path = "missing" }, CancellationToken.None));
 
         Assert.Equal(1, missingExitCode);
         Assert.Contains("not found", missingOutput);
@@ -1410,6 +1438,24 @@ public class CommandBehaviorTests
         return new SyntaxHighlighter([
             new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),
         ]);
+    }
+
+    private static LinkedProjectReadService CreateLinkedReads(ProjectRoot projectRoot)
+    {
+        var registryRoot = projectRoot.Exists
+            ? Path.Combine(projectRoot.RepositoryPath, ".command-test-registry")
+            : Path.Combine(Path.GetTempPath(), $"pm-command-test-registry-{Guid.NewGuid():N}");
+        var family = new LinkedProjectFamilyService(
+            projectRoot,
+            new LinkedProjectService(projectRoot),
+            new LinkedProjectResolver(
+                new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions { RootPath = registryRoot }),
+                new EmptyLinkedProjectSubmoduleInspector()));
+        return new LinkedProjectReadService(
+            projectRoot,
+            family,
+            new RecordingNextIdService(),
+            new LinkedProjectGitInspector());
     }
 
     private static async Task<(int ExitCode, string Output)> ExecuteListCommand(

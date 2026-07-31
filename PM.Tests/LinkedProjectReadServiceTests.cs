@@ -74,6 +74,7 @@ public sealed class LinkedProjectReadServiceTests
         var child = await CreateProject(Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale");
         LinkParentAndChildren(parent, [(child, "royale")]);
         AddTask(parent, "PM-0001", "Parent task");
+        await File.AppendAllTextAsync(parent.GetTaskFilePath("PM-0001"), "\n<!-- exact task markdown -->\n");
         Assert.True(new WikiService(parent).CreatePage("guide", "Guide", "Body").Success);
         var service = Service(child, workspace);
 
@@ -82,7 +83,9 @@ public sealed class LinkedProjectReadServiceTests
         var wiki = await service.GetWikiPageAsync("guide", "games");
         var unknown = await service.GetTaskAsync("PM-0001", "unknown");
 
-        Assert.Equal("prj_games", Assert.Single(byParent.Payload!.Items).Owner.ProjectId);
+        var parentTask = Assert.Single(byParent.Payload!.Items);
+        Assert.Equal("prj_games", parentTask.Owner.ProjectId);
+        Assert.Contains("<!-- exact task markdown -->", parentTask.Resource.Markdown);
         Assert.Equal("prj_games", Assert.Single(byId.Payload!.Items).Owner.ProjectId);
         Assert.Equal("prj_games", Assert.Single(wiki.Payload!.Items).Owner.ProjectId);
         Assert.False(unknown.Success);

@@ -12,7 +12,22 @@ public enum LinkedProjectReadScope
 
 public sealed record LinkedProjectReadRequest(
     LinkedProjectReadScope Scope = LinkedProjectReadScope.Current,
-    string? ProjectSelector = null);
+    string? ProjectSelector = null)
+{
+    public static AppResult<LinkedProjectReadRequest> FromOptions(string? projectSelector, bool family)
+    {
+        var normalized = string.IsNullOrWhiteSpace(projectSelector) ? null : projectSelector.Trim();
+        if (family && normalized != null)
+            return AppResult<LinkedProjectReadRequest>.Fail(
+                "invalid_project_scope", "Project selection and family scope cannot be used together.");
+
+        return AppResult<LinkedProjectReadRequest>.Ok(family
+            ? new LinkedProjectReadRequest(LinkedProjectReadScope.Family)
+            : normalized == null || string.Equals(normalized, "current", StringComparison.OrdinalIgnoreCase)
+                ? new LinkedProjectReadRequest()
+                : new LinkedProjectReadRequest(LinkedProjectReadScope.Project, normalized));
+    }
+}
 
 public sealed record LinkedProjectGitMetadata(string? Revision, bool? Dirty);
 
@@ -138,11 +153,13 @@ public sealed class LinkedProjectReadService
         cancellationToken.ThrowIfCancellationRequested();
         var result = new BoardService(member.Project!).GetTask(taskId.Trim());
         if (!result.Success) return Failure<BoardTask>(result.ErrorCode, result.Message);
+        if (!member.Project!.TryReadTaskFile(taskId.Trim(), out var markdown))
+            return Failure<BoardTask>("missing_task", $"Task {taskId.Trim()} not found.");
 
         var owner = await BuildOwnerAsync(member, cancellationToken);
         return AppResult<LinkedProjectReadResult<BoardTask>>.Ok(
             new LinkedProjectReadResult<BoardTask>(
-                [new LinkedProjectResource<BoardTask>(owner, result.Payload!)],
+                [new LinkedProjectResource<BoardTask>(owner, result.Payload! with { Markdown = markdown })],
                 targets.Payload.Warnings));
     }
 

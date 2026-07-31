@@ -124,4 +124,9 @@ public sealed record McpCapabilityContext(
     public bool CanAppendNoteTo(string taskId) =>
         Profile == McpCapabilityProfile.Normal ||
         string.Equals(AssignedTaskId, taskId.Trim(), StringComparison.Ordinal);
+
+    public bool CanReadLinkedProjects(string? projectSelector, bool family) =>
+        Profile == McpCapabilityProfile.Normal ||
+        !family && (string.IsNullOrWhiteSpace(projectSelector) ||
+                    string.Equals(projectSelector.Trim(), "current", StringComparison.OrdinalIgnoreCase));
 }
