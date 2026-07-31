@@ -67,13 +67,17 @@ describe('ProjectSwitcher', () => {
       warnings: [],
     });
     await TestBed.tick();
+    await fixture.whenStable();
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('summary')?.textContent).toContain('Active');
-    expect(element.querySelector('a[href="/projects/prj_child/tasks"]')?.textContent).toContain(
-      'Read-only',
+    const child = [...element.querySelectorAll<HTMLAnchorElement>('.project-switcher-menu a')].find(
+      (link) => link.textContent?.includes('Child'),
     );
+    expect(element.querySelector('summary')?.textContent).toContain('Active');
+    expect(child).toBeDefined();
+    expect(child!.textContent).toContain('Read-only');
+    expect(child!.getAttribute('href')).toBe('/projects/prj_child/tasks');
     expect(element.querySelector('.project-switcher-unavailable')?.textContent).toContain(
       'Missing',
     );
