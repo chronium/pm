@@ -13,7 +13,16 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { cssClose, cssMaximize, cssNotes, cssPen } from '@ng-icons/css.gg';
+import {
+  cssCheck,
+  cssClose,
+  cssDanger,
+  cssMaximize,
+  cssNotes,
+  cssPen,
+  cssSandClock,
+  cssUnavailable,
+} from '@ng-icons/css.gg';
 import { firstValueFrom } from 'rxjs';
 
 import { ExternalChangeBanner, type ExternalChangePhase } from '../../core/external-change-banner';
@@ -34,7 +43,11 @@ import { StaticModeService } from '../../static/static-mode.service';
 import { AgentRunLaunch } from '../../agent-runs/agent-run-launch';
 import type { AgentRunRemoteStart } from '../../agent-runs/agent-runs-api.service';
 import { ProjectContextService } from '../../core/project-context.service';
-import { ProjectLinksService, type ProjectLinkResolution } from '../../core/project-links.service';
+import {
+  parseCanonicalProjectReference,
+  ProjectLinksService,
+  type ProjectLinkResolution,
+} from '../../core/project-links.service';
 
 export type TaskWorkspacePresentation = 'dialog' | 'page';
 export type TaskWorkspaceMode = 'detail' | 'create';
@@ -56,6 +69,7 @@ interface CreatedIntent {
 }
 
 type ConfirmKind = 'discard' | 'remove' | null;
+type DependencyState = 'ready' | 'waiting' | 'missing' | 'unavailable';
 
 @Component({
   selector: 'pm-task-workspace',
@@ -72,7 +86,19 @@ type ConfirmKind = 'discard' | 'remove' | null;
     RouterLink,
     TitleCasePipe,
   ],
-  providers: [TaskDetailResource, provideIcons({ cssClose, cssMaximize, cssNotes, cssPen })],
+  providers: [
+    TaskDetailResource,
+    provideIcons({
+      cssCheck,
+      cssClose,
+      cssDanger,
+      cssMaximize,
+      cssNotes,
+      cssPen,
+      cssSandClock,
+      cssUnavailable,
+    }),
+  ],
   templateUrl: './task-workspace.html',
   styleUrl: './task-workspace.css',
   host: {
@@ -364,6 +390,42 @@ export class TaskWorkspace {
 
   protected dependencyLink(id: string): ProjectLinkResolution {
     return this.projectLinks.resolve(id);
+  }
+
+  protected dependencyLabel(id: string): string {
+    return parseCanonicalProjectReference(id)?.value ?? id;
+  }
+
+  protected dependencyTitle(id: string, link: ProjectLinkResolution): string | null {
+    if (link.kind === 'unavailable') return `${id}\n${link.reason}`;
+    return this.dependencyLabel(id) === id ? null : id;
+  }
+
+  protected dependencyState(
+    task: TaskResponse,
+    id: string,
+    link: ProjectLinkResolution,
+  ): DependencyState {
+    if (task.dependencies.missing.includes(id)) return 'missing';
+    if (link.kind === 'unavailable') return 'unavailable';
+    return task.dependencies.waitingOn.includes(id) ? 'waiting' : 'ready';
+  }
+
+  protected dependencyStateLabel(state: DependencyState): string {
+    return this.label(state);
+  }
+
+  protected dependencyStateIcon(state: DependencyState): string {
+    switch (state) {
+      case 'ready':
+        return 'cssCheck';
+      case 'waiting':
+        return 'cssSandClock';
+      case 'missing':
+        return 'cssDanger';
+      case 'unavailable':
+        return 'cssUnavailable';
+    }
   }
 
   protected reviewLatest(): void {

@@ -375,33 +375,39 @@
           }
           <section class="dependencies" aria-labelledby="dependencies-heading">
             <h2 id="dependencies-heading">Dependencies</h2>
-            <p>{{ task.dependencies.summary }}</p>
             @if (task.dependencies.dependsOn.length) {
-              <div class="dependency-list">
-                <span>Depends on</span>
+              <ul class="dependency-list">
                 @for (id of task.dependencies.dependsOn; track id) {
                   @if (dependencyLink(id); as link) {
-                    @if (link.kind === 'available') {
-                      <a [href]="link.href">{{ id }}</a>
-                    } @else if (link.kind === 'unavailable') {
-                      <span class="pm-unavailable-link" [title]="link.reason">{{ id }}</span>
-                    } @else {
-                      <a
-                        [routerLink]="projectContext.taskUrl(id)"
-                        queryParamsHandling="preserve"
-                        (click)="dependencyClick($event, id)"
-                        >{{ id }}</a
-                      >
+                    @if (dependencyState(task, id, link); as state) {
+                      <li class="dependency-item">
+                        @if (link.kind === 'available') {
+                          <a [href]="link.href" [title]="dependencyTitle(id, link)">{{
+                            dependencyLabel(id)
+                          }}</a>
+                        } @else if (link.kind === 'unavailable') {
+                          <span class="pm-unavailable-link" [title]="dependencyTitle(id, link)">{{
+                            dependencyLabel(id)
+                          }}</span>
+                        } @else {
+                          <a
+                            [routerLink]="projectContext.taskUrl(id)"
+                            queryParamsHandling="preserve"
+                            (click)="dependencyClick($event, id)"
+                            >{{ dependencyLabel(id) }}</a
+                          >
+                        }
+                        <span class="dependency-state dependency-state--{{ state }}">
+                          <ng-icon [name]="dependencyStateIcon(state)" aria-hidden="true" />
+                          {{ dependencyStateLabel(state) }}
+                        </span>
+                      </li>
                     }
                   }
                 }
-              </div>
-            }
-            @if (task.dependencies.waitingOn.length) {
-              <p>Waiting on: {{ task.dependencies.waitingOn.join(', ') }}</p>
-            }
-            @if (task.dependencies.missing.length) {
-              <p>Missing: {{ task.dependencies.missing.join(', ') }}</p>
+              </ul>
+            } @else {
+              <p>No dependencies</p>
             }
           </section>
 

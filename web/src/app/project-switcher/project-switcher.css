@@ -80,6 +80,7 @@
   width: max-content;
   min-width: 240px;
   max-width: 340px;
+  margin: 0;
   padding: var(--pm-space-1);
   border: 1px solid var(--pm-border-strong);
   border-radius: var(--pm-radius-md);
