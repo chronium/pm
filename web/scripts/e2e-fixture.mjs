@@ -7,6 +7,7 @@ if (!e2eRoot) throw new Error('PM_E2E_ROOT must be set by the Playwright configu
 export const projectRoot = join(e2eRoot, 'project');
 export const configRoot = join(e2eRoot, 'config');
 export const linkedProjectRoot = join(projectRoot, 'linked');
+export const siblingProjectRoot = join(projectRoot, 'sibling');
 const idPort = process.env.PM_E2E_ID_PORT;
 if (!idPort) throw new Error('PM_E2E_ID_PORT must be set by the E2E runner.');
 
@@ -16,6 +17,7 @@ export async function resetFixture(size = 'small') {
   const pm = join(projectRoot, '.pm');
   await rm(pm, { recursive: true, force: true });
   await rm(linkedProjectRoot, { recursive: true, force: true });
+  await rm(siblingProjectRoot, { recursive: true, force: true });
   await mkdir(projectRoot, { recursive: true });
   await Promise.all([
     mkdir(join(pm, 'tasks'), { recursive: true }),
@@ -47,7 +49,7 @@ milestonePriorities:
 `,
   );
   await writeFile(join(pm, 'project_id.txt'), 'playwright-project\n');
-  if (process.env.PM_E2E_MODE === 'dev') await createLinkedFixture(pm);
+  if (process.env.PM_E2E_MODE === 'dev') await createLinkedFixtures(pm);
   if (process.env.PM_E2E_MODE === 'static') {
     await writeFile(
       join(pm, 'linked_projects.yaml'),
@@ -131,13 +133,18 @@ Local fixture content.${
   }
 }
 
-async function createLinkedFixture(pm) {
+async function createLinkedFixtures(pm) {
   const linkedPm = join(linkedProjectRoot, '.pm');
+  const siblingPm = join(siblingProjectRoot, '.pm');
   await Promise.all([
     mkdir(join(linkedPm, 'tasks'), { recursive: true }),
     mkdir(join(linkedPm, 'states', 'todo'), { recursive: true }),
     mkdir(join(linkedPm, 'states', 'done'), { recursive: true }),
     mkdir(join(linkedPm, 'wiki'), { recursive: true }),
+    mkdir(join(siblingPm, 'tasks'), { recursive: true }),
+    mkdir(join(siblingPm, 'states', 'todo'), { recursive: true }),
+    mkdir(join(siblingPm, 'states', 'done'), { recursive: true }),
+    mkdir(join(siblingPm, 'wiki'), { recursive: true }),
   ]);
   await writeFile(
     join(pm, 'linked_projects.yaml'),
@@ -147,6 +154,14 @@ children:
     alias: linked
     repositoryUrl: https://example.test/linked.git
     pathHint: linked
+  - projectId: sibling-project
+    alias: sibling
+    repositoryUrl: https://example.test/sibling.git
+    pathHint: sibling
+  - projectId: unavailable-project
+    alias: unavailable
+    repositoryUrl: https://example.test/unavailable.git
+    pathHint: missing-unavailable
 `,
   );
   await writeFile(
@@ -161,7 +176,7 @@ parent:
   );
   await writeFile(
     join(linkedPm, 'pm_config.yaml'),
-    `name: Linked Project
+    `name: Royale Project
 idWidth: 4
 idPrefix: LINK
 nextIdServiceUrl: http://127.0.0.1:${idPort}
@@ -202,6 +217,64 @@ modifiedAt: ${timestamp}
 # Linked guide
 
 Read-only linked wiki body.
+`,
+  );
+
+  await writeFile(
+    join(siblingPm, 'linked_projects.yaml'),
+    `version: 1
+parent:
+  projectId: playwright-project
+  alias: parent
+  repositoryUrl: https://example.test/playwright.git
+  pathHint: ..
+`,
+  );
+  await writeFile(
+    join(siblingPm, 'pm_config.yaml'),
+    `name: Starfall Project
+idWidth: 4
+idPrefix: STAR
+nextIdServiceUrl: http://127.0.0.1:${idPort}
+taskStates:
+  todo: To Do
+  done: Done
+tracks:
+  STAR: Starfall work
+milestones:
+  sibling: Sibling Release
+milestonePriorities: {}
+`,
+  );
+  await writeFile(join(siblingPm, 'project_id.txt'), 'sibling-project\n');
+  await writeFile(
+    join(siblingPm, 'tasks', 'STAR-0001.md'),
+    `---
+id: STAR-0001
+title: Starfall fixture task
+track: STAR
+milestone: sibling
+dependsOn:
+- pm://project/playwright-project/task/E2E-0001
+createdAt: ${timestamp}
+modifiedAt: ${timestamp}
+---
+
+Read-only sibling task body.
+`,
+  );
+  await writeFile(join(siblingPm, 'states', 'todo', 'STAR-0001.ref'), '../../tasks/STAR-0001.md');
+  await writeFile(
+    join(siblingPm, 'wiki', 'starfall-guide.md'),
+    `---
+title: Starfall guide
+createdAt: ${timestamp}
+modifiedAt: ${timestamp}
+---
+
+# Starfall guide
+
+Read-only sibling wiki body.
 `,
   );
 }

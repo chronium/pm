@@ -70,15 +70,33 @@ public partial class ApiContractTests
         await WriteProjectId(active, "prj_games");
         var child = await CreateLinkedProject(
             Path.Combine(workspace.Path, "royale"), "prj_royale", "Royale");
+        var sibling = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "starfall"), "prj_starfall", "Starfall");
         active.WriteLinkedProjectsManifest(new LinkedProjectManifest
         {
-            Children = [Declaration("prj_royale", "royale", "royale")],
+            Children =
+            [
+                Declaration("prj_royale", "royale", "royale"),
+                Declaration("prj_starfall", "starfall", "starfall"),
+            ],
         });
         child.WriteLinkedProjectsManifest(new LinkedProjectManifest
         {
             Parent = Declaration("prj_games", "games", ".."),
         });
-        var task = TestData.Task("GAME-0001", "Linked task", "Linked task body", track: "GAME");
+        sibling.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = Declaration("prj_games", "games", ".."),
+        });
+        var dependency = TestData.Task("STAR-0001", "Sibling dependency", track: "GAME");
+        sibling.WriteTask(dependency);
+        sibling.UpdateTaskState(dependency, "done");
+        var task = TestData.Task(
+            "GAME-0001",
+            "Linked task",
+            "Linked task body",
+            track: "GAME",
+            dependsOn: ["pm://project/prj_starfall/task/STAR-0001"]);
         child.WriteTask(task);
         child.UpdateTaskState(task, "todo");
         Assert.True(new WikiService(child).CreatePage("guide/start", "Linked guide", "Linked wiki body").Success);
@@ -98,12 +116,16 @@ public partial class ApiContractTests
             var board = await client.GetFromJsonAsync<BoardResponse>(
                 "/api/v1/projects/prj_royale/board");
             Assert.Equal("Royale", board!.ProjectName);
-            Assert.Contains(board.MilestoneGroups.SelectMany(group => group.States)
+            var boardTask = Assert.Single(board.MilestoneGroups.SelectMany(group => group.States)
                 .SelectMany(state => state.Tasks), candidate => candidate.Id == task.Id);
+            Assert.True(boardTask.Dependencies.Ready);
+            Assert.Empty(boardTask.Dependencies.Missing);
 
             var detail = await client.GetFromJsonAsync<TaskResponse>(
                 "/api/v1/projects/prj_royale/tasks/GAME-0001");
             Assert.Equal("Linked task body", detail!.Description);
+            Assert.True(detail.Dependencies.Ready);
+            Assert.Empty(detail.Dependencies.Missing);
 
             var settings = await client.GetFromJsonAsync<SettingsResponse>(
                 "/api/v1/projects/prj_royale/settings");

@@ -240,8 +240,10 @@ public static class TaskApiEndpoints
         if (!task.Success) return (null, ApiResults.Failure(task.ErrorCode, task.Message, request.Path));
         var revision = revisions.GetTaskRevision(id);
         if (!revision.Success) return (null, ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path));
-        var item = task.Payload!;
-        return (new TaskResponse(
+        return (ToResponse(task.Payload!, revision.Payload!), null);
+    }
+
+    internal static TaskResponse ToResponse(BoardTask item, string revision) => new(
             item.Task.Id,
             item.Task.Title,
             item.Track,
@@ -254,9 +256,8 @@ public static class TaskApiEndpoints
             BoardApiEndpoints.ToUtc(item.Task.CreatedAt),
             BoardApiEndpoints.ToUtc(item.Task.ModifiedAt),
             item.Task.Description,
-            revision.Payload!,
-            new TaskLocalMetadataResponse(item.FilePath)), null);
-    }
+            revision,
+            new TaskLocalMetadataResponse(item.FilePath));
 
     internal static IResult? CheckPrecondition(HttpRequest request, string id, ResourceRevisionService revisions)
     {
