@@ -180,10 +180,26 @@ public sealed class ProjectValidationService
 
     private void ValidateTaskDependencies(List<ProjectValidationIssue> issues, Dictionary<string, TaskItem> tasksById)
     {
+        var activeProjectId = projectRoot.TryReadProjectId(out var projectId) ? projectId : null;
         foreach (var task in tasksById.Values)
         {
-            foreach (var dependencyId in task.DependencyIds)
+            foreach (var dependencyValue in task.DependencyIds)
             {
+                if (!TaskDependencyReference.TryParse(dependencyValue, out var dependency, out var message))
+                {
+                    issues.Add(new ProjectValidationIssue(
+                        "error",
+                        "invalid_dependency_reference",
+                        $"Task {task.Id} has invalid dependency {dependencyValue}: {message}",
+                        projectRoot.GetTaskFilePath(task.Id),
+                        task.Id));
+                    continue;
+                }
+
+                if (!dependency!.IsLocalTo(activeProjectId))
+                    continue;
+
+                var dependencyId = dependency.TaskId;
                 if (string.Equals(task.Id, dependencyId, StringComparison.Ordinal))
                 {
                     issues.Add(new ProjectValidationIssue(
@@ -205,7 +221,7 @@ public sealed class ProjectValidationService
             }
         }
 
-        foreach (var cycle in FindDependencyCycles(tasksById))
+        foreach (var cycle in FindDependencyCycles(tasksById, activeProjectId))
             issues.Add(new ProjectValidationIssue(
                 "error",
                 "dependency_cycle",
@@ -214,7 +230,9 @@ public sealed class ProjectValidationService
                 cycle[0]));
     }
 
-    private static IReadOnlyList<IReadOnlyList<string>> FindDependencyCycles(Dictionary<string, TaskItem> tasksById)
+    private static IReadOnlyList<IReadOnlyList<string>> FindDependencyCycles(
+        Dictionary<string, TaskItem> tasksById,
+        string? activeProjectId)
     {
         var visiting = new HashSet<string>(StringComparer.Ordinal);
         var visited = new HashSet<string>(StringComparer.Ordinal);
@@ -241,8 +259,13 @@ public sealed class ProjectValidationService
             visiting.Add(taskId);
             stack.Add(taskId);
 
-            foreach (var dependencyId in tasksById[taskId].DependencyIds)
+            foreach (var dependencyValue in tasksById[taskId].DependencyIds)
             {
+                if (!TaskDependencyReference.TryParse(dependencyValue, out var dependency, out _) ||
+                    !dependency!.IsLocalTo(activeProjectId))
+                    continue;
+
+                var dependencyId = dependency.TaskId;
                 if (!tasksById.ContainsKey(dependencyId) ||
                     string.Equals(taskId, dependencyId, StringComparison.Ordinal))
                     continue;

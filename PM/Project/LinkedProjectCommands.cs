@@ -57,6 +57,7 @@ public sealed class ProjectLinksCommand(
 }
 
 public sealed class ProjectBindCommand(
+    ProjectRoot projectRoot,
     LinkedProjectService linkedProjects,
     LinkedProjectRegistryStore registry) : Command<ProjectBindCommand.Settings>
 {
@@ -66,7 +67,9 @@ public sealed class ProjectBindCommand(
         if (!manifest.Success)
             return WriteError(manifest.Message ?? "Linked projects could not be read.");
 
-        var projectId = LinkedProjectSelector.ResolveProjectId(manifest.Payload!.Manifest, settings.Selector);
+        var activeProjectId = projectRoot.TryReadProjectId(out var currentProjectId) ? currentProjectId : null;
+        var projectId = LinkedProjectSelector.ResolveProjectId(
+            activeProjectId, manifest.Payload!.Manifest, settings.Selector);
         if (!projectId.Success)
             return WriteError(projectId.Message ?? "Linked-project selector is invalid.");
 
@@ -88,7 +91,7 @@ public sealed class ProjectBindCommand(
     public sealed class Settings : CommandSettings
     {
         [CommandArgument(0, "<selector-or-id>")]
-        [Description("Declared parent, alias, or stable project ID")]
+        [Description("Current project, declared parent, alias, or stable project ID")]
         public string Selector { get; init; } = string.Empty;
 
         [CommandArgument(1, "<repository-root>")]
@@ -102,6 +105,7 @@ public sealed class ProjectBindCommand(
 }
 
 public sealed class ProjectUnbindCommand(
+    ProjectRoot projectRoot,
     LinkedProjectService linkedProjects,
     LinkedProjectRegistryStore registry) : Command<ProjectUnbindCommand.Settings>
 {
@@ -111,7 +115,9 @@ public sealed class ProjectUnbindCommand(
         if (!manifest.Success)
             return WriteError(manifest.Message ?? "Linked projects could not be read.");
 
-        var projectId = LinkedProjectSelector.ResolveProjectId(manifest.Payload!.Manifest, settings.Selector);
+        var activeProjectId = projectRoot.TryReadProjectId(out var currentProjectId) ? currentProjectId : null;
+        var projectId = LinkedProjectSelector.ResolveProjectId(
+            activeProjectId, manifest.Payload!.Manifest, settings.Selector);
         if (!projectId.Success)
             return WriteError(projectId.Message ?? "Linked-project selector is invalid.");
 
@@ -132,7 +138,7 @@ public sealed class ProjectUnbindCommand(
     public sealed class Settings : CommandSettings
     {
         [CommandArgument(0, "<selector-or-id>")]
-        [Description("Declared parent, alias, or stable project ID")]
+        [Description("Current project, declared parent, alias, or stable project ID")]
         public string Selector { get; init; } = string.Empty;
     }
 }

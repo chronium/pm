@@ -470,7 +470,7 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "update_task_metadata", Destructive = true, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Updates selected task metadata fields without replacing the full markdown file. Use priority inherit to clear a task override, none to explicitly suppress inherited priority, or low/medium/high/urgent to override.")]
+    [Description("Updates selected task metadata fields without replacing the full markdown file. Dependencies accept local task IDs or canonical pm://project/<project-id>/task/<task-id> references. Use priority inherit to clear a task override, none to explicitly suppress inherited priority, or low/medium/high/urgent to override.")]
     public McpToolResponse<TaskMutationPayload> UpdateTaskMetadata(
         string taskId,
         string? title = null,

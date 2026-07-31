@@ -696,6 +696,9 @@ public class McpToolTests
         var none = tools.UpdateTaskMetadata("PM-0001", priority: "none");
         var invalidPriority = tools.UpdateTaskMetadata("PM-0001", priority: "later");
         var invalidDependency = tools.UpdateTaskMetadata("PM-0001", dependsOn: ["PM-0001"]);
+        const string qualifiedReference = "pm://project/prj_other/task/OTHER-0001";
+        var qualifiedDependency = tools.UpdateTaskMetadata("PM-0001", dependsOn: [qualifiedReference]);
+        var malformedReference = tools.UpdateTaskMetadata("PM-0001", dependsOn: ["pm:not-a-reference"]);
         var note = tools.AppendTaskNote("PM-0001", "MCP note");
         var reorder = tools.ReorderTasks("PM", "todo", ["PM-0002"]);
 
@@ -720,6 +723,10 @@ public class McpToolTests
         Assert.Equal("task", none.Data.Task.PrioritySource);
         Assert.Equal("invalid_priority", invalidPriority.ErrorCode);
         Assert.Equal("invalid_dependency", invalidDependency.ErrorCode);
+        Assert.True(qualifiedDependency.Success);
+        Assert.Equal([qualifiedReference], qualifiedDependency.Data!.Task.DependsOn);
+        Assert.Equal([qualifiedReference], qualifiedDependency.Data.Task.MissingDependencies);
+        Assert.Equal("invalid_dependency_reference", malformedReference.ErrorCode);
         Assert.True(note.Success);
         Assert.Contains("MCP note", note.Data!.Task.Description);
         Assert.True(reorder.Success);

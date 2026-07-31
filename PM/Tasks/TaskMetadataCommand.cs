@@ -59,7 +59,7 @@ public class TaskMetadataCommand(TaskService taskService) : Command<TaskMetadata
         public string? Description { get; init; }
 
         [CommandOption("--depends-on <TASK-IDS>")]
-        [Description("Comma-separated dependency task IDs. Use an empty value to clear.")]
+        [Description("Comma-separated local task IDs or canonical pm:// task references. Use an empty value to clear.")]
         public string? DependsOn { get; init; }
     }
 }

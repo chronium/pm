@@ -9,6 +9,29 @@ namespace PM.Tests;
 public partial class ApiContractTests
 {
     [Fact]
+    public async Task TaskApiPreservesCanonicalCrossProjectDependencies()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        const string qualifiedReference = "pm://project/prj_other/task/OTHER-0001";
+        var task = TestData.Task("PM-0001", "Cross-project task", dependsOn: [qualifiedReference]);
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "todo");
+
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var response = await client.GetFromJsonAsync<TaskResponse>("/api/v1/tasks/PM-0001");
+
+            Assert.NotNull(response);
+            Assert.Equal([qualifiedReference], response.Dependencies.DependsOn);
+            Assert.Equal([qualifiedReference], response.Dependencies.Missing);
+            Assert.False(response.Dependencies.Ready);
+        }
+    }
+
+    [Fact]
     public async Task BoardReturnsNormalizedFiltersOptionsOrderedGroupsAndSummaries()
     {
         using var workspace = new TempWorkingDirectory();
