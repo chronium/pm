@@ -19,12 +19,26 @@ const linkedTaskRoutes: Routes = [
     component: TasksBoard,
     children: [
       {
+        path: 'dialog/new',
+        loadComponent: () =>
+          import('./tasks/task-workspace/task-dialog-host').then((module) => module.TaskDialogHost),
+        data: { mode: 'create' },
+        canDeactivate: [canLeaveDirtyRoute],
+      },
+      {
         path: 'dialog/:taskId',
         loadComponent: () =>
           import('./tasks/task-workspace/task-dialog-host').then((module) => module.TaskDialogHost),
         data: { mode: 'detail' },
       },
     ],
+  },
+  {
+    path: 'new',
+    loadComponent: () =>
+      import('./tasks/task-workspace/task-page-host').then((module) => module.TaskPageHost),
+    data: { mode: 'create' },
+    canDeactivate: [canLeaveDirtyRoute],
   },
   {
     path: ':taskId',
@@ -36,6 +50,21 @@ const linkedTaskRoutes: Routes = [
 
 const linkedWikiRoutes: Routes = [
   { path: '', pathMatch: 'full', component: WikiIndex },
+  {
+    path: 'new',
+    loadComponent: () => import('./wiki/wiki-create').then((module) => module.WikiCreate),
+    canDeactivate: [canLeaveDirtyRoute],
+  },
+  {
+    matcher: wikiEditMatcher,
+    loadComponent: () => import('./wiki/wiki-edit').then((module) => module.WikiEdit),
+    canDeactivate: [canLeaveDirtyRoute],
+  },
+  {
+    matcher: wikiMetaMatcher,
+    loadComponent: () => import('./wiki/wiki-metadata').then((module) => module.WikiMetadata),
+    canDeactivate: [canLeaveDirtyRoute],
+  },
   {
     matcher: wikiPathMatcher,
     loadComponent: () => import('./wiki/wiki-workspace').then((module) => module.WikiWorkspace),

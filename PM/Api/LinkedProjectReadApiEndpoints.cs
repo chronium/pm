@@ -21,10 +21,11 @@ public static class LinkedProjectReadApiEndpoints
 
     public static void MapLinkedProjectReadApi(
         this RouteGroupBuilder api,
-        LinkedProjectFamilyService familyService)
+        LinkedProjectFamilyService familyService,
+        LinkedProjectMutationService mutations)
     {
         var projects = api.MapGroup("/projects/{projectId}")
-            .AddEndpointFilter((context, next) => ResolveProject(context, next, familyService));
+            .AddEndpointFilter((context, next) => ResolveProject(context, next, familyService, mutations));
 
         projects.MapGet("/project", (HttpRequest request) =>
             {
@@ -41,7 +42,7 @@ public static class LinkedProjectReadApiEndpoints
                     context.Member.Name,
                     context.Root.Config!.Accent,
                     LinkedProjectFamilyService.Format(context.Member.Relationship),
-                    true,
+                    context.MutationTarget == null,
                     revision.Payload!));
             })
             .WithName("GetLinkedProjectContext")
@@ -129,6 +130,8 @@ public static class LinkedProjectReadApiEndpoints
             .Produces<TaskResponse>()
             .WithRevisionedReadMetadata();
 
+        MapTaskMutations(projects, mutations);
+
         projects.MapGet("/wiki/search", (HttpRequest request, int limit = 20) =>
             {
                 var result = GetContext(request).Wiki.SearchPages(request.Query["query"].ToString(), limit);
@@ -162,12 +165,246 @@ public static class LinkedProjectReadApiEndpoints
             .WithName("GetLinkedProjectWikiPage")
             .Produces<WikiPageResponse>()
             .WithRevisionedReadMetadata();
+
+        MapWikiMutations(projects, mutations);
     }
+
+    private static void MapTaskMutations(RouteGroupBuilder projects, LinkedProjectMutationService mutations)
+    {
+        projects.MapPost("/tasks", async (HttpRequest request, CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<CreateTaskRequest>(request, cancellationToken);
+            if (error != null) return error;
+            if (string.IsNullOrWhiteSpace(input!.Title))
+                return TaskApiEndpoints.DomainFailure("invalid_title", "Task title is required.", request);
+            if (string.IsNullOrWhiteSpace(input.Track))
+                return TaskApiEndpoints.DomainFailure("invalid_track", "Task track is required.", request);
+
+            using var tracker = mutations.Track(writable.Context!.MutationTarget!);
+            var result = await writable.Context.Tasks.CreateTask(input.Title, input.Track, input.Milestone,
+                input.Description ?? string.Empty, false, cancellationToken);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            var response = TaskApiEndpoints.GetResponse(result.Payload!.Id, writable.Context.Board,
+                writable.Context.Revisions, request);
+            if (response.Error != null) return response.Error;
+            ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return Results.Created($"{request.Path}/{Uri.EscapeDataString(result.Payload.Id)}", response.Value);
+        })
+        .WithName("CreateLinkedProjectTask")
+        .Accepts<CreateTaskRequest>("application/json")
+        .Produces<TaskResponse>(StatusCodes.Status201Created)
+        .WithResponseETagMetadata(StatusCodes.Status201Created)
+        .WithClientHeaderMetadata();
+
+        projects.MapPut("/tasks/{id}", async (HttpRequest request, string id,
+            CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<UpdateTaskRequest>(request, cancellationToken);
+            if (error != null) return error;
+            if (input!.Title == null) return TaskApiEndpoints.DomainFailure("invalid_title", "Task title is required.", request);
+            if (input.State == null) return TaskApiEndpoints.DomainFailure("invalid_state", "Task state is required.", request);
+            if (input.Description == null) return TaskApiEndpoints.DomainFailure("invalid_description", "Task description is required.", request);
+            if (input.Priority == null || !TaskApiEndpoints.AcceptedPriorities.Contains(input.Priority.Trim()))
+                return TaskApiEndpoints.DomainFailure("invalid_priority",
+                    "Task priority must be inherit, none, low, medium, high, or urgent.", request);
+            if (input.Placement != null && string.IsNullOrWhiteSpace(input.Placement.Track))
+                return TaskApiEndpoints.DomainFailure("invalid_track", "Task track is required.", request);
+            if (input.Placement?.Milestone != null && string.IsNullOrWhiteSpace(input.Placement.Milestone))
+                return TaskApiEndpoints.DomainFailure("invalid_milestone", "Task milestone must be configured or null.", request);
+            var precondition = TaskApiEndpoints.CheckPrecondition(request, id, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var placement = input.Placement == null
+                ? null
+                : new TaskPlacementUpdate(input.Placement.Track, input.Placement.Milestone);
+            var result = writable.Context.Tasks.UpdateTaskDetails(id, input.Title, input.State, input.Description,
+                input.Priority, placement);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions);
+        })
+        .WithName("UpdateLinkedProjectTask")
+        .Accepts<UpdateTaskRequest>("application/json")
+        .Produces<TaskResponse>()
+        .WithRevisionedMutationMetadata()
+        .WithClientHeaderMetadata();
+
+        projects.MapPut("/tasks/{id}/state", async (HttpRequest request, string id,
+            CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<UpdateTaskStateRequest>(request, cancellationToken);
+            if (error != null) return error;
+            if (input!.State == null)
+                return TaskApiEndpoints.DomainFailure("invalid_state", "Task state is required.", request);
+            var precondition = TaskApiEndpoints.CheckPrecondition(request, id, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var result = writable.Context.Tasks.MoveTask(id, input.State);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions);
+        })
+        .WithName("UpdateLinkedProjectTaskState")
+        .Accepts<UpdateTaskStateRequest>("application/json")
+        .Produces<TaskResponse>()
+        .WithRevisionedMutationMetadata()
+        .WithClientHeaderMetadata();
+
+        projects.MapPost("/tasks/{id}/notes", async (HttpRequest request, string id,
+            CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<AppendTaskNoteRequest>(request, cancellationToken);
+            if (error != null) return error;
+            if (input!.Note == null)
+                return TaskApiEndpoints.DomainFailure("invalid_note", "Task note is required.", request);
+            var precondition = TaskApiEndpoints.CheckPrecondition(request, id, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var result = writable.Context.Tasks.AppendTaskNote(id, input.Note);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions);
+        })
+        .WithName("AppendLinkedProjectTaskNote")
+        .Accepts<AppendTaskNoteRequest>("application/json")
+        .Produces<TaskResponse>()
+        .WithRevisionedMutationMetadata()
+        .WithClientHeaderMetadata();
+
+        projects.MapDelete("/tasks/{id}", (HttpRequest request, string id) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var precondition = TaskApiEndpoints.CheckPrecondition(request, id, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var result = writable.Context.Tasks.RemoveTask(id);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return Results.NoContent();
+        })
+        .WithName("DeleteLinkedProjectTask")
+        .Produces(StatusCodes.Status204NoContent)
+        .WithRevisionedMutationMetadata(StatusCodes.Status204NoContent)
+        .WithClientHeaderMetadata();
+    }
+
+    private static void MapWikiMutations(RouteGroupBuilder projects, LinkedProjectMutationService mutations)
+    {
+        projects.MapPost("/wiki/pages", async (HttpRequest request, CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<CreateWikiPageRequest>(request, cancellationToken);
+            if (error != null) return error;
+            using var tracker = mutations.Track(writable.Context!.MutationTarget!);
+            var result = writable.Context.Wiki.CreatePage(input!.Path, input.Title, input.Body ?? string.Empty);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            var response = WikiApiEndpoints.CreateResponse(result.Payload!, writable.Context.Revisions, request);
+            if (response.Error != null) return response.Error;
+            ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return Results.Created($"{request.Path}/{EncodeWikiPath(response.Value.Path)}", response.Value);
+        })
+        .WithName("CreateLinkedProjectWikiPage")
+        .Accepts<CreateWikiPageRequest>("application/json")
+        .Produces<WikiPageResponse>(StatusCodes.Status201Created)
+        .WithResponseETagMetadata(StatusCodes.Status201Created)
+        .WithClientHeaderMetadata();
+
+        projects.MapPut("/wiki/pages/{**path}", async (HttpRequest request, string path,
+            CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<UpdateWikiPageBodyRequest>(request, cancellationToken);
+            if (error != null) return error;
+            if (input!.Body == null)
+                return ApiResults.Failure("invalid_wiki_page", "Wiki page body is required.", request.Path);
+            var precondition = WikiApiEndpoints.CheckPrecondition(request, path, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var result = writable.Context.Wiki.UpdatePageBody(path, input.Body);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return WikiApiEndpoints.Refreshed(request, result, writable.Context.Revisions);
+        })
+        .WithName("UpdateLinkedProjectWikiPageBody")
+        .Accepts<UpdateWikiPageBodyRequest>("application/json")
+        .Produces<WikiPageResponse>()
+        .WithRevisionedMutationMetadata()
+        .WithClientHeaderMetadata();
+
+        projects.MapPatch("/wiki/pages/{**path}", async (HttpRequest request, string path,
+            CancellationToken cancellationToken) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var (input, error) = await ApiJsonRequest.Read<UpdateWikiPageMetadataRequest>(request, cancellationToken);
+            if (error != null) return error;
+            var precondition = WikiApiEndpoints.CheckPrecondition(request, path, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var result = writable.Context.Wiki.RenamePage(path, input!.Path, input.Title);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return WikiApiEndpoints.Refreshed(request, result, writable.Context.Revisions);
+        })
+        .WithName("UpdateLinkedProjectWikiPageMetadata")
+        .Accepts<UpdateWikiPageMetadataRequest>("application/json")
+        .Produces<WikiPageResponse>()
+        .WithRevisionedMutationMetadata()
+        .WithClientHeaderMetadata();
+
+        projects.MapDelete("/wiki/pages/{**path}", (HttpRequest request, string path) =>
+        {
+            var writable = GetWritableContext(request);
+            if (writable.Error != null) return writable.Error;
+            var precondition = WikiApiEndpoints.CheckPrecondition(request, path, writable.Context!.Revisions);
+            if (precondition != null) return precondition;
+            using var tracker = mutations.Track(writable.Context.MutationTarget!);
+            var result = writable.Context.Wiki.RemovePage(path);
+            if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+            ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+            return Results.NoContent();
+        })
+        .WithName("DeleteLinkedProjectWikiPage")
+        .Produces(StatusCodes.Status204NoContent)
+        .WithRevisionedMutationMetadata(StatusCodes.Status204NoContent)
+        .WithClientHeaderMetadata();
+    }
+
+    private static (LinkedProjectReadContext? Context, IResult? Error) GetWritableContext(HttpRequest request)
+    {
+        var context = GetContext(request);
+        if (context.MutationTarget != null) return (context, null);
+        var failure = context.MutationFailure;
+        return (null, ApiResults.Failure(
+            failure?.ErrorCode ?? "linked_project_write_untrusted",
+            failure?.Message ?? $"Linked project {context.Member.ProjectId} is read-only until local write trust is granted.",
+            request.Path));
+    }
+
+    private static string EncodeWikiPath(string path) =>
+        string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
 
     private static async ValueTask<object?> ResolveProject(
         EndpointFilterInvocationContext context,
         EndpointFilterDelegate next,
-        LinkedProjectFamilyService familyService)
+        LinkedProjectFamilyService familyService,
+        LinkedProjectMutationService mutations)
     {
         var projectId = context.HttpContext.Request.RouteValues["projectId"]?.ToString();
         var family = await familyService.ResolveAsync(context.HttpContext.RequestAborted);
@@ -194,15 +431,27 @@ public static class LinkedProjectReadApiEndpoints
                 $"Project {member.Name} has an invalid project configuration.",
                 context.HttpContext.Request.Path);
 
-        var board = new BoardService(member.Project);
+        LinkedProjectMutationTarget? mutationTarget = null;
+        AppResult<LinkedProjectMutationTarget>? mutationFailure = null;
+        if (member.WriteTrusted)
+        {
+            var resolved = await mutations.ResolveTargetAsync(member.ProjectId,
+                cancellationToken: context.HttpContext.RequestAborted);
+            if (resolved.Success) mutationTarget = resolved.Payload;
+            else mutationFailure = resolved;
+        }
+
+        var board = mutationTarget?.Board ?? new BoardService(member.Project);
         context.HttpContext.Items[ContextKey] = new LinkedProjectReadContext(
             member,
             member.Project,
             board,
             new ProjectConfigService(member.Project),
-            new TaskService(member.Project, ReadOnlyNextIdService.Instance),
-            new WikiService(member.Project),
-            new ResourceRevisionService(member.Project, board));
+            mutationTarget?.Tasks ?? new TaskService(member.Project, ReadOnlyNextIdService.Instance),
+            mutationTarget?.Wiki ?? new WikiService(member.Project),
+            mutationTarget?.Revisions ?? new ResourceRevisionService(member.Project, board),
+            mutationTarget,
+            mutationFailure);
         return await next(context);
     }
 
@@ -219,7 +468,9 @@ public static class LinkedProjectReadApiEndpoints
         ProjectConfigService Config,
         TaskService Tasks,
         WikiService Wiki,
-        ResourceRevisionService Revisions);
+        ResourceRevisionService Revisions,
+        LinkedProjectMutationTarget? MutationTarget,
+        AppResult<LinkedProjectMutationTarget>? MutationFailure);
 
     private sealed class ReadOnlyNextIdService : INextIdService
     {
@@ -237,5 +488,18 @@ public static class LinkedProjectReadApiEndpoints
             Task.FromException<ProjectRegistration>(new NotSupportedException("Linked-project reads cannot register projects."));
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
+    }
+}
+
+internal static class ProjectMutationApiHeaders
+{
+    public const string ProjectId = "X-PM-Project-Id";
+    public const string ChangedPath = "X-PM-Changed-Path";
+
+    public static void Set(HttpResponse response, ProjectMutationReceipt receipt)
+    {
+        response.Headers[ProjectId] = receipt.ProjectId;
+        foreach (var path in receipt.ChangedPaths)
+            response.Headers.Append(ChangedPath, path);
     }
 }

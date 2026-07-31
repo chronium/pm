@@ -1,15 +1,30 @@
 using System.ComponentModel;
 using PM.Application;
+using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Tasks;
 
-public class TaskMetadataCommand(TaskService taskService) : Command<TaskMetadataCommand.Settings>
+public class TaskMetadataCommand(LinkedProjectMutationService mutations) : AsyncCommand<TaskMetadataCommand.Settings>
 {
-    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    public int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken) =>
+        ExecuteAsync(context, settings, cancellationToken).GetAwaiter().GetResult();
+
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken)
     {
-        var result = taskService.PatchTaskMetadata(
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{target.Message!.EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        using var mutation = mutations.Track(target.Payload!);
+        var result = target.Payload!.Tasks.PatchTaskMetadata(
             settings.TaskId,
             settings.Title,
             settings.Track,
@@ -29,10 +44,11 @@ public class TaskMetadataCommand(TaskService taskService) : Command<TaskMetadata
 
         var changed = result.Payload!.Changed ? "Updated" : "No changes for";
         AnsiConsole.MarkupLineInterpolated($"{changed} task [green]{settings.TaskId.Trim().EscapeMarkup()}[/].");
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
         return 0;
     }
 
-    public class Settings : CommandSettings
+    public class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<task-id>")]
         [Description("Task ID")]

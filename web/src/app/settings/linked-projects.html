@@ -1,0 +1,53 @@
+<section aria-labelledby="linked-projects-heading">
+  <div class="section-heading">
+    <div>
+      <h2 id="linked-projects-heading">Linked projects</h2>
+      <p>Private write trust applies only to this user and verified checkout.</p>
+    </div>
+    <button
+      type="button"
+      class="pm-button pm-button--ghost"
+      [disabled]="context.family.isLoading()"
+      (click)="context.reloadFamily()"
+    >
+      Refresh
+    </button>
+  </div>
+
+  @if (context.family.isLoading() && !context.family.hasValue()) {
+    <p class="empty-state" role="status">Loading linked projects…</p>
+  } @else if (linkedMembers().length === 0) {
+    <p class="empty-state">No linked projects are declared.</p>
+  } @else {
+    <div class="linked-project-list" role="list">
+      @for (member of linkedMembers(); track member.projectId) {
+        <div class="linked-project-row" role="listitem">
+          <div class="project-identity">
+            <strong>{{ member.name }}</strong>
+            <code>{{ member.projectId }}</code>
+            <span>{{ member.relationship }} · {{ member.status }}</span>
+          </div>
+          <span class="trust-state" [class.trusted]="member.writeTrusted">
+            {{ member.writeTrusted ? 'Write trusted' : 'Read only' }}
+          </span>
+          <button
+            type="button"
+            class="pm-button pm-button--secondary"
+            [disabled]="!member.readable || pendingProjectId() !== null"
+            (click)="setTrust(member, !member.writeTrusted)"
+          >
+            @if (pendingProjectId() === member.projectId) {
+              Saving…
+            } @else {
+              {{ member.writeTrusted ? 'Revoke trust' : 'Trust writes' }}
+            }
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  @if (error()) {
+    <p class="row-error" role="alert">{{ error() }}</p>
+  }
+</section>

@@ -404,6 +404,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/project/links/{projectId}/write-trust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant private local write trust to a linked project */
+        post: operations["TrustLinkedProjectWrites"];
+        /** Revoke private local write trust from a linked project */
+        delete: operations["UntrustLinkedProjectWrites"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/project/identity": {
         parameters: {
             query?: never;
@@ -904,8 +922,56 @@ export interface paths {
             cookie?: never;
         };
         get: operations["GetLinkedProjectTask"];
-        put?: never;
+        put: operations["UpdateLinkedProjectTask"];
         post?: never;
+        delete: operations["DeleteLinkedProjectTask"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateLinkedProjectTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/tasks/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateLinkedProjectTaskState"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/tasks/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AppendLinkedProjectTaskNote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -937,7 +1003,7 @@ export interface paths {
         };
         get: operations["ListLinkedProjectWikiPages"];
         put?: never;
-        post?: never;
+        post: operations["CreateLinkedProjectWikiPage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -952,12 +1018,12 @@ export interface paths {
             cookie?: never;
         };
         get: operations["GetLinkedProjectWikiPage"];
-        put?: never;
+        put: operations["UpdateLinkedProjectWikiPageBody"];
         post?: never;
-        delete?: never;
+        delete: operations["DeleteLinkedProjectWikiPage"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["UpdateLinkedProjectWikiPageMetadata"];
         trace?: never;
     };
 }
@@ -3833,6 +3899,92 @@ export interface operations {
             };
         };
     };
+    TrustLinkedProjectWrites: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedProjectFamilyResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    UntrustLinkedProjectWrites: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedProjectFamilyResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
     GetLocalIdentity: {
         parameters: {
             query?: never;
@@ -5139,6 +5291,231 @@ export interface operations {
             };
         };
     };
+    UpdateLinkedProjectTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteLinkedProjectTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    CreateLinkedProjectTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+        };
+    };
+    UpdateLinkedProjectTaskState: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskStateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    AppendLinkedProjectTaskNote: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendTaskNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
     SearchLinkedProjectWikiPages: {
         parameters: {
             query?: {
@@ -5195,6 +5572,35 @@ export interface operations {
             };
         };
     };
+    CreateLinkedProjectWikiPage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWikiPageRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiPageResponse"];
+                };
+            };
+        };
+    };
     GetLinkedProjectWikiPage: {
         parameters: {
             query?: never;
@@ -5228,6 +5634,151 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    UpdateLinkedProjectWikiPageBody: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWikiPageBodyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiPageResponse"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteLinkedProjectWikiPage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    UpdateLinkedProjectWikiPageMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required current strong resource ETag. Use * to match any current representation. */
+                "If-Match": string;
+                /** @description Identifies the API client performing the mutation. */
+                "X-PM-Client": string;
+            };
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWikiPageMetadataRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiPageResponse"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
             };
         };
     };

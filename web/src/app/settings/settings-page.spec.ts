@@ -98,6 +98,7 @@ describe('SettingsPage', () => {
     expect(element.textContent).toContain('task_state_missing');
     expect(element.textContent).toContain('.pm/tasks/PM-0001.md');
     expect(element.textContent).toContain('A very long milestone title');
+    expect(element.querySelector('.settings-navigation')?.textContent).toContain('Linked projects');
     expect(element.querySelectorAll('.settings-row input')).toHaveLength(0);
     expect(
       element.querySelector('button[aria-label="Edit milestone title"]')?.getAttribute('title'),

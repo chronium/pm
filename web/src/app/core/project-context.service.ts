@@ -71,7 +71,13 @@ export class ProjectContextService {
     const projectId = this.selectedProjectId();
     return projectId ? `/api/v1/projects/${encodeURIComponent(projectId)}` : '/api/v1';
   });
-  readonly readOnly = computed(() => !!this.selectedProjectId() || this.staticMode.enabled);
+  readonly readOnly = computed(() => {
+    if (this.staticMode.enabled) return true;
+    if (!this.selectedProjectId()) return false;
+    const member = this.selectedMember();
+    if (member) return !member.writeTrusted;
+    return !this.project.hasValue() || this.project.value().readOnly;
+  });
   readonly mode = computed<'tasks' | 'wiki'>(() => {
     const segments = this.segments();
     const mode = segments[0] === 'projects' ? segments[2] : segments[0];
@@ -116,6 +122,14 @@ export class ProjectContextService {
   enableFamilyMetadata(): void {
     this.projectMetadataEnabled.set(true);
     this.familyMetadataEnabled.set(true);
+  }
+
+  enableLinkedProjectFamily(): void {
+    this.familyMetadataEnabled.set(true);
+  }
+
+  reloadFamily(): boolean {
+    return this.family.reload();
   }
 
   apiUrl(path: string): string {

@@ -21,6 +21,7 @@ import {
   type AccentPreference,
 } from '../core/accent.service';
 import { AccentPicker } from '../shared/accent-picker/accent-picker';
+import { LinkedProjects } from './linked-projects';
 
 interface Editor {
   collection: SettingsCollection;
@@ -39,7 +40,8 @@ interface SettingsDraft {
   milestone: { key: string; title: string; priority: string };
   edit: { value: string };
 }
-type SettingsSection = 'overview' | 'members' | 'runners' | 'statuses' | 'milestones' | 'tracks';
+type SettingsSection =
+  'overview' | 'members' | 'linked-projects' | 'runners' | 'statuses' | 'milestones' | 'tracks';
 
 @Component({
   selector: 'pm-settings-page',
@@ -52,6 +54,7 @@ type SettingsSection = 'overview' | 'members' | 'runners' | 'statuses' | 'milest
     PmLoadingState,
     ProjectHealth,
     ProjectMembers,
+    LinkedProjects,
     AgentRunners,
     AccentPicker,
     ExternalChangeBanner,

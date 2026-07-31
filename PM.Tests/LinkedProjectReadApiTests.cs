@@ -62,9 +62,79 @@ public partial class ApiContractTests
                 "/api/v1/projects/prj_royale/wiki/pages/guide/start");
             Assert.Equal("Linked wiki body", page!.Body);
 
-            Assert.Equal(HttpStatusCode.NotFound,
-                (await client.PostAsJsonAsync("/api/v1/projects/prj_royale/tasks", new { title = "No" }))
-                .StatusCode);
+            using var denied = new HttpRequestMessage(HttpMethod.Post,
+                "/api/v1/projects/prj_royale/tasks")
+            {
+                Content = JsonContent.Create(new CreateTaskRequest("No", "GAME")),
+            };
+            denied.Headers.Add(ApiV1Endpoints.ClientHeader, "api-test");
+            var deniedResponse = await client.SendAsync(denied);
+            Assert.Equal(HttpStatusCode.Forbidden, deniedResponse.StatusCode);
+            Assert.Equal("linked_project_write_untrusted",
+                (await deniedResponse.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+        }
+    }
+
+    [Fact]
+    public async Task LinkedProjectApiGrantsLocalTrustAndReturnsMutationReceipts()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await workspace.CreateProject(TestData.Config(name: "Games"));
+        await WriteProjectId(active, "prj_games");
+        var child = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "royale"), "prj_royale", "Royale");
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children = [Declaration("prj_royale", "royale", "royale")],
+        });
+        var task = TestData.Task("GAME-0001", "Linked task", "Body", track: "GAME");
+        child.WriteTask(task);
+        child.UpdateTaskState(task, "todo");
+
+        var registry = new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+        {
+            RootPath = Path.Combine(workspace.Path, "linked-api-registry"),
+        });
+        Assert.True(registry.Bind("prj_royale", child.RepositoryPath).Success);
+        var family = LinkedFamily(active, workspace, registry);
+        var nextIds = new ApiNextIdService();
+        var mutations = new LinkedProjectMutationService(active, nextIds, family, registry);
+        var (app, client) = await CreateApiClient(active, nextIdService: nextIds,
+            linkedProjectFamilyService: family, linkedProjectMutationService: mutations,
+            linkedProjectRegistry: registry);
+        await using (app)
+        using (client)
+        {
+            using var trust = new HttpRequestMessage(HttpMethod.Post,
+                "/api/v1/project/links/prj_royale/write-trust")
+            {
+                Content = JsonContent.Create(new { }),
+            };
+            trust.Headers.Add(ApiV1Endpoints.ClientHeader, "api-test");
+            var trustResponse = await client.SendAsync(trust);
+            Assert.Equal(HttpStatusCode.OK, trustResponse.StatusCode);
+            Assert.Contains((await trustResponse.Content.ReadFromJsonAsync<LinkedProjectFamilyResponse>())!.Members,
+                member => member.ProjectId == "prj_royale" && member.WriteTrusted);
+
+            var detail = await client.GetAsync("/api/v1/projects/prj_royale/tasks/GAME-0001");
+            var current = (await detail.Content.ReadFromJsonAsync<TaskResponse>())!;
+            using var update = new HttpRequestMessage(HttpMethod.Put,
+                "/api/v1/projects/prj_royale/tasks/GAME-0001")
+            {
+                Content = JsonContent.Create(new UpdateTaskRequest(
+                    "Updated linked task", current.State, current.Description, "inherit")),
+            };
+            update.Headers.Add(ApiV1Endpoints.ClientHeader, "api-test");
+            update.Headers.TryAddWithoutValidation("If-Match", detail.Headers.ETag!.ToString());
+            var updated = await client.SendAsync(update);
+
+            Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+            Assert.Equal("prj_royale", updated.Headers.GetValues("X-PM-Project-Id").Single());
+            Assert.Equal([".pm/states/todo/GAME-0001.ref", ".pm/tasks/GAME-0001.md"],
+                updated.Headers.GetValues("X-PM-Changed-Path").ToArray());
+            Assert.Equal("Updated linked task",
+                (await updated.Content.ReadFromJsonAsync<TaskResponse>())!.Title);
+            Assert.DoesNotContain(active.GetAllTasks(), candidate => candidate.Id == task.Id);
         }
     }
 
@@ -98,12 +168,13 @@ public partial class ApiContractTests
 
     private static LinkedProjectFamilyService LinkedFamily(
         ProjectRoot active,
-        TempWorkingDirectory workspace) =>
+        TempWorkingDirectory workspace,
+        LinkedProjectRegistryStore? registry = null) =>
         new(
             active,
             new LinkedProjectService(active),
             new LinkedProjectResolver(
-                new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+                registry ?? new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
                 {
                     RootPath = Path.Combine(workspace.Path, "linked-api-registry"),
                 }),

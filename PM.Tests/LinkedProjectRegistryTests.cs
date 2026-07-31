@@ -68,6 +68,31 @@ public sealed class LinkedProjectRegistryTests
     }
 
     [Fact]
+    public async Task WriteTrustIsPrivateRevocableAndResetByRebinding()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var first = await CreateProject(Path.Combine(workspace.Path, "first"), "prj_one");
+        var second = await CreateProject(Path.Combine(workspace.Path, "second"), "prj_one");
+        var registry = Registry(Path.Combine(workspace.Path, "registry"));
+        Assert.True(registry.Bind("prj_one", first.RepositoryPath).Success);
+
+        var trusted = registry.GrantWriteTrust("prj_one");
+        Assert.True(trusted.Success);
+        Assert.True(trusted.Payload!.WriteTrusted);
+        Assert.Equal(first.RepositoryPath, registry.OpenWriteTrusted("prj_one").Payload!.RepositoryPath);
+
+        var revoked = registry.RevokeWriteTrust("prj_one");
+        Assert.True(revoked.Success);
+        Assert.False(revoked.Payload!.WriteTrusted);
+        Assert.Equal("linked_project_write_untrusted", registry.OpenWriteTrusted("prj_one").ErrorCode);
+
+        Assert.True(registry.GrantWriteTrust("prj_one").Success);
+        var rebound = registry.Bind("prj_one", second.RepositoryPath, replace: true);
+        Assert.True(rebound.Success);
+        Assert.False(rebound.Payload!.WriteTrusted);
+    }
+
+    [Fact]
     public async Task RegistryRejectsSymlinkedStorage()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -229,11 +254,19 @@ public sealed class LinkedProjectRegistryTests
             Selector = "linked",
             RepositoryPath = linked.RepositoryPath,
         }, CancellationToken.None);
+        var family = new LinkedProjectFamilyService(active, service,
+            new LinkedProjectResolver(registry, new StubSubmoduleInspector(null)));
+        var trustExit = await new ProjectTrustCommand(family, registry).ExecuteAsync(null!,
+            new ProjectTrustCommand.Settings { Selector = "linked" }, CancellationToken.None);
+        var untrustExit = await new ProjectUntrustCommand(family, registry).ExecuteAsync(null!,
+            new ProjectUntrustCommand.Settings { Selector = "prj_linked" }, CancellationToken.None);
         active.DeleteLinkedProjectsManifest();
         var unbindExit = new ProjectUnbindCommand(active, service, registry).Execute(null!,
             new ProjectUnbindCommand.Settings { Selector = "prj_linked" }, CancellationToken.None);
 
         Assert.Equal(0, bindExit);
+        Assert.Equal(0, trustExit);
+        Assert.Equal(0, untrustExit);
         Assert.Equal(0, unbindExit);
         Assert.Equal("project_not_registered", registry.Get("prj_linked").ErrorCode);
     }

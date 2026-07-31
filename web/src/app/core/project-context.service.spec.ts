@@ -90,5 +90,13 @@ describe('ProjectContextService', () => {
 
     expect(context.projectModeUrl('prj_active')).toBe('/tasks');
     expect(context.displayProject()?.name).toBe('Child');
+    expect(context.readOnly()).toBe(true);
+    context.family.update((family) => ({
+      ...family!,
+      members: family!.members.map((member) =>
+        member.projectId === 'prj_child' ? { ...member, writeTrusted: true } : member,
+      ),
+    }));
+    expect(context.readOnly()).toBe(false);
   });
 });

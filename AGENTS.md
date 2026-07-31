@@ -132,6 +132,7 @@ Avoid unnecessary re-renders, repeated expensive computation, avoidable layout s
 - Follow existing naming, file organization, dependency injection, result handling, and testing conventions.
 - Make the smallest coherent change that solves the problem.
 - Avoid unrelated refactoring and broad visual restyling.
+- Do not retain obsolete compatibility shims solely to keep old tests or internal call sites compiling. Update those callers unless backward compatibility is an explicit requirement.
 - Explain significant architectural deviations.
 - Remove obsolete code introduced by the change.
 - Update documentation and tests when behavior changes.

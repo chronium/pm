@@ -100,6 +100,51 @@ public sealed class LinkedProjectRegistryStore(
             false));
     }
 
+    public AppResult<LinkedProjectBinding> GrantWriteTrust(string projectId)
+    {
+        var existing = Get(projectId);
+        if (!existing.Success)
+            return AppResult<LinkedProjectBinding>.Fail(existing.ErrorCode!, existing.Message!);
+
+        var opened = OpenAndVerify(existing.Payload!.ProjectId, existing.Payload.RepositoryPath);
+        if (!opened.Success)
+            return AppResult<LinkedProjectBinding>.Fail(opened.ErrorCode!, opened.Message!);
+
+        return Save(new StoredLinkedProjectBinding(
+            SchemaVersion,
+            existing.Payload.ProjectId,
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(opened.Payload!.RepositoryPath)),
+            _timeProvider.GetUtcNow(),
+            true));
+    }
+
+    public AppResult<LinkedProjectBinding> RevokeWriteTrust(string projectId)
+    {
+        var existing = Get(projectId);
+        if (!existing.Success)
+            return AppResult<LinkedProjectBinding>.Fail(existing.ErrorCode!, existing.Message!);
+
+        return Save(new StoredLinkedProjectBinding(
+            SchemaVersion,
+            existing.Payload!.ProjectId,
+            existing.Payload.RepositoryPath,
+            existing.Payload.VerifiedAt,
+            false));
+    }
+
+    public AppResult<ProjectRoot> OpenWriteTrusted(string projectId)
+    {
+        var existing = Get(projectId);
+        if (!existing.Success)
+            return AppResult<ProjectRoot>.Fail(existing.ErrorCode!, existing.Message!);
+        if (!existing.Payload!.WriteTrusted)
+            return AppResult<ProjectRoot>.Fail(
+                "linked_project_write_untrusted",
+                $"Project {existing.Payload.ProjectId} is not trusted for local writes.");
+
+        return OpenAndVerify(existing.Payload.ProjectId, existing.Payload.RepositoryPath);
+    }
+
     public AppResult<LinkedProjectBinding> Remember(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists || !projectRoot.TryReadProjectId(out var projectId))
@@ -262,8 +307,7 @@ public sealed class LinkedProjectRegistryStore(
     private static AppResult Validate(StoredLinkedProjectBinding binding)
     {
         if (binding.SchemaVersion != SchemaVersion || !ProjectIdentifiers.IsValid(binding.ProjectId) ||
-            string.IsNullOrWhiteSpace(binding.RepositoryPath) || !Path.IsPathFullyQualified(binding.RepositoryPath) ||
-            binding.WriteTrusted)
+            string.IsNullOrWhiteSpace(binding.RepositoryPath) || !Path.IsPathFullyQualified(binding.RepositoryPath))
             return AppResult.Fail("invalid_project_binding", "A project binding is invalid.");
         return AppResult.Ok();
     }

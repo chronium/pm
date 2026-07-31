@@ -15,6 +15,13 @@ public abstract class LinkedProjectSelectorSettings : CommonSettings
         LinkedProjectReadRequest.FromOptions(Project, false);
 }
 
+public abstract class LinkedProjectMutationSettings : CommonSettings
+{
+    [CommandOption("--project <SELECTOR>")]
+    [Description("Write to current, parent, a stable project ID, or a trusted linked-project alias")]
+    public string? Project { get; init; }
+}
+
 public abstract class LinkedProjectAggregateReadSettings : LinkedProjectSelectorSettings
 {
     [CommandOption("--family")]
@@ -32,6 +39,15 @@ public abstract class LinkedProjectAggregateReadSettings : LinkedProjectSelector
 
 public static class LinkedProjectConsole
 {
+    public static void WriteReceipt(ProjectMutationReceipt receipt)
+    {
+        var paths = receipt.ChangedPaths.Count == 0
+            ? "no files changed"
+            : string.Join(", ", receipt.ChangedPaths);
+        AnsiConsole.MarkupLineInterpolated(
+            $"[grey]Project {receipt.ProjectId.EscapeMarkup()} · {paths.EscapeMarkup()}[/]");
+    }
+
     public static string ProjectLabel(LinkedProjectResourceOwner owner)
     {
         var alias = owner.Alias is null ? string.Empty : $" / {owner.Alias}";

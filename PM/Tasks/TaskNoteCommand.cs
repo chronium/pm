@@ -1,16 +1,24 @@
 using System.ComponentModel;
 using PM.Application;
+using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Tasks;
 
-public sealed class TaskNoteCommand(TaskService taskService, IEditorService editorService)
+public sealed class TaskNoteCommand(LinkedProjectMutationService mutations, IEditorService editorService)
     : AsyncCommand<TaskNoteCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{target.Message!.EscapeMarkup()}[/]");
+            return 1;
+        }
+
         var note = settings.Note;
         if (settings.Edit || note == null)
         {
@@ -18,7 +26,8 @@ public sealed class TaskNoteCommand(TaskService taskService, IEditorService edit
             if (note == null) return 1;
         }
 
-        var result = taskService.AppendTaskNote(settings.TaskId, note);
+        using var mutation = mutations.Track(target.Payload!);
+        var result = target.Payload!.Tasks.AppendTaskNote(settings.TaskId, note);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated(
@@ -28,6 +37,7 @@ public sealed class TaskNoteCommand(TaskService taskService, IEditorService edit
 
         AnsiConsole.MarkupLineInterpolated(
             $"Added note to task [green]{settings.TaskId.Trim().EscapeMarkup()}[/].");
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
         return 0;
     }
 
@@ -58,7 +68,7 @@ public sealed class TaskNoteCommand(TaskService taskService, IEditorService edit
         }
     }
 
-    public sealed class Settings : CommandSettings
+    public sealed class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<task-id>")]
         [Description("Task ID")]

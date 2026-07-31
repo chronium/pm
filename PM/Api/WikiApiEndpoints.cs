@@ -194,7 +194,7 @@ public static class WikiApiEndpoints
         return Results.Ok(response.Value);
     }
 
-    private static IResult Refreshed(HttpRequest request, AppResult<WikiPageData> result,
+    internal static IResult Refreshed(HttpRequest request, AppResult<WikiPageData> result,
         ResourceRevisionService revisions)
     {
         if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
@@ -204,7 +204,7 @@ public static class WikiApiEndpoints
         return Results.Ok(response.Value);
     }
 
-    private static (WikiPageResponse? Value, IResult? Error) CreateResponse(WikiPageData page,
+    internal static (WikiPageResponse? Value, IResult? Error) CreateResponse(WikiPageData page,
         ResourceRevisionService revisions, HttpRequest request)
     {
         var revision = revisions.GetWikiPageRevision(page.Path);
@@ -221,7 +221,7 @@ public static class WikiApiEndpoints
             new WikiPageLocalMetadataResponse(page.FilePath)), null);
     }
 
-    private static IResult? CheckPrecondition(HttpRequest request, string path,
+    internal static IResult? CheckPrecondition(HttpRequest request, string path,
         ResourceRevisionService revisions)
     {
         var revision = revisions.GetWikiPageRevision(path);
@@ -230,6 +230,6 @@ public static class WikiApiEndpoints
             : ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path);
     }
 
-    private static string PageLocation(string path) =>
+    internal static string PageLocation(string path) =>
         $"{ApiV1Endpoints.Prefix}/wiki/pages/{string.Join('/', path.Split('/').Select(Uri.EscapeDataString))}";
 }

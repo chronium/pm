@@ -5,12 +5,18 @@ using Spectre.Console.Cli;
 
 namespace PM.Tasks;
 
-public class MoveCommand(ProjectRoot projectRoot, TaskService taskService) : AsyncCommand<MoveCommand.Settings>
+public class MoveCommand(LinkedProjectMutationService mutations) : AsyncCommand<MoveCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
-        if (ValidateProjectAndServiceHealth(cancellationToken) != 0) return 1;
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{target.Message!.EscapeMarkup()}[/]");
+            return 1;
+        }
+        var projectRoot = target.Payload!.Root;
 
         if (!projectRoot.TryGetById(settings.TaskId, out var task))
         {
@@ -30,7 +36,8 @@ public class MoveCommand(ProjectRoot projectRoot, TaskService taskService) : Asy
             .AddChoices(projectRoot.Config!.TaskStates.Keys);
 
         var newState = await AnsiConsole.PromptAsync(newStatePrompt, cancellationToken);
-        var result = taskService.MoveTask(settings.TaskId, newState);
+        using var mutation = mutations.Track(target.Payload);
+        var result = target.Payload.Tasks.MoveTask(settings.TaskId, newState);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated($"[red]{(result.Message ?? "Task move failed.").EscapeMarkup()}[/]");
@@ -38,22 +45,12 @@ public class MoveCommand(ProjectRoot projectRoot, TaskService taskService) : Asy
         }
 
         AnsiConsole.MarkupLine($"[green]Task {settings.TaskId} moved to state {newState}[/]");
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
 
         return 0;
     }
 
-    private int ValidateProjectAndServiceHealth(CancellationToken cancellationToken)
-    {
-        if (!projectRoot.Exists)
-        {
-            AnsiConsole.MarkupLine("[red]Project not found. Run [green]pm init[/] first.[/]");
-            return 1;
-        }
-
-        return 0;
-    }
-
-    public class Settings : CommonSettings
+    public class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<task-id>")] public string TaskId { get; init; } = string.Empty;
     }

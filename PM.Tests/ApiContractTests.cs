@@ -388,7 +388,9 @@ public partial class ApiContractTests
         bool mapNonApiEndpoint = false,
         INextIdService? nextIdService = null,
         IProjectMembershipService? membershipService = null,
-        LinkedProjectFamilyService? linkedProjectFamilyService = null)
+        LinkedProjectFamilyService? linkedProjectFamilyService = null,
+        LinkedProjectMutationService? linkedProjectMutationService = null,
+        LinkedProjectRegistryStore? linkedProjectRegistry = null)
     {
         var port = GetAvailablePort();
         var url = $"http://127.0.0.1:{port}";
@@ -401,7 +403,9 @@ public partial class ApiContractTests
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
             new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,
-            membershipService, linkedProjectFamilyService: linkedProjectFamilyService);
+            membershipService, linkedProjectFamilyService: linkedProjectFamilyService,
+            linkedProjectMutationService: linkedProjectMutationService,
+            linkedProjectRegistry: linkedProjectRegistry);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapNonApiEndpoint)
             app.MapGet("/board", () => Results.Content("non-api", "text/html"));

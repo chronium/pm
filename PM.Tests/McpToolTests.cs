@@ -1184,11 +1184,14 @@ public class McpToolTests
         var task = await tools.GetTask("AGENT-0002");
         var allowed = tools.AppendTaskNote("AGENT-0002", "Allowed note");
         var denied = tools.AppendTaskNote("AGENT-0003", "Denied note");
+        var linkedDenied = tools.AppendTaskNote("AGENT-0002", "Linked note", project: "prj_linked");
 
         Assert.True(task.Success);
         Assert.True(allowed.Success);
         Assert.False(denied.Success);
         Assert.Equal("mcp_task_scope_denied", denied.ErrorCode);
+        Assert.False(linkedDenied.Success);
+        Assert.Equal("linked_project_write_denied", linkedDenied.ErrorCode);
         Assert.True(projectRoot.TryGetById("AGENT-0002", out var assignedTask));
         Assert.Contains("Allowed note", assignedTask.Description);
         Assert.True(projectRoot.TryGetById("AGENT-0003", out var otherTask));

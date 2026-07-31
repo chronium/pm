@@ -40,7 +40,9 @@ public static class ApiV1Endpoints
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
         IAgentRunnerClient? agentRunnerClient = null,
-        LinkedProjectFamilyService? linkedProjectFamilyService = null)
+        LinkedProjectFamilyService? linkedProjectFamilyService = null,
+        LinkedProjectMutationService? linkedProjectMutationService = null,
+        LinkedProjectRegistryStore? linkedProjectRegistry = null)
     {
         var api = endpoints.MapGroup(Prefix)
             .AddEndpointFilter((context, next) => ReloadProjectConfig(context, next, projectRoot))
@@ -84,8 +86,10 @@ public static class ApiV1Endpoints
         api.MapSettingsApi(configService, revisions);
         api.MapValidationApi(validationService);
         var linkedProjects = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
-        api.MapLinkedProjectApi(linkedProjects);
-        api.MapLinkedProjectReadApi(linkedProjects);
+        var linkedRegistry = linkedProjectRegistry ?? new LinkedProjectRegistryStore();
+        var linkedMutations = linkedProjectMutationService ?? LinkedProjectMutationService.ForCurrent(taskService);
+        api.MapLinkedProjectApi(linkedProjects, linkedRegistry);
+        api.MapLinkedProjectReadApi(linkedProjects, linkedMutations);
         if (membershipService != null) api.MapProjectMembershipApi(membershipService);
         if (agentRunService != null && agentRunnerClient != null)
             api.MapAgentRunApi(agentRunService, agentRunnerClient);
@@ -252,7 +256,8 @@ public static class ApiResults
         if (errorCode is "next_id_unavailable" or "worker_unavailable" or "runner_unavailable" or
             "runner_clock_skew") return StatusCodes.Status503ServiceUnavailable;
         if (errorCode is "unauthorized" or "runner_unauthorized") return StatusCodes.Status401Unauthorized;
-        if (errorCode == "admin_required") return StatusCodes.Status403Forbidden;
+        if (errorCode is "admin_required" or "linked_project_write_untrusted" or
+            "linked_project_write_denied") return StatusCodes.Status403Forbidden;
         if (errorCode == "rate_limited") return StatusCodes.Status429TooManyRequests;
         if (errorCode is "member_not_found" or "invitation_not_found" or "runner_not_registered" or
             "unknown_linked_project" or
