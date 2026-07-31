@@ -103,7 +103,7 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   }
 
   await page.goto('/#/tasks/E2E-0006');
-  await page.getByRole('link', { name: 'pm://project/playwright-project/task/E2E-0005' }).click();
+  await page.getByRole('link', { name: 'E2E-0005', exact: true }).click();
   await expect(page).toHaveURL(/#\/tasks\/E2E-0005$/);
 
   await page.goto('/#/wiki/guides/section-1');
