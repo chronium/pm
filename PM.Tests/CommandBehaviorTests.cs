@@ -52,6 +52,89 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task DoctorReturnsZeroAndPrintsLinkedProjectWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "prj_active\n");
+        projectRoot.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_missing",
+                    Alias = "missing",
+                    RepositoryUrl = "https://example.test/missing.git",
+                    PathHint = "missing",
+                },
+            ],
+        });
+        var linkedProjects = new LinkedProjectService(projectRoot);
+        var family = new LinkedProjectFamilyService(
+            projectRoot,
+            linkedProjects,
+            new LinkedProjectResolver(
+                new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+                {
+                    RootPath = Path.Combine(workspace.Path, "registry"),
+                }),
+                new EmptyLinkedProjectSubmoduleInspector()));
+        var command = new DoctorCommand(new ProjectValidationService(projectRoot, linkedProjects, family));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Project validation passed with 2 warning(s).", output);
+        Assert.Contains("warning missing_project_path", output);
+        Assert.Contains("warning linked_project_missing", output);
+        Assert.Contains("project prj_missing", output);
+        Assert.Contains("alias missing", output);
+    }
+
+    [Fact]
+    public async Task ProjectLinksPrintsPartialFamilyAndNamedWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "prj_active\n");
+        projectRoot.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_missing",
+                    Alias = "missing",
+                    RepositoryUrl = "https://example.test/missing.git",
+                    PathHint = "missing",
+                },
+            ],
+        });
+        var command = new ProjectLinksCommand(new LinkedProjectFamilyService(
+            projectRoot,
+            new LinkedProjectService(projectRoot),
+            new LinkedProjectResolver(
+                new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+                {
+                    RootPath = Path.Combine(workspace.Path, "registry"),
+                }),
+                new EmptyLinkedProjectSubmoduleInspector())));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.ExecuteAsync(null!, new ProjectLinksCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("current", output);
+        Assert.Contains("prj_active", output);
+        Assert.Contains("prj_missing", output);
+        Assert.Contains("linked_project_missing", output);
+    }
+
+    [Fact]
     public async Task DoctorInvalidProjectReturnsOneAndPrintsIssueContext()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1390,6 +1473,15 @@ public class CommandBehaviorTests
             HealthyCalls++;
             return Task.FromResult(true);
         }
+    }
+
+    private sealed class EmptyLinkedProjectSubmoduleInspector : ILinkedProjectSubmoduleInspector
+    {
+        public Task<AppResult<LinkedProjectRepairAction?>> InspectAsync(
+            string repositoryPath,
+            string pathHint,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<LinkedProjectRepairAction?>.Ok(null));
     }
 
     private sealed class RecordingEditorService : IEditorService

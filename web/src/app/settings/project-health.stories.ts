@@ -14,6 +14,25 @@ const invalid = {
       wikiPath: 'architecture/angular/settings-and-validation-with-a-deliberately-long-path.md',
       state: 'archived',
       path: '.pm/tasks/PM-0052-with-a-deliberately-long-file-name.md',
+      projectId: null,
+      projectAlias: null,
+    },
+  ],
+};
+
+const validWithWarnings = {
+  valid: true,
+  issues: [
+    {
+      severity: 'warning',
+      code: 'linked_project_missing',
+      message: 'Linked project prj_gameplay (gameplay) is missing.',
+      taskId: null,
+      wikiPath: null,
+      state: null,
+      path: null,
+      projectId: 'prj_gameplay',
+      projectAlias: 'gameplay',
     },
   ],
 };
@@ -27,6 +46,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Valid: Story = { args: { validation: { valid: true, issues: [] } } };
+export const ValidWithWarnings: Story = { args: { validation: validWithWarnings } };
 export const Invalid: Story = { args: { validation: invalid } };
 export const Loading: Story = { args: { loading: true } };
 export const Refreshing: Story = { args: { validation: invalid, refreshing: true } };

@@ -387,6 +387,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/project/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get linked-project family health */
+        get: operations["GetLinkedProjects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/project/identity": {
         parameters: {
             query?: never;
@@ -1215,6 +1232,30 @@ export interface components {
             summary: string;
         };
         JsonElement: unknown;
+        LinkedProjectFamilyResponse: {
+            activeProjectId: string;
+            members: components["schemas"]["LinkedProjectMemberResponse"][];
+            warnings: components["schemas"]["LinkedProjectWarningResponse"][];
+        };
+        LinkedProjectMemberResponse: {
+            projectId: string;
+            name: string;
+            alias: null | string;
+            relationship: string;
+            status: string;
+            source: string;
+            readable: boolean;
+            writeTrusted: boolean;
+        };
+        LinkedProjectWarningResponse: {
+            code: string;
+            message: string;
+            declaringProjectId: string;
+            targetProjectId: string;
+            alias: null | string;
+            status: string;
+            repairCommand: null | string;
+        };
         LocalIdentityResponse: {
             userId: string;
             displayName: string;
@@ -1359,6 +1400,8 @@ export interface components {
             taskId: null | string;
             wikiPath: null | string;
             state: null | string;
+            projectId: null | string;
+            projectAlias: null | string;
         };
         ValidationResponse: {
             valid: boolean;
@@ -3521,6 +3564,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLinkedProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedProjectFamilyResponse"];
                 };
             };
             /** @description Bad Request */

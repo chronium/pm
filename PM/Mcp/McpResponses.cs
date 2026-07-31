@@ -217,4 +217,30 @@ public sealed record ProjectValidationIssuePayload(
     string? Path,
     string? TaskId,
     string? WikiPath,
-    string? State);
+    string? State,
+    string? ProjectId,
+    string? ProjectAlias);
+
+public sealed record LinkedProjectMemberPayload(
+    string ProjectId,
+    string Name,
+    string? Alias,
+    string Relationship,
+    string Status,
+    string Source,
+    bool Readable,
+    bool WriteTrusted);
+
+public sealed record LinkedProjectWarningPayload(
+    string Code,
+    string Message,
+    string DeclaringProjectId,
+    string TargetProjectId,
+    string? Alias,
+    string Status,
+    string? RepairCommand);
+
+public sealed record LinkedProjectFamilyPayload(
+    string ActiveProjectId,
+    IReadOnlyList<LinkedProjectMemberPayload> Members,
+    IReadOnlyList<LinkedProjectWarningPayload> Warnings);

@@ -12,23 +12,25 @@ public sealed record ValidationIssueResponse(
     string? Path,
     string? TaskId,
     string? WikiPath,
-    string? State);
+    string? State,
+    string? ProjectId,
+    string? ProjectAlias);
 public sealed record ValidationResponse(bool Valid, IReadOnlyList<ValidationIssueResponse> Issues);
 
 public static class ValidationApiEndpoints
 {
     public static void MapValidationApi(this RouteGroupBuilder api, ProjectValidationService validationService)
     {
-        api.MapGet("/validation", (HttpRequest request) =>
+        api.MapGet("/validation", async (HttpRequest request, CancellationToken cancellationToken) =>
             {
-                var result = validationService.ValidateProject();
+                var result = await validationService.ValidateProjectAsync(cancellationToken);
                 if (!result.Success)
                     return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
 
                 var validation = result.Payload!;
                 return Results.Ok(new ValidationResponse(validation.Valid, validation.Issues.Select(issue =>
                     new ValidationIssueResponse(issue.Severity, issue.Code, issue.Message, issue.Path,
-                        issue.TaskId, issue.WikiPath, issue.State)).ToList()));
+                        issue.TaskId, issue.WikiPath, issue.State, issue.ProjectId, issue.ProjectAlias)).ToList()));
             })
             .WithName("GetValidation")
             .WithSummary("Validate the project")

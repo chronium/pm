@@ -33,6 +33,11 @@ h2 {
   color: var(--pm-success);
   font-weight: 600;
 }
+.health-warning {
+  margin: 0 0 var(--pm-space-2);
+  color: var(--pm-warning);
+  font-weight: 600;
+}
 .health-valid span {
   margin-right: var(--pm-space-1);
 }
@@ -68,6 +73,9 @@ h2 {
   font-size: var(--pm-font-size-xs);
   font-weight: 700;
   text-transform: uppercase;
+}
+.issue-severity--warning {
+  color: var(--pm-warning);
 }
 .issue-lead code {
   overflow-wrap: anywhere;

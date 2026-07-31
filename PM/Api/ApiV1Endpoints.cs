@@ -33,7 +33,8 @@ public static class ApiV1Endpoints
         Action<RouteGroupBuilder>? configure = null,
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
-        IAgentRunnerClient? agentRunnerClient = null)
+        IAgentRunnerClient? agentRunnerClient = null,
+        LinkedProjectFamilyService? linkedProjectFamilyService = null)
     {
         var api = endpoints.MapGroup(Prefix)
             .AddEndpointFilter((context, next) => ReloadProjectConfig(context, next, projectRoot))
@@ -72,6 +73,7 @@ public static class ApiV1Endpoints
         api.MapWikiApi(wikiService, revisions);
         api.MapSettingsApi(configService, revisions);
         api.MapValidationApi(validationService);
+        api.MapLinkedProjectApi(linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot));
         if (membershipService != null) api.MapProjectMembershipApi(membershipService);
         if (agentRunService != null && agentRunnerClient != null)
             api.MapAgentRunApi(agentRunService, agentRunnerClient);

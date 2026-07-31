@@ -750,6 +750,45 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task LinkedProjectToolsReturnPartialFamilyAndValidationWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "prj_active\n");
+        projectRoot.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_missing",
+                    Alias = "missing",
+                    RepositoryUrl = "https://example.test/missing.git",
+                    PathHint = "missing",
+                },
+            ],
+        });
+        var tools = CreateTools(projectRoot);
+
+        var family = await tools.ListLinkedProjects();
+        var validation = tools.ValidateProject();
+
+        Assert.True(family.Success);
+        Assert.Equal(2, family.Data!.Members.Count);
+        var missing = Assert.Single(family.Data.Members, member => member.ProjectId == "prj_missing");
+        Assert.Equal("missing", missing.Status);
+        Assert.False(missing.Readable);
+        var warning = Assert.Single(family.Data.Warnings, item => item.Code == "linked_project_missing");
+        Assert.Equal("prj_missing", warning.TargetProjectId);
+        Assert.DoesNotContain(projectRoot.RepositoryPath, JsonSerializer.Serialize(family.Data));
+        Assert.True(validation.Success);
+        Assert.True(validation.Data!.Valid);
+        Assert.Contains(validation.Data.Issues, issue =>
+            issue.Severity == "warning" && issue.ProjectId == "prj_missing");
+    }
+
+    [Fact]
     public async Task AddTrackAndMilestoneReturnDuplicateAndInvalidErrors()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1018,6 +1057,19 @@ public class McpToolTests
         McpCapabilityContext? capabilityContext = null)
     {
         nextIdService ??= new RecordingNextIdService();
+        var linkedProjects = new LinkedProjectService(projectRoot);
+        var registryBasePath = projectRoot.Exists
+            ? projectRoot.RepositoryPath
+            : Environment.CurrentDirectory;
+        var linkedProjectFamily = new LinkedProjectFamilyService(
+            projectRoot,
+            linkedProjects,
+            new LinkedProjectResolver(
+                new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+                {
+                    RootPath = Path.Combine(registryBasePath, ".test-project-registry"),
+                }),
+                new NullSubmoduleInspector()));
         return new PmMcpTools(
             projectRoot,
             new TaskService(projectRoot, nextIdService),
@@ -1025,9 +1077,19 @@ public class McpToolTests
             new ProjectConfigService(projectRoot),
             new BoardService(projectRoot),
             new WikiService(projectRoot),
-            new ProjectValidationService(projectRoot),
+            new ProjectValidationService(projectRoot, linkedProjects, linkedProjectFamily),
+            linkedProjectFamily,
             membershipService,
             capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal));
+    }
+
+    private sealed class NullSubmoduleInspector : ILinkedProjectSubmoduleInspector
+    {
+        public Task<AppResult<LinkedProjectRepairAction?>> InspectAsync(
+            string repositoryPath,
+            string pathHint,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(AppResult<LinkedProjectRepairAction?>.Ok(null));
     }
 
     private static List<string> ResolveSchemaEnumValues(JsonElement root, JsonElement schema)

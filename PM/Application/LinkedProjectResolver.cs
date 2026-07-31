@@ -11,8 +11,8 @@ public enum LinkedProjectResolutionStatus
     Missing,
     Invalid,
     IdentityMismatch,
-    StaleBinding,
     UninitializedSubmodule,
+    UntrustedForWrite,
 }
 
 public enum LinkedProjectResolutionSource
@@ -211,11 +211,7 @@ public sealed class LinkedProjectResolver(
         var decisiveFailure = pathFailure ?? registryFailure;
         if (decisiveFailure != null)
         {
-            var status = registryFailure != null && pathFailure == null &&
-                         decisiveFailure.Status == LinkedProjectResolutionStatus.Missing
-                ? LinkedProjectResolutionStatus.StaleBinding
-                : decisiveFailure.Status;
-            return Unavailable(declaration, status, decisiveFailure.RepositoryPath, diagnostics);
+            return Unavailable(declaration, decisiveFailure.Status, decisiveFailure.RepositoryPath, diagnostics);
         }
 
         return Unavailable(declaration, LinkedProjectResolutionStatus.Unregistered, null, diagnostics);
