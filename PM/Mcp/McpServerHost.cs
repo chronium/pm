@@ -51,6 +51,8 @@ public static class McpServerHost
         builder.Services.AddSingleton<ProjectConfigService>();
         builder.Services.AddSingleton<LinkedProjectService>();
         builder.Services.AddSingleton<LinkedProjectFamilyService>();
+        builder.Services.AddSingleton<ILinkedProjectGitInspector, LinkedProjectGitInspector>();
+        builder.Services.AddSingleton<LinkedProjectReadService>();
         builder.Services.AddSingleton<BoardService>();
         builder.Services.AddSingleton<WikiService>();
         builder.Services.AddSingleton<ProjectValidationService>();
