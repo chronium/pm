@@ -114,8 +114,17 @@ public partial record TaskItem
     }
 
     public static bool HasSelfDependency(string taskId, IEnumerable<string?> dependencyIds)
+        => HasSelfDependency(taskId, dependencyIds, null);
+
+    public static bool HasSelfDependency(
+        string taskId,
+        IEnumerable<string?> dependencyIds,
+        string? activeProjectId)
     {
-        return dependencyIds.Any(id => string.Equals(taskId, id, StringComparison.Ordinal));
+        return dependencyIds.Any(value =>
+            TaskDependencyReference.TryParse(value, out var dependency, out _) &&
+            dependency!.IsLocalTo(activeProjectId) &&
+            string.Equals(taskId, dependency.TaskId, StringComparison.Ordinal));
     }
 
     [GeneratedRegex(@"\A---[ \t]*\r?\n(?<yaml>.*?)\r?\n---[ \t]*(?:\r?\n|$)(?<body>.*)\z", RegexOptions.Singleline)]

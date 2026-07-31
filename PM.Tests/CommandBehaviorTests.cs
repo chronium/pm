@@ -796,6 +796,13 @@ public class CommandBehaviorTests
         Assert.Contains("- PM-0002", content);
         Assert.Contains("- BUILD-0002", content);
 
+        const string qualified = "pm://project/prj_other/task/OTHER-0001";
+        Assert.Equal(0,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = qualified },
+                CancellationToken.None));
+        Assert.Contains($"- {qualified}", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
+
         Assert.Equal(0,
             command.Execute(null!,
                 new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = "" },
@@ -805,6 +812,10 @@ public class CommandBehaviorTests
         Assert.Equal(1,
             command.Execute(null!,
                 new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = "PM-0001" },
+                CancellationToken.None));
+        Assert.Equal(1,
+            command.Execute(null!,
+                new TaskMetadataCommand.Settings { TaskId = "PM-0001", DependsOn = "pm:not-a-reference" },
                 CancellationToken.None));
     }
 

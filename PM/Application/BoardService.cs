@@ -176,7 +176,7 @@ public partial class BoardService(ProjectRoot projectRoot)
             priority.Priority,
             priority.Source,
             state,
-            BuildDependencyStatus(task, tasksById, stateById),
+            BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId()),
             GetDescriptionPreview(task.Description, descriptionPreviewLength),
             projectRoot.GetTaskFilePath(task.Id)));
     }
@@ -230,7 +230,7 @@ public partial class BoardService(ProjectRoot projectRoot)
                 item => projectRoot.TryGetState(item, out var state) ? state : string.Empty,
                 StringComparer.Ordinal);
 
-        return BuildDependencyStatus(task, tasksById, stateById);
+        return BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId());
     }
 
     public static string GetDescriptionPreview(string description, int previewLength)
@@ -278,7 +278,7 @@ public partial class BoardService(ProjectRoot projectRoot)
                     priority.Priority,
                     priority.Source,
                     state,
-                    BuildDependencyStatus(task, tasksById, stateById),
+                    BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId()),
                     GetDescriptionPreview(task.Description, descriptionPreviewLength),
                     projectRoot.GetTaskFilePath(task.Id));
             })
@@ -294,7 +294,8 @@ public partial class BoardService(ProjectRoot projectRoot)
     public static DependencyStatus BuildDependencyStatus(
         TaskItem task,
         IReadOnlyDictionary<string, TaskItem> tasksById,
-        IReadOnlyDictionary<string, string> stateById)
+        IReadOnlyDictionary<string, string> stateById,
+        string? activeProjectId = null)
     {
         var dependencies = task.DependencyIds;
         if (dependencies.Count == 0)
@@ -302,17 +303,25 @@ public partial class BoardService(ProjectRoot projectRoot)
 
         var waitingOn = new List<string>();
         var missing = new List<string>();
-        foreach (var dependencyId in dependencies)
+        foreach (var dependencyValue in dependencies)
         {
+            if (!TaskDependencyReference.TryParse(dependencyValue, out var dependency, out _) ||
+                !dependency!.IsLocalTo(activeProjectId))
+            {
+                missing.Add(dependencyValue);
+                continue;
+            }
+
+            var dependencyId = dependency.TaskId;
             if (!tasksById.ContainsKey(dependencyId))
             {
-                missing.Add(dependencyId);
+                missing.Add(dependencyValue);
                 continue;
             }
 
             if (!stateById.TryGetValue(dependencyId, out var state) ||
                 !string.Equals(state, "done", StringComparison.Ordinal))
-                waitingOn.Add(dependencyId);
+                waitingOn.Add(dependencyValue);
         }
 
         var ready = waitingOn.Count == 0 && missing.Count == 0;
@@ -322,6 +331,9 @@ public partial class BoardService(ProjectRoot projectRoot)
 
         return new DependencyStatus(ready, dependencies.ToList(), waitingOn, missing, summary);
     }
+
+    private string? GetActiveProjectId() =>
+        projectRoot.TryReadProjectId(out var projectId) ? projectId : null;
 
     private static Dictionary<string, TaskItem> BuildTaskLookup(IEnumerable<TaskItem> tasks)
     {

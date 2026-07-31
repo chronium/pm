@@ -224,7 +224,7 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
                 priority.Priority,
                 priority.Source,
                 state,
-                BoardService.BuildDependencyStatus(task, tasksById, stateById),
+                BoardService.BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId()),
                 descriptionPreview,
                 filePath,
                 matchCount,
@@ -402,7 +402,11 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         if (!string.Equals(editedTask.Id, taskId, StringComparison.Ordinal))
             return AppResult.Fail("changed_task_id", "Task ID cannot be changed.");
 
-        if (TaskItem.HasSelfDependency(editedTask.Id, editedTask.DependencyIds))
+        var dependencyValidation = NormalizeDependenciesForWrite(editedTask.DependencyIds);
+        if (!dependencyValidation.Success)
+            return AppResult.Fail(dependencyValidation.ErrorCode!, dependencyValidation.Message!);
+
+        if (TaskItem.HasSelfDependency(editedTask.Id, editedTask.DependencyIds, GetActiveProjectId()))
             return AppResult.Fail("invalid_dependency", $"Task {editedTask.Id} cannot depend on itself.");
 
         return AppResult.Ok();
@@ -461,12 +465,20 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             return AppResult<TaskMutationResult>.Fail("invalid_priority",
                 $"Task priority must be inherit or one of {string.Join(", ", PriorityLevel.Values)}.");
 
-        var normalizedDependencies = dependsOn == null ? null : TaskItem.NormalizeDependencyIds(dependsOn);
+        IReadOnlyList<string>? normalizedDependencies = null;
+        if (dependsOn != null)
+        {
+            var dependencyResult = NormalizeDependenciesForWrite(dependsOn);
+            if (!dependencyResult.Success)
+                return AppResult<TaskMutationResult>.Fail(dependencyResult.ErrorCode!, dependencyResult.Message!);
+            normalizedDependencies = dependencyResult.Payload!;
+        }
 
         if (!projectRoot.TryGetById(taskId, out var task))
             return AppResult<TaskMutationResult>.Fail("missing_task", $"Task with ID {taskId} not found.");
 
-        if (normalizedDependencies != null && TaskItem.HasSelfDependency(task.Id, normalizedDependencies))
+        if (normalizedDependencies != null &&
+            TaskItem.HasSelfDependency(task.Id, normalizedDependencies, GetActiveProjectId()))
             return AppResult<TaskMutationResult>.Fail("invalid_dependency", $"Task {task.Id} cannot depend on itself.");
 
         if (!projectRoot.TryGetState(task, out var state))
@@ -652,6 +664,24 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
 
         return $"{normalizedDescription}\n\n## Notes\n\n{formattedNote}";
     }
+
+    private AppResult<IReadOnlyList<string>> NormalizeDependenciesForWrite(IEnumerable<string?> values)
+    {
+        var activeProjectId = GetActiveProjectId();
+        var normalized = new List<string>();
+        foreach (var value in TaskItem.NormalizeDependencyIds(values))
+        {
+            if (!TaskDependencyReference.TryParse(value, out var dependency, out var message))
+                return AppResult<IReadOnlyList<string>>.Fail(
+                    "invalid_dependency_reference", $"Dependency {value} is invalid: {message}");
+            normalized.Add(dependency!.ToPersistedValue(activeProjectId));
+        }
+
+        return AppResult<IReadOnlyList<string>>.Ok(normalized.Distinct(StringComparer.Ordinal).ToList());
+    }
+
+    private string? GetActiveProjectId() =>
+        projectRoot.TryReadProjectId(out var projectId) ? projectId : null;
 
     private static IReadOnlyList<(string Label, string Value, bool IsFallback)> BuildSearchFields(
         TaskItem task,

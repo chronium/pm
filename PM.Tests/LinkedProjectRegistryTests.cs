@@ -224,13 +224,13 @@ public sealed class LinkedProjectRegistryTests
         var service = new LinkedProjectService(active);
         var registry = Registry(Path.Combine(workspace.Path, "registry"));
 
-        var bindExit = new ProjectBindCommand(service, registry).Execute(null!, new ProjectBindCommand.Settings
+        var bindExit = new ProjectBindCommand(active, service, registry).Execute(null!, new ProjectBindCommand.Settings
         {
             Selector = "linked",
             RepositoryPath = linked.RepositoryPath,
         }, CancellationToken.None);
         active.DeleteLinkedProjectsManifest();
-        var unbindExit = new ProjectUnbindCommand(service, registry).Execute(null!,
+        var unbindExit = new ProjectUnbindCommand(active, service, registry).Execute(null!,
             new ProjectUnbindCommand.Settings { Selector = "prj_linked" }, CancellationToken.None);
 
         Assert.Equal(0, bindExit);
