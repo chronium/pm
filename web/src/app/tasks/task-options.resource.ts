@@ -1,7 +1,8 @@
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
-import { computed, Injectable } from '@angular/core';
+import { computed, inject, Injectable } from '@angular/core';
 
 import type { components } from '../api/generated/pm-api';
+import { ProjectContextService } from '../core/project-context.service';
 
 export type TaskOptionsResponse = components['schemas']['SettingsResponse'];
 export type TaskOption = components['schemas']['SettingsOptionResponse'];
@@ -9,7 +10,10 @@ export type TaskMilestoneOption = components['schemas']['SettingsMilestoneRespon
 
 @Injectable({ providedIn: 'root' })
 export class TaskOptionsResource {
-  readonly resource = httpResource<TaskOptionsResponse>(() => '/api/v1/settings');
+  private readonly projectContext = inject(ProjectContextService);
+  readonly resource = httpResource<TaskOptionsResponse>(() =>
+    this.projectContext.apiUrl('/settings'),
+  );
   readonly options = computed(() => (this.resource.hasValue() ? this.resource.value() : null));
   readonly loading = computed(() => this.resource.isLoading() && !this.options());
   readonly error = computed(() => this.readableError(this.resource.error()));

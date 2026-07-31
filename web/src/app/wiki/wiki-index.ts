@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 
 import { PmEmptyState, PmErrorState, PmLoadingState } from '../ui/state/state';
 import { WikiStore } from './wiki.store';
-import { StaticModeService } from '../static/static-mode.service';
+import { ProjectContextService } from '../core/project-context.service';
 
 @Component({
   selector: 'pm-wiki-index',
@@ -15,7 +15,7 @@ import { StaticModeService } from '../static/static-mode.service';
         <p class="wiki-eyebrow">Workspace</p>
         <h1>Wiki</h1>
       </div>
-      @if (!staticMode.enabled) {
+      @if (!projectContext.readOnly()) {
         <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
       }
     </header>
@@ -31,14 +31,14 @@ import { StaticModeService } from '../static/static-mode.service';
     } @else if (!store.pages()?.length) {
       <pm-empty-state
         ><p>No wiki pages yet.</p>
-        @if (!staticMode.enabled) {
+        @if (!projectContext.readOnly()) {
           <a class="pm-button pm-button--primary" routerLink="/wiki/new">Create the first page</a>
         }
       </pm-empty-state>
     } @else {
       <div class="wiki-list" aria-label="All wiki pages">
         @for (page of store.pages(); track page.path) {
-          <a class="wiki-list-row" [routerLink]="['/wiki', ...page.path.split('/')]">
+          <a class="wiki-list-row" [routerLink]="projectContext.wikiUrl(page.path)">
             <span class="wiki-list-title">{{ page.title }}</span
             ><code>{{ page.path }}</code
             ><time [attr.datetime]="page.modifiedAt">{{ page.modifiedAt | date: 'medium' }}</time>
@@ -51,5 +51,5 @@ import { StaticModeService } from '../static/static-mode.service';
 })
 export class WikiIndex {
   protected readonly store = inject(WikiStore);
-  protected readonly staticMode = inject(StaticModeService);
+  protected readonly projectContext = inject(ProjectContextService);
 }

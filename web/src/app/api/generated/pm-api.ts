@@ -798,6 +798,168 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{projectId}/project": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get readable linked-project metadata */
+        get: operations["GetLinkedProjectContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get readable linked-project configuration */
+        get: operations["GetLinkedProjectSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/board/navigation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLinkedProjectBoardNavigation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLinkedProjectBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/tasks/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SearchLinkedProjectTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/tasks/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLinkedProjectNextTaskRecommendation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLinkedProjectTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/wiki/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SearchLinkedProjectWikiPages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/wiki/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListLinkedProjectWikiPages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{projectId}/wiki/pages/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetLinkedProjectWikiPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1250,6 +1412,14 @@ export interface components {
             summary: string;
         };
         JsonElement: unknown;
+        LinkedProjectContextResponse: {
+            projectId: string;
+            name: string;
+            accent: string;
+            relationship: string;
+            readOnly: boolean;
+            revision: string;
+        };
         LinkedProjectFamilyResponse: {
             activeProjectId: string;
             members: components["schemas"]["LinkedProjectMemberResponse"][];
@@ -1321,8 +1491,11 @@ export interface components {
             members: components["schemas"]["ProjectMemberResponse"][];
         };
         ProjectResponse: {
+            projectId: string;
             name: string;
             accent: string;
+            relationship: string;
+            readOnly: boolean;
             revision: string;
         };
         ProjectRoleRequest: {
@@ -4719,6 +4892,342 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ApiProblemDetails"];
                 };
+            };
+        };
+    };
+    GetLinkedProjectContext: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedProjectContextResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLinkedProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetLinkedProjectBoardNavigation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardNavigationResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetLinkedProjectBoard: {
+        parameters: {
+            query?: {
+                track?: string;
+                milestone?: string;
+                state?: string;
+            };
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SearchLinkedProjectTasks: {
+        parameters: {
+            query: {
+                query: string;
+                limit?: number | string;
+                track?: string;
+                milestone?: string;
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSearchResultResponse"][];
+                };
+            };
+        };
+    };
+    GetLinkedProjectNextTaskRecommendation: {
+        parameters: {
+            query?: {
+                track?: string;
+                milestone?: string;
+                readyOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextTaskResponse"];
+                };
+            };
+        };
+    };
+    GetLinkedProjectTask: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SearchLinkedProjectWikiPages: {
+        parameters: {
+            query?: {
+                limit?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiSearchResultResponse"][];
+                };
+            };
+        };
+    };
+    ListLinkedProjectWikiPages: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiPageSummaryResponse"][];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetLinkedProjectWikiPage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiPageResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

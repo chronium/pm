@@ -104,7 +104,13 @@ public sealed class SiteSnapshotBuilder(
             generatedAt.ToUniversalTime(),
             projectId,
             linkedProjectsResult.Payload!,
-            new ProjectResponse(settings.ProjectName, settings.Accent, StaticRevision),
+            new ProjectResponse(
+                projectId ?? string.Empty,
+                settings.ProjectName,
+                settings.Accent,
+                "current",
+                true,
+                StaticRevision),
             responseSettings,
             new BoardNavigationResponse(
                 navigation.RemainingCount,

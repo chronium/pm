@@ -6,6 +6,7 @@ import { TaskDialogShell } from '../task-dialog/task-dialog-shell';
 import type { DirtyDialogRoute } from '../task-dialog/task-dialog.types';
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskWorkspace } from './task-workspace';
+import { ProjectContextService } from '../../core/project-context.service';
 
 @Component({
   selector: 'pm-task-dialog-host',
@@ -34,6 +35,7 @@ export class TaskDialogHost implements DirtyDialogRoute, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly navigation = inject(TaskNavigationService);
+  private readonly projectContext = inject(ProjectContextService);
   protected readonly workspace = viewChild(TaskWorkspace);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
@@ -59,9 +61,13 @@ export class TaskDialogHost implements DirtyDialogRoute, OnDestroy {
   }
 
   protected fullscreen(): void {
-    const target = this.mode() === 'create' ? ['/tasks', 'new'] : ['/tasks', this.taskId()!];
-    void this.router.navigate(target, {
-      queryParams: this.router.parseUrl(this.router.url).queryParams,
+    const target =
+      this.mode() === 'create'
+        ? `${this.projectContext.tasksRoot()}/new`
+        : this.projectContext.taskUrl(this.taskId()!);
+    const tree = this.router.parseUrl(target);
+    tree.queryParams = this.router.parseUrl(this.router.url).queryParams;
+    void this.router.navigateByUrl(tree, {
       state: this.navigation.returnState(this.router),
       replaceUrl: true,
     });
@@ -72,8 +78,9 @@ export class TaskDialogHost implements DirtyDialogRoute, OnDestroy {
       this.close();
       return;
     }
-    void this.router.navigate(['/tasks', 'dialog', id], {
-      queryParams: this.router.parseUrl(this.router.url).queryParams,
+    const tree = this.router.parseUrl(this.projectContext.taskUrl(id, true));
+    tree.queryParams = this.router.parseUrl(this.router.url).queryParams;
+    void this.router.navigateByUrl(tree, {
       state: this.navigation.returnState(this.router),
       replaceUrl: true,
     });

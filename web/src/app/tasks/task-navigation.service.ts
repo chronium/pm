@@ -1,8 +1,10 @@
-import { Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { ProjectContextService } from '../core/project-context.service';
 
 @Injectable({ providedIn: 'root' })
 export class TaskNavigationService {
+  private readonly projectContext = inject(ProjectContextService);
   readonly remainingCount = signal<number | null>(null);
   readonly refreshRequest = signal(0);
   private origin: HTMLElement | null = null;
@@ -37,7 +39,7 @@ export class TaskNavigationService {
 
   navigateToTask(router: Router, taskId: string, recommendationReason?: string): Promise<boolean> {
     const returnUrl = router.url;
-    const target = this.isMobile() ? ['/tasks', taskId] : ['/tasks', 'dialog', taskId];
+    const target = this.taskCommands(this.isMobile() ? [taskId] : ['dialog', taskId]);
     return router.navigate(target, {
       queryParams: router.parseUrl(returnUrl).queryParams,
       state: { returnUrl, ...(recommendationReason ? { recommendationReason } : {}) },
@@ -53,8 +55,8 @@ export class TaskNavigationService {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
       return undefined;
     event.preventDefault();
-    const returnUrl = router.url.startsWith('/tasks/dialog/') ? this.returnUrl(router) : router.url;
-    const target = this.isMobile() ? ['/tasks', taskId] : ['/tasks', 'dialog', taskId];
+    const returnUrl = router.url.includes('/tasks/dialog/') ? this.returnUrl(router) : router.url;
+    const target = this.taskCommands(this.isMobile() ? [taskId] : ['dialog', taskId]);
     return router.navigate(target, {
       queryParams: router.parseUrl(returnUrl).queryParams,
       state: { returnUrl },
@@ -63,7 +65,7 @@ export class TaskNavigationService {
 
   canonicalHref(router: Router, taskId: string | 'new'): string {
     return router.serializeUrl(
-      router.createUrlTree(['/tasks', taskId], {
+      router.createUrlTree(this.taskCommands([taskId]), {
         queryParams: router.parseUrl(router.url).queryParams,
       }),
     );
@@ -99,7 +101,8 @@ export class TaskNavigationService {
     if (!candidate.startsWith('/') || candidate.startsWith('//')) return false;
     const segments =
       router.parseUrl(candidate).root.children['primary']?.segments.map((item) => item.path) ?? [];
-    return segments.length === 1 && segments[0] === 'tasks';
+    const tasksIndex = segments.indexOf('tasks');
+    return tasksIndex >= 0 && segments.length === tasksIndex + 1;
   }
 
   private scopedBoardUrl(router: Router): string {
@@ -111,6 +114,11 @@ export class TaskNavigationService {
           (entry): entry is [string, string] => typeof entry[1] === 'string' && !!entry[1].trim(),
         ),
     );
-    return router.serializeUrl(router.createUrlTree(['/tasks'], { queryParams }));
+    return router.serializeUrl(router.createUrlTree(this.taskCommands(), { queryParams }));
+  }
+
+  private taskCommands(tail: string[] = []): string[] {
+    const segments = this.projectContext.tasksRoot().split('/').filter(Boolean);
+    return [`/${segments[0]}`, ...segments.slice(1), ...tail];
   }
 }

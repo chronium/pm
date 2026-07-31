@@ -9,7 +9,14 @@ const snapshot: StaticSnapshot = {
   generatedAt: '2026-07-27T12:30:00Z',
   projectId: 'static-pm',
   linkedProjects: [],
-  project: { name: 'Static PM', accent: 'teal', revision: 'static-snapshot' },
+  project: {
+    projectId: 'static-project',
+    name: 'Static PM',
+    accent: 'teal',
+    relationship: 'current',
+    readOnly: true,
+    revision: 'static-snapshot',
+  },
   settings: {
     projectName: 'Static PM',
     accent: 'teal',

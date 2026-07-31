@@ -7,6 +7,7 @@ import { filter, map } from 'rxjs';
 import type { components, operations } from '../api/generated/pm-api';
 import { PollingCoordinator } from '../core/polling-coordinator';
 import { TaskNavigationService } from './task-navigation.service';
+import { ProjectContextService } from '../core/project-context.service';
 
 export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
 export type BoardQuery = NonNullable<operations['GetBoard']['parameters']['query']>;
@@ -29,6 +30,7 @@ export class TasksBoardStore {
   private readonly router = inject(Router);
   private readonly polling = inject(PollingCoordinator);
   private readonly navigation = inject(TaskNavigationService);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly retainedBoard = signal<BoardResponse | undefined>(undefined);
   private readonly retainedEtag = signal('');
   private pollingActive = false;
@@ -50,7 +52,7 @@ export class TasksBoardStore {
   }));
 
   readonly resource = httpResource<BoardResponse>(() => ({
-    url: '/api/v1/board',
+    url: this.projectContext.apiUrl('/board'),
     params: this.filters(),
   }));
 
@@ -77,7 +79,7 @@ export class TasksBoardStore {
       const board = this.board();
       if (!board) return null;
       return {
-        url: '/api/v1/board',
+        url: this.projectContext.apiUrl('/board'),
         etag: this.retainedEtag() || `"${board.revision}"`,
         params: new HttpParams({ fromObject: this.filters() }),
       };
@@ -87,6 +89,16 @@ export class TasksBoardStore {
   readonly liveUpdateUnavailable = computed(() => this.pollStatus.state() === 'retrying');
 
   constructor() {
+    let apiPrefix = this.projectContext.apiPrefix();
+    effect(() => {
+      const nextPrefix = this.projectContext.apiPrefix();
+      if (nextPrefix === apiPrefix) return;
+      apiPrefix = nextPrefix;
+      this.retainedBoard.set(undefined);
+      this.retainedEtag.set('');
+      this.pollStatus.stop();
+      this.resource.reload();
+    });
     effect(() => {
       if (this.resource.hasValue()) {
         const board = this.resource.value();
@@ -104,7 +116,8 @@ export class TasksBoardStore {
       else this.pollStatus.stop();
     });
     effect(() => {
-      this.filters();
+      const filters = this.filters();
+      this.projectContext.rememberTaskFilters(filters);
       this.pollStatus.restart(false);
     });
     effect(() => {
@@ -208,7 +221,9 @@ export class TasksBoardStore {
   }
 
   private boardRouteActive(): boolean {
-    return this.currentPathSegments()[1] !== 'settings';
+    const segments = this.currentPathSegments();
+    const tasksIndex = segments.indexOf('tasks');
+    return tasksIndex >= 0 && segments[tasksIndex + 1] !== 'settings';
   }
 
   private currentPathSegments(): string[] {
@@ -226,13 +241,13 @@ export class TasksBoardStore {
   }
 
   private collapseKey(milestone: BoardMilestoneGroup, state: BoardStateGroup): string {
-    const project = encodeURIComponent(this.board()?.projectName ?? 'unknown-project');
+    const project = encodeURIComponent(this.projectContext.storageProjectId());
     const milestoneKey = encodeURIComponent(milestone.key ?? 'unassigned');
     return `pm.tasks-board.v1.${project}.${milestoneKey}.${encodeURIComponent(state.key)}.open`;
   }
 
   private milestoneCollapseKey(milestone: BoardMilestoneGroup): string {
-    const project = encodeURIComponent(this.board()?.projectName ?? 'unknown-project');
+    const project = encodeURIComponent(this.projectContext.storageProjectId());
     const milestoneKey = encodeURIComponent(milestone.key ?? 'unassigned');
     return `pm.tasks-board.v1.${project}.${milestoneKey}.__milestone__.open`;
   }

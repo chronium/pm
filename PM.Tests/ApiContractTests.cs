@@ -33,6 +33,8 @@ public partial class ApiContractTests
             var revision = body.GetProperty("revision").GetString();
             Assert.Equal("Contract Project", body.GetProperty("name").GetString());
             Assert.Equal("teal", body.GetProperty("accent").GetString());
+            Assert.Equal("current", body.GetProperty("relationship").GetString());
+            Assert.False(body.GetProperty("readOnly").GetBoolean());
             Assert.Matches("^[0-9a-f]{64}$", revision!);
             Assert.Equal(ApiPreconditions.FormatETag(revision!), response.Headers.ETag?.Tag);
         }
@@ -385,7 +387,8 @@ public partial class ApiContractTests
         Action<Microsoft.AspNetCore.Routing.RouteGroupBuilder>? configure = null,
         bool mapNonApiEndpoint = false,
         INextIdService? nextIdService = null,
-        IProjectMembershipService? membershipService = null)
+        IProjectMembershipService? membershipService = null,
+        LinkedProjectFamilyService? linkedProjectFamilyService = null)
     {
         var port = GetAvailablePort();
         var url = $"http://127.0.0.1:{port}";
@@ -398,7 +401,7 @@ public partial class ApiContractTests
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
             new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,
-            membershipService);
+            membershipService, linkedProjectFamilyService: linkedProjectFamilyService);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapNonApiEndpoint)
             app.MapGet("/board", () => Results.Content("non-api", "text/html"));

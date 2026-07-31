@@ -33,6 +33,7 @@ import { TaskOptionsResource } from '../task-options.resource';
 import { StaticModeService } from '../../static/static-mode.service';
 import { AgentRunLaunch } from '../../agent-runs/agent-run-launch';
 import type { AgentRunRemoteStart } from '../../agent-runs/agent-runs-api.service';
+import { ProjectContextService } from '../../core/project-context.service';
 import {
   StaticProjectLinksService,
   type StaticProjectLinkResolution,
@@ -96,6 +97,7 @@ export class TaskWorkspace {
   private readonly navigation = inject(TaskNavigationService);
   private readonly projectLinks = inject(StaticProjectLinksService);
   protected readonly staticMode = inject(StaticModeService);
+  protected readonly projectContext = inject(ProjectContextService);
   protected readonly options = inject(TaskOptionsResource);
   protected readonly detail = inject(TaskDetailResource);
   protected readonly activeField = signal<WorkspaceField | null>(null);

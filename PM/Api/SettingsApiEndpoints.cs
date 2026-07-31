@@ -148,7 +148,7 @@ public static class SettingsApiEndpoints
             .WithSettingsMutationProblems();
     }
 
-    private static IResult Read(HttpRequest request, ProjectConfigService configService,
+    internal static IResult Read(HttpRequest request, ProjectConfigService configService,
         ResourceRevisionService revisions)
     {
         var response = GetResponse(configService, revisions, request);

@@ -59,11 +59,7 @@ public static class BoardApiEndpoints
                 if (conditional != null) return conditional;
 
                 ApiPreconditions.SetETag(request.HttpContext.Response, revision);
-                return Results.Ok(new BoardNavigationResponse(
-                    result.Payload.RemainingCount,
-                    result.Payload.Tracks.Select(ToNavigationOption).ToList(),
-                    result.Payload.Milestones.Select(ToNavigationOption).ToList(),
-                    revision));
+                return Results.Ok(ToNavigationResponse(result.Payload, revision));
             })
             .WithName("GetBoardNavigation")
             .WithSummary("Get task scope navigation")
@@ -96,7 +92,15 @@ public static class BoardApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
     }
 
-    private static BoardResponse ToResponse(BoardData board, string revision) => new(
+    internal static BoardNavigationResponse ToNavigationResponse(
+        BoardNavigationData navigation,
+        string revision) => new(
+        navigation.RemainingCount,
+        navigation.Tracks.Select(ToNavigationOption).ToList(),
+        navigation.Milestones.Select(ToNavigationOption).ToList(),
+        revision);
+
+    internal static BoardResponse ToResponse(BoardData board, string revision) => new(
         board.ProjectName,
         new BoardFilterResponse(board.Query.Track, board.Query.Milestone, board.Query.State),
         board.Tracks.Select(ToOption).ToList(),

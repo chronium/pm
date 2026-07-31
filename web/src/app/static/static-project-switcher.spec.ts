@@ -8,7 +8,14 @@ import { StaticProjectSwitcher } from './static-project-switcher';
 describe('StaticProjectSwitcher', () => {
   it('orders linked projects and explains sites that are unavailable', () => {
     const snapshot = {
-      project: { name: '<Games>', accent: 'teal', revision: 'static' },
+      project: {
+        projectId: 'games',
+        name: '<Games>',
+        accent: 'teal',
+        relationship: 'current',
+        readOnly: true,
+        revision: 'static',
+      },
       linkedProjects: [
         {
           projectId: 'parent',

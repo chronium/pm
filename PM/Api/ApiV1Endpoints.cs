@@ -9,7 +9,13 @@ using PM.Project;
 
 namespace PM.Api;
 
-public sealed record ProjectResponse(string Name, string Accent, string Revision);
+public sealed record ProjectResponse(
+    string ProjectId,
+    string Name,
+    string Accent,
+    string Relationship,
+    bool ReadOnly,
+    string Revision);
 
 public sealed class ApiProblemDetails : ProblemDetails
 {
@@ -55,9 +61,13 @@ public static class ApiV1Endpoints
                 if (notModified != null) return notModified;
 
                 ApiPreconditions.SetETag(request.HttpContext.Response, revision);
+                _ = projectRoot.TryReadProjectId(out var projectId);
                 return Results.Ok(new ProjectResponse(
+                    projectId ?? string.Empty,
                     result.Payload!.ProjectName,
                     result.Payload.Accent,
+                    "current",
+                    false,
                     revision));
             })
             .WithName("GetProject")
@@ -73,7 +83,9 @@ public static class ApiV1Endpoints
         api.MapWikiApi(wikiService, revisions);
         api.MapSettingsApi(configService, revisions);
         api.MapValidationApi(validationService);
-        api.MapLinkedProjectApi(linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot));
+        var linkedProjects = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
+        api.MapLinkedProjectApi(linkedProjects);
+        api.MapLinkedProjectReadApi(linkedProjects);
         if (membershipService != null) api.MapProjectMembershipApi(membershipService);
         if (agentRunService != null && agentRunnerClient != null)
             api.MapAgentRunApi(agentRunService, agentRunnerClient);
@@ -243,6 +255,7 @@ public static class ApiResults
         if (errorCode == "admin_required") return StatusCodes.Status403Forbidden;
         if (errorCode == "rate_limited") return StatusCodes.Status429TooManyRequests;
         if (errorCode is "member_not_found" or "invitation_not_found" or "runner_not_registered" or
+            "unknown_linked_project" or
             "missing_run" or "artifact_not_found" or "artifact_unavailable")
             return StatusCodes.Status404NotFound;
         if (errorCode == "artifact_too_large") return StatusCodes.Status413PayloadTooLarge;
@@ -257,7 +270,7 @@ public static class ApiResults
                 "stale_run_preflight" or "run_id_conflict" or "runner_already_registered" or
                 "runner_tls_mismatch" or "artifact_corrupt" or "artifact_invalid" or
                 "patch_already_collected" or "patch_not_ready" or "patch_preflight_failed" or
-                "patch_apply_failed")
+                "patch_apply_failed" or "linked_project_unavailable")
             return StatusCodes.Status409Conflict;
 
         return StatusCodes.Status500InternalServerError;

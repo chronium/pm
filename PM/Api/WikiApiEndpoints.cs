@@ -180,7 +180,7 @@ public static class WikiApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
     }
 
-    private static IResult ReadPage(HttpRequest request, string path, WikiService wikiService,
+    internal static IResult ReadPage(HttpRequest request, string path, WikiService wikiService,
         ResourceRevisionService revisions)
     {
         var result = wikiService.ReadPage(path);

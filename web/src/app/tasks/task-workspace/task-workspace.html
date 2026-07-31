@@ -70,7 +70,7 @@
           <button
             type="button"
             class="inline-value inline-status"
-            [disabled]="staticMode.enabled || pending() || blocked()"
+            [disabled]="projectContext.readOnly() || pending() || blocked()"
             aria-label="Edit task status"
             (click)="activate('status')"
           >
@@ -82,7 +82,7 @@
           [class.host-actions--clean-page]="presentation() === 'page' && !dirty()"
           aria-label="Task actions"
         >
-          @if (mode() === 'detail' && !staticMode.enabled) {
+          @if (mode() === 'detail' && !projectContext.readOnly()) {
             <button
               type="button"
               class="pm-button pm-button--secondary run-action"
@@ -179,7 +179,7 @@
             <button
               type="button"
               class="inline-value title-value"
-              [disabled]="staticMode.enabled || pending() || blocked()"
+              [disabled]="projectContext.readOnly() || pending() || blocked()"
               aria-label="Edit task title"
               (click)="activate('title')"
             >
@@ -214,7 +214,7 @@
             class="inline-value"
             aria-label="Edit task track"
             [title]="trackName()"
-            [disabled]="staticMode.enabled || pending() || blocked()"
+            [disabled]="projectContext.readOnly() || pending() || blocked()"
             (click)="activate('track')"
           >
             {{ trackName() }}
@@ -245,7 +245,7 @@
             class="inline-value"
             aria-label="Edit task milestone"
             [title]="milestoneName()"
-            [disabled]="staticMode.enabled || pending() || blocked()"
+            [disabled]="projectContext.readOnly() || pending() || blocked()"
             (click)="activate('milestone')"
           >
             {{ milestoneName() }}
@@ -278,7 +278,7 @@
             class="inline-value"
             aria-label="Edit task priority"
             [title]="priorityName()"
-            [disabled]="staticMode.enabled || pending() || blocked()"
+            [disabled]="projectContext.readOnly() || pending() || blocked()"
             (click)="activate('priority')"
           >
             {{ priorityName() }}
@@ -293,7 +293,9 @@
       <section class="description-section pm-scroll-surface" aria-label="Task description">
         <div class="section-heading">
           <div class="section-actions">
-            @if (mode() === 'detail' && activeField() !== 'description' && !staticMode.enabled) {
+            @if (
+              mode() === 'detail' && activeField() !== 'description' && !projectContext.readOnly()
+            ) {
               <button
                 type="button"
                 class="icon-button"
@@ -311,7 +313,7 @@
                 class="icon-button"
                 aria-label="Edit task description"
                 title="Edit description"
-                [disabled]="staticMode.enabled || pending() || blocked() || noteDirty()"
+                [disabled]="projectContext.readOnly() || pending() || blocked() || noteDirty()"
                 (click)="activate('description')"
               >
                 <ng-icon name="cssPen" aria-hidden="true" />
@@ -385,7 +387,7 @@
                       <span class="pm-unavailable-link" [title]="link.reason">{{ id }}</span>
                     } @else {
                       <a
-                        [routerLink]="['/tasks', id]"
+                        [routerLink]="projectContext.taskUrl(id)"
                         queryParamsHandling="preserve"
                         (click)="dependencyClick($event, id)"
                         >{{ id }}</a
@@ -404,7 +406,7 @@
           </section>
 
           <div class="metadata-spacer"></div>
-          @if (!staticMode.enabled) {
+          @if (!projectContext.readOnly()) {
             <button
               type="button"
               class="remove-action"
@@ -456,7 +458,7 @@
   (cancelled)="cancelConfirm()"
 />
 
-@if (mode() === 'detail' && detail.task(); as task) {
+@if (mode() === 'detail' && !projectContext.readOnly() && detail.task(); as task) {
   <pm-agent-run-launch
     [open]="launchOpen()"
     [taskId]="task.id"

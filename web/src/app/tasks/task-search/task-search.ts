@@ -7,6 +7,7 @@ import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switc
 import type { components } from '../../api/generated/pm-api';
 import { TopBarSearch, type TopBarSearchOption } from '../../shared/top-bar-search/top-bar-search';
 import { TaskNavigationService } from '../task-navigation.service';
+import { ProjectContextService } from '../../core/project-context.service';
 
 type TaskSearchResult = components['schemas']['TaskSearchResultResponse'];
 type SettingsResponse = components['schemas']['SettingsResponse'];
@@ -79,6 +80,7 @@ export class TaskSearch {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly navigation = inject(TaskNavigationService);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly search = viewChild(TopBarSearch);
   private readonly requests = new Subject<string>();
@@ -96,7 +98,7 @@ export class TaskSearch {
 
   constructor() {
     this.http
-      .get<SettingsResponse>('/api/v1/settings')
+      .get<SettingsResponse>(this.projectContext.apiUrl('/settings'))
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (settings) => this.settings.set(settings) });
 
@@ -109,7 +111,9 @@ export class TaskSearch {
           this.loading.set(true);
           this.error.set(null);
           return this.http
-            .get<TaskSearchResult[]>('/api/v1/tasks/search', { params: this.searchParams(query) })
+            .get<TaskSearchResult[]>(this.projectContext.apiUrl('/tasks/search'), {
+              params: this.searchParams(query),
+            })
             .pipe(
               map((results) => ({ results, error: null as string | null })),
               catchError((error: unknown) =>
