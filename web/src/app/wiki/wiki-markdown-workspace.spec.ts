@@ -66,6 +66,7 @@ describe('WikiMarkdownWorkspace', () => {
     expect(toolbarLabels.some((label) => /side.by.side/i.test(label))).toBe(false);
     expect(toolbarLabels.some((label) => /full.?screen/i.test(label))).toBe(false);
     expect(toolbarLabels.some((label) => /bold/i.test(label))).toBe(true);
+    expect(toolbarLabels.some((label) => /project wiki link/i.test(label))).toBe(true);
 
     fixture.componentInstance.disabled.set(true);
     fixture.detectChanges();

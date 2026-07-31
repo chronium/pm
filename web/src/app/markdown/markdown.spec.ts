@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MarkdownDisplay } from './markdown-display';
 import { MarkdownEditor } from './markdown-editor';
 import { MarkdownService } from './markdown.service';
-import { StaticProjectLinksService } from '../static/static-project-links.service';
+import { ProjectLinksService } from '../core/project-links.service';
 
 describe('Markdown components', () => {
   it('renders Markdown and removes unsafe markup without bypassing Angular sanitization', () => {
@@ -26,7 +26,7 @@ describe('Markdown components', () => {
   });
 
   it('rewrites available project links and degrades unavailable links to safe text', () => {
-    TestBed.overrideProvider(StaticProjectLinksService, {
+    TestBed.overrideProvider(ProjectLinksService, {
       useValue: {
         resolve: (href: string) =>
           href.includes('available')
@@ -45,6 +45,8 @@ describe('Markdown components', () => {
     expect(html).toContain('href="https://example.test/site/#/wiki/page"');
     expect(html).toContain('class="pm-unavailable-link"');
     expect(html).toContain('title="No published site."');
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('Unavailable: No published site.');
     expect(html).not.toContain('pm://');
   });
 

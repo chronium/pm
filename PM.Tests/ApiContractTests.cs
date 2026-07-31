@@ -400,12 +400,21 @@ public partial class ApiContractTests
         var app = builder.Build();
         var configService = new ProjectConfigService(projectRoot);
         var boardService = new BoardService(projectRoot);
+        var nextIds = nextIdService ?? new ApiNextIdService();
+        var family = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
+        var taskService = new TaskService(projectRoot, nextIds);
+        var linkedReads = new LinkedProjectReadService(
+            projectRoot,
+            family,
+            nextIds,
+            new LinkedProjectGitInspector());
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
-            new TaskService(projectRoot, nextIdService ?? new ApiNextIdService()),
+            taskService,
             new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,
-            membershipService, linkedProjectFamilyService: linkedProjectFamilyService,
+            membershipService, linkedProjectFamilyService: family,
             linkedProjectMutationService: linkedProjectMutationService,
-            linkedProjectRegistry: linkedProjectRegistry);
+            linkedProjectRegistry: linkedProjectRegistry,
+            linkedProjectReadService: linkedReads);
         app.MapOpenApi("/openapi/{documentName}.json");
         if (mapNonApiEndpoint)
             app.MapGet("/board", () => Results.Content("non-api", "text/html"));

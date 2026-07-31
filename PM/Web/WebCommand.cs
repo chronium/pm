@@ -31,7 +31,8 @@ public class WebCommand(
     IAgentRunService? agentRunService,
     IAgentRunnerClient? agentRunnerClient,
     LinkedProjectMutationService? linkedProjectMutations = null,
-    LinkedProjectRegistryStore? linkedProjectRegistry = null) : AsyncCommand<WebCommand.Settings>
+    LinkedProjectRegistryStore? linkedProjectRegistry = null,
+    LinkedProjectReadService? linkedProjectReads = null) : AsyncCommand<WebCommand.Settings>
 {
     public WebCommand(
         ProjectRoot projectRoot,
@@ -83,7 +84,8 @@ public class WebCommand(
 
         var app = builder.Build();
         MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService,
-            membershipService, agentRunService, agentRunnerClient, linkedProjectMutations, linkedProjectRegistry);
+            membershipService, agentRunService, agentRunnerClient, linkedProjectMutations, linkedProjectRegistry,
+            linkedProjectReads);
         if (!settings.Api) app.MapAngularWeb(angularAssets!);
 
         await app.StartAsync(cancellationToken);
@@ -147,7 +149,8 @@ public class WebCommand(
         IAgentRunService? agentRunService = null,
         IAgentRunnerClient? agentRunnerClient = null,
         LinkedProjectMutationService? linkedProjectMutations = null,
-        LinkedProjectRegistryStore? linkedProjectRegistry = null)
+        LinkedProjectRegistryStore? linkedProjectRegistry = null,
+        LinkedProjectReadService? linkedProjectReads = null)
     {
         endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
             wikiService, new ResourceRevisionService(projectRoot, boardService),
@@ -155,7 +158,8 @@ public class WebCommand(
             agentRunService: agentRunService,
             agentRunnerClient: agentRunnerClient,
             linkedProjectMutationService: linkedProjectMutations,
-            linkedProjectRegistry: linkedProjectRegistry);
+            linkedProjectRegistry: linkedProjectRegistry,
+            linkedProjectReadService: linkedProjectReads);
         endpoints.MapOpenApi("/openapi/{documentName}.json");
     }
 

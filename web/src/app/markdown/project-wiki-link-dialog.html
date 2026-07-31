@@ -1,0 +1,90 @@
+<dialog
+  #dialog
+  class="wiki-link-dialog pm-frosted-surface pm-frosted-dialog"
+  aria-labelledby="wiki-link-dialog-heading"
+  (cancel)="cancel($event)"
+>
+  <header>
+    <div>
+      <p class="eyebrow">Wiki reference</p>
+      <h2 id="wiki-link-dialog-heading">Insert project wiki link</h2>
+    </div>
+    <button type="button" class="pm-button pm-button--ghost" aria-label="Close" (click)="dismiss()">
+      ×
+    </button>
+  </header>
+
+  <div class="wiki-link-fields">
+    <pm-form-field>
+      <label for="wiki-link-project">Project</label>
+      <select
+        id="wiki-link-project"
+        pmControl
+        [value]="selectedProjectId()"
+        (change)="selectProject($event)"
+      >
+        @for (member of members(); track member.projectId) {
+          <option [value]="member.projectId">
+            {{ member.name }}{{ member.alias ? ' · ' + member.alias : '' }}
+          </option>
+        }
+      </select>
+    </pm-form-field>
+    <pm-form-field>
+      <label for="wiki-link-filter">Find page</label>
+      <input
+        id="wiki-link-filter"
+        pmControl
+        type="search"
+        placeholder="Title or path"
+        [value]="filter()"
+        (input)="filter.set($any($event.target).value)"
+      />
+    </pm-form-field>
+  </div>
+
+  <div class="wiki-link-pages" role="listbox" aria-label="Wiki pages">
+    @if (loading()) {
+      <p class="wiki-link-state" role="status">Loading pages…</p>
+    } @else if (error(); as message) {
+      <p class="wiki-link-state error" role="alert">{{ message }}</p>
+    } @else if (filteredPages().length) {
+      @for (page of filteredPages(); track page.path) {
+        <button
+          type="button"
+          role="option"
+          [attr.aria-selected]="selectedPage()?.path === page.path"
+          [class.selected]="selectedPage()?.path === page.path"
+          (click)="selectPage(page)"
+        >
+          <strong>{{ page.title }}</strong>
+          <code>{{ page.path }}</code>
+        </button>
+      }
+    } @else {
+      <p class="wiki-link-state">No matching wiki pages.</p>
+    }
+  </div>
+
+  <pm-form-field>
+    <label for="wiki-link-label">Link text</label>
+    <input
+      id="wiki-link-label"
+      pmControl
+      [value]="label()"
+      (input)="label.set($any($event.target).value)"
+    />
+  </pm-form-field>
+
+  <footer>
+    <button type="button" class="pm-button pm-button--secondary" (click)="dismiss()">Cancel</button>
+    <button
+      type="button"
+      class="pm-button pm-button--primary"
+      [disabled]="!selectedPage()"
+      (click)="insert()"
+    >
+      Insert link
+    </button>
+  </footer>
+</dialog>

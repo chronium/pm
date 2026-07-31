@@ -80,6 +80,9 @@
           <p class="search-state" role="status">{{ emptyMessage() }}</p>
         </div>
       }
+      @if (notice(); as message) {
+        <p class="search-notice" role="status">{{ message }}</p>
+      }
     </div>
   }
 </div>

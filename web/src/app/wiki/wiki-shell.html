@@ -9,7 +9,10 @@
         >Wiki home</a
       >
       @if (!projectContext.readOnly()) {
-        <a routerLink="/wiki/new" routerLinkActive="active" (click)="layout.closeMobileSidebar()"
+        <a
+          [routerLink]="projectContext.wikiCreateUrl()"
+          routerLinkActive="active"
+          (click)="layout.closeMobileSidebar()"
           >New page</a
         >
       }

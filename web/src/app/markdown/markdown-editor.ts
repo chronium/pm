@@ -15,11 +15,28 @@ import type { FormValueControl } from '@angular/forms/signals';
 import EasyMDE from 'easymde';
 
 import { MarkdownService } from './markdown.service';
+import { ProjectWikiLinkDialog } from './project-wiki-link-dialog';
 
 @Component({
   selector: 'pm-markdown-editor',
-  template:
-    '<textarea #textarea [disabled]="disabled()" [attr.aria-label]="label()" (input)="fallbackInput($event)" (blur)="touch.emit()"></textarea>',
+  imports: [ProjectWikiLinkDialog],
+  template: `
+    <textarea
+      #textarea
+      [disabled]="disabled()"
+      [attr.aria-label]="label()"
+      (input)="fallbackInput($event)"
+      (blur)="touch.emit()"
+    ></textarea>
+    @if (enableProjectWikiLinks()) {
+      <pm-project-wiki-link-dialog
+        [open]="linkPickerOpen()"
+        [initialLabel]="selectedLinkText()"
+        (inserted)="insertProjectWikiLink($event)"
+        (dismissed)="linkPickerOpen.set(false)"
+      />
+    }
+  `,
   styleUrl: './markdown-editor.css',
   encapsulation: ViewEncapsulation.None,
   host: { '[class.markdown-editor--external-preview]': 'externalPreview()' },
@@ -29,10 +46,13 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
   readonly disabled = input(false);
   readonly label = input('Markdown description');
   readonly externalPreview = input(false);
+  readonly enableProjectWikiLinks = input(false);
   readonly touch = output<void>();
   private readonly textarea = viewChild<ElementRef<HTMLTextAreaElement>>('textarea');
   private readonly editor = signal<EasyMDE | null>(null);
   private syncing = false;
+  protected readonly linkPickerOpen = signal(false);
+  protected readonly selectedLinkText = signal('');
 
   constructor(private readonly renderer: MarkdownService) {
     effect(() => {
@@ -63,7 +83,7 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
         minHeight: '180px',
         previewRender: (markdown) => this.renderer.render(markdown),
       };
-      if (this.externalPreview()) {
+      if (this.externalPreview() || this.enableProjectWikiLinks()) {
         options.toolbar = [
           'bold',
           'italic',
@@ -74,6 +94,17 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
           'ordered-list',
           '|',
           'link',
+          ...(this.enableProjectWikiLinks()
+            ? [
+                {
+                  name: 'project-wiki-link',
+                  action: () => this.openProjectWikiLinkPicker(),
+                  className: 'pm-project-wiki-link',
+                  title: 'Insert project wiki link',
+                  icon: 'PM',
+                } satisfies EasyMDE.ToolbarIcon,
+              ]
+            : []),
           'image',
           '|',
           'guide',
@@ -113,6 +144,23 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
 
   protected fallbackInput(event: Event): void {
     if (!this.editor()) this.value.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected insertProjectWikiLink(markdown: string): void {
+    const editor = this.editor();
+    if (editor) {
+      editor.codemirror.replaceSelection(markdown);
+      editor.codemirror.focus();
+    } else {
+      this.value.update((value) => `${value}${markdown}`);
+    }
+    this.linkPickerOpen.set(false);
+  }
+
+  private openProjectWikiLinkPicker(): void {
+    const editor = this.editor();
+    this.selectedLinkText.set(editor?.codemirror.getSelection() ?? '');
+    this.linkPickerOpen.set(true);
   }
 
   private updateDisabled(editor: EasyMDE): void {

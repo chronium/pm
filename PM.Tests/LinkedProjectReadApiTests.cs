@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using PM.Api;
 using PM.Application;
 using PM.Project;
@@ -8,6 +9,59 @@ namespace PM.Tests;
 
 public partial class ApiContractTests
 {
+    [Fact]
+    public async Task LinkedWikiSearchReturnsOwnedFamilyResultsAndWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await workspace.CreateProject(TestData.Config(name: "Games"));
+        await WriteProjectId(active, "prj_games");
+        var child = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "royale"), "prj_royale", "Royale");
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                Declaration("prj_royale", "royale", "royale"),
+                Declaration("prj_missing", "missing", "missing"),
+            ],
+        });
+        child.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = Declaration("prj_games", "games", ".."),
+        });
+        Assert.True(new WikiService(active).CreatePage("shared/current", "Current guide", "needle").Success);
+        Assert.True(new WikiService(child).CreatePage("shared/royale", "Royale guide", "needle").Success);
+
+        var family = LinkedFamily(active, workspace);
+        var (app, client) = await CreateApiClient(active, linkedProjectFamilyService: family);
+        await using (app)
+        using (client)
+        {
+            var response = await client.GetAsync(
+                "/api/v1/project/links/wiki/search?query=needle&limit=10");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var result = (await response.Content.ReadFromJsonAsync<LinkedWikiSearchResponse>())!;
+
+            Assert.Equal(["prj_games", "prj_royale"], result.Pages.Select(page => page.ProjectId));
+            Assert.Equal("royale", result.Pages[1].Alias);
+            Assert.Equal("child", result.Pages[1].Relationship);
+            Assert.Contains(result.Warnings, warning => warning.TargetProjectId == "prj_missing");
+
+            var invalid = await client.GetAsync(
+                "/api/v1/project/links/wiki/search?query=%20");
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+            var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json")).RootElement;
+            var operation = document.GetProperty("paths")
+                .GetProperty("/api/v1/project/links/wiki/search")
+                .GetProperty("get");
+            Assert.Equal("SearchLinkedProjectFamilyWikiPages", operation.GetProperty("operationId").GetString());
+            Assert.Contains(operation.GetProperty("parameters").EnumerateArray(), parameter =>
+                parameter.GetProperty("name").GetString() == "query" &&
+                parameter.GetProperty("required").GetBoolean());
+        }
+    }
+
     [Fact]
     public async Task LinkedProjectReadApiServesProjectBoardTasksWikiAndSettingsWithoutWrites()
     {

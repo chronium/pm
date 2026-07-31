@@ -404,6 +404,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/project/links/wiki/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search readable wiki pages across the linked-project family */
+        get: operations["SearchLinkedProjectFamilyWikiPages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/project/links/{projectId}/write-trust": {
         parameters: {
             query?: never;
@@ -1509,6 +1526,23 @@ export interface components {
             alias: null | string;
             status: string;
             repairCommand: null | string;
+        };
+        LinkedWikiSearchResponse: {
+            pages: components["schemas"]["LinkedWikiSearchResultResponse"][];
+            warnings: components["schemas"]["LinkedProjectWarningResponse"][];
+        };
+        LinkedWikiSearchResultResponse: {
+            projectId: string;
+            projectName: string;
+            alias: null | string;
+            relationship: string;
+            path: string;
+            title: string;
+            /** Format: date-time */
+            modifiedAt: string;
+            /** Format: int32 */
+            matchCount: number | string;
+            snippet: string;
         };
         LocalIdentityResponse: {
             userId: string;
@@ -3890,6 +3924,47 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    SearchLinkedProjectFamilyWikiPages: {
+        parameters: {
+            query: {
+                query: string;
+                limit?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedWikiSearchResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

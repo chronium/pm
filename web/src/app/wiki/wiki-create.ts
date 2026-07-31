@@ -9,6 +9,7 @@ import { WikiApiService } from './wiki-api.service';
 import { WikiDirtyForm } from './wiki-dirty-form';
 import { WikiMarkdownWorkspace } from './wiki-markdown-workspace';
 import { WikiStore } from './wiki.store';
+import { ProjectContextService } from '../core/project-context.service';
 
 @Component({
   selector: 'pm-wiki-create',
@@ -22,7 +23,8 @@ import { WikiStore } from './wiki.store';
           <h1>New page</h1>
         </div>
         <div class="wiki-form-actions">
-          <a class="pm-button pm-button--secondary" routerLink="/wiki">Cancel</a
+          <a class="pm-button pm-button--secondary" [routerLink]="projectContext.wikiRoot()"
+            >Cancel</a
           ><button
             class="pm-button pm-button--primary"
             type="submit"
@@ -86,6 +88,7 @@ export class WikiCreate extends WikiDirtyForm {
   private readonly api = inject(WikiApiService);
   private readonly store = inject(WikiStore);
   private readonly router = inject(Router);
+  protected readonly projectContext = inject(ProjectContextService);
   private readonly injector = inject(Injector);
   protected readonly pending = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -120,7 +123,7 @@ export class WikiCreate extends WikiDirtyForm {
       );
       const page = this.store.accept(response);
       this.allowLeave = true;
-      await this.router.navigate(['/wiki', ...page.path.split('/')], { replaceUrl: true });
+      await this.router.navigateByUrl(this.projectContext.wikiUrl(page.path), { replaceUrl: true });
     } catch (error) {
       this.error.set(this.api.error(error, 'The wiki page could not be created.').message);
     } finally {

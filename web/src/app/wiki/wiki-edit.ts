@@ -12,6 +12,7 @@ import { WikiMarkdownWorkspace } from './wiki-markdown-workspace';
 import { WikiStore } from './wiki.store';
 import { ExternalChangeBanner, type ExternalChangePhase } from '../core/external-change-banner';
 import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
+import { ProjectContextService } from '../core/project-context.service';
 
 @Component({
   selector: 'pm-wiki-edit',
@@ -34,7 +35,7 @@ import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
         <pm-error-state
           ><h1>Page unavailable</h1>
           <p>{{ store.pageError() }}</p>
-          <a class="pm-button pm-button--secondary" routerLink="/wiki"
+          <a class="pm-button pm-button--secondary" [routerLink]="projectContext.wikiRoot()"
             >Back to wiki</a
           ></pm-error-state
         >
@@ -50,7 +51,7 @@ import type { UpdateWikiPageBodyRequest } from './wiki-api.service';
           <div class="wiki-form-actions">
             <a
               class="pm-button pm-button--secondary"
-              [routerLink]="['/wiki', ...page.path.split('/')]"
+              [routerLink]="projectContext.wikiUrl(page.path)"
               >Cancel</a
             ><button
               class="pm-button pm-button--primary"
@@ -116,6 +117,7 @@ export class WikiEdit extends WikiDirtyForm {
   protected readonly store = inject(WikiStore);
   private readonly api = inject(WikiApiService);
   private readonly router = inject(Router);
+  protected readonly projectContext = inject(ProjectContextService);
   private readonly injector = inject(Injector);
   protected readonly pending = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -178,7 +180,7 @@ export class WikiEdit extends WikiDirtyForm {
       this.loadedRevision = page.revision;
       this.pageForm().reset();
       this.allowLeave = true;
-      await this.router.navigate(['/wiki', ...page.path.split('/')], { replaceUrl: true });
+      await this.router.navigateByUrl(this.projectContext.wikiUrl(page.path), { replaceUrl: true });
     } catch (error) {
       const mapped = this.api.error(error, 'The wiki body could not be saved.');
       this.error.set(mapped.message);
