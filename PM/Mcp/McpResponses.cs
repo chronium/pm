@@ -71,7 +71,11 @@ public sealed record TaskSearchPayload(
     IReadOnlyList<TaskSearchResultPayload> Tasks,
     IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
-public sealed record NextTaskPayload(bool Found, TaskSummaryPayload? Task, string Reason);
+public sealed record NextTaskPayload(
+    bool Found,
+    TaskSummaryPayload? Task,
+    string Reason,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
 public sealed record TaskSummaryPayload(
     string Id,
@@ -86,6 +90,9 @@ public sealed record TaskSummaryPayload(
     string DependencySummary,
     IReadOnlyList<string> WaitingOnDependencies,
     IReadOnlyList<string> MissingDependencies,
+    IReadOnlyList<string> CompletedDependencies,
+    IReadOnlyList<string> UnavailableDependencies,
+    IReadOnlyList<string> InvalidDependencies,
     string DescriptionPreview,
     string FilePath,
     LinkedProjectOwnerPayload? Project = null);
@@ -103,6 +110,9 @@ public sealed record TaskSearchResultPayload(
     string DependencySummary,
     IReadOnlyList<string> WaitingOnDependencies,
     IReadOnlyList<string> MissingDependencies,
+    IReadOnlyList<string> CompletedDependencies,
+    IReadOnlyList<string> UnavailableDependencies,
+    IReadOnlyList<string> InvalidDependencies,
     string DescriptionPreview,
     string FilePath,
     int MatchCount,
@@ -124,6 +134,9 @@ public sealed record TaskDetailPayload(
     string DependencySummary,
     IReadOnlyList<string> WaitingOnDependencies,
     IReadOnlyList<string> MissingDependencies,
+    IReadOnlyList<string> CompletedDependencies,
+    IReadOnlyList<string> UnavailableDependencies,
+    IReadOnlyList<string> InvalidDependencies,
     string FilePath,
     string Markdown,
     string Description,

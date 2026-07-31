@@ -124,7 +124,11 @@ public static class BoardApiEndpoints
         ToUtc(task.Task.ModifiedAt));
 
     internal static DependencyStatusResponse ToDependencies(DependencyStatus status) => new(
-        status.Ready, status.DependsOn, status.WaitingOn, status.Missing, status.Summary);
+        status.Ready,
+        status.DependsOn,
+        status.WaitingOn,
+        status.Missing.Concat(status.Unavailable).Concat(status.Invalid).ToList(),
+        status.Summary);
 
     private static BoardOptionResponse ToOption(BoardOption option) =>
         new(option.Key, option.Name, option.Priority);

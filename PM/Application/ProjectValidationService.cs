@@ -22,6 +22,7 @@ public sealed class ProjectValidationService
     private readonly ProjectRoot projectRoot;
     private readonly LinkedProjectService linkedProjects;
     private readonly LinkedProjectFamilyService linkedProjectFamily;
+    private readonly LinkedProjectTaskGraphService linkedTaskGraph;
 
     public ProjectValidationService(ProjectRoot projectRoot)
         : this(projectRoot, new LinkedProjectService(projectRoot),
@@ -33,10 +34,21 @@ public sealed class ProjectValidationService
         ProjectRoot projectRoot,
         LinkedProjectService linkedProjects,
         LinkedProjectFamilyService linkedProjectFamily)
+        : this(projectRoot, linkedProjects, linkedProjectFamily,
+            new LinkedProjectTaskGraphService(linkedProjectFamily))
+    {
+    }
+
+    public ProjectValidationService(
+        ProjectRoot projectRoot,
+        LinkedProjectService linkedProjects,
+        LinkedProjectFamilyService linkedProjectFamily,
+        LinkedProjectTaskGraphService linkedTaskGraph)
     {
         this.projectRoot = projectRoot;
         this.linkedProjects = linkedProjects;
         this.linkedProjectFamily = linkedProjectFamily;
+        this.linkedTaskGraph = linkedTaskGraph;
     }
 
     public AppResult<ProjectValidationResult> ValidateProject() =>
@@ -95,6 +107,13 @@ public sealed class ProjectValidationService
             warning.Message,
             ProjectId: warning.TargetProjectId,
             ProjectAlias: warning.Alias)));
+        issues.AddRange(linkedTaskGraph.Build(family.Payload).Warnings.Select(warning =>
+            new ProjectValidationIssue(
+                "warning",
+                warning.Code,
+                warning.Message,
+                ProjectId: warning.TargetProjectId,
+                ProjectAlias: warning.Alias)));
     }
 
     private void ValidateConfigMetadata(List<ProjectValidationIssue> issues)

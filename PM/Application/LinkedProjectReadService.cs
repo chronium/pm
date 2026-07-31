@@ -46,6 +46,13 @@ public sealed record LinkedProjectReadResult<T>(
     IReadOnlyList<LinkedProjectFamilyWarning> Warnings,
     bool Truncated = false);
 
+public sealed record LinkedProjectNextTaskResult(
+    bool Found,
+    BoardTask? Task,
+    LinkedProjectResourceOwner? Owner,
+    string Reason,
+    IReadOnlyList<LinkedProjectFamilyWarning> Warnings);
+
 public interface ILinkedProjectGitInspector
 {
     Task<LinkedProjectGitMetadata> InspectAsync(
@@ -61,6 +68,7 @@ public sealed class LinkedProjectReadService
     private readonly LinkedProjectFamilyService familyService;
     private readonly INextIdService nextIdService;
     private readonly ILinkedProjectGitInspector gitInspector;
+    private readonly LinkedProjectTaskGraphService taskGraphService;
     private readonly int maximumListResultCount;
 
     public LinkedProjectReadService(
@@ -83,6 +91,7 @@ public sealed class LinkedProjectReadService
         this.familyService = familyService;
         this.nextIdService = nextIdService;
         this.gitInspector = gitInspector;
+        taskGraphService = new LinkedProjectTaskGraphService(familyService);
         this.maximumListResultCount = Math.Clamp(maximumListResultCount, 1, MaximumListResultCount);
     }
 
@@ -129,6 +138,7 @@ public sealed class LinkedProjectReadService
 
         if (truncated)
             warnings.Add(TruncationWarning(targets.Payload.ActiveProjectId, "task", maximumListResultCount));
+        items = await EnrichTasksAsync(items, warnings, cancellationToken);
         return AppResult<LinkedProjectReadResult<BoardTask>>.Ok(
             new LinkedProjectReadResult<BoardTask>(items, warnings.Items, truncated));
     }
@@ -157,10 +167,15 @@ public sealed class LinkedProjectReadService
             return Failure<BoardTask>("missing_task", $"Task {taskId.Trim()} not found.");
 
         var owner = await BuildOwnerAsync(member, cancellationToken);
+        var warnings = new ReadWarningCollector(targets.Payload.Warnings);
+        var items = await EnrichTasksAsync(
+            [new LinkedProjectResource<BoardTask>(owner, result.Payload! with { Markdown = markdown })],
+            warnings,
+            cancellationToken);
         return AppResult<LinkedProjectReadResult<BoardTask>>.Ok(
             new LinkedProjectReadResult<BoardTask>(
-                [new LinkedProjectResource<BoardTask>(owner, result.Payload! with { Markdown = markdown })],
-                targets.Payload.Warnings));
+                items,
+                warnings.Items));
     }
 
     public async Task<AppResult<LinkedProjectReadResult<TaskSearchResult>>> SearchTasksAsync(
@@ -207,8 +222,114 @@ public sealed class LinkedProjectReadService
             .Take(limit)
             .Select(entry => entry.Item)
             .ToList();
+        items = await EnrichSearchResultsAsync(items, warnings, cancellationToken);
         return AppResult<LinkedProjectReadResult<TaskSearchResult>>.Ok(
             new LinkedProjectReadResult<TaskSearchResult>(items, warnings.Items));
+    }
+
+    public async Task<AppResult<LinkedProjectNextTaskResult>> GetNextTaskAsync(
+        LinkedProjectReadRequest request,
+        NextTaskQuery query,
+        int descriptionPreviewLength = BoardService.CliDescriptionPreviewLength,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.Scope == LinkedProjectReadScope.Current &&
+            !activeProject.TryReadProjectId(out _))
+        {
+            var local = new BoardService(activeProject).GetNextTask(query, descriptionPreviewLength);
+            return local.Success
+                ? AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
+                    local.Payload!.Found, local.Payload.Task, null, local.Payload.Reason, []))
+                : AppResult<LinkedProjectNextTaskResult>.Fail(local.ErrorCode!, local.Message!);
+        }
+
+        var targets = await ResolveTargetsAsync(request, cancellationToken);
+        if (!targets.Success)
+            return AppResult<LinkedProjectNextTaskResult>.Fail(targets.ErrorCode!, targets.Message!);
+
+        var members = targets.Payload!.Members;
+        if (request.Scope == LinkedProjectReadScope.Family)
+        {
+            if (query.Track != null && !members.Any(member => member.Project!.Config!.Tracks.ContainsKey(query.Track)))
+                return AppResult<LinkedProjectNextTaskResult>.Fail(
+                    "invalid_track", $"Track {query.Track} was not found in any available family project.");
+            if (query.Milestone != null &&
+                !members.Any(member => member.Project!.Config!.Milestones.ContainsKey(query.Milestone)))
+                return AppResult<LinkedProjectNextTaskResult>.Fail(
+                    "invalid_milestone", $"Milestone {query.Milestone} was not found in any available family project.");
+        }
+
+        var warnings = new ReadWarningCollector(targets.Payload.Warnings);
+        var candidates = new List<RecommendationCandidate>();
+        for (var projectIndex = 0; projectIndex < members.Count; projectIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var member = members[projectIndex];
+            if (request.Scope == LinkedProjectReadScope.Family &&
+                !Supports(member.Project!, new BoardQuery(query.Track, query.Milestone)))
+                continue;
+
+            var board = new BoardService(member.Project!).GetBoard(
+                new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength);
+            if (!board.Success)
+            {
+                if (!CanContinue(request, member))
+                    return AppResult<LinkedProjectNextTaskResult>.Fail(board.ErrorCode!, board.Message!);
+                warnings.Add(ReadFailure(member, "task recommendations", board.ErrorCode));
+                continue;
+            }
+
+            var owner = await BuildOwnerAsync(member, cancellationToken);
+            candidates.AddRange(board.Payload!.Tasks
+                .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+                .Select(task => new RecommendationCandidate(
+                    member, owner, task, projectIndex,
+                    GetStateIndex(member.Project!, task),
+                    GetMilestoneIndex(member.Project!, task),
+                    GetTaskOrderIndex(member.Project!, task))));
+        }
+
+        var resources = candidates
+            .Select(candidate => new LinkedProjectResource<BoardTask>(candidate.Owner, candidate.Task))
+            .ToList();
+        var enriched = await EnrichTasksAsync(resources, warnings, cancellationToken, force: true);
+        var dependencies = enriched.ToDictionary(
+            item => new ProjectTaskKey(item.Owner.ProjectId, item.Resource.Task.Id),
+            item => item.Resource.Dependencies);
+        candidates = candidates.Select(candidate => candidate with
+            {
+                Task = candidate.Task with
+                {
+                    Dependencies = dependencies[new ProjectTaskKey(
+                        candidate.Owner.ProjectId, candidate.Task.Task.Id)],
+                },
+            })
+            .Where(candidate => !query.ReadyOnly || candidate.Task.Dependencies.Ready)
+            .ToList();
+
+        var selected = candidates
+            .OrderBy(candidate => candidate.Task.Dependencies.Ready ? 0 : 1)
+            .ThenByDescending(candidate => PriorityLevel.Rank(candidate.Task.Priority))
+            .ThenBy(candidate => candidate.StateIndex)
+            .ThenBy(candidate => string.Equals(
+                candidate.Owner.ProjectId, targets.Payload.ActiveProjectId, StringComparison.Ordinal) ? 0 : 1)
+            .ThenBy(candidate => candidate.ProjectIndex)
+            .ThenBy(candidate => candidate.MilestoneIndex)
+            .ThenBy(candidate => candidate.TaskOrderIndex)
+            .ThenByDescending(candidate => candidate.Task.Task.ModifiedAt)
+            .ThenBy(candidate => candidate.Owner.ProjectId, StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Task.Task.Id, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        if (selected == null)
+            return AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
+                false, null, null, BuildNoRecommendationReason(request, query), warnings.Items));
+
+        var reason = $"Selected {selected.Task.Priority} priority task in " +
+                     $"{selected.Owner.ProjectName} ({selected.Owner.ProjectId}), state {selected.Task.State}; " +
+                     $"{selected.Task.Dependencies.Summary}.";
+        return AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
+            true, selected.Task, selected.Owner, reason, warnings.Items));
     }
 
     public async Task<AppResult<LinkedProjectReadResult<WikiPageSummary>>> ListWikiPagesAsync(
@@ -398,6 +519,132 @@ public sealed class LinkedProjectReadService
             resolvedFamily.Warnings));
     }
 
+    private async Task<List<LinkedProjectResource<BoardTask>>> EnrichTasksAsync(
+        List<LinkedProjectResource<BoardTask>> items,
+        ReadWarningCollector warnings,
+        CancellationToken cancellationToken,
+        bool force = false)
+    {
+        if (!force && !items.Any(item => HasQualifiedDependency(item.Resource.Task))) return items;
+
+        var graph = await taskGraphService.BuildAsync(cancellationToken);
+        if (!graph.Success)
+        {
+            warnings.Add(new LinkedProjectFamilyWarning(
+                graph.ErrorCode ?? "dependency_graph_unavailable",
+                graph.Message ?? "The linked task dependency graph could not be resolved.",
+                items.FirstOrDefault()?.Owner.ProjectId ?? "current",
+                items.FirstOrDefault()?.Owner.ProjectId ?? "current",
+                items.FirstOrDefault()?.Owner.Alias,
+                LinkedProjectResolutionStatus.Invalid));
+            return items;
+        }
+
+        foreach (var warning in graph.Payload!.Warnings) warnings.Add(warning);
+        return items.Select(item => item with
+            {
+                Resource = item.Resource with
+                {
+                    Dependencies = graph.Payload.GetDependencyStatus(item.Owner.ProjectId, item.Resource.Task),
+                },
+            })
+            .ToList();
+    }
+
+    private async Task<List<LinkedProjectResource<TaskSearchResult>>> EnrichSearchResultsAsync(
+        List<LinkedProjectResource<TaskSearchResult>> items,
+        ReadWarningCollector warnings,
+        CancellationToken cancellationToken)
+    {
+        if (!items.Any(item => HasQualifiedDependency(item.Resource.Task))) return items;
+
+        var graph = await taskGraphService.BuildAsync(cancellationToken);
+        if (!graph.Success)
+        {
+            warnings.Add(new LinkedProjectFamilyWarning(
+                graph.ErrorCode ?? "dependency_graph_unavailable",
+                graph.Message ?? "The linked task dependency graph could not be resolved.",
+                items.FirstOrDefault()?.Owner.ProjectId ?? "current",
+                items.FirstOrDefault()?.Owner.ProjectId ?? "current",
+                items.FirstOrDefault()?.Owner.Alias,
+                LinkedProjectResolutionStatus.Invalid));
+            return items;
+        }
+
+        foreach (var warning in graph.Payload!.Warnings) warnings.Add(warning);
+        return items.Select(item => item with
+            {
+                Resource = item.Resource with
+                {
+                    Dependencies = graph.Payload.GetDependencyStatus(item.Owner.ProjectId, item.Resource.Task),
+                },
+            })
+            .ToList();
+    }
+
+    private static bool HasQualifiedDependency(TaskItem task) =>
+        task.DependencyIds.Any(value =>
+            TaskDependencyReference.TryParse(value, out var dependency, out _) &&
+            dependency!.ProjectId != null);
+
+    private static int GetStateIndex(ProjectRoot project, BoardTask task)
+    {
+        var index = 0;
+        foreach (var state in project.Config!.TaskStates.Keys)
+        {
+            if (string.Equals(state, task.State, StringComparison.Ordinal)) return index;
+            index++;
+        }
+
+        return int.MaxValue;
+    }
+
+    private static int GetMilestoneIndex(ProjectRoot project, BoardTask task)
+    {
+        if (task.Milestone == null) return project.Config!.Milestones.Count;
+        var index = 0;
+        foreach (var milestone in project.Config!.Milestones.Keys)
+        {
+            if (string.Equals(milestone, task.Milestone, StringComparison.Ordinal)) return index;
+            index++;
+        }
+
+        return project.Config.Milestones.Count + 1;
+    }
+
+    private static int GetTaskOrderIndex(ProjectRoot project, BoardTask task)
+    {
+        var order = project.ReadTaskOrder().Orders.FirstOrDefault(entry =>
+            string.Equals(entry.Track, task.Track, StringComparison.Ordinal) &&
+            string.Equals(entry.State, task.State, StringComparison.Ordinal) &&
+            string.Equals(Normalize(entry.Milestone), Normalize(task.Milestone), StringComparison.Ordinal));
+        if (order == null) return int.MaxValue;
+        var index = order.TaskIds.ToList().FindIndex(id => string.Equals(id, task.Task.Id, StringComparison.Ordinal));
+        return index >= 0 ? index : int.MaxValue;
+    }
+
+    private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string BuildNoRecommendationReason(
+        LinkedProjectReadRequest request,
+        NextTaskQuery query)
+    {
+        var scope = request.Scope switch
+        {
+            LinkedProjectReadScope.Family => " in the linked project family",
+            LinkedProjectReadScope.Project => $" in project {request.ProjectSelector}",
+            _ => " in the active project",
+        };
+        var filters = new List<string>();
+        if (query.Track != null) filters.Add($"track {query.Track}");
+        if (query.Milestone != null) filters.Add($"milestone {query.Milestone}");
+        var filter = filters.Count == 0 ? string.Empty : $" for {string.Join(" and ", filters)}";
+        return query.ReadyOnly
+            ? $"No dependency-ready actionable task found{scope}{filter}."
+            : $"No actionable task found{scope}{filter}.";
+    }
+
     private LinkedProjectFamilyMember CurrentMember(string activeProjectId) =>
         new(activeProjectId, activeProject.Config!.Name, "current", LinkedProjectRelationship.Current,
             LinkedProjectResolutionStatus.Available, LinkedProjectResolutionSource.ActiveProject,
@@ -505,6 +752,17 @@ public sealed class LinkedProjectReadService
         string ActiveProjectId,
         IReadOnlyList<LinkedProjectFamilyMember> Members,
         IReadOnlyList<LinkedProjectFamilyWarning> Warnings);
+
+    private sealed record RecommendationCandidate(
+        LinkedProjectFamilyMember Member,
+        LinkedProjectResourceOwner Owner,
+        BoardTask Task,
+        int ProjectIndex,
+        int StateIndex,
+        int MilestoneIndex,
+        int TaskOrderIndex);
+
+    private readonly record struct ProjectTaskKey(string ProjectId, string TaskId);
 
     private sealed class ReadWarningCollector
     {

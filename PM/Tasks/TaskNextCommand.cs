@@ -1,18 +1,31 @@
 using System.ComponentModel;
 using PM.Application;
+using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Tasks;
 
-public sealed class TaskNextCommand(BoardService boardService) : Command<TaskNextCommand.Settings>
+public sealed class TaskNextCommand(LinkedProjectReadService linkedReads) : AsyncCommand<TaskNextCommand.Settings>
 {
-    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken)
     {
-        var result = boardService.GetNextTask(new NextTaskQuery(
+        var request = LinkedProjectReadRequest.FromOptions(settings.Project, settings.Family);
+        if (!request.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated(
+                $"[red]{(request.Message ?? "Project selection failed.").EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        var result = await linkedReads.GetNextTaskAsync(request.Payload!, new NextTaskQuery(
             Normalize(settings.Track),
             Normalize(settings.Milestone),
-            ReadyOnly: !settings.IncludeBlocked));
+            ReadyOnly: !settings.IncludeBlocked),
+            cancellationToken: cancellationToken);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated(
@@ -36,6 +49,7 @@ public sealed class TaskNextCommand(BoardService boardService) : Command<TaskNex
             .AddColumn("State")
             .AddColumn("Track")
             .AddColumn("Milestone")
+            .AddColumn("Project")
             .AddColumn("Priority")
             .AddColumn("Dependencies");
         table.AddRow(
@@ -44,10 +58,12 @@ public sealed class TaskNextCommand(BoardService boardService) : Command<TaskNex
             task.State.EscapeMarkup(),
             task.Track.EscapeMarkup(),
             (task.Milestone ?? "-").EscapeMarkup(),
+            (recommendation.Owner?.ProjectName ?? "current").EscapeMarkup(),
             task.Priority.EscapeMarkup(),
             task.Dependencies.Summary.EscapeMarkup());
         AnsiConsole.Write(table);
         AnsiConsole.MarkupLineInterpolated($"[grey]{recommendation.Reason.EscapeMarkup()}[/]");
+        LinkedProjectConsole.WriteWarnings(recommendation.Warnings);
         return 0;
     }
 
@@ -67,5 +83,13 @@ public sealed class TaskNextCommand(BoardService boardService) : Command<TaskNex
         [CommandOption("--include-blocked")]
         [Description("Return the best blocked task when no dependency-ready task exists")]
         public bool IncludeBlocked { get; init; }
+
+        [CommandOption("--project <PROJECT>")]
+        [Description("Select current, parent, a stable project ID, or a unique linked-project alias")]
+        public string? Project { get; init; }
+
+        [CommandOption("--family")]
+        [Description("Recommend across every available project in the linked family")]
+        public bool Family { get; init; }
     }
 }

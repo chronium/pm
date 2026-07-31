@@ -1,4 +1,5 @@
 using PM.Application;
+using PM.Tasks;
 
 namespace PM.Tests;
 
@@ -87,5 +88,23 @@ public class BoardServiceTests
         var boardTask = Assert.Single(new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!.Tasks);
 
         Assert.Equal("PM", boardTask.Track);
+    }
+
+    [Fact]
+    public void LocalDependencyStatusDistinguishesInvalidAndUnavailableReferences()
+    {
+        var invalid = TestData.Task("PM-0001", "Invalid", dependsOn: ["pm:not-a-reference"]);
+        var unavailable = TestData.Task("PM-0002", "Unavailable",
+            dependsOn: ["pm://project/prj_other/task/PM-0001"]);
+
+        var invalidStatus = BoardService.BuildDependencyStatus(
+            invalid, new Dictionary<string, TaskItem>(), new Dictionary<string, string>(), "prj_current");
+        var unavailableStatus = BoardService.BuildDependencyStatus(
+            unavailable, new Dictionary<string, TaskItem>(), new Dictionary<string, string>(), "prj_current");
+
+        Assert.Equal(["pm:not-a-reference"], invalidStatus.Invalid);
+        Assert.Empty(invalidStatus.Missing);
+        Assert.Equal(["pm://project/prj_other/task/PM-0001"], unavailableStatus.Unavailable);
+        Assert.Empty(unavailableStatus.Missing);
     }
 }
