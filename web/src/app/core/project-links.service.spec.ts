@@ -101,8 +101,8 @@ describe('ProjectLinksService', () => {
     expect(parseCanonicalProjectReference('pm://project/royale/task/one/two')).toBeNull();
   });
 
-  it('resolves current, linked, missing, and malformed references in live mode', () => {
-    configureLive();
+  it('resolves current, linked, missing, and malformed references in live mode', async () => {
+    const enableLinkedProjectFamily = configureLive();
     const links = TestBed.inject(ProjectLinksService);
     expect(links.resolve('pm://project/games/wiki/shared/engine')).toEqual({
       kind: 'available',
@@ -122,6 +122,8 @@ describe('ProjectLinksService', () => {
       kind: 'unavailable',
       reason: 'This project reference is malformed.',
     });
+    await Promise.resolve();
+    expect(enableLinkedProjectFamily).toHaveBeenCalledOnce();
   });
 
   it('preserves static local and separately published routes', () => {
@@ -150,7 +152,8 @@ describe('ProjectLinksService', () => {
   });
 });
 
-function configureLive(): void {
+function configureLive() {
+  const enableLinkedProjectFamily = vi.fn();
   TestBed.configureTestingModule({
     providers: [
       { provide: StaticModeService, useValue: { enabled: false } },
@@ -158,7 +161,7 @@ function configureLive(): void {
       {
         provide: ProjectContextService,
         useValue: {
-          enableLinkedProjectFamily: () => undefined,
+          enableLinkedProjectFamily,
           family: {
             hasValue: () => true,
             value: () => liveFamily,
@@ -168,4 +171,5 @@ function configureLive(): void {
       },
     ],
   });
+  return enableLinkedProjectFamily;
 }

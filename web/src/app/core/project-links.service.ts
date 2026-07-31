@@ -25,6 +25,7 @@ export class ProjectLinksService {
   private readonly snapshot = toSignal(this.mode.enabled ? this.store.snapshot : of(null), {
     initialValue: null,
   });
+  private familyRequestScheduled = false;
 
   resolve(reference: string): ProjectLinkResolution {
     const parsed = parseCanonicalProjectReference(reference);
@@ -34,8 +35,14 @@ export class ProjectLinksService {
         : { kind: 'not-project-link' };
     }
     if (this.mode.enabled) return this.resolveStatic(parsed);
-    this.context.enableLinkedProjectFamily();
+    this.requestLiveFamily();
     return this.resolveLive(parsed);
+  }
+
+  private requestLiveFamily(): void {
+    if (this.familyRequestScheduled) return;
+    this.familyRequestScheduled = true;
+    queueMicrotask(() => this.context.enableLinkedProjectFamily());
   }
 
   private resolveLive(reference: CanonicalProjectReference): ProjectLinkResolution {

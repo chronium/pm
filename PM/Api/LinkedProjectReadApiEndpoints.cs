@@ -22,7 +22,8 @@ public static class LinkedProjectReadApiEndpoints
     public static void MapLinkedProjectReadApi(
         this RouteGroupBuilder api,
         LinkedProjectFamilyService familyService,
-        LinkedProjectMutationService mutations)
+        LinkedProjectMutationService mutations,
+        LinkedProjectReadService? linkedReads = null)
     {
         var projects = api.MapGroup("/projects/{projectId}")
             .AddEndpointFilter((context, next) => ResolveProject(context, next, familyService, mutations));
@@ -77,20 +78,31 @@ public static class LinkedProjectReadApiEndpoints
             .Produces<BoardNavigationResponse>()
             .WithRevisionedReadMetadata();
 
-        projects.MapGet("/board", (HttpRequest request, string? track, string? milestone, string? state) =>
+        projects.MapGet("/board", async (HttpRequest request, string? track, string? milestone, string? state,
+                CancellationToken cancellationToken) =>
             {
                 var context = GetContext(request);
                 var query = new BoardQuery(Normalize(track), Normalize(milestone), Normalize(state));
                 var result = context.Board.GetBoard(query);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-                var revision = context.Revisions.GetBoardRevision(result.Payload!);
+                var board = result.Payload!;
+                if (linkedReads != null)
+                {
+                    var enriched = await linkedReads.ListTasksAsync(
+                        ProjectRequest(context.Member.ProjectId), query, cancellationToken);
+                    if (!enriched.Success)
+                        return ApiResults.Failure(enriched.ErrorCode, enriched.Message, request.Path);
+                    board = EnrichBoard(board, enriched.Payload!.Items);
+                }
+
+                var revision = context.Revisions.GetBoardRevision(board);
                 if (!revision.Success)
                     return ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path);
                 var conditional = ApiPreconditions.EvaluateIfNoneMatch(request, revision.Payload!);
                 if (conditional != null) return conditional;
 
                 ApiPreconditions.SetETag(request.HttpContext.Response, revision.Payload!);
-                return Results.Ok(BoardApiEndpoints.ToResponse(result.Payload!, revision.Payload!));
+                return Results.Ok(BoardApiEndpoints.ToResponse(board, revision.Payload!));
             })
             .WithName("GetLinkedProjectBoard")
             .Produces<BoardResponse>()
@@ -109,11 +121,25 @@ public static class LinkedProjectReadApiEndpoints
             .WithName("SearchLinkedProjectTasks")
             .Produces<IReadOnlyList<TaskSearchResultResponse>>();
 
-        projects.MapGet("/tasks/next", (HttpRequest request, string? track = null,
-                string? milestone = null, bool readyOnly = true) =>
+        projects.MapGet("/tasks/next", async (HttpRequest request, string? track = null,
+                string? milestone = null, bool readyOnly = true,
+                CancellationToken cancellationToken = default) =>
             {
-                var result = GetContext(request).Board.GetNextTask(new NextTaskQuery(
-                    Normalize(track), Normalize(milestone), readyOnly), BoardService.WebDescriptionPreviewLength);
+                var context = GetContext(request);
+                var query = new NextTaskQuery(Normalize(track), Normalize(milestone), readyOnly);
+                if (linkedReads == null)
+                {
+                    var local = context.Board.GetNextTask(query, BoardService.WebDescriptionPreviewLength);
+                    if (!local.Success) return ApiResults.Failure(local.ErrorCode, local.Message, request.Path);
+                    return Results.Ok(new NextTaskResponse(
+                        local.Payload!.Found,
+                        local.Payload.Task == null ? null : BoardApiEndpoints.ToSummary(local.Payload.Task),
+                        local.Payload.Reason));
+                }
+
+                var result = await linkedReads.GetNextTaskAsync(
+                    ProjectRequest(context.Member.ProjectId), query,
+                    BoardService.WebDescriptionPreviewLength, cancellationToken);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var next = result.Payload!;
                 return Results.Ok(new NextTaskResponse(
@@ -124,13 +150,16 @@ public static class LinkedProjectReadApiEndpoints
             .WithName("GetLinkedProjectNextTaskRecommendation")
             .Produces<NextTaskResponse>();
 
-        projects.MapGet("/tasks/{id}", (HttpRequest request, string id) =>
-                TaskApiEndpoints.ReadTask(request, id, GetContext(request).Board, GetContext(request).Revisions))
+        projects.MapGet("/tasks/{id}", async (HttpRequest request, string id,
+                CancellationToken cancellationToken) =>
+                linkedReads == null
+                    ? TaskApiEndpoints.ReadTask(request, id, GetContext(request).Board, GetContext(request).Revisions)
+                    : await ReadLinkedTask(request, id, GetContext(request), linkedReads, cancellationToken))
             .WithName("GetLinkedProjectTask")
             .Produces<TaskResponse>()
             .WithRevisionedReadMetadata();
 
-        MapTaskMutations(projects, mutations);
+        MapTaskMutations(projects, mutations, linkedReads);
 
         projects.MapGet("/wiki/search", (HttpRequest request, int limit = 20) =>
             {
@@ -169,7 +198,10 @@ public static class LinkedProjectReadApiEndpoints
         MapWikiMutations(projects, mutations);
     }
 
-    private static void MapTaskMutations(RouteGroupBuilder projects, LinkedProjectMutationService mutations)
+    private static void MapTaskMutations(
+        RouteGroupBuilder projects,
+        LinkedProjectMutationService mutations,
+        LinkedProjectReadService? linkedReads)
     {
         projects.MapPost("/tasks", async (HttpRequest request, CancellationToken cancellationToken) =>
         {
@@ -186,12 +218,16 @@ public static class LinkedProjectReadApiEndpoints
             var result = await writable.Context.Tasks.CreateTask(input.Title, input.Track, input.Milestone,
                 input.Description ?? string.Empty, false, cancellationToken);
             if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-            var response = TaskApiEndpoints.GetResponse(result.Payload!.Id, writable.Context.Board,
-                writable.Context.Revisions, request);
-            if (response.Error != null) return response.Error;
-            ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
+            var response = linkedReads == null
+                ? Task.FromResult(TaskApiEndpoints.GetResponse(result.Payload!.Id, writable.Context.Board,
+                    writable.Context.Revisions, request))
+                : GetLinkedTaskResponse(request, result.Payload!.Id, writable.Context, linkedReads,
+                    cancellationToken);
+            var resolvedResponse = await response;
+            if (resolvedResponse.Error != null) return resolvedResponse.Error;
+            ApiPreconditions.SetETag(request.HttpContext.Response, resolvedResponse.Value!.Revision);
             ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
-            return Results.Created($"{request.Path}/{Uri.EscapeDataString(result.Payload.Id)}", response.Value);
+            return Results.Created($"{request.Path}/{Uri.EscapeDataString(result.Payload.Id)}", resolvedResponse.Value);
         })
         .WithName("CreateLinkedProjectTask")
         .Accepts<CreateTaskRequest>("application/json")
@@ -227,7 +263,9 @@ public static class LinkedProjectReadApiEndpoints
                 input.Priority, placement);
             if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
             ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
-            return TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions);
+            return linkedReads == null
+                ? TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions)
+                : await RefreshedLinkedTask(request, id, writable.Context, linkedReads, cancellationToken);
         })
         .WithName("UpdateLinkedProjectTask")
         .Accepts<UpdateTaskRequest>("application/json")
@@ -251,7 +289,9 @@ public static class LinkedProjectReadApiEndpoints
             var result = writable.Context.Tasks.MoveTask(id, input.State);
             if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
             ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
-            return TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions);
+            return linkedReads == null
+                ? TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions)
+                : await RefreshedLinkedTask(request, id, writable.Context, linkedReads, cancellationToken);
         })
         .WithName("UpdateLinkedProjectTaskState")
         .Accepts<UpdateTaskStateRequest>("application/json")
@@ -275,7 +315,9 @@ public static class LinkedProjectReadApiEndpoints
             var result = writable.Context.Tasks.AppendTaskNote(id, input.Note);
             if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
             ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
-            return TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions);
+            return linkedReads == null
+                ? TaskApiEndpoints.Refreshed(request, id, writable.Context.Board, writable.Context.Revisions)
+                : await RefreshedLinkedTask(request, id, writable.Context, linkedReads, cancellationToken);
         })
         .WithName("AppendLinkedProjectTaskNote")
         .Accepts<AppendTaskNoteRequest>("application/json")
@@ -299,6 +341,85 @@ public static class LinkedProjectReadApiEndpoints
         .Produces(StatusCodes.Status204NoContent)
         .WithRevisionedMutationMetadata(StatusCodes.Status204NoContent)
         .WithClientHeaderMetadata();
+    }
+
+    private static LinkedProjectReadRequest ProjectRequest(string projectId) =>
+        new(LinkedProjectReadScope.Project, projectId);
+
+    private static BoardData EnrichBoard(
+        BoardData board,
+        IReadOnlyList<LinkedProjectResource<BoardTask>> items)
+    {
+        var enrichedTasks = items.ToDictionary(
+            item => item.Resource.Task.Id,
+            item => item.Resource,
+            StringComparer.Ordinal);
+
+        BoardTask Enrich(BoardTask task) =>
+            enrichedTasks.TryGetValue(task.Task.Id, out var enriched) ? enriched : task;
+
+        return board with
+        {
+            Tasks = board.Tasks.Select(Enrich).ToList(),
+            MilestoneGroups = board.MilestoneGroups.Select(group => group with
+            {
+                States = group.States.Select(state => state with
+                {
+                    Tasks = state.Tasks.Select(Enrich).ToList(),
+                }).ToList(),
+            }).ToList(),
+        };
+    }
+
+    private static async Task<IResult> ReadLinkedTask(
+        HttpRequest request,
+        string id,
+        LinkedProjectReadContext context,
+        LinkedProjectReadService linkedReads,
+        CancellationToken cancellationToken)
+    {
+        var response = await GetLinkedTaskResponse(request, id, context, linkedReads, cancellationToken);
+        if (response.Error != null) return response.Error;
+        var conditional = ApiPreconditions.EvaluateIfNoneMatch(request, response.Value!.Revision);
+        if (conditional != null) return conditional;
+
+        ApiPreconditions.SetETag(request.HttpContext.Response, response.Value.Revision);
+        return Results.Ok(response.Value);
+    }
+
+    private static async Task<IResult> RefreshedLinkedTask(
+        HttpRequest request,
+        string id,
+        LinkedProjectReadContext context,
+        LinkedProjectReadService linkedReads,
+        CancellationToken cancellationToken)
+    {
+        var response = await GetLinkedTaskResponse(request, id, context, linkedReads, cancellationToken);
+        if (response.Error != null) return response.Error;
+        ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
+        return Results.Ok(response.Value);
+    }
+
+    private static async Task<(TaskResponse? Value, IResult? Error)> GetLinkedTaskResponse(
+        HttpRequest request,
+        string id,
+        LinkedProjectReadContext context,
+        LinkedProjectReadService linkedReads,
+        CancellationToken cancellationToken)
+    {
+        var task = await linkedReads.GetTaskAsync(id, context.Member.ProjectId, cancellationToken);
+        if (!task.Success)
+            return (null, ApiResults.Failure(task.ErrorCode, task.Message, request.Path));
+
+        var item = task.Payload!.Items.SingleOrDefault();
+        if (item == null)
+            return (null, ApiResults.Failure("missing_task", $"Task {id} not found.", request.Path));
+
+        var revision = context.Revisions.GetTaskRevision(id);
+        if (!revision.Success)
+            return (null, ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path));
+
+        return (TaskApiEndpoints.ToResponse(item.Resource, revision.Payload!), null);
     }
 
     private static void MapWikiMutations(RouteGroupBuilder projects, LinkedProjectMutationService mutations)

@@ -155,6 +155,42 @@ public class AgentRunOrchestrationTests
     }
 
     [Fact]
+    public async Task LinkedWikiPreflightRenegotiatesAnUpgradedRunnerBeforeCheckingProtocol()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await Project(workspace);
+        var runner = new FakeRunnerClient(
+            "runner-test",
+            registeredProtocol: AgentRunProtocol.Version11);
+        var linked = new AgentRunLinkedContext(
+            "project-engine",
+            "Shared engine",
+            "engine",
+            new AgentRunRepository("git@github.com:chronium/engine.git", new string('c', 40)),
+            AgentRunLinkedContextRequirement.Required,
+            [AgentRunLinkedContextScope.Wiki]);
+        var service = new AgentRunService(root, new BoardService(root), new FakeGitInspector(),
+            new AgentRunCache(root, TimeProvider.System,
+                new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, "cache") }),
+            runner, TimeProvider.System, new FakeLinkedContextResolver(linked));
+
+        var preflight = await service.Preflight(Selection("runner-test") with
+        {
+            LinkedContexts =
+            [
+                new AgentRunLinkedContextSelection(
+                    "project-engine", AgentRunLinkedContextRequirement.Required),
+            ],
+        });
+
+        Assert.True(preflight.Success, preflight.Message);
+        Assert.True(preflight.Payload!.Ready);
+        Assert.Equal(1, runner.CapabilitiesCalls);
+        Assert.Equal(AgentRunProtocol.Current, preflight.Payload.Request!.Specification.ProtocolVersion);
+        Assert.DoesNotContain(preflight.Payload.Checks, check => check.Id == "linked_context_protocol");
+    }
+
+    [Fact]
     public async Task RepeatedStartUsesRunnerIdempotencyForThePersistedRequest()
     {
         using var workspace = new TempWorkingDirectory();
@@ -488,16 +524,20 @@ public class AgentRunOrchestrationTests
 
     private sealed class FakeRunnerClient : IAgentRunnerClient
     {
-        private readonly AgentRunnerRegistration _registration;
+        private AgentRunnerRegistration _registration;
         private readonly AgentRunnerCapabilities _capabilities;
         private readonly Dictionary<string, AgentRunnerRun> _runs = [];
         private readonly AgentRunArtifact? _artifact;
         private readonly byte[]? _artifactBytes;
 
-        public FakeRunnerClient(string runnerId, byte[]? artifactBytes = null, byte[]? contentBytes = null)
+        public FakeRunnerClient(
+            string runnerId,
+            byte[]? artifactBytes = null,
+            byte[]? contentBytes = null,
+            AgentRunProtocolVersion? registeredProtocol = null)
         {
             _registration = new AgentRunnerRegistration(runnerId, "Test runner", new Uri("https://runner.test/"),
-                $"sha256:{new string('a', 64)}", AgentRunProtocol.Current, "client-test",
+                $"sha256:{new string('a', 64)}", registeredProtocol ?? AgentRunProtocol.Current, "client-test",
                 $"sha256:{new string('b', 64)}", DateTimeOffset.UtcNow);
             _capabilities = JsonSerializer.Deserialize<AgentRunnerCapabilities>(File.ReadAllText(
                 Path.Combine(AppContext.BaseDirectory, "AgentRunContracts", "v1", "runner-capabilities.json")),
@@ -513,6 +553,7 @@ public class AgentRunOrchestrationTests
         public void SetRun(AgentRunnerRun run) => _runs[run.RunId] = run;
 
         public int HealthCalls { get; private set; }
+        public int CapabilitiesCalls { get; private set; }
         public int PreflightCalls { get; private set; }
         public int StartCalls { get; private set; }
         public AgentRunRequest? LastPreflightRequest { get; private set; }
@@ -534,8 +575,14 @@ public class AgentRunOrchestrationTests
                 AgentRunProtocol.Current, DateTimeOffset.UtcNow)));
         }
         public Task<AppResult<AgentRunnerCapabilities>> Capabilities(string runnerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(AppResult<AgentRunnerCapabilities>.Ok(_capabilities));
+            CancellationToken cancellationToken = default)
+        {
+            CapabilitiesCalls++;
+            var negotiated = AgentRunProtocol.HighestCommon(_capabilities.ProtocolVersions);
+            if (negotiated != null)
+                _registration = _registration with { ProtocolVersion = negotiated.Value };
+            return Task.FromResult(AppResult<AgentRunnerCapabilities>.Ok(_capabilities));
+        }
         public Task<AppResult<AgentRunnerPreflightResult>> Preflight(string runnerId,
             AgentRunRequest request, CancellationToken cancellationToken = default)
         {

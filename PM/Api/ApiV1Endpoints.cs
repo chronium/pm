@@ -90,7 +90,7 @@ public static class ApiV1Endpoints
         var linkedRegistry = linkedProjectRegistry ?? new LinkedProjectRegistryStore();
         var linkedMutations = linkedProjectMutationService ?? LinkedProjectMutationService.ForCurrent(taskService);
         api.MapLinkedProjectApi(linkedProjects, linkedRegistry, linkedProjectReadService);
-        api.MapLinkedProjectReadApi(linkedProjects, linkedMutations);
+        api.MapLinkedProjectReadApi(linkedProjects, linkedMutations, linkedProjectReadService);
         if (membershipService != null) api.MapProjectMembershipApi(membershipService);
         if (agentRunService != null && agentRunnerClient != null)
             api.MapAgentRunApi(agentRunService, agentRunnerClient);

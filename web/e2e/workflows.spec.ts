@@ -52,7 +52,9 @@ test('switches linked projects with isolated filters and read-only task and wiki
 }, testInfo) => {
   await page.goto('/tasks?track=OPS');
   await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
-  await page.getByRole('link', { name: /Linked Project.*Read-only/ }).click();
+  await expect(page.locator('.project-switcher-unavailable')).toContainText('unavailable');
+  await expect(page.locator('.project-switcher-unavailable')).not.toHaveAttribute('href');
+  await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks$/);
   await expect(page.getByText('Linked fixture task', { exact: true })).toBeVisible();
 
@@ -88,14 +90,23 @@ test('switches linked projects with isolated filters and read-only task and wiki
   await expect(page.getByRole('heading', { name: 'Linked guide' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Switch project from Linked Project' }).click();
+  await page.getByRole('button', { name: 'Switch project from Royale Project' }).click();
+  await page.getByRole('link', { name: /Starfall Project.*Read-only/ }).click();
+  await expect(page).toHaveURL(/\/projects\/sibling-project\/wiki$/);
+  await page
+    .getByRole('link', { name: /Starfall guide/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { name: 'Starfall guide' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Switch project from Starfall Project' }).click();
   await page.getByRole('link', { name: /Playwright Project/ }).click();
   await expect(page).toHaveURL(/\/wiki$/);
   await page.getByRole('link', { name: /^Tasks/ }).click();
   await expect(page).toHaveURL(/\/tasks\?track=OPS$/);
 
   await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
-  await page.getByRole('link', { name: /Linked Project.*Read-only/ }).click();
+  await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
 });
 

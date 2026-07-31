@@ -285,13 +285,6 @@ public sealed partial class AgentRunService(
                 projectId, task.Payload!, git.Payload.Snapshot, null));
         }
         checks.Add(Passed("runner_registration", "Runner registration", "The selected runner is paired."));
-        if (linkedContexts.Payload.Contexts.Count > 0 && registration.Payload!.ProtocolVersion.Minor < 2)
-        {
-            checks.Add(Failed("linked_context_protocol", "Linked wiki context",
-                "The selected runner must negotiate protocol 1.2 for linked wiki context."));
-            return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, false, checks,
-                projectId, task.Payload!, git.Payload.Snapshot, null, linkedContexts.Payload.Contexts));
-        }
 
         var health = await runners.Health(selection.RunnerId, cancellationToken);
         if (!health.Success)
@@ -309,6 +302,22 @@ public sealed partial class AgentRunService(
                 capabilities.Message ?? "Runner capabilities are unavailable."));
             return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, false, checks,
                 projectId, task.Payload!, git.Payload.Snapshot, null));
+        }
+
+        var negotiatedRegistration = runners.Registration(selection.RunnerId);
+        if (!negotiatedRegistration.Success)
+        {
+            checks.Add(Failed("runner_registration", "Runner registration",
+                "The negotiated runner registration could not be loaded."));
+            return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, false, checks,
+                projectId, task.Payload!, git.Payload.Snapshot, null, linkedContexts.Payload.Contexts));
+        }
+        if (linkedContexts.Payload.Contexts.Count > 0 && negotiatedRegistration.Payload!.ProtocolVersion.Minor < 2)
+        {
+            checks.Add(Failed("linked_context_protocol", "Linked wiki context",
+                "The selected runner must negotiate protocol 1.2 for linked wiki context."));
+            return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, false, checks,
+                projectId, task.Payload!, git.Payload.Snapshot, null, linkedContexts.Payload.Contexts));
         }
 
         var provider = capabilities.Payload!.AgentProviders.FirstOrDefault(item => item.ProviderId == selection.ProviderId);
