@@ -1,0 +1,56 @@
+<section class="launch-section" aria-labelledby="context-heading">
+  <div class="section-heading">
+    <div>
+      <h3 id="context-heading">Linked wiki context</h3>
+      <p>Select exact linked-project wiki revisions to expose read-only to this run.</p>
+    </div>
+    @if (selectedCount()) {
+      <span class="context-count">{{ selectedCount() }} selected</span>
+    }
+  </div>
+
+  @if (loading()) {
+    <p class="inline-status" role="status">Loading linked projects…</p>
+  } @else if (error()) {
+    <p class="inline-error" role="alert">{{ error() }}</p>
+  } @else if (!projects().length) {
+    <p class="inline-status">No readable linked projects are available.</p>
+  } @else {
+    <div class="context-list">
+      @for (project of projects(); track project.projectId) {
+        <div class="context-row">
+          <label class="context-project">
+            <input
+              type="checkbox"
+              [checked]="selected(project.projectId)"
+              [disabled]="disabled()"
+              (change)="toggle(project.projectId, $event)"
+            />
+            <span>
+              <strong>{{ project.name }}</strong>
+              <small>{{ project.alias || project.relationship }} · Wiki only · Read-only</small>
+            </span>
+          </label>
+          <label class="context-requirement">
+            <span class="visually-hidden">Requirement for {{ project.name }}</span>
+            <select
+              [disabled]="!selected(project.projectId) || disabled()"
+              (change)="changeRequirement(project.projectId, $event)"
+            >
+              <option value="required" [selected]="selections()[project.projectId] !== 'optional'">
+                Required
+              </option>
+              <option value="optional" [selected]="selections()[project.projectId] === 'optional'">
+                Optional
+              </option>
+            </select>
+          </label>
+        </div>
+      }
+    </div>
+    <p class="context-note">
+      Required context blocks launch if its exact revision cannot be prepared. Optional context
+      records a warning and continues without it.
+    </p>
+  }
+</section>

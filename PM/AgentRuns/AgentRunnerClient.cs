@@ -19,6 +19,10 @@ public interface IAgentRunnerClient
         CancellationToken cancellationToken = default);
     Task<AppResult<AgentRunnerCapabilities>> Capabilities(string runnerId,
         CancellationToken cancellationToken = default);
+    Task<AppResult<AgentRunnerPreflightResult>> Preflight(string runnerId, AgentRunRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(AppResult<AgentRunnerPreflightResult>.Ok(
+            new AgentRunnerPreflightResult(true, [])));
     Task<AppResult<AgentRunRemoteStart>> Start(string runnerId, AgentRunRequest request,
         CancellationToken cancellationToken = default);
     Task<AppResult<AgentRunnerRun>> Inspect(string runnerId, string runId,
@@ -174,6 +178,28 @@ public sealed class AgentRunnerClient(
         return disposition.HasValue && ValidateRun(parsed.Payload.Run, runnerId)
             ? AppResult<AgentRunRemoteStart>.Ok(new AgentRunRemoteStart(disposition.Value, parsed.Payload.Run))
             : AppResult<AgentRunRemoteStart>.Fail("invalid_runner_response", "The runner returned an invalid start response.");
+    }
+
+    public async Task<AppResult<AgentRunnerPreflightResult>> Preflight(
+        string runnerId,
+        AgentRunRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = AgentRunContractValidator.ValidateRequest(request);
+        if (!validation.Success)
+            return AppResult<AgentRunnerPreflightResult>.Fail(validation.ErrorCode!, validation.Message!);
+        var raw = await SendRegistered(runnerId, HttpMethod.Post, "/v1/runs/preflight", Serialize(request),
+            cancellationToken);
+        if (!raw.Success) return AppResult<AgentRunnerPreflightResult>.Fail(raw.ErrorCode!, raw.Message!);
+        if (raw.Payload!.StatusCode != HttpStatusCode.OK)
+            return Failure<AgentRunnerPreflightResult>(raw.Payload);
+        var parsed = Deserialize<AgentRunnerPreflightResult>(raw.Payload.Body);
+        return parsed.Success && parsed.Payload!.Checks != null && parsed.Payload.Checks.All(check =>
+                   !string.IsNullOrWhiteSpace(check.Id) && !string.IsNullOrWhiteSpace(check.Label) &&
+                   !string.IsNullOrWhiteSpace(check.Summary))
+            ? parsed
+            : AppResult<AgentRunnerPreflightResult>.Fail("invalid_runner_response",
+                "The runner returned an invalid preflight response.");
     }
 
     public async Task<AppResult<AgentRunnerRun>> Inspect(string runnerId, string runId,

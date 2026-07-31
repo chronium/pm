@@ -32,6 +32,7 @@ export const runFailureCodes = [
   'repository_fetch_failed',
   'base_revision_unavailable',
   'task_revision_mismatch',
+  'linked_context_unavailable',
   'workspace_policy_unsupported',
   'workspace_preparation_failed',
   'runtime_start_failed',
@@ -81,6 +82,7 @@ export interface RunSpecification {
     remote: string;
     baseCommit: string;
   };
+  linkedContexts?: LinkedContext[];
   agent: {
     providerId: string;
     modelId: string;
@@ -91,6 +93,18 @@ export interface RunSpecification {
     runnerId: string;
     profile: RuntimeProfile;
   };
+}
+
+export interface LinkedContext {
+  projectId: string;
+  name: string;
+  alias: string;
+  repository: {
+    remote: string;
+    baseCommit: string;
+  };
+  requirement: 'required' | 'optional';
+  scopes: ['wiki'];
 }
 
 export interface RuntimeProfile {

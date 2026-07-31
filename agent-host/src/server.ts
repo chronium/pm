@@ -13,6 +13,7 @@ import { EventStreamManager, StreamCapacityError } from './event-stream.js';
 import { ProtocolValidationError, parseRunRequest } from './protocol/validation.js';
 import type { ReleaseInfo } from './release-info.js';
 import { ArtifactContentError, streamArtifactContent } from './artifact-content.js';
+import type { GitWorkspaceService } from './execution/workspace.js';
 
 const maximumBodyBytes = 1_048_576;
 const defaultPageLimit = 100;
@@ -27,6 +28,7 @@ export interface AgentHostServerOptions {
   capabilities: CapabilityService;
   runStore: RunStore;
   runCoordinator: RunCoordinator;
+  workspace?: GitWorkspaceService;
   logger: JsonLogger;
   release?: ReleaseInfo;
   now?: () => Date;
@@ -206,6 +208,25 @@ export class AgentHostServer {
           writeError(response, 409, result.validation.errorCode, result.validation.message);
           return true;
       }
+    }
+
+    if (pathname === '/v1/runs/preflight' && method === 'POST') {
+      if (this.options.workspace === undefined) {
+        writeError(
+          response,
+          503,
+          'preflight_unavailable',
+          'Runner repository preflight is unavailable.',
+        );
+        return true;
+      }
+      const requestValue = parseRunRequest(parseJson(body));
+      const result = await this.options.workspace.preflight(
+        requestValue.specification,
+        new AbortController().signal,
+      );
+      writeJson(response, 200, result);
+      return true;
     }
 
     if (pathname === '/v1/runs' && method === 'GET') {

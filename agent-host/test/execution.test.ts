@@ -94,6 +94,96 @@ test('workspace preparation materializes exact committed task bytes and isolates
   }
 });
 
+test('workspace preflight and preparation expose only selected immutable wiki projections', async () => {
+  const fixture = createGitFixture('run-linked-wiki');
+  try {
+    const source = join(fixture.temporary.path, 'linked-source');
+    const remote = join(fixture.temporary.path, 'linked.git');
+    mkdirSync(join(source, '.pm', 'wiki', 'reference'), { recursive: true });
+    mkdirSync(join(source, '.pm', 'tasks'), { recursive: true });
+    git(['init', '--initial-branch=main', source]);
+    git(['-C', source, 'config', 'user.name', 'PM Test']);
+    git(['-C', source, 'config', 'user.email', 'pm@example.invalid']);
+    writeFileSync(join(source, '.pm', 'project_id.txt'), 'project-engine\n');
+    writeFileSync(join(source, '.pm', 'pm_config.yaml'), 'name: Shared engine\n');
+    writeFileSync(
+      join(source, '.pm', 'wiki', 'reference', 'renderer.md'),
+      '---\ntitle: Renderer\n---\n\nShared rendering contract.\n',
+    );
+    writeFileSync(join(source, '.pm', 'tasks', 'ENGINE-0001.md'), 'private task\n');
+    writeFileSync(join(source, 'private.txt'), 'not project context\n');
+    git(['-C', source, 'add', '.']);
+    git(['-C', source, 'commit', '-m', 'linked fixture']);
+    const commit = git(['-C', source, 'rev-parse', 'HEAD']).trim();
+    git(['clone', '--bare', source, remote]);
+
+    fixture.request.specification.protocolVersion = '1.2';
+    fixture.request.specification.linkedContexts = [
+      {
+        projectId: 'project-engine',
+        name: 'Shared engine',
+        alias: 'engine',
+        repository: { remote, baseCommit: commit },
+        requirement: 'required',
+        scopes: ['wiki'],
+      },
+      {
+        projectId: 'project-missing',
+        name: 'Missing optional project',
+        alias: 'missing',
+        repository: {
+          remote: join(fixture.temporary.path, 'missing.git'),
+          baseCommit: 'd'.repeat(40),
+        },
+        requirement: 'optional',
+        scopes: ['wiki'],
+      },
+    ];
+    fixture.request.specificationHash = computeSpecificationHash(fixture.request.specification);
+
+    const preflight = await fixture.workspaceService.preflight(
+      fixture.request.specification,
+      new AbortController().signal,
+    );
+    assert.equal(preflight.ready, true);
+    assert.equal(
+      preflight.checks.find((check) => check.id === 'linked_context_project-engine')?.status,
+      'passed',
+    );
+    assert.equal(
+      preflight.checks.find((check) => check.id === 'linked_context_project-missing')?.status,
+      'skipped',
+    );
+
+    const prepared = await fixture.workspaceService.prepare(
+      fixture.request.specification,
+      new AbortController().signal,
+    );
+    assert.deepEqual(
+      prepared.linkedContexts.map((context) => [context.projectId, context.status]),
+      [
+        ['project-engine', 'available'],
+        ['project-missing', 'unavailable'],
+      ],
+    );
+    const projection = join(prepared.paths.contexts, 'project-engine');
+    assert.equal(
+      readFileSync(join(projection, '.pm', 'wiki', 'reference', 'renderer.md'), 'utf8'),
+      '---\ntitle: Renderer\n---\n\nShared rendering contract.\n',
+    );
+    assert.equal(existsSync(join(projection, '.pm', 'tasks')), false);
+    assert.equal(existsSync(join(projection, 'private.txt')), false);
+    const manifest = JSON.parse(readFileSync(prepared.paths.contextManifest, 'utf8')) as {
+      primaryProjectId: string;
+      contexts: Array<{ projectId: string; status: string }>;
+    };
+    assert.equal(manifest.primaryProjectId, fixture.request.specification.project.projectId);
+    assert.equal(manifest.contexts[0]?.projectId, 'project-engine');
+  } finally {
+    fixture.dispose();
+  }
+});
+
 test('workspace preparation rejects task revision drift and unsupported Git features', async () => {
   const revisionFixture = createGitFixture('run-revision');
   try {

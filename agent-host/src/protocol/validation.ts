@@ -16,6 +16,7 @@ import { posix } from 'node:path';
 
 const runId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const taskId = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const projectId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/;
 const sha256 = /^[0-9a-f]{64}$/;
 const digestImage = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
 const gitCommit = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
@@ -52,6 +53,11 @@ export function parseRunRequest(value: unknown): RunRequest {
   const project = record(specification['project'], 'Project');
   const task = record(specification['task'], 'Task');
   const repository = record(specification['repository'], 'Repository');
+  const protocolVersion = text(specification['protocolVersion'], 16, 'Protocol version');
+  const linkedContexts =
+    protocolVersion === '1.2'
+      ? array(specification['linkedContexts'] ?? [], 'Linked contexts').map(parseLinkedContext)
+      : [];
   const agent = record(specification['agent'], 'Agent');
   const runtime = record(specification['runtime'], 'Runtime');
   const profile = record(runtime['profile'], 'Runtime profile');
@@ -59,7 +65,7 @@ export function parseRunRequest(value: unknown): RunRequest {
   const request: RunRequest = {
     specificationHash,
     specification: {
-      protocolVersion: text(specification['protocolVersion'], 16, 'Protocol version'),
+      protocolVersion,
       runId: text(specification['runId'], 128, 'Run ID'),
       requestedAt: canonicalTimestamp(specification['requestedAt'], 'Requested timestamp'),
       project: {
@@ -75,6 +81,7 @@ export function parseRunRequest(value: unknown): RunRequest {
         remote: text(repository['remote'], 2048, 'Repository remote'),
         baseCommit: text(repository['baseCommit'], 64, 'Base commit'),
       },
+      ...(linkedContexts.length > 0 ? { linkedContexts } : {}),
       agent: {
         providerId: id(agent['providerId'], 'Agent provider'),
         modelId: id(agent['modelId'], 'Agent model'),
@@ -275,11 +282,25 @@ function containerPath(value: unknown, name: string): string {
 
 function validateCanonicalHashes(request: RunRequest): void {
   const specification = request.specification;
-  if (specification.protocolVersion !== '1.0' && specification.protocolVersion !== '1.1')
+  if (!['1.0', '1.1', '1.2'].includes(specification.protocolVersion))
     throw new ProtocolValidationError(
       'incompatible_protocol',
-      'Only protocol 1.0 and 1.1 are supported.',
+      'Only protocol 1.0, 1.1, and 1.2 are supported.',
     );
+  const linkedContexts = specification.linkedContexts ?? [];
+  if (specification.protocolVersion !== '1.2' && linkedContexts.length > 0)
+    invalid('Linked contexts require protocol 1.2.');
+  if (
+    linkedContexts.length > 31 ||
+    new Set(linkedContexts.map((context) => context.projectId)).size !== linkedContexts.length ||
+    new Set(linkedContexts.map((context) => context.alias.toLowerCase())).size !==
+      linkedContexts.length ||
+    linkedContexts.some((context) => context.projectId === specification.project.projectId) ||
+    linkedContexts.some(
+      (context, index) => index > 0 && linkedContexts[index - 1]!.projectId >= context.projectId,
+    )
+  )
+    invalid('Linked contexts must be unique, sorted, and exclude the primary project.');
   if (!runId.test(specification.runId)) invalid('Run ID is not URL-safe.');
   if (!taskId.test(specification.task.taskId)) invalid('Task ID is not path-safe.');
   if (!sha256.test(specification.task.revision)) invalid('Task revision must be a SHA-256 hash.');
@@ -300,6 +321,33 @@ function validateCanonicalHashes(request: RunRequest): void {
       'specification_hash_mismatch',
       'Specification hash does not match its canonical snapshot.',
     );
+}
+
+function parseLinkedContext(value: unknown) {
+  const context = record(value, 'Linked context');
+  const repository = record(context['repository'], 'Linked context repository');
+  const requirement = text(context['requirement'], 16, 'Linked context requirement');
+  if (requirement !== 'required' && requirement !== 'optional')
+    invalid('Linked context requirement must be required or optional.');
+  const scopes = array(context['scopes'], 'Linked context scopes').map((scope) =>
+    text(scope, 32, 'Linked context scope'),
+  );
+  if (scopes.length !== 1 || scopes[0] !== 'wiki') invalid('Linked context scope must be wiki.');
+  const baseCommit = text(repository['baseCommit'], 64, 'Linked context base commit');
+  if (!gitCommit.test(baseCommit)) invalid('Linked context base commit is invalid.');
+  const linkedProjectId = text(context['projectId'], 256, 'Linked context project ID');
+  if (!projectId.test(linkedProjectId)) invalid('Linked context project ID is not path-safe.');
+  return {
+    projectId: linkedProjectId,
+    name: text(context['name'], 512, 'Linked context name'),
+    alias: id(context['alias'], 'Linked context alias'),
+    repository: {
+      remote: text(repository['remote'], 2048, 'Linked context remote'),
+      baseCommit,
+    },
+    requirement: requirement as 'required' | 'optional',
+    scopes: ['wiki'] as ['wiki'],
+  };
 }
 
 function parseProviderCapability(value: unknown): ProviderCapability {

@@ -6,8 +6,9 @@ namespace PM.AgentRuns;
 public static class AgentRunProtocol
 {
     public static readonly AgentRunProtocolVersion Version10 = new(1, 0);
-    public static readonly AgentRunProtocolVersion Current = new(1, 1);
-    public static IReadOnlyList<AgentRunProtocolVersion> Supported { get; } = [Current, Version10];
+    public static readonly AgentRunProtocolVersion Version11 = new(1, 1);
+    public static readonly AgentRunProtocolVersion Current = new(1, 2);
+    public static IReadOnlyList<AgentRunProtocolVersion> Supported { get; } = [Current, Version11, Version10];
 
     public static bool IsCompatible(AgentRunProtocolVersion requested, AgentRunProtocolVersion supported) =>
         requested.Major == supported.Major && requested.Minor <= supported.Minor;
@@ -65,13 +66,40 @@ public sealed record AgentRunSpecification(
     AgentRunTask Task,
     AgentRunRepository Repository,
     AgentRunAgent Agent,
-    AgentRunRuntime Runtime);
+    AgentRunRuntime Runtime,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<AgentRunLinkedContext>? LinkedContexts = null);
 
 public sealed record AgentRunProject(string ProjectId, string Name);
 
 public sealed record AgentRunTask(string TaskId, string Title, string Revision);
 
 public sealed record AgentRunRepository(string Remote, string BaseCommit);
+
+public sealed record AgentRunLinkedContext(
+    string ProjectId,
+    string Name,
+    string Alias,
+    AgentRunRepository Repository,
+    AgentRunLinkedContextRequirement Requirement,
+    IReadOnlyList<AgentRunLinkedContextScope> Scopes);
+
+[JsonConverter(typeof(JsonStringEnumConverter<AgentRunLinkedContextRequirement>))]
+public enum AgentRunLinkedContextRequirement
+{
+    [JsonStringEnumMemberName("required")]
+    Required,
+
+    [JsonStringEnumMemberName("optional")]
+    Optional,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<AgentRunLinkedContextScope>))]
+public enum AgentRunLinkedContextScope
+{
+    [JsonStringEnumMemberName("wiki")]
+    Wiki,
+}
 
 public sealed record AgentRunAgent(
     string ProviderId,

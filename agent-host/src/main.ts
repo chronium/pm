@@ -145,6 +145,7 @@ async function serve(config: HostConfig): Promise<void> {
       capabilities,
       runStore: store,
       runCoordinator,
+      workspace,
       logger,
       release,
     });

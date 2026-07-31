@@ -71,6 +71,21 @@ export function canonicalSpecification(specification: RunSpecification): string 
       remote: specification.repository.remote,
       baseCommit: specification.repository.baseCommit,
     },
+    ...(specification.protocolVersion === '1.2'
+      ? {
+          linkedContexts: (specification.linkedContexts ?? []).map((context) => ({
+            projectId: context.projectId,
+            name: context.name,
+            alias: context.alias,
+            repository: {
+              remote: context.repository.remote,
+              baseCommit: context.repository.baseCommit,
+            },
+            requirement: context.requirement,
+            scopes: context.scopes,
+          })),
+        }
+      : {}),
     agent: {
       providerId: specification.agent.providerId,
       modelId: specification.agent.modelId,

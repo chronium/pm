@@ -1,9 +1,11 @@
 # Agent run protocol v1 fixtures
 
-These fixtures are the language-neutral interoperability examples for agent run protocol 1.0.
+These fixtures are the language-neutral interoperability examples for agent run protocol 1.x.
 The .NET contracts, validators, canonical writers, and expected hashes are normative. Future
 runner implementations must deserialize these files and produce the same profile revision and
-run specification hash before they can advertise protocol 1.0 compatibility.
+run specification hash before they can advertise compatibility with the represented protocol
+version. Protocol 1.2 adds immutable, explicitly selected wiki-only linked contexts; omitting them
+continues to mean a primary-project-only run.
 
 Runtime profile revisions cover the pinned image, resource limits, explicit offline/open network
 mode, logical container paths, temporary filesystem size, safe environment allowlist, read-only

@@ -42,6 +42,7 @@ serviceProvider.AddSingleton<IAgentRunnerCommandPrompts, AgentRunnerCommandPromp
 serviceProvider.AddSingleton<TimeProvider>(TimeProvider.System);
 serviceProvider.AddSingleton<AgentRunCache>();
 serviceProvider.AddSingleton<IAgentRunGitInspector, AgentRunGitInspector>();
+serviceProvider.AddSingleton<IAgentRunLinkedContextResolver, AgentRunLinkedContextResolver>();
 serviceProvider.AddSingleton<IAgentRunService, AgentRunService>();
 serviceProvider.AddSingleton<LinkedProjectRegistryStore>();
 serviceProvider.AddSingleton<ILinkedProjectSubmoduleInspector, GitLinkedProjectSubmoduleInspector>();

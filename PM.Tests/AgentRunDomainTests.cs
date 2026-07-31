@@ -11,7 +11,7 @@ public class AgentRunDomainTests
     {
         var json = JsonSerializer.Serialize(AgentRunProtocol.Current, AgentRunJson.Options);
 
-        Assert.Equal("\"1.1\"", json);
+        Assert.Equal("\"1.2\"", json);
         Assert.Equal(AgentRunProtocol.Current,
             JsonSerializer.Deserialize<AgentRunProtocolVersion>(json, AgentRunJson.Options));
         Assert.True(AgentRunProtocol.IsCompatible(new AgentRunProtocolVersion(1, 0), new AgentRunProtocolVersion(1, 2)));
@@ -81,6 +81,50 @@ public class AgentRunDomainTests
         });
         Assert.False(hashResult.Success);
         Assert.Equal("specification_hash_mismatch", hashResult.ErrorCode);
+    }
+
+    [Fact]
+    public void LinkedWikiContextsAreCanonicalImmutableAndRequireProtocol12()
+    {
+        var specification = CreateSpecification() with
+        {
+            LinkedContexts =
+            [
+                new AgentRunLinkedContext(
+                    "project-engine",
+                    "Shared engine",
+                    "engine",
+                    new AgentRunRepository("git@github.com:chronium/engine.git", new string('c', 40)),
+                    AgentRunLinkedContextRequirement.Required,
+                    [AgentRunLinkedContextScope.Wiki]),
+            ],
+        };
+
+        Assert.True(AgentRunContractValidator.ValidateSpecification(specification).Success);
+        var hash = AgentRunCanonicalJson.ComputeSpecificationHash(specification);
+        Assert.NotEqual(hash, AgentRunCanonicalJson.ComputeSpecificationHash(specification with
+        {
+            LinkedContexts =
+            [
+                specification.LinkedContexts[0] with
+                {
+                    Requirement = AgentRunLinkedContextRequirement.Optional,
+                },
+            ],
+        }));
+
+        var oldProtocol = AgentRunContractValidator.ValidateSpecification(specification with
+        {
+            ProtocolVersion = AgentRunProtocol.Version11,
+        });
+        Assert.False(oldProtocol.Success);
+        Assert.Equal("invalid_run_specification", oldProtocol.ErrorCode);
+
+        var unsafeProjectId = AgentRunContractValidator.ValidateSpecification(specification with
+        {
+            LinkedContexts = [specification.LinkedContexts[0] with { ProjectId = "../engine" }],
+        });
+        Assert.False(unsafeProjectId.Success);
     }
 
     [Fact]

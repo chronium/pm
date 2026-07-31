@@ -112,6 +112,49 @@ public class AgentRunOrchestrationTests
     }
 
     [Fact]
+    public async Task LinkedWikiSelectionIsImmutableAndRunnerVerifiedBeforePreflightAndStart()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await Project(workspace);
+        var git = new FakeGitInspector();
+        var runner = new FakeRunnerClient("runner-test");
+        var linked = new AgentRunLinkedContext(
+            "project-engine",
+            "Shared engine",
+            "engine",
+            new AgentRunRepository("git@github.com:chronium/engine.git", new string('c', 40)),
+            AgentRunLinkedContextRequirement.Required,
+            [AgentRunLinkedContextScope.Wiki]);
+        var resolver = new FakeLinkedContextResolver(linked);
+        var service = new AgentRunService(root, new BoardService(root), git,
+            new AgentRunCache(root, TimeProvider.System,
+                new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, "cache") }),
+            runner, TimeProvider.System, resolver);
+        var selection = Selection("runner-test") with
+        {
+            LinkedContexts =
+            [
+                new AgentRunLinkedContextSelection(
+                    "project-engine", AgentRunLinkedContextRequirement.Required),
+            ],
+        };
+
+        var preflight = await service.Preflight(selection);
+
+        Assert.True(preflight.Success, preflight.Message);
+        Assert.True(preflight.Payload!.Ready);
+        Assert.Equal(linked, Assert.Single(preflight.Payload.Request!.Specification.LinkedContexts!));
+        Assert.Equal(1, runner.PreflightCalls);
+        Assert.Equal(preflight.Payload.Request.SpecificationHash,
+            runner.LastPreflightRequest!.SpecificationHash);
+
+        var started = await service.Start(preflight.Payload.RunId!, preflight.Payload.Revision!);
+        Assert.True(started.Success, started.Message);
+        Assert.Equal(2, runner.PreflightCalls);
+        Assert.Equal(1, runner.StartCalls);
+    }
+
+    [Fact]
     public async Task RepeatedStartUsesRunnerIdempotencyForThePersistedRequest()
     {
         using var workspace = new TempWorkingDirectory();
@@ -428,6 +471,21 @@ public class AgentRunOrchestrationTests
                     AgentRunPreflightCheckStatus.Failed, "Commit changes.")])));
     }
 
+    private sealed class FakeLinkedContextResolver(AgentRunLinkedContext context)
+        : IAgentRunLinkedContextResolver
+    {
+        public Task<AppResult<AgentRunLinkedContextResolution>> Resolve(
+            IReadOnlyList<AgentRunLinkedContextSelection> selections,
+            CancellationToken cancellationToken = default) => Task.FromResult(
+            AppResult<AgentRunLinkedContextResolution>.Ok(new AgentRunLinkedContextResolution(
+                selections.Count == 0 ? [] : [context],
+                selections.Count == 0
+                    ? []
+                    : [new AgentRunPreflightCheck("linked_context_project-engine", "Linked wiki context",
+                        AgentRunPreflightCheckStatus.Passed, "Captured exact revision.")],
+                true)));
+    }
+
     private sealed class FakeRunnerClient : IAgentRunnerClient
     {
         private readonly AgentRunnerRegistration _registration;
@@ -455,7 +513,9 @@ public class AgentRunOrchestrationTests
         public void SetRun(AgentRunnerRun run) => _runs[run.RunId] = run;
 
         public int HealthCalls { get; private set; }
+        public int PreflightCalls { get; private set; }
         public int StartCalls { get; private set; }
+        public AgentRunRequest? LastPreflightRequest { get; private set; }
         public AgentRunRequest? FirstRequest { get; private set; }
         public AgentRunRequest? LastRequest { get; private set; }
         public AppResult<IReadOnlyList<AgentRunnerRegistration>> Registrations() =>
@@ -476,6 +536,16 @@ public class AgentRunOrchestrationTests
         public Task<AppResult<AgentRunnerCapabilities>> Capabilities(string runnerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(AppResult<AgentRunnerCapabilities>.Ok(_capabilities));
+        public Task<AppResult<AgentRunnerPreflightResult>> Preflight(string runnerId,
+            AgentRunRequest request, CancellationToken cancellationToken = default)
+        {
+            PreflightCalls++;
+            LastPreflightRequest = request;
+            return Task.FromResult(AppResult<AgentRunnerPreflightResult>.Ok(
+                new AgentRunnerPreflightResult(true,
+                [new AgentRunPreflightCheck("linked_context_project-engine", "Linked wiki context",
+                    AgentRunPreflightCheckStatus.Passed, "Exact commit available.")] )));
+        }
         public Task<AppResult<AgentRunRemoteStart>> Start(string runnerId, AgentRunRequest request,
             CancellationToken cancellationToken = default)
         {

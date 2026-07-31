@@ -86,7 +86,14 @@ Use `pm runner list`, `pm runner status <runner-id>`, `pm runner rotate <runner-
 
 ## PM control-plane API
 
-`pm web --api` exposes the paired-runner lifecycle under `/api/v1/runners` and the project-scoped run lifecycle under `/api/v1/runs`. A run begins with `POST /api/v1/runs/preflight`, which validates the clean published Git base, exact committed task revision, runner health, capacity, and explicit provider/model/effort/profile selection. A ready response persists the immutable request outside `.pm` and returns its strong ETag. `POST /api/v1/runs/{runId}/start` requires that ETag in `If-Match`; PM repeats the checks and refuses stale drafts before contacting the runner.
+`pm web --api` exposes the paired-runner lifecycle under `/api/v1/runners` and the project-scoped run lifecycle under `/api/v1/runs`. A run begins with `POST /api/v1/runs/preflight`, which validates the clean published Git base, exact committed task revision, runner health, capacity, explicit provider/model/effort/profile selection, and any explicitly selected linked wiki projects. A ready response persists the immutable request outside `.pm` and returns its strong ETag. `POST /api/v1/runs/{runId}/start` requires that ETag in `If-Match`; PM repeats the checks and refuses stale drafts before contacting the runner.
+
+Linked context is opt-in per run. PM captures the selected family projects at exact commits and asks
+the runner to verify its repository allowlist and commit availability. Required unavailable context
+blocks the run; optional unavailable context is reported and skipped. During execution, linked
+projects are reduced to read-only `.pm` wiki projections. They add wiki list, read, search, and
+outline context to the run-worker MCP but never expose source trees, tasks, credentials, or linked
+write operations. The primary project remains the only writable and authoritative project.
 
 Run inspection, active-run listing, event replay, SSE streaming, cancellation, and artifact metadata remain PM API operations. The Angular client never receives runner signing credentials or communicates with the runner directly. Run state is private, non-authoritative local cache data; tasks and wiki remain public repository artifacts, and a run never marks its task complete.
 
@@ -141,7 +148,7 @@ The service reconciles runner-owned containers and transient run directories bef
 
 `pm-agent-worker` is a one-shot internal process intended to run inside an isolated OCI runtime. It accepts one validated request over stdin, starts the pinned Codex SDK, and reserves stdout for bounded JSONL runner events. The trusted runtime supplies its executable, workspace, isolated `CODEX_HOME`, environment allowlist, network policy, and PM MCP command; none of those command paths come from the repository run request.
 
-The worker requires `pm mcp --profile run-worker --task-id <TASK-ID>`, uses `approvalPolicy: never` with `workspace-write`, and fails when PM MCP cannot initialize. It can read project context and append a note only to its assigned task. PM remains authoritative for task completion.
+The worker requires `pm mcp --profile run-worker --task-id <TASK-ID>`, uses `approvalPolicy: never` with `workspace-write`, and fails when PM MCP cannot initialize. It can read primary project context and append a note only to its assigned task. When linked wiki context was selected, the runner adds `--linked-context-manifest /pm-linked-contexts/manifest.json`; this option is accepted only by the run-worker profile and only as an absolute path. Wiki read tools may address the manifest's read-only projections, while task reads and every mutation remain primary-project-only. PM remains authoritative for task completion.
 
 For v1 ChatGPT authentication, the runtime will copy only the dedicated runner's owner-only `auth.json` into a fresh per-run `CODEX_HOME`. Run-local Codex sessions, logs, and refreshed authentication are deleted with the runtime and are never copied back to the host source.
 

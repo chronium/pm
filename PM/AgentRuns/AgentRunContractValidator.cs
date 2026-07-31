@@ -50,6 +50,29 @@ public static partial class AgentRunContractValidator
         if (!IsText(specification.Repository?.Remote, 2048) ||
             !GitCommitPattern().IsMatch(specification.Repository?.BaseCommit ?? string.Empty))
             return Invalid("A repository remote and lowercase 40- or 64-character commit are required.");
+        var linkedContexts = specification.LinkedContexts ?? [];
+        if (linkedContexts.Count > 0 && specification.ProtocolVersion.Minor < AgentRunProtocol.Current.Minor)
+            return Invalid("Linked contexts require agent run protocol 1.2.");
+        if (linkedContexts.Count > 31 || linkedContexts.Select(item => item.ProjectId)
+                .Distinct(StringComparer.Ordinal).Count() != linkedContexts.Count ||
+            linkedContexts.Select(item => item.Alias).Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+            linkedContexts.Count)
+            return Invalid("Linked contexts must have unique project IDs and aliases and contain at most 31 entries.");
+        if (!linkedContexts.SequenceEqual(linkedContexts.OrderBy(item => item.ProjectId, StringComparer.Ordinal)))
+            return Invalid("Linked contexts must be ordered by project ID.");
+        foreach (var context in linkedContexts)
+        {
+            if (context == null || !ProjectIdPattern().IsMatch(context.ProjectId ?? string.Empty) ||
+                !IsText(context.Name, 512) ||
+                !IsIdentifier(context.Alias) || !IsText(context.Repository?.Remote, 2048) ||
+                !GitCommitPattern().IsMatch(context.Repository?.BaseCommit ?? string.Empty) ||
+                context.Requirement is not (AgentRunLinkedContextRequirement.Required or
+                    AgentRunLinkedContextRequirement.Optional) || context.Scopes == null ||
+                context.Scopes.Count != 1 || context.Scopes[0] != AgentRunLinkedContextScope.Wiki)
+                return Invalid("Linked contexts must identify one immutable wiki-only repository snapshot.");
+            if (string.Equals(context.ProjectId, specification.Project!.ProjectId, StringComparison.Ordinal))
+                return Invalid("The primary project cannot also be a linked context.");
+        }
         if (!IsIdentifier(specification.Agent?.ProviderId) || !IsIdentifier(specification.Agent?.ModelId) ||
             !IsIdentifier(specification.Agent?.EffortId) || !IsIdentifier(specification.Agent?.PromptProfileId))
             return Invalid("Agent provider, model, effort, and prompt profile IDs are required.");
@@ -274,6 +297,9 @@ public static partial class AgentRunContractValidator
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex TaskIdPattern();
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ProjectIdPattern();
 
     [GeneratedRegex("^[a-z][a-z0-9_-]*\\.[a-z0-9][a-z0-9._-]*$", RegexOptions.CultureInvariant)]
     private static partial Regex EventTypePattern();

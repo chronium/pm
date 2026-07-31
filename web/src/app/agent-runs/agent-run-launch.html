@@ -198,6 +198,15 @@
           }
         </section>
 
+        <pm-agent-run-linked-context-selector
+          [projects]="availableLinkedProjects()"
+          [selections]="linkedContexts()"
+          [loading]="linkedProjectsLoading()"
+          [error]="linkedProjectsError()"
+          [disabled]="checking() || starting()"
+          (selectionChange)="selectLinkedContexts($event)"
+        />
+
         @if (preflight(); as result) {
           <section class="launch-section" aria-labelledby="checks-heading">
             <div class="section-heading">
@@ -260,6 +269,10 @@
                   <dd>
                     <code>{{ specification.repository.baseCommit }}</code>
                   </dd>
+                </div>
+                <div>
+                  <dt>Linked wiki</dt>
+                  <dd>{{ specification.linkedContexts?.length ?? 0 }} project(s)</dd>
                 </div>
                 <div>
                   <dt>Profile</dt>
