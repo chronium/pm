@@ -47,6 +47,58 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
 });
 
+test('switches linked projects with isolated filters and read-only task and wiki views', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/tasks?track=OPS');
+  await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
+  await page.getByRole('link', { name: /Linked Project.*Read-only/ }).click();
+  await expect(page).toHaveURL(/\/projects\/linked-project\/tasks$/);
+  await expect(page.getByText('Linked fixture task', { exact: true })).toBeVisible();
+
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  if (await menu.isVisible()) await menu.click();
+  await expect(page.getByRole('link', { name: 'New task' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Next task' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
+  await page.getByRole('link', { name: /Linked work/ }).click();
+  await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
+
+  await page.getByRole('link', { name: /LINK-0001/ }).click();
+  await expect(page).toHaveURL(
+    testInfo.project.name.includes('mobile')
+      ? /\/projects\/linked-project\/tasks\/LINK-0001\?track=LINK$/
+      : /\/projects\/linked-project\/tasks\/dialog\/LINK-0001\?track=LINK$/,
+  );
+  await expect(page.getByRole('button', { name: 'Edit task title' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Run with Codex' })).toHaveCount(0);
+  await page
+    .getByRole('button', {
+      name: testInfo.project.name.includes('mobile') ? 'Back' : 'Close task dialog',
+      exact: true,
+    })
+    .click();
+
+  await page.getByRole('link', { name: 'Wiki', exact: true }).click();
+  await expect(page).toHaveURL(/\/projects\/linked-project\/wiki$/);
+  await page
+    .getByRole('link', { name: /Linked guide/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { name: 'Linked guide' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Switch project from Linked Project' }).click();
+  await page.getByRole('link', { name: /Playwright Project/ }).click();
+  await expect(page).toHaveURL(/\/wiki$/);
+  await page.getByRole('link', { name: /^Tasks/ }).click();
+  await expect(page).toHaveURL(/\/tasks\?track=OPS$/);
+
+  await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
+  await page.getByRole('link', { name: /Linked Project.*Read-only/ }).click();
+  await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
+});
+
 test('task search follows sidebar scope, supports in:all, and preserves board context', async ({
   page,
 }, testInfo) => {

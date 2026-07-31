@@ -6,7 +6,14 @@ import { StaticSnapshotStore, type StaticSnapshot } from './static-snapshot.inte
 import { StaticProjectSwitcher } from './static-project-switcher';
 
 const snapshot = {
-  project: { name: 'Games', accent: 'teal', revision: 'static-snapshot' },
+  project: {
+    projectId: 'games',
+    name: 'Games',
+    accent: 'teal',
+    relationship: 'current',
+    readOnly: true,
+    revision: 'static-snapshot',
+  },
   linkedProjects: [
     {
       projectId: 'royale',

@@ -57,7 +57,6 @@ describe('WikiStore retained state', () => {
     const store = TestBed.inject(WikiStore);
     TestBed.flushEffects();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/v1/project').flush({ name: 'Atlas', revision: 'p1' });
     http.expectOne('/api/v1/wiki/pages').flush([
       { path: 'guides', title: 'Guides home', modifiedAt: '2026-01-01T00:00:00Z' },
       { path: 'guides/start', title: 'Start', modifiedAt: '2026-01-01T00:00:00Z' },

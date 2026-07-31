@@ -1,0 +1,45 @@
+@if (context.displayProject(); as project) {
+  @if (context.family.value(); as family) {
+    @if (family.members.length > 1) {
+      <details #switcher class="project-switcher">
+        <summary role="button" [attr.aria-label]="'Switch project from ' + project.name">
+          <span class="project-switcher-name">{{ project.name }}</span>
+          <ng-icon class="project-switcher-caret" name="cssChevronRight" aria-hidden="true" />
+        </summary>
+        <div class="project-switcher-menu">
+          @for (member of family.members; track member.projectId) {
+            @if (member.readable) {
+              <a
+                [routerLink]="context.projectModeLink(member.projectId)"
+                [class.project-switcher-current]="member.projectId === project.projectId"
+                [attr.aria-current]="member.projectId === project.projectId ? 'page' : null"
+                (click)="close(switcher)"
+              >
+                <span>{{ member.name }}</span>
+                <small>
+                  {{ member.relationship }}
+                  @if (member.projectId !== family.activeProjectId) {
+                    · Read-only
+                  }
+                </small>
+              </a>
+            } @else {
+              <span class="project-switcher-unavailable" [title]="member.status">
+                <span>{{ member.name }}</span>
+                <small>{{ member.relationship }} · {{ member.status }}</small>
+              </span>
+            }
+          }
+        </div>
+      </details>
+    } @else {
+      <a class="brand" [routerLink]="context.tasksRoot()" aria-label="PM home">{{
+        project.name
+      }}</a>
+    }
+  } @else {
+    <span class="brand">{{ project.name }}</span>
+  }
+} @else {
+  <span class="brand" aria-label="Loading project">PM</span>
+}

@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import type { DirtyDialogRoute } from '../task-dialog/task-dialog.types';
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskWorkspace } from './task-workspace';
+import { ProjectContextService } from '../../core/project-context.service';
 
 @Component({
   selector: 'pm-task-page-host',
@@ -73,6 +74,7 @@ export class TaskPageHost implements DirtyDialogRoute {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly navigation = inject(TaskNavigationService);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly workspace = viewChild(TaskWorkspace);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
@@ -98,8 +100,9 @@ export class TaskPageHost implements DirtyDialogRoute {
       this.close();
       return;
     }
-    void this.router.navigate(['/tasks', id], {
-      queryParams: this.router.parseUrl(this.router.url).queryParams,
+    const tree = this.router.parseUrl(this.projectContext.taskUrl(id));
+    tree.queryParams = this.router.parseUrl(this.router.url).queryParams;
+    void this.router.navigateByUrl(tree, {
       state: this.navigation.returnState(this.router),
       replaceUrl: true,
     });

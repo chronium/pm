@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpResponse } from '@angular/common/htt
 import { inject, Injectable } from '@angular/core';
 
 import type { components } from '../api/generated/pm-api';
+import { ProjectContextService } from '../core/project-context.service';
 
 export type WikiPage = components['schemas']['WikiPageResponse'];
 export type WikiPageSummary = components['schemas']['WikiPageSummaryResponse'];
@@ -28,6 +29,7 @@ export function encodeWikiPath(path: string): string {
 @Injectable({ providedIn: 'root' })
 export class WikiApiService {
   private readonly http = inject(HttpClient);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly mutationOptions = {
     observe: 'response' as const,
     headers: { 'X-PM-Client': 'angular-web' },
@@ -50,7 +52,7 @@ export class WikiApiService {
   }
 
   pageUrl(path: string): string {
-    return `/api/v1/wiki/pages/${encodeWikiPath(path)}`;
+    return this.projectContext.apiUrl(`/wiki/pages/${encodeWikiPath(path)}`);
   }
 
   etag(response: HttpResponse<unknown>): string {

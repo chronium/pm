@@ -1,6 +1,6 @@
 <nav aria-label="Task views">
   <a
-    routerLink="/tasks"
+    [routerLink]="projectContext.tasksRoot()"
     [queryParams]="{ track: null, milestone: null }"
     queryParamsHandling="merge"
     [class.active]="allActive()"
@@ -16,7 +16,7 @@
       >
     }
   </a>
-  @if (!staticMode.enabled) {
+  @if (!projectContext.readOnly()) {
     <a class="new-task-action" [attr.href]="newTaskHref()" (click)="openNew($event)">
       <ng-icon name="cssAdd" aria-hidden="true" />
       <span>New task</span>
@@ -56,7 +56,7 @@
         } @else {
           @for (milestone of navigation.milestones; track milestone.key) {
             <a
-              routerLink="/tasks"
+              [routerLink]="projectContext.tasksRoot()"
               [queryParams]="{ milestone: milestone.key, track: null }"
               queryParamsHandling="merge"
               [class.active]="activeMilestone() === milestone.key"
@@ -80,7 +80,7 @@
         } @else {
           @for (track of navigation.tracks; track track.key) {
             <a
-              routerLink="/tasks"
+              [routerLink]="projectContext.tasksRoot()"
               [queryParams]="{ track: track.key, milestone: null }"
               queryParamsHandling="merge"
               [class.active]="activeTrack() === track.key"
@@ -100,7 +100,7 @@
     }
   </div>
 
-  @if (!staticMode.enabled) {
+  @if (!projectContext.readOnly()) {
     <a
       class="settings-link"
       routerLink="/tasks/settings"

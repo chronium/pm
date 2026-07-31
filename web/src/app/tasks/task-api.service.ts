@@ -7,6 +7,7 @@ import {
 } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { PollingCoordinator } from '../core/polling-coordinator';
+import { ProjectContextService } from '../core/project-context.service';
 
 import type { components } from '../api/generated/pm-api';
 
@@ -28,6 +29,7 @@ export interface TaskApiError {
 @Injectable({ providedIn: 'root' })
 export class TaskApiService {
   private readonly http = inject(HttpClient);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly mutationOptions = {
     observe: 'response' as const,
     headers: { 'X-PM-Client': 'angular-web' },
@@ -62,7 +64,7 @@ export class TaskApiService {
     let params = new HttpParams().set('readyOnly', readyOnly);
     if (track) params = params.set('track', track);
     if (milestone) params = params.set('milestone', milestone);
-    return this.http.get<NextTaskResponse>('/api/v1/tasks/next', { params });
+    return this.http.get<NextTaskResponse>(this.projectContext.apiUrl('/tasks/next'), { params });
   }
 
   remove(id: string, etag: string) {
@@ -90,8 +92,8 @@ export class TaskApiService {
     return response.headers.get('ETag') ?? '';
   }
 
-  private taskUrl(id: string): string {
-    return `/api/v1/tasks/${encodeURIComponent(id)}`;
+  taskUrl(id: string): string {
+    return this.projectContext.apiUrl(`/tasks/${encodeURIComponent(id)}`);
   }
 
   private isProblem(value: unknown): value is ApiProblemDetails {
@@ -112,7 +114,7 @@ export class TaskDetailResource {
   readonly pollSession = this.polling.create<TaskResponse>({
     target: () =>
       this.task() && this.etag()
-        ? { url: `/api/v1/tasks/${encodeURIComponent(this.taskId())}`, etag: this.etag() }
+        ? { url: this.api.taskUrl(this.taskId()), etag: this.etag() }
         : null,
     accept: (response) => this.acceptExternal(response),
     missing: () => {
@@ -121,7 +123,7 @@ export class TaskDetailResource {
     },
   });
   readonly resource = httpResource<TaskResponse>(() =>
-    this.taskId() ? `/api/v1/tasks/${encodeURIComponent(this.taskId())}` : undefined,
+    this.taskId() ? this.api.taskUrl(this.taskId()) : undefined,
   );
   readonly task = computed(() => this.retainedTask());
   readonly etag = computed(() => this.retainedEtag());
@@ -135,6 +137,18 @@ export class TaskDetailResource {
   readonly liveUpdateUnavailable = computed(() => this.pollSession.state() === 'retrying');
 
   constructor() {
+    const projectContext = inject(ProjectContextService);
+    let apiPrefix = projectContext.apiPrefix();
+    effect(() => {
+      const nextPrefix = projectContext.apiPrefix();
+      if (nextPrefix === apiPrefix) return;
+      apiPrefix = nextPrefix;
+      this.retainedTask.set(null);
+      this.retainedEtag.set('');
+      this.pendingExternalTask.set(null);
+      this.pollSession.stop();
+      if (this.taskId()) this.resource.reload();
+    });
     effect(() => {
       if (!this.resource.hasValue()) return;
       this.retainedTask.set(this.resource.value());

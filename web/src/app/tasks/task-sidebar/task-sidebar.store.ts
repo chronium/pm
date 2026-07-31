@@ -6,6 +6,7 @@ import type { operations } from '../../api/generated/pm-api';
 import { PollingCoordinator } from '../../core/polling-coordinator';
 import { TaskNavigationService } from '../task-navigation.service';
 import { TaskApiService, type NextTaskResponse } from '../task-api.service';
+import { ProjectContextService } from '../../core/project-context.service';
 
 export type BoardNavigationResponse =
   operations['GetBoardNavigation']['responses'][200]['content']['application/json'];
@@ -15,11 +16,14 @@ export class TaskSidebarStore {
   private readonly taskNavigation = inject(TaskNavigationService);
   private readonly polling = inject(PollingCoordinator);
   private readonly api = inject(TaskApiService);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly retained = signal<BoardNavigationResponse | undefined>(undefined);
   private readonly etag = signal('');
   private lastRefreshRequest = this.taskNavigation.refreshRequest();
 
-  readonly resource = httpResource<BoardNavigationResponse>(() => '/api/v1/board/navigation');
+  readonly resource = httpResource<BoardNavigationResponse>(() =>
+    this.projectContext.apiUrl('/board/navigation'),
+  );
   readonly navigation = computed(() =>
     this.resource.hasValue() ? this.resource.value() : this.retained(),
   );
@@ -32,13 +36,27 @@ export class TaskSidebarStore {
     target: () => {
       const navigation = this.navigation();
       return navigation
-        ? { url: '/api/v1/board/navigation', etag: this.etag() || `"${navigation.revision}"` }
+        ? {
+            url: this.projectContext.apiUrl('/board/navigation'),
+            etag: this.etag() || `"${navigation.revision}"`,
+          }
         : null;
     },
     accept: (response) => this.accept(response),
   });
 
   constructor() {
+    let apiPrefix = this.projectContext.apiPrefix();
+    effect(() => {
+      const nextPrefix = this.projectContext.apiPrefix();
+      if (nextPrefix === apiPrefix) return;
+      apiPrefix = nextPrefix;
+      this.retained.set(undefined);
+      this.etag.set('');
+      this.pollStatus.stop();
+      this.taskNavigation.setRemainingCount(0);
+      this.resource.reload();
+    });
     effect(() => {
       if (!this.resource.hasValue()) return;
       const value = this.resource.value();

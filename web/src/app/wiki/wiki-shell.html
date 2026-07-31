@@ -2,13 +2,13 @@
   <aside id="pm-sidebar" class="sidebar" aria-label="Wiki navigation">
     <nav class="wiki-primary-nav" aria-label="Wiki views">
       <a
-        routerLink="/wiki"
+        [routerLink]="projectContext.wikiRoot()"
         routerLinkActive="active"
         [routerLinkActiveOptions]="{ exact: true }"
         (click)="layout.closeMobileSidebar()"
         >Wiki home</a
       >
-      @if (!staticMode.enabled) {
+      @if (!projectContext.readOnly()) {
         <a routerLink="/wiki/new" routerLinkActive="active" (click)="layout.closeMobileSidebar()"
           >New page</a
         >

@@ -213,7 +213,7 @@ public static class TaskApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
     }
 
-    private static IResult ReadTask(HttpRequest request, string id, BoardService boardService,
+    internal static IResult ReadTask(HttpRequest request, string id, BoardService boardService,
         ResourceRevisionService revisions)
     {
         var response = GetResponse(id, boardService, revisions, request);

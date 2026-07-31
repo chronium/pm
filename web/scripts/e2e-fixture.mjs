@@ -6,6 +6,7 @@ if (!e2eRoot) throw new Error('PM_E2E_ROOT must be set by the Playwright configu
 
 export const projectRoot = join(e2eRoot, 'project');
 export const configRoot = join(e2eRoot, 'config');
+export const linkedProjectRoot = join(projectRoot, 'linked');
 const idPort = process.env.PM_E2E_ID_PORT;
 if (!idPort) throw new Error('PM_E2E_ID_PORT must be set by the E2E runner.');
 
@@ -14,6 +15,7 @@ const timestamp = '2026-01-01T00:00:00.0000000Z';
 export async function resetFixture(size = 'small') {
   const pm = join(projectRoot, '.pm');
   await rm(pm, { recursive: true, force: true });
+  await rm(linkedProjectRoot, { recursive: true, force: true });
   await mkdir(projectRoot, { recursive: true });
   await Promise.all([
     mkdir(join(pm, 'tasks'), { recursive: true }),
@@ -45,6 +47,7 @@ milestonePriorities:
 `,
   );
   await writeFile(join(pm, 'project_id.txt'), 'playwright-project\n');
+  if (process.env.PM_E2E_MODE === 'dev') await createLinkedFixture(pm);
   if (process.env.PM_E2E_MODE === 'static') {
     await writeFile(
       join(pm, 'linked_projects.yaml'),
@@ -126,4 +129,79 @@ Local fixture content.${
 `,
     );
   }
+}
+
+async function createLinkedFixture(pm) {
+  const linkedPm = join(linkedProjectRoot, '.pm');
+  await Promise.all([
+    mkdir(join(linkedPm, 'tasks'), { recursive: true }),
+    mkdir(join(linkedPm, 'states', 'todo'), { recursive: true }),
+    mkdir(join(linkedPm, 'states', 'done'), { recursive: true }),
+    mkdir(join(linkedPm, 'wiki'), { recursive: true }),
+  ]);
+  await writeFile(
+    join(pm, 'linked_projects.yaml'),
+    `version: 1
+children:
+  - projectId: linked-project
+    alias: linked
+    repositoryUrl: https://example.test/linked.git
+    pathHint: linked
+`,
+  );
+  await writeFile(
+    join(linkedPm, 'linked_projects.yaml'),
+    `version: 1
+parent:
+  projectId: playwright-project
+  alias: parent
+  repositoryUrl: https://example.test/playwright.git
+  pathHint: ..
+`,
+  );
+  await writeFile(
+    join(linkedPm, 'pm_config.yaml'),
+    `name: Linked Project
+idWidth: 4
+idPrefix: LINK
+nextIdServiceUrl: http://127.0.0.1:${idPort}
+taskStates:
+  todo: To Do
+  done: Done
+tracks:
+  LINK: Linked work
+milestones:
+  shared: Shared Release
+milestonePriorities: {}
+`,
+  );
+  await writeFile(join(linkedPm, 'project_id.txt'), 'linked-project\n');
+  await writeFile(
+    join(linkedPm, 'tasks', 'LINK-0001.md'),
+    `---
+id: LINK-0001
+title: Linked fixture task
+track: LINK
+milestone: shared
+createdAt: ${timestamp}
+modifiedAt: ${timestamp}
+---
+
+Read-only linked task body.
+`,
+  );
+  await writeFile(join(linkedPm, 'states', 'todo', 'LINK-0001.ref'), '../../tasks/LINK-0001.md');
+  await writeFile(
+    join(linkedPm, 'wiki', 'linked-guide.md'),
+    `---
+title: Linked guide
+createdAt: ${timestamp}
+modifiedAt: ${timestamp}
+---
+
+# Linked guide
+
+Read-only linked wiki body.
+`,
+  );
 }

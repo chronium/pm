@@ -6,7 +6,7 @@ import { MarkdownDisplay } from '../markdown/markdown-display';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import { WikiBreadcrumbs } from './wiki-breadcrumbs';
 import { WikiStore } from './wiki.store';
-import { StaticModeService } from '../static/static-mode.service';
+import { ProjectContextService } from '../core/project-context.service';
 
 @Component({
   selector: 'pm-wiki-workspace',
@@ -28,13 +28,13 @@ import { StaticModeService } from '../static/static-mode.service';
           <p class="wiki-eyebrow">Folder</p>
           <h1>{{ folderName() }}</h1>
         </div>
-        @if (!staticMode.enabled) {
+        @if (!projectContext.readOnly()) {
           <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
         }
       </header>
       <div class="wiki-list" aria-label="Pages in folder">
         @for (page of folderPages(); track page.path) {
-          <a class="wiki-list-row" [routerLink]="['/wiki', ...page.path.split('/')]"
+          <a class="wiki-list-row" [routerLink]="projectContext.wikiUrl(page.path)"
             ><span class="wiki-list-title">{{ page.title }}</span
             ><code>{{ page.path }}</code
             ><time [attr.datetime]="page.modifiedAt">{{
@@ -50,7 +50,7 @@ import { StaticModeService } from '../static/static-mode.service';
           No wiki page or folder exists at <code>{{ wikiPath() }}</code
           >.
         </p>
-        <a class="pm-button pm-button--secondary" routerLink="/wiki"
+        <a class="pm-button pm-button--secondary" [routerLink]="projectContext.wikiRoot()"
           >Back to wiki</a
         ></pm-error-state
       >
@@ -68,7 +68,7 @@ import { StaticModeService } from '../static/static-mode.service';
       <pm-error-state
         ><h1>Page unavailable</h1>
         <p>This page was removed or renamed outside this view.</p>
-        <a class="pm-button pm-button--secondary" routerLink="/wiki"
+        <a class="pm-button pm-button--secondary" [routerLink]="projectContext.wikiRoot()"
           >Back to wiki</a
         ></pm-error-state
       >
@@ -85,7 +85,7 @@ import { StaticModeService } from '../static/static-mode.service';
               <time [attr.datetime]="page.modifiedAt">{{ page.modifiedAt | date: 'medium' }}</time>
             </p>
           </div>
-          @if (!staticMode.enabled) {
+          @if (!projectContext.readOnly()) {
             <div class="wiki-actions">
               <a
                 class="pm-button pm-button--secondary"
@@ -108,7 +108,7 @@ import { StaticModeService } from '../static/static-mode.service';
 export class WikiWorkspace {
   readonly wikiPath = input('');
   protected readonly store = inject(WikiStore);
-  protected readonly staticMode = inject(StaticModeService);
+  protected readonly projectContext = inject(ProjectContextService);
   protected readonly resolution = computed(() => this.store.resolve(this.wikiPath()));
   protected readonly folderPages = computed(() => {
     const value = this.resolution();

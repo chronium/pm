@@ -14,12 +14,12 @@
   @if (staticMode.enabled) {
     <pm-static-project-switcher />
   } @else {
-    <a class="brand" routerLink="/tasks" aria-label="PM home">{{ projectApi.projectName() }}</a>
+    <pm-project-switcher />
   }
 
   <nav class="mode-navigation" aria-label="Workspace">
     <a
-      routerLink="/tasks"
+      [routerLink]="projectContext.modeLink('tasks')"
       routerLinkActive="active"
       #tasksLink="routerLinkActive"
       [attr.aria-current]="tasksLink.isActive ? 'page' : null"
@@ -37,7 +37,7 @@
       }
     </a>
     <a
-      routerLink="/wiki"
+      [routerLink]="projectContext.modeLink('wiki')"
       routerLinkActive="active"
       #wikiLink="routerLinkActive"
       [attr.aria-current]="wikiLink.isActive ? 'page' : null"

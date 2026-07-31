@@ -7,6 +7,7 @@ import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switc
 
 import type { components } from '../api/generated/pm-api';
 import { TopBarSearch, type TopBarSearchOption } from '../shared/top-bar-search/top-bar-search';
+import { ProjectContextService } from '../core/project-context.service';
 
 type WikiSearchResult = components['schemas']['WikiSearchResultResponse'];
 
@@ -37,6 +38,7 @@ export class WikiSearch {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly search = viewChild(TopBarSearch);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly requests = new Subject<string>();
 
   protected readonly query = signal('');
@@ -54,12 +56,14 @@ export class WikiSearch {
           this.loading.set(true);
           this.error.set(null);
           const params = new HttpParams().set('query', query).set('limit', 20);
-          return this.http.get<WikiSearchResult[]>('/api/v1/wiki/search', { params }).pipe(
-            map((results) => ({ results, error: null as string | null })),
-            catchError((error: unknown) =>
-              of({ results: [] as WikiSearchResult[], error: this.readError(error) }),
-            ),
-          );
+          return this.http
+            .get<WikiSearchResult[]>(this.projectContext.apiUrl('/wiki/search'), { params })
+            .pipe(
+              map((results) => ({ results, error: null as string | null })),
+              catchError((error: unknown) =>
+                of({ results: [] as WikiSearchResult[], error: this.readError(error) }),
+              ),
+            );
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -92,7 +96,14 @@ export class WikiSearch {
     this.query.set('');
     this.options.set([]);
     this.search()?.close();
-    await this.router.navigate(['/wiki', ...option.result.path.split('/')]);
+    await this.router.navigate([
+      ...this.projectContext
+        .wikiRoot()
+        .split('/')
+        .filter(Boolean)
+        .map((part, index) => (index === 0 ? `/${part}` : part)),
+      ...option.result.path.split('/'),
+    ]);
   }
 
   private readError(error: unknown): string {

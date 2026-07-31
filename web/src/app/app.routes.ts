@@ -13,6 +13,35 @@ export enum AppShell {
   Components = 'components',
 }
 
+const linkedTaskRoutes: Routes = [
+  {
+    path: '',
+    component: TasksBoard,
+    children: [
+      {
+        path: 'dialog/:taskId',
+        loadComponent: () =>
+          import('./tasks/task-workspace/task-dialog-host').then((module) => module.TaskDialogHost),
+        data: { mode: 'detail' },
+      },
+    ],
+  },
+  {
+    path: ':taskId',
+    loadComponent: () =>
+      import('./tasks/task-workspace/task-page-host').then((module) => module.TaskPageHost),
+    data: { mode: 'detail' },
+  },
+];
+
+const linkedWikiRoutes: Routes = [
+  { path: '', pathMatch: 'full', component: WikiIndex },
+  {
+    matcher: wikiPathMatcher,
+    loadComponent: () => import('./wiki/wiki-workspace').then((module) => module.WikiWorkspace),
+  },
+];
+
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'tasks' },
   {
@@ -97,6 +126,18 @@ export const routes: Routes = [
         loadComponent: () => import('./wiki/wiki-workspace').then((module) => module.WikiWorkspace),
       },
     ],
+  },
+  {
+    path: 'projects/:projectId/tasks',
+    component: TasksShell,
+    data: { shell: AppShell.Tasks, linkedProject: true },
+    children: linkedTaskRoutes,
+  },
+  {
+    path: 'projects/:projectId/wiki',
+    component: WikiShell,
+    data: { shell: AppShell.Wiki, linkedProject: true },
+    children: linkedWikiRoutes,
   },
   {
     path: 'components',

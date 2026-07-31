@@ -4,7 +4,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 
-import { ProjectApiService } from '../api/project-api.service';
+import { ProjectContextService } from '../core/project-context.service';
 import { PollingCoordinator } from '../core/polling-coordinator';
 import {
   WikiApiService,
@@ -28,7 +28,7 @@ export type WikiResolution =
 @Injectable()
 export class WikiStore {
   private readonly api = inject(WikiApiService);
-  private readonly project = inject(ProjectApiService);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly router = inject(Router);
   private readonly polling = inject(PollingCoordinator);
   private readonly retainedIndex = signal<WikiPageSummary[] | undefined>(undefined);
@@ -47,7 +47,9 @@ export class WikiStore {
     { initialValue: this.router.currentNavigation()?.finalUrl?.toString() ?? this.router.url },
   );
 
-  readonly indexResource = httpResource<WikiPageSummary[]>(() => '/api/v1/wiki/pages');
+  readonly indexResource = httpResource<WikiPageSummary[]>(() =>
+    this.projectContext.apiUrl('/wiki/pages'),
+  );
   readonly pageResource = httpResource<WikiPage>(() =>
     this.selectedPath() ? this.api.pageUrl(this.selectedPath()) : undefined,
   );
@@ -72,7 +74,7 @@ export class WikiStore {
   readonly indexPoll = this.polling.create<WikiPageSummary[]>({
     target: () =>
       this.pages() && this.retainedIndexEtag()
-        ? { url: '/api/v1/wiki/pages', etag: this.retainedIndexEtag() }
+        ? { url: this.projectContext.apiUrl('/wiki/pages'), etag: this.retainedIndexEtag() }
         : null,
     accept: (response) => this.acceptIndexPoll(response),
   });
@@ -94,6 +96,18 @@ export class WikiStore {
   private pageActive = false;
 
   constructor() {
+    let apiPrefix = this.projectContext.apiPrefix();
+    effect(() => {
+      const nextPrefix = this.projectContext.apiPrefix();
+      if (nextPrefix === apiPrefix) return;
+      apiPrefix = nextPrefix;
+      this.indexPoll.stop();
+      this.pagePoll.stop();
+      this.retainedIndex.set(undefined);
+      this.retainedIndexEtag.set('');
+      this.clearSelection();
+      this.indexResource.reload();
+    });
     effect(() => {
       if (!this.indexResource.hasValue()) return;
       this.retainedIndex.set(this.indexResource.value());
@@ -197,10 +211,7 @@ export class WikiStore {
   }
 
   expansionKey(): string {
-    const name = this.project.project.hasValue()
-      ? this.project.project.value().name
-      : 'unknown-project';
-    return `pm.wiki-tree.v1.${encodeURIComponent(name)}.expanded`;
+    return `pm.wiki-tree.v1.${encodeURIComponent(this.projectContext.storageProjectId())}.expanded`;
   }
 
   private upsertSummary(page: WikiPage, previousPath?: string): void {
@@ -235,8 +246,9 @@ export class WikiStore {
   private activeMode(): 'index' | 'page' | 'none' {
     const tree = this.router.parseUrl(this.currentUrl());
     const segments = tree.root.children['primary']?.segments.map((segment) => segment.path) ?? [];
-    if (segments[0] !== 'wiki') return 'none';
-    const rest = segments.slice(1);
+    const wikiIndex = segments.indexOf('wiki');
+    if (wikiIndex < 0) return 'none';
+    const rest = segments.slice(wikiIndex + 1);
     if (!rest.length || rest[0] === 'new') return 'index';
     if (rest[0] === 'edit' || rest[0] === 'meta') return 'page';
     return this.resolve(rest.join('/')).kind === 'page' ? 'page' : 'index';

@@ -36,10 +36,31 @@ describe('application shell', () => {
     await router.navigateByUrl(url);
     fixture.detectChanges();
     TestBed.inject(HttpTestingController).expectOne('/api/v1/project').flush({
+      projectId: 'project-1',
       name: projectName,
       accent: 'purple',
+      relationship: 'current',
+      readOnly: false,
       revision: 'project-revision',
     });
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/project/links')
+      .flush({
+        activeProjectId: 'project-1',
+        members: [
+          {
+            projectId: 'project-1',
+            name: projectName,
+            alias: null,
+            relationship: 'current',
+            status: 'resolved',
+            source: 'current',
+            readable: true,
+            writeTrusted: true,
+          },
+        ],
+        warnings: [],
+      });
     const boardRequest = TestBed.inject(HttpTestingController).match(
       (request) => request.url === '/api/v1/board',
     );
@@ -254,6 +275,11 @@ describe('application shell', () => {
     TestBed.inject(HttpTestingController)
       .expectOne('/api/v1/project')
       .flush({ title: 'Unavailable' }, { status: 503, statusText: 'Service Unavailable' });
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/project/links').flush({
+      activeProjectId: 'project-1',
+      members: [],
+      warnings: [],
+    });
     await fixture.whenStable();
     fixture.detectChanges();
 

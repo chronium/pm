@@ -6,6 +6,7 @@ import { filter, Subscription } from 'rxjs';
 
 import { LayoutService } from '../core/layout.service';
 import { WikiStore, type WikiTreeNode } from './wiki.store';
+import { ProjectContextService } from '../core/project-context.service';
 
 @Component({
   selector: 'pm-wiki-tree',
@@ -33,7 +34,7 @@ import { WikiStore, type WikiTreeNode } from './wiki.store';
             <span class="wiki-tree-spacer" aria-hidden="true"></span>
           }
           <a
-            [routerLink]="['/wiki', ...node.path.split('/')]"
+            [routerLink]="projectContext.wikiUrl(node.path)"
             [attr.aria-current]="active(node.path) ? 'page' : null"
             [class.active]="active(node.path)"
             (click)="layout.closeMobileSidebar()"
@@ -53,6 +54,7 @@ export class WikiTree implements OnDestroy {
   protected readonly layout = inject(LayoutService);
   private readonly store = inject(WikiStore);
   private readonly router = inject(Router);
+  protected readonly projectContext = inject(ProjectContextService);
   private readonly currentUrl = signal(
     this.router.currentNavigation()?.finalUrl?.toString() ?? this.router.url,
   );

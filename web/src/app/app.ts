@@ -6,7 +6,6 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { LayoutService } from './core/layout.service';
 import { ThemeService } from './core/theme.service';
-import { ProjectApiService } from './api/project-api.service';
 import { TaskNavigationService } from './tasks/task-navigation.service';
 import { AppShell } from './app.routes';
 import { TaskSearch } from './tasks/task-search/task-search';
@@ -14,6 +13,8 @@ import { WikiSearch } from './wiki/wiki-search';
 import { StaticModeService } from './static/static-mode.service';
 import { SyncStatusService } from './core/sync-status.service';
 import { StaticProjectSwitcher } from './static/static-project-switcher';
+import { ProjectSwitcher } from './project-switcher/project-switcher';
+import { ProjectContextService } from './core/project-context.service';
 
 @Component({
   selector: 'pm-root',
@@ -23,6 +24,7 @@ import { StaticProjectSwitcher } from './static/static-project-switcher';
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
+    ProjectSwitcher,
     StaticProjectSwitcher,
     TaskSearch,
     WikiSearch,
@@ -35,10 +37,10 @@ export class App {
   protected readonly AppShell = AppShell;
   protected readonly layout = inject(LayoutService);
   protected readonly theme = inject(ThemeService);
-  protected readonly projectApi = inject(ProjectApiService);
   protected readonly taskNavigation = inject(TaskNavigationService);
   protected readonly staticMode = inject(StaticModeService);
   protected readonly syncStatus = inject(SyncStatusService);
+  protected readonly projectContext = inject(ProjectContextService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
 
   protected toggleNavigation(): void {

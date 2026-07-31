@@ -162,7 +162,7 @@ describe('TasksBoard', () => {
   });
 
   it('uses native collapse controls, defaults done closed, and restores project-scoped session choices', async () => {
-    sessionStorage.setItem('pm.tasks-board.v1.Atlas%20Project.second.todo.open', 'false');
+    sessionStorage.setItem('pm.tasks-board.v1.current.second.todo.open', 'false');
     const { element } = await render();
     const groups = [...element.querySelectorAll<HTMLDetailsElement>('details.status-group')];
     expect(groups[0]?.open).toBe(false);
@@ -171,9 +171,7 @@ describe('TasksBoard', () => {
 
     groups[1]!.open = true;
     groups[1]!.dispatchEvent(new Event('toggle'));
-    expect(sessionStorage.getItem('pm.tasks-board.v1.Atlas%20Project.second.done.open')).toBe(
-      'true',
-    );
+    expect(sessionStorage.getItem('pm.tasks-board.v1.current.second.done.open')).toBe('true');
   });
 
   it('renders semantic task links with textual priority and dependency meaning and long content', async () => {
