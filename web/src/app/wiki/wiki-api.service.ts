@@ -36,7 +36,11 @@ export class WikiApiService {
   };
 
   create(request: CreateWikiPageRequest) {
-    return this.http.post<WikiPage>('/api/v1/wiki/pages', request, this.mutationOptions);
+    return this.http.post<WikiPage>(
+      this.projectContext.apiUrl('/wiki/pages'),
+      request,
+      this.mutationOptions,
+    );
   }
 
   updateBody(path: string, request: UpdateWikiPageBodyRequest, etag: string) {

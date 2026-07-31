@@ -11,8 +11,7 @@ using Spectre.Console.Rendering;
 namespace PM.Tasks;
 
 public class TaskAddCommand(
-    ProjectRoot projectRoot,
-    TaskService taskService,
+    LinkedProjectMutationService mutations,
     ISyntaxHighlighter highlighter,
     IEditorService editorService)
     : AsyncCommand<TaskAddCommand.Settings>
@@ -20,19 +19,21 @@ public class TaskAddCommand(
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
-        if (!projectRoot.Exists)
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
         {
-            AnsiConsole.MarkupLine("[red]Project not found. Run [green]pm init[/] first.[/]");
+            RenderError(target.Message);
             return 1;
         }
 
-        var track = await ResolveTrack(settings, cancellationToken);
+        var track = await ResolveTrack(target.Payload!.Root, settings, cancellationToken);
         if (track == null) return 1;
 
         var description = await ResolveDescription(settings, cancellationToken);
         if (description == null) return 1;
 
-        var result = await taskService.CreateTask(
+        using var mutation = mutations.Track(target.Payload);
+        var result = await target.Payload.Tasks.CreateTask(
             settings.Title,
             track,
             settings.Milestone,
@@ -48,6 +49,7 @@ public class TaskAddCommand(
         var taskItem = result.Payload!;
         AnsiConsole.MarkupLine($"[green]Task created with ID {taskItem.Id}: [/]{taskItem.Title}");
         RenderTaskPanel(taskItem);
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
 
         return 0;
     }
@@ -68,7 +70,10 @@ public class TaskAddCommand(
         AnsiConsole.Write(taskPanel);
     }
 
-    private async Task<string?> ResolveTrack(Settings settings, CancellationToken cancellationToken)
+    private static async Task<string?> ResolveTrack(
+        ProjectRoot projectRoot,
+        Settings settings,
+        CancellationToken cancellationToken)
     {
         var config = projectRoot.Config!;
         var track = settings.Track?.Trim();
@@ -133,7 +138,7 @@ public class TaskAddCommand(
         AnsiConsole.MarkupLineInterpolated($"[red]{(message ?? "Task creation failed.").EscapeMarkup()}[/]");
     }
 
-    public class Settings : CommonSettings
+    public class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<title>")] public string Title { get; init; } = string.Empty;
 

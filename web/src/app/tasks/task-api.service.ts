@@ -36,7 +36,11 @@ export class TaskApiService {
   };
 
   create(request: CreateTaskRequest) {
-    return this.http.post<TaskResponse>('/api/v1/tasks', request, this.mutationOptions);
+    return this.http.post<TaskResponse>(
+      this.projectContext.apiUrl('/tasks'),
+      request,
+      this.mutationOptions,
+    );
   }
 
   update(id: string, request: UpdateTaskRequest, etag: string) {

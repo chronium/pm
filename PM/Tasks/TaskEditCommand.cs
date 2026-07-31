@@ -10,13 +10,23 @@ using Spectre.Console.Rendering;
 
 namespace PM.Tasks;
 
-public class TaskEditCommand(TaskService taskService, IEditorService editorService, ISyntaxHighlighter highlighter)
+public class TaskEditCommand(
+    LinkedProjectMutationService mutations,
+    IEditorService editorService,
+    ISyntaxHighlighter highlighter)
     : AsyncCommand<TaskEditCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
-        var readResult = taskService.ReadTaskMarkdown(settings.TaskId);
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{target.Message!.EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        var readResult = target.Payload!.Tasks.ReadTaskMarkdown(settings.TaskId);
         if (!readResult.Success)
         {
             AnsiConsole.MarkupLineInterpolated($"[red]{(readResult.Message ?? "Task not found.").EscapeMarkup()}[/]");
@@ -43,7 +53,8 @@ public class TaskEditCommand(TaskService taskService, IEditorService editorServi
             }
 
             var editedContent = await File.ReadAllTextAsync(tempFilePath, cancellationToken);
-            var saveResult = taskService.SaveEditedTaskContent(settings.TaskId, editedContent);
+            using var mutation = mutations.Track(target.Payload);
+            var saveResult = target.Payload.Tasks.SaveEditedTaskContent(settings.TaskId, editedContent);
             if (!saveResult.Success)
             {
                 AnsiConsole.MarkupLineInterpolated(
@@ -51,6 +62,7 @@ public class TaskEditCommand(TaskService taskService, IEditorService editorServi
                 return 1;
             }
 
+            LinkedProjectConsole.WriteReceipt(mutation.Receipt);
             return 0;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -78,7 +90,7 @@ public class TaskEditCommand(TaskService taskService, IEditorService editorServi
         AnsiConsole.Write(taskPanel);
     }
 
-    public class Settings : CommonSettings
+    public class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<task-id>")]
         [Description("Task ID to edit")]

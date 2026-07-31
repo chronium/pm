@@ -1,15 +1,30 @@
 using System.ComponentModel;
 using PM.Application;
+using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Wiki;
 
-public sealed class WikiRenameCommand(WikiService wikiService) : Command<WikiRenameCommand.Settings>
+public sealed class WikiRenameCommand(LinkedProjectMutationService mutations) : AsyncCommand<WikiRenameCommand.Settings>
 {
-    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    public int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken) =>
+        ExecuteAsync(context, settings, cancellationToken).GetAwaiter().GetResult();
+
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken)
     {
-        var result = wikiService.RenamePage(settings.Path, settings.NewPath, settings.Title);
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{target.Message!.EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        using var mutation = mutations.Track(target.Payload!);
+        var result = target.Payload!.Wiki.RenamePage(settings.Path, settings.NewPath, settings.Title);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated(
@@ -19,10 +34,11 @@ public sealed class WikiRenameCommand(WikiService wikiService) : Command<WikiRen
 
         AnsiConsole.MarkupLineInterpolated(
             $"Renamed wiki page [green]{result.Payload!.Path.EscapeMarkup()}[/].");
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
         return 0;
     }
 
-    public sealed class Settings : CommandSettings
+    public sealed class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<path>")]
         [Description("Current wiki page path")]

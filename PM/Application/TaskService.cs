@@ -53,6 +53,9 @@ public sealed record TaskSearchResult(
 
 public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdService)
 {
+    public ProjectRoot ProjectRoot => projectRoot;
+    public INextIdService NextIdService => nextIdService;
+
     private const int MaxBulkTaskCount = 100;
 
     public async Task<AppResult<TaskItem>> CreateTask(

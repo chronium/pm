@@ -46,6 +46,45 @@ public sealed class LinkedProjectFamilyService(
     public const int MaximumProjectCount = 32;
     public const int MaximumWarningCount = 64;
 
+    public static AppResult<LinkedProjectFamilyMember> SelectMember(
+        LinkedProjectFamily family,
+        string selector)
+    {
+        selector = selector.Trim();
+        if (string.Equals(selector, "current", StringComparison.OrdinalIgnoreCase))
+            return AppResult<LinkedProjectFamilyMember>.Ok(
+                family.Members.Single(member => member.Relationship == LinkedProjectRelationship.Current));
+        if (string.Equals(selector, "parent", StringComparison.OrdinalIgnoreCase))
+        {
+            var parent = family.Members.SingleOrDefault(member =>
+                member.Relationship == LinkedProjectRelationship.Parent);
+            return parent == null
+                ? AppResult<LinkedProjectFamilyMember>.Fail(
+                    "unknown_linked_project", "This project has no linked parent.")
+                : AppResult<LinkedProjectFamilyMember>.Ok(parent);
+        }
+
+        var byId = family.Members.SingleOrDefault(member =>
+            string.Equals(member.ProjectId, selector, StringComparison.Ordinal));
+        if (byId != null) return AppResult<LinkedProjectFamilyMember>.Ok(byId);
+
+        var byAlias = family.Members
+            .Where(member => member.Alias != null &&
+                             string.Equals(member.Alias, selector, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (byAlias.Count == 1) return AppResult<LinkedProjectFamilyMember>.Ok(byAlias[0]);
+        if (byAlias.Count > 1)
+            return AppResult<LinkedProjectFamilyMember>.Fail(
+                "ambiguous_linked_project",
+                $"Linked-project selector {selector} is ambiguous; use a stable project ID.");
+
+        var candidates = string.Join(", ", family.Members.Take(12).Select(member =>
+            member.Alias == null ? member.ProjectId : $"{member.Alias} ({member.ProjectId})"));
+        return AppResult<LinkedProjectFamilyMember>.Fail(
+            "unknown_linked_project",
+            $"Linked project {selector} was not found. Available projects: {candidates}.");
+    }
+
     public static LinkedProjectFamilyService CreateDefault(ProjectRoot projectRoot)
     {
         var linkedProjects = new LinkedProjectService(projectRoot);

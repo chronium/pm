@@ -29,7 +29,9 @@ public class WebCommand(
     ProjectValidationService validationService,
     IProjectMembershipService membershipService,
     IAgentRunService? agentRunService,
-    IAgentRunnerClient? agentRunnerClient) : AsyncCommand<WebCommand.Settings>
+    IAgentRunnerClient? agentRunnerClient,
+    LinkedProjectMutationService? linkedProjectMutations = null,
+    LinkedProjectRegistryStore? linkedProjectRegistry = null) : AsyncCommand<WebCommand.Settings>
 {
     public WebCommand(
         ProjectRoot projectRoot,
@@ -40,7 +42,7 @@ public class WebCommand(
         ProjectValidationService validationService)
         : this(projectRoot, boardService, taskService, configService, wikiService, validationService,
             new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
-            null, null)
+            null, null, null, null)
     {
     }
 
@@ -81,7 +83,7 @@ public class WebCommand(
 
         var app = builder.Build();
         MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService,
-            membershipService, agentRunService, agentRunnerClient);
+            membershipService, agentRunService, agentRunnerClient, linkedProjectMutations, linkedProjectRegistry);
         if (!settings.Api) app.MapAngularWeb(angularAssets!);
 
         await app.StartAsync(cancellationToken);
@@ -143,13 +145,17 @@ public class WebCommand(
         WikiService wikiService,
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
-        IAgentRunnerClient? agentRunnerClient = null)
+        IAgentRunnerClient? agentRunnerClient = null,
+        LinkedProjectMutationService? linkedProjectMutations = null,
+        LinkedProjectRegistryStore? linkedProjectRegistry = null)
     {
         endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
             wikiService, new ResourceRevisionService(projectRoot, boardService),
             membershipService: membershipService,
             agentRunService: agentRunService,
-            agentRunnerClient: agentRunnerClient);
+            agentRunnerClient: agentRunnerClient,
+            linkedProjectMutationService: linkedProjectMutations,
+            linkedProjectRegistry: linkedProjectRegistry);
         endpoints.MapOpenApi("/openapi/{documentName}.json");
     }
 

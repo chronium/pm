@@ -38,6 +38,14 @@
       <nav class="settings-navigation" aria-label="Project settings sections">
         <button
           type="button"
+          [class.active]="activeSection() === 'linked-projects'"
+          [attr.aria-current]="activeSection() === 'linked-projects' ? 'page' : null"
+          (click)="selectSection('linked-projects')"
+        >
+          Linked projects
+        </button>
+        <button
+          type="button"
           [class.active]="activeSection() === 'overview'"
           [attr.aria-current]="activeSection() === 'overview' ? 'page' : null"
           (click)="selectSection('overview')"
@@ -116,6 +124,12 @@
         <div class="settings-panel" [hidden]="activeSection() !== 'members'">
           <pm-project-members />
         </div>
+
+        @if (activeSection() === 'linked-projects') {
+          <div class="settings-panel">
+            <pm-linked-projects />
+          </div>
+        }
 
         <div class="settings-panel" [hidden]="activeSection() !== 'runners'">
           <pm-agent-runners />

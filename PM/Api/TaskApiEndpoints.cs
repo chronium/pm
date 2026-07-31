@@ -224,7 +224,7 @@ public static class TaskApiEndpoints
         return Results.Ok(response.Value);
     }
 
-    private static IResult Refreshed(HttpRequest request, string id, BoardService boardService,
+    internal static IResult Refreshed(HttpRequest request, string id, BoardService boardService,
         ResourceRevisionService revisions)
     {
         var response = GetResponse(id, boardService, revisions, request);
@@ -233,7 +233,7 @@ public static class TaskApiEndpoints
         return Results.Ok(response.Value);
     }
 
-    private static (TaskResponse? Value, IResult? Error) GetResponse(string id, BoardService boardService,
+    internal static (TaskResponse? Value, IResult? Error) GetResponse(string id, BoardService boardService,
         ResourceRevisionService revisions, HttpRequest request)
     {
         var task = boardService.GetTask(id);
@@ -258,7 +258,7 @@ public static class TaskApiEndpoints
             new TaskLocalMetadataResponse(item.FilePath)), null);
     }
 
-    private static IResult? CheckPrecondition(HttpRequest request, string id, ResourceRevisionService revisions)
+    internal static IResult? CheckPrecondition(HttpRequest request, string id, ResourceRevisionService revisions)
     {
         var revision = revisions.GetTaskRevision(id);
         return revision.Success
@@ -266,12 +266,12 @@ public static class TaskApiEndpoints
             : ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path);
     }
 
-    private static IResult DomainFailure(string code, string message, HttpRequest request) =>
+    internal static IResult DomainFailure(string code, string message, HttpRequest request) =>
         ApiResults.Failure(code, message, request.Path);
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static readonly HashSet<string> AcceptedPriorities =
+    internal static readonly HashSet<string> AcceptedPriorities =
         ["inherit", "none", "low", "medium", "high", "urgent"];
 }

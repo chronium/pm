@@ -1,13 +1,20 @@
 using System.ComponentModel;
 using PM.Application;
+using PM.Project;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Wiki;
 
-public sealed class WikiRemoveCommand(WikiService wikiService) : Command<WikiRemoveCommand.Settings>
+public sealed class WikiRemoveCommand(LinkedProjectMutationService mutations) : AsyncCommand<WikiRemoveCommand.Settings>
 {
-    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    public int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken) =>
+        ExecuteAsync(context, settings, cancellationToken).GetAwaiter().GetResult();
+
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken)
     {
         if (!settings.Yes)
         {
@@ -15,7 +22,15 @@ public sealed class WikiRemoveCommand(WikiService wikiService) : Command<WikiRem
             return 1;
         }
 
-        var result = wikiService.RemovePage(settings.Path);
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{target.Message!.EscapeMarkup()}[/]");
+            return 1;
+        }
+
+        using var mutation = mutations.Track(target.Payload!);
+        var result = target.Payload!.Wiki.RemovePage(settings.Path);
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated(
@@ -24,10 +39,11 @@ public sealed class WikiRemoveCommand(WikiService wikiService) : Command<WikiRem
         }
 
         AnsiConsole.MarkupLineInterpolated($"Removed wiki page [green]{settings.Path.Trim().EscapeMarkup()}[/].");
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
         return 0;
     }
 
-    public sealed class Settings : CommandSettings
+    public sealed class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<path>")]
         [Description("Wiki page path")]

@@ -1,5 +1,6 @@
 using PM.Project;
 using PM.Wiki;
+using PM.Files;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -47,6 +48,8 @@ public sealed record WikiHeadingOutline(
 
 public sealed class WikiService(ProjectRoot projectRoot)
 {
+    public ProjectRoot ProjectRoot => projectRoot;
+
     private static readonly Regex AtxHeadingPattern =
         new(@"^[ \t]{0,3}(?<marks>#{1,6})(?:[ \t]+|$)(?<title>.*?)(?:[ \t]+#+[ \t]*)?$",
             RegexOptions.Compiled);
@@ -364,7 +367,7 @@ public sealed class WikiService(ProjectRoot projectRoot)
         projectRoot.WriteWikiPage(updatedPage);
         if (!string.Equals(filePath, newFilePath, StringComparison.Ordinal))
         {
-            File.Delete(filePath);
+            FileSystem.DeleteFile(filePath);
             RemoveEmptyWikiParentDirectories(filePath);
         }
 
@@ -382,7 +385,7 @@ public sealed class WikiService(ProjectRoot projectRoot)
         if (!File.Exists(filePath))
             return AppResult.Fail("missing_wiki_page", $"Wiki page {normalizedPath} not found.");
 
-        File.Delete(filePath);
+        FileSystem.DeleteFile(filePath);
         RemoveEmptyWikiParentDirectories(filePath);
         return AppResult.Ok();
     }

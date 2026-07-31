@@ -3,6 +3,7 @@ using System.Text;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Spectre.Rendering;
 using PM.Application;
+using PM.Project;
 using PM.Tasks;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -10,13 +11,23 @@ using Spectre.Console.Rendering;
 
 namespace PM.Wiki;
 
-public sealed class WikiEditCommand(WikiService wikiService, IEditorService editorService, ISyntaxHighlighter highlighter)
+public sealed class WikiEditCommand(
+    LinkedProjectMutationService mutations,
+    IEditorService editorService,
+    ISyntaxHighlighter highlighter)
     : AsyncCommand<WikiEditCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
-        var readResult = wikiService.ReadPage(settings.Path);
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            RenderError(target.Message, "Wiki project could not be resolved.");
+            return 1;
+        }
+
+        var readResult = target.Payload!.Wiki.ReadPage(settings.Path);
         if (!readResult.Success)
         {
             RenderError(readResult.Message, "Wiki page not found.");
@@ -43,7 +54,8 @@ public sealed class WikiEditCommand(WikiService wikiService, IEditorService edit
             }
 
             var editedContent = await File.ReadAllTextAsync(tempFilePath, cancellationToken);
-            var saveResult = wikiService.UpdatePageMarkdown(settings.Path, editedContent);
+            using var mutation = mutations.Track(target.Payload);
+            var saveResult = target.Payload.Wiki.UpdatePageMarkdown(settings.Path, editedContent);
             if (!saveResult.Success)
             {
                 AnsiConsole.MarkupLineInterpolated(
@@ -51,6 +63,7 @@ public sealed class WikiEditCommand(WikiService wikiService, IEditorService edit
                 return 1;
             }
 
+            LinkedProjectConsole.WriteReceipt(mutation.Receipt);
             return 0;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -83,7 +96,7 @@ public sealed class WikiEditCommand(WikiService wikiService, IEditorService edit
         AnsiConsole.MarkupLineInterpolated($"[red]{(message ?? fallback).EscapeMarkup()}[/]");
     }
 
-    public sealed class Settings : CommonSettings
+    public sealed class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<path>")]
         [Description("Wiki page path")]

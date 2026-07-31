@@ -143,18 +143,30 @@ public sealed record TaskDetailPayload(
     LinkedProjectOwnerPayload? Project = null,
     IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
-public sealed record CreatedTaskPayload(string Id, string Title, string Track, string? Milestone, string FilePath);
+public sealed record ProjectMutationReceiptPayload(string ProjectId, IReadOnlyList<string> ChangedPaths);
 
-public sealed record MutatedPayload(bool Changed);
+public sealed record CreatedTaskPayload(
+    string Id,
+    string Title,
+    string Track,
+    string? Milestone,
+    string FilePath,
+    ProjectMutationReceiptPayload? Mutation = null);
 
-public sealed record TaskMutationPayload(bool Changed, TaskDetailPayload Task);
+public sealed record MutatedPayload(bool Changed, ProjectMutationReceiptPayload? Mutation = null);
+
+public sealed record TaskMutationPayload(
+    bool Changed,
+    TaskDetailPayload Task,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record TaskReorderPayload(
     string Track,
     string State,
     string? Milestone,
     IReadOnlyList<string> TaskIds,
-    bool Changed);
+    bool Changed,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record BulkTaskInputPayload(string Title, string? Description = null);
 
@@ -172,14 +184,16 @@ public sealed record BulkCreatedTasksPayload(
     IReadOnlyList<BulkCreatedTaskPayload> Tasks,
     int RequestedCount,
     int CreatedCount,
-    BulkFailurePayload? Failure);
+    BulkFailurePayload? Failure,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record BulkMilestoneAssignmentPayload(
     string Milestone,
     IReadOnlyList<string> TaskIds,
     IReadOnlyList<string> FilePaths,
     int RequestedCount,
-    int UpdatedCount);
+    int UpdatedCount,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record WikiPageListPayload(
     IReadOnlyList<WikiPageSummaryPayload> Pages,
@@ -202,7 +216,8 @@ public sealed record WikiPagePayload(
     string Markdown,
     string Body,
     LinkedProjectOwnerPayload? Project = null,
-    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record WikiPageOutlinePayload(
     string Path,
@@ -222,7 +237,8 @@ public sealed record WikiHeadingOutlinePayload(
 
 public sealed record WikiPagePatchPayload(
     WikiPagePayload Page,
-    string Version);
+    string Version,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record WikiSearchPayload(
     IReadOnlyList<WikiSearchResultPayload> Pages,

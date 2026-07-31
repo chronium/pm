@@ -62,6 +62,7 @@ serviceProvider.AddSingleton<LinkedProjectFamilyService>();
 serviceProvider.AddSingleton<LinkedProjectTaskGraphService>();
 serviceProvider.AddSingleton<ILinkedProjectGitInspector, LinkedProjectGitInspector>();
 serviceProvider.AddSingleton<LinkedProjectReadService>();
+serviceProvider.AddSingleton<LinkedProjectMutationService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<ProjectValidationService>();
@@ -102,6 +103,8 @@ app.Configure(config =>
         project.AddCommand<ProjectLinksCommand>("links");
         project.AddCommand<ProjectBindCommand>("bind");
         project.AddCommand<ProjectUnbindCommand>("unbind");
+        project.AddCommand<ProjectTrustCommand>("trust");
+        project.AddCommand<ProjectUntrustCommand>("untrust");
     });
 
     config.AddBranch(GlobalConfig.RunnerBranchName, runner =>

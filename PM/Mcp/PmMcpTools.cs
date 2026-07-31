@@ -17,10 +17,31 @@ public sealed class PmMcpTools(
     ProjectValidationService validationService,
     LinkedProjectFamilyService linkedProjectFamilyService,
     LinkedProjectReadService linkedProjectReadService,
+    LinkedProjectMutationService linkedProjectMutations,
     IProjectMembershipService? membershipService,
     McpCapabilityContext capabilityContext,
     McpLinkedWikiContextStore? linkedWikiContexts = null)
 {
+    public PmMcpTools(
+        ProjectRoot projectRoot,
+        TaskService taskService,
+        ProjectCreationService projectCreationService,
+        ProjectConfigService configService,
+        BoardService boardService,
+        WikiService wikiService,
+        ProjectValidationService validationService,
+        LinkedProjectFamilyService linkedProjectFamilyService,
+        LinkedProjectReadService linkedProjectReadService,
+        IProjectMembershipService? membershipService,
+        McpCapabilityContext capabilityContext,
+        McpLinkedWikiContextStore? linkedWikiContexts = null)
+        : this(projectRoot, taskService, projectCreationService, configService, boardService, wikiService,
+            validationService, linkedProjectFamilyService, linkedProjectReadService,
+            LinkedProjectMutationService.ForCurrent(taskService), membershipService, capabilityContext,
+            linkedWikiContexts)
+    {
+    }
+
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Initializes a PM project in the current directory.")]
@@ -412,20 +433,29 @@ public sealed class PmMcpTools(
         string track,
         string? milestone = null,
         string? description = null,
+        string? project = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await taskService.CreateTask(title, track, milestone, description ?? string.Empty, false,
+        var result = await linkedProjectMutations.ExecuteAsync(
+            project,
+            (target, token) => target.Tasks.CreateTask(
+                title, track, milestone, description ?? string.Empty, false, token),
+            MutationAccess,
             cancellationToken);
         if (!result.Success)
             return McpToolResponse<CreatedTaskPayload>.FromFailure(result);
 
-        var task = result.Payload!;
+        var task = result.Payload!.Value;
         var payload = new CreatedTaskPayload(
             task.Id,
             task.Title,
-            projectRoot.ResolveTaskTrack(task),
+            result.Payload.Receipt.ProjectId == ActiveProjectId
+                ? projectRoot.ResolveTaskTrack(task)
+                : task.Track ?? track,
             task.Milestone,
-            projectRoot.GetTaskFilePath(task.Id));
+            result.Payload.Receipt.ChangedPaths.FirstOrDefault(path => path.EndsWith($"/{task.Id}.md", StringComparison.Ordinal))
+            ?? $".pm/tasks/{task.Id}.md",
+            ToReceipt(result.Payload.Receipt));
 
         return McpToolResponse<CreatedTaskPayload>.Ok($"Created task {task.Id}.", payload);
     }
@@ -436,16 +466,21 @@ public sealed class PmMcpTools(
     public async Task<McpToolResponse<BulkCreatedTasksPayload>> BulkCreateTasksForTrack(
         string track,
         IReadOnlyList<BulkTaskInputPayload> tasks,
+        string? project = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await taskService.BulkCreateTasksForTrack(
-            track,
-            tasks.Select(task => new BulkTaskCreateInput(task.Title, task.Description)).ToList(),
+        var result = await linkedProjectMutations.ExecuteAsync(
+            project,
+            (target, token) => target.Tasks.BulkCreateTasksForTrack(
+                track,
+                tasks.Select(task => new BulkTaskCreateInput(task.Title, task.Description)).ToList(),
+                token),
+            MutationAccess,
             cancellationToken);
         if (!result.Success)
             return McpToolResponse<BulkCreatedTasksPayload>.FromFailure(result);
 
-        var bulk = result.Payload!;
+        var bulk = result.Payload!.Value;
         var payload = new BulkCreatedTasksPayload(
             bulk.Track,
             bulk.Tasks.Select(task => new BulkCreatedTaskPayload(
@@ -456,7 +491,8 @@ public sealed class PmMcpTools(
                 task.FilePath)).ToList(),
             bulk.RequestedCount,
             bulk.CreatedCount,
-            bulk.Failure == null ? null : new BulkFailurePayload(bulk.Failure.ErrorCode, bulk.Failure.Message));
+            bulk.Failure == null ? null : new BulkFailurePayload(bulk.Failure.ErrorCode, bulk.Failure.Message),
+            ToReceipt(result.Payload.Receipt));
 
         var summary = bulk.Failure == null
             ? $"Created {bulk.CreatedCount} task(s)."
@@ -469,19 +505,26 @@ public sealed class PmMcpTools(
     [Description("Assigns 1 to 100 existing tasks to a milestone.")]
     public McpToolResponse<BulkMilestoneAssignmentPayload> BulkAssignTasksToMilestone(
         string milestone,
-        IReadOnlyList<string> taskIds)
+        IReadOnlyList<string> taskIds,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.BulkAssignTasksToMilestone(milestone, taskIds);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => target.Tasks.BulkAssignTasksToMilestone(milestone, taskIds),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         if (!result.Success)
             return McpToolResponse<BulkMilestoneAssignmentPayload>.FromFailure(result);
 
-        var assignment = result.Payload!;
+        var assignment = result.Payload!.Value;
         var payload = new BulkMilestoneAssignmentPayload(
             assignment.Milestone,
             assignment.TaskIds,
             assignment.FilePaths,
             assignment.RequestedCount,
-            assignment.UpdatedCount);
+            assignment.UpdatedCount,
+            ToReceipt(result.Payload.Receipt));
 
         return McpToolResponse<BulkMilestoneAssignmentPayload>.Ok(
             $"Assigned {assignment.RequestedCount} task(s) to {assignment.Milestone}.",
@@ -491,32 +534,58 @@ public sealed class PmMcpTools(
     [McpServerTool(Name = "move_task", Destructive = true, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Moves a task to the target state.")]
-    public McpToolResponse<MutatedPayload> MoveTask(string taskId, string targetState)
+    public McpToolResponse<MutatedPayload> MoveTask(
+        string taskId,
+        string targetState,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.MoveTask(taskId, targetState);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => ToPayload(target.Tasks.MoveTask(taskId, targetState)),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Moved task {taskId} to {targetState}.", new MutatedPayload(true))
+            ? McpToolResponse<MutatedPayload>.Ok($"Moved task {taskId} to {targetState}.",
+                new MutatedPayload(true, ToReceipt(result.Payload!.Receipt)))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "remove_task", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Permanently removes a task and its state reference.")]
-    public McpToolResponse<MutatedPayload> RemoveTask(string taskId)
+    public McpToolResponse<MutatedPayload> RemoveTask(
+        string taskId,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.RemoveTask(taskId);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => ToPayload(target.Tasks.RemoveTask(taskId)),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Removed task {taskId}.", new MutatedPayload(true))
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed task {taskId}.",
+                new MutatedPayload(true, ToReceipt(result.Payload!.Receipt)))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "update_task_markdown", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Replaces a task markdown file after validating the task ID is unchanged.")]
-    public McpToolResponse<MutatedPayload> UpdateTaskMarkdown(string taskId, string markdown)
+    public McpToolResponse<MutatedPayload> UpdateTaskMarkdown(
+        string taskId,
+        string markdown,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.SaveEditedTaskContent(taskId, markdown);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => ToPayload(target.Tasks.SaveEditedTaskContent(taskId, markdown)),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Updated task {taskId}.", new MutatedPayload(true))
+            ? McpToolResponse<MutatedPayload>.Ok($"Updated task {taskId}.",
+                new MutatedPayload(true, ToReceipt(result.Payload!.Receipt)))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
@@ -530,34 +599,55 @@ public sealed class PmMcpTools(
         string? milestone = null,
         string? description = null,
         string? priority = null,
-        IReadOnlyList<string>? dependsOn = null)
+        IReadOnlyList<string>? dependsOn = null,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.PatchTaskMetadata(taskId, title, track, milestone, description, priority, dependsOn);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => ToMcpMutation(target, target.Tasks.PatchTaskMetadata(
+                taskId, title, track, milestone, description, priority, dependsOn)),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);
 
-        var mutation = result.Payload!;
+        var mutation = result.Payload!.Value;
         return McpToolResponse<TaskMutationPayload>.Ok(
             mutation.Changed ? $"Updated task {taskId}." : $"Task {taskId} already matched.",
-            new TaskMutationPayload(mutation.Changed, ToTaskDetailPayload(mutation.Task)));
+            new TaskMutationPayload(
+                mutation.Changed,
+                mutation.Task,
+                ToReceipt(result.Payload.Receipt)));
     }
 
     [McpServerTool(Name = "append_task_note", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Appends a dated note under a task's Notes section.")]
-    public McpToolResponse<TaskMutationPayload> AppendTaskNote(string taskId, string note)
+    public McpToolResponse<TaskMutationPayload> AppendTaskNote(
+        string taskId,
+        string note,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         if (!capabilityContext.CanAppendNoteTo(taskId))
             return McpToolResponse<TaskMutationPayload>.Fail(
                 "mcp_task_scope_denied",
                 $"The run-worker MCP profile may only append notes to task {capabilityContext.AssignedTaskId}.");
 
-        var result = taskService.AppendTaskNote(taskId, note);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => ToMcpMutation(target, target.Tasks.AppendTaskNote(taskId, note)),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);
 
-        var mutation = result.Payload!;
+        var mutation = result.Payload!.Value;
         return McpToolResponse<TaskMutationPayload>.Ok($"Appended note to task {taskId}.",
-            new TaskMutationPayload(mutation.Changed, ToTaskDetailPayload(mutation.Task)));
+            new TaskMutationPayload(
+                mutation.Changed,
+                mutation.Task,
+                ToReceipt(result.Payload.Receipt)));
     }
 
     [McpServerTool(Name = "reorder_tasks", Destructive = true, Idempotent = true, OpenWorld = false,
@@ -567,13 +657,19 @@ public sealed class PmMcpTools(
         string track,
         string state,
         IReadOnlyList<string> taskIds,
-        string? milestone = null)
+        string? milestone = null,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = taskService.ReorderTasks(track, state, taskIds, milestone);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => target.Tasks.ReorderTasks(track, state, taskIds, milestone),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         if (!result.Success)
             return McpToolResponse<TaskReorderPayload>.FromFailure(result);
 
-        var reorder = result.Payload!;
+        var reorder = result.Payload!.Value;
         return McpToolResponse<TaskReorderPayload>.Ok(
             reorder.Changed ? "Task order updated." : "Task order already matched.",
             new TaskReorderPayload(
@@ -581,7 +677,8 @@ public sealed class PmMcpTools(
                 reorder.State,
                 reorder.Milestone,
                 reorder.TaskIds,
-                reorder.Changed));
+                reorder.Changed,
+                ToReceipt(result.Payload.Receipt)));
     }
 
     [McpServerTool(Name = "list_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -773,24 +870,41 @@ public sealed class PmMcpTools(
     [McpServerTool(Name = "create_wiki_page", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Creates a wiki page from a slash-separated path, title, and markdown body.")]
-    public McpToolResponse<WikiPagePayload> CreateWikiPage(string path, string title, string body = "")
+    public McpToolResponse<WikiPagePayload> CreateWikiPage(
+        string path,
+        string title,
+        string body = "",
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.CreatePage(path, title, body);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => target.Wiki.CreatePage(path, title, body),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<WikiPagePayload>.Ok($"Created wiki page {result.Payload!.Path}.",
-                ToWikiPagePayload(result.Payload))
+            ? McpToolResponse<WikiPagePayload>.Ok($"Created wiki page {result.Payload!.Value.Path}.",
+                ToWikiPagePayload(result.Payload.Value) with { Mutation = ToReceipt(result.Payload.Receipt) })
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "update_wiki_page_markdown", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Replaces a wiki markdown file after validating frontmatter.")]
-    public McpToolResponse<WikiPagePayload> UpdateWikiPageMarkdown(string path, string markdown)
+    public McpToolResponse<WikiPagePayload> UpdateWikiPageMarkdown(
+        string path,
+        string markdown,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.UpdatePageMarkdown(path, markdown);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => target.Wiki.UpdatePageMarkdown(path, markdown),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<WikiPagePayload>.Ok($"Updated wiki page {result.Payload!.Path}.",
-                ToWikiPagePayload(result.Payload))
+            ? McpToolResponse<WikiPagePayload>.Ok($"Updated wiki page {result.Payload!.Value.Path}.",
+                ToWikiPagePayload(result.Payload.Value) with { Mutation = ToReceipt(result.Payload.Receipt) })
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
     }
 
@@ -803,35 +917,62 @@ public sealed class PmMcpTools(
         string headingId,
         [Description("Patch operation. Accepted values are represented by the schema enum.")]
         WikiPatchOperation operation,
-        string markdown)
+        string markdown,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.PatchPageSection(path, version, headingId, ToOperationValue(operation), markdown);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => target.Wiki.PatchPageSection(
+                path, version, headingId, ToOperationValue(operation), markdown),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<WikiPagePatchPayload>.Ok($"Patched wiki page {result.Payload!.Page.Path}.",
-                new WikiPagePatchPayload(ToWikiPagePayload(result.Payload.Page), result.Payload.Version))
+            ? McpToolResponse<WikiPagePatchPayload>.Ok($"Patched wiki page {result.Payload!.Value.Page.Path}.",
+                new WikiPagePatchPayload(
+                    ToWikiPagePayload(result.Payload.Value.Page),
+                    result.Payload.Value.Version,
+                    ToReceipt(result.Payload.Receipt)))
             : McpToolResponse<WikiPagePatchPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "rename_wiki_page", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Renames a wiki page path, title, or both while preserving body and created timestamp.")]
-    public McpToolResponse<WikiPagePayload> RenameWikiPage(string path, string newPath, string title)
+    public McpToolResponse<WikiPagePayload> RenameWikiPage(
+        string path,
+        string newPath,
+        string title,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.RenamePage(path, newPath, title);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => target.Wiki.RenamePage(path, newPath, title),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<WikiPagePayload>.Ok($"Renamed wiki page {result.Payload!.Path}.",
-                ToWikiPagePayload(result.Payload))
+            ? McpToolResponse<WikiPagePayload>.Ok($"Renamed wiki page {result.Payload!.Value.Path}.",
+                ToWikiPagePayload(result.Payload.Value) with { Mutation = ToReceipt(result.Payload.Receipt) })
             : McpToolResponse<WikiPagePayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "remove_wiki_page", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Permanently removes one wiki page.")]
-    public McpToolResponse<MutatedPayload> RemoveWikiPage(string path)
+    public McpToolResponse<MutatedPayload> RemoveWikiPage(
+        string path,
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = wikiService.RemovePage(path);
+        var result = linkedProjectMutations.ExecuteAsync(
+            project,
+            target => ToPayload(target.Wiki.RemovePage(path)),
+            MutationAccess,
+            cancellationToken).GetAwaiter().GetResult();
         return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Removed wiki page {path}.", new MutatedPayload(true))
+            ? McpToolResponse<MutatedPayload>.Ok($"Removed wiki page {path}.",
+                new MutatedPayload(true, ToReceipt(result.Payload!.Receipt)))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
@@ -1071,6 +1212,22 @@ public sealed class PmMcpTools(
             task.Description);
     }
 
+    private static AppResult<McpTaskMutationValue> ToMcpMutation(
+        LinkedProjectMutationTarget target,
+        AppResult<TaskMutationResult> result)
+    {
+        if (!result.Success)
+            return AppResult<McpTaskMutationValue>.Fail(result.ErrorCode!, result.Message!);
+
+        var task = target.Board.GetTask(result.Payload!.Task.Id);
+        if (!task.Success)
+            return AppResult<McpTaskMutationValue>.Fail(task.ErrorCode!, task.Message!);
+
+        return AppResult<McpTaskMutationValue>.Ok(new McpTaskMutationValue(
+            result.Payload.Changed,
+            ToTaskDetailPayload(task.Payload!, null, [])));
+    }
+
     private McpToolResponse<TaskDetailPayload> GetLocalTask(string taskId)
     {
         var markdownResult = taskService.ReadTaskMarkdown(taskId);
@@ -1085,7 +1242,7 @@ public sealed class PmMcpTools(
 
     private static TaskDetailPayload ToTaskDetailPayload(
         BoardTask task,
-        LinkedProjectResourceOwner owner,
+        LinkedProjectResourceOwner? owner,
         IReadOnlyList<LinkedProjectFamilyWarning> warnings)
     {
         return new TaskDetailPayload(
@@ -1109,7 +1266,7 @@ public sealed class PmMcpTools(
             task.FilePath,
             task.Markdown ?? task.Task.ToMarkdown(),
             task.Task.Description,
-            ToOwner(owner),
+            owner == null ? null : ToOwner(owner),
             ToWarnings(warnings));
     }
 
@@ -1216,4 +1373,22 @@ public sealed class PmMcpTools(
             _ => string.Empty,
         };
     }
+
+    private LinkedProjectMutationAccess MutationAccess =>
+        capabilityContext.Profile == McpCapabilityProfile.RunWorker
+            ? LinkedProjectMutationAccess.CurrentProjectOnly
+            : LinkedProjectMutationAccess.TrustedLinkedProjects;
+
+    private string? ActiveProjectId =>
+        projectRoot.TryReadProjectId(out var projectId) ? projectId : null;
+
+    private static ProjectMutationReceiptPayload ToReceipt(ProjectMutationReceipt receipt) =>
+        new(receipt.ProjectId, receipt.ChangedPaths);
+
+    private static AppResult<bool> ToPayload(AppResult result) =>
+        result.Success
+            ? AppResult<bool>.Ok(true)
+            : AppResult<bool>.Fail(result.ErrorCode!, result.Message!);
+
+    private sealed record McpTaskMutationValue(bool Changed, TaskDetailPayload Task);
 }

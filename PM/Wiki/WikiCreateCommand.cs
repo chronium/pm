@@ -3,6 +3,7 @@ using System.Text;
 using CodePunk.Highlight.Core.SyntaxHighlighting.Abstractions;
 using CodePunk.Highlight.Spectre.Rendering;
 using PM.Application;
+using PM.Project;
 using PM.Tasks;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -10,28 +11,39 @@ using Spectre.Console.Rendering;
 
 namespace PM.Wiki;
 
-public sealed class WikiCreateCommand(WikiService wikiService, IEditorService editorService, ISyntaxHighlighter highlighter)
+public sealed class WikiCreateCommand(
+    LinkedProjectMutationService mutations,
+    IEditorService editorService,
+    ISyntaxHighlighter highlighter)
     : AsyncCommand<WikiCreateCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
+        var target = await mutations.ResolveTargetAsync(settings.Project, cancellationToken: cancellationToken);
+        if (!target.Success)
+        {
+            RenderError(target.Message, "Wiki project could not be resolved.");
+            return 1;
+        }
+
         if (string.IsNullOrWhiteSpace(settings.Title))
         {
             RenderError("Wiki page title is required.", "Wiki page creation failed.");
             return 1;
         }
 
+        using var mutation = mutations.Track(target.Payload!);
         AppResult<WikiPageData> result;
         if (settings.Edit)
         {
             var markdown = await ResolveEditedMarkdown(settings, cancellationToken);
             if (markdown == null) return 1;
-            result = wikiService.CreatePageMarkdown(settings.Path, markdown);
+            result = target.Payload!.Wiki.CreatePageMarkdown(settings.Path, markdown);
         }
         else
         {
-            result = wikiService.CreatePage(settings.Path, settings.Title, settings.Body ?? string.Empty);
+            result = target.Payload!.Wiki.CreatePage(settings.Path, settings.Title, settings.Body ?? string.Empty);
         }
 
         if (!result.Success)
@@ -43,6 +55,7 @@ public sealed class WikiCreateCommand(WikiService wikiService, IEditorService ed
         var page = result.Payload!;
         AnsiConsole.MarkupLineInterpolated($"[green]Wiki page created: [/]{page.Path.EscapeMarkup()}");
         RenderPagePanel(page);
+        LinkedProjectConsole.WriteReceipt(mutation.Receipt);
         return 0;
     }
 
@@ -102,7 +115,7 @@ public sealed class WikiCreateCommand(WikiService wikiService, IEditorService ed
         AnsiConsole.MarkupLineInterpolated($"[red]{(message ?? fallback).EscapeMarkup()}[/]");
     }
 
-    public sealed class Settings : CommonSettings
+    public sealed class Settings : LinkedProjectMutationSettings
     {
         [CommandArgument(0, "<path>")]
         [Description("Wiki page path")]
