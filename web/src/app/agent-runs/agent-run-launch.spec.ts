@@ -11,6 +11,43 @@ import {
 } from './agent-runs.fixtures';
 import { AgentRunLaunch } from './agent-run-launch';
 
+const linkedProjects = {
+  activeProjectId: 'project-current',
+  members: [
+    {
+      projectId: 'project-current',
+      name: 'Current project',
+      alias: null,
+      relationship: 'current',
+      status: 'available',
+      source: 'local',
+      readable: true,
+      writeTrusted: true,
+    },
+    {
+      projectId: 'project-engine',
+      name: 'Shared engine',
+      alias: 'engine',
+      relationship: 'sibling',
+      status: 'available',
+      source: 'local',
+      readable: true,
+      writeTrusted: false,
+    },
+    {
+      projectId: 'project-missing',
+      name: 'Unavailable game',
+      alias: 'missing',
+      relationship: 'sibling',
+      status: 'unavailable',
+      source: 'local',
+      readable: false,
+      writeTrusted: false,
+    },
+  ],
+  warnings: [],
+};
+
 describe('AgentRunLaunch', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -32,6 +69,7 @@ describe('AgentRunLaunch', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/v1/runners').flush([runnerRegistration]);
+    http.expectOne('/api/v1/project/links').flush(linkedProjects);
     http.expectOne('/api/v1/runners/runner-linux/status').flush(status);
     await fixture.whenStable();
     fixture.detectChanges();
@@ -55,6 +93,7 @@ describe('AgentRunLaunch', () => {
       providerId: 'codex',
       modelId: 'gpt-5.4',
       effortId: 'medium',
+      linkedContexts: [],
     });
     request.flush(readyPreflight, { headers: { ETag: '"draft-r1"' } });
     await fixture.whenStable();
@@ -74,6 +113,38 @@ describe('AgentRunLaunch', () => {
       (button) => button.textContent?.trim() === 'Start run',
     )!;
     expect(start.disabled).toBe(false);
+  });
+
+  it('opts into readable linked wiki context as required and invalidates readiness changes', async () => {
+    const { fixture, element, http } = await render();
+    expect(element.textContent).toContain('Shared engine');
+    expect(element.textContent).not.toContain('Unavailable game');
+
+    const context = element.querySelector<HTMLInputElement>('.context-project input')!;
+    expect(context.checked).toBe(false);
+    context.click();
+    fixture.detectChanges();
+
+    const requirement = element.querySelector<HTMLSelectElement>('.context-requirement select')!;
+    expect(requirement.disabled).toBe(false);
+    expect(requirement.value).toBe('required');
+
+    [...element.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Check readiness')!
+      .click();
+    const request = http.expectOne('/api/v1/runs/preflight');
+    expect(request.request.body.linkedContexts).toEqual([
+      { projectId: 'project-engine', requirement: 'required' },
+    ]);
+    request.flush(readyPreflight, { headers: { ETag: '"draft-r1"' } });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Immutable run specification');
+
+    requirement.value = 'optional';
+    requirement.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain('Immutable run specification');
   });
 
   it('starts once with the strong preflight ETag and settles into an accepted state', async () => {

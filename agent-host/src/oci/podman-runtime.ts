@@ -23,6 +23,7 @@ const runnerLabel = 'io.chronium.pm.runner-id';
 const runLabel = 'io.chronium.pm.run-id';
 const maximumCommandOutputBytes = 1_048_576;
 const runtimeRunTmpfsBytes = 16 * 1024 * 1024;
+const linkedContextsPath = '/pm-linked-contexts';
 
 export interface PodmanCommandResult {
   exitCode: number | null;
@@ -55,6 +56,7 @@ export interface PodmanRuntimeHandle extends RuntimeHandle {
   readonly hostWorkspaceDirectory: string;
   readonly hostCodexHomeDirectory: string;
   readonly hostRuntimeDirectory: string;
+  readonly hostContextsDirectory: string;
   policyFailure: string | null;
   monitorController: AbortController;
   monitorPromise: Promise<void>;
@@ -155,7 +157,7 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       await assertDirectoryChain(this.dataRoot, cache.hostPath, false);
     await mkdir(paths.runtime, { recursive: true, mode: 0o700 });
     const initialUsage = await this.diskBudget.check(
-      [paths.workspace, paths.codexHome],
+      [paths.workspace, paths.codexHome, paths.contexts],
       profile.limits.diskBytes,
       this.dataRoot,
       this.options.minimumFreeDiskBytes,
@@ -186,12 +188,13 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       hostWorkspaceDirectory: paths.workspace,
       hostCodexHomeDirectory: paths.codexHome,
       hostRuntimeDirectory: paths.runtime,
+      hostContextsDirectory: paths.contexts,
       policyFailure: null,
       monitorController,
       monitorPromise: Promise.resolve(),
       destroyed: false,
       peakWritableBytes: initialUsage.bytes,
-      agentContext: this.agentContext(profile),
+      agentContext: this.agentContext(specification),
     };
     handle.monitorPromise = this.monitor(handle, profile, monitorController.signal);
     return handle;
@@ -286,7 +289,11 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       while (!signal.aborted) {
         await delay(this.diskCheckIntervalMilliseconds, undefined, { signal });
         const usage = await this.diskBudget.check(
-          [handle.hostWorkspaceDirectory, handle.hostCodexHomeDirectory],
+          [
+            handle.hostWorkspaceDirectory,
+            handle.hostCodexHomeDirectory,
+            handle.hostContextsDirectory,
+          ],
           profile.limits.diskBytes,
           this.dataRoot,
           this.options.minimumFreeDiskBytes,
@@ -308,6 +315,7 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       workspace: run.workspace,
       codexHome: run.codexHome,
       runtime: run.runtime,
+      contexts: run.contexts,
       caches: profile.container.readOnlyCaches.map((cache) => ({
         ...cache,
         hostPath: join(this.dataRoot, 'caches', profile.profileId, cache.cacheId),
@@ -315,7 +323,8 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
     };
   }
 
-  private agentContext(profile: RuntimeProfile): AgentRuntimeContext {
+  private agentContext(specification: RunSpecification): AgentRuntimeContext {
+    const profile = specification.runtime.profile;
     const available = {
       CODEX_HOME: profile.container.codexHomePath,
       DOTNET_CLI_HOME: posix.join(profile.container.temporaryPath, 'dotnet-cli'),
@@ -338,7 +347,10 @@ export class PodmanRuntimeDriver implements RuntimeDriver, RuntimeProcessExecuto
       codexHomeDirectory: profile.container.codexHomePath,
       networkAccessEnabled: profile.network.mode === 'open',
       workerCommand: { executable: 'pm-agent-worker', arguments: [] },
-      pmMcpCommand: { executable: 'pm', arguments: [] },
+      pmMcpCommand: {
+        executable: 'pm',
+        arguments: [],
+      },
       environment,
     };
   }
@@ -349,6 +361,7 @@ interface RuntimeHostPaths {
   workspace: string;
   codexHome: string;
   runtime: string;
+  contexts: string;
   caches: Array<{ cacheId: string; containerPath: string; hostPath: string }>;
 }
 
@@ -421,6 +434,8 @@ export function buildPodmanCreateArguments(
     bindMount(paths.workspace, profile.container.workspacePath, false),
     '--mount',
     bindMount(paths.codexHome, profile.container.codexHomePath, false),
+    '--mount',
+    bindMount(paths.contexts, linkedContextsPath, true),
     ...paths.caches.flatMap((cache) => [
       '--mount',
       bindMount(cache.hostPath, cache.containerPath, true),

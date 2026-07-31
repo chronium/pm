@@ -7,6 +7,7 @@ import type { RunArtifact, RunFailure } from '../protocol/types.js';
 import type { RunnerLayout } from './layout.js';
 import type { ValidationResult } from './validation.js';
 import type { RuntimeUsage } from '../drivers.js';
+import type { PreparedLinkedContext } from './workspace.js';
 
 const maximumCommandBytes = 64 * 1024 * 1024;
 const maximumEventExportBytes = 16 * 1024 * 1024;
@@ -23,6 +24,7 @@ export interface CollectionInput {
     agent: RuntimeUsage | null;
     validation: RuntimeUsage | null;
   };
+  linkedContexts?: PreparedLinkedContext[];
 }
 
 export class ArtifactCollector {
@@ -144,6 +146,7 @@ export class ArtifactCollector {
         startedAt: input.startedAt,
         collectedAt: this.now().toISOString(),
         resourceUsage: input.resourceUsage,
+        linkedContexts: input.linkedContexts ?? [],
       }),
     );
     if (input.run.specification.runtime.profile.output.includeEventLog) {

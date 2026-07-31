@@ -3,7 +3,7 @@ import type { CredentialStore, PairedClient } from './credential-store.js';
 import { validateNonce, verifySignedRequest } from './crypto.js';
 
 const allowedClockSkewSeconds = 300;
-export const supportedProtocolVersions = ['1.1', '1.0'] as const;
+export const supportedProtocolVersions = ['1.2', '1.1', '1.0'] as const;
 export type SupportedProtocolVersion = (typeof supportedProtocolVersions)[number];
 
 export type AuthenticationResult =

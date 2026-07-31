@@ -18,7 +18,8 @@ public sealed class PmMcpTools(
     LinkedProjectFamilyService linkedProjectFamilyService,
     LinkedProjectReadService linkedProjectReadService,
     IProjectMembershipService? membershipService,
-    McpCapabilityContext capabilityContext)
+    McpCapabilityContext capabilityContext,
+    McpLinkedWikiContextStore? linkedWikiContexts = null)
 {
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -233,7 +234,7 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (IsImplicitCurrent(project, family))
+        if (IsLocalRead(project, family))
         {
             var local = boardService.GetBoard(new BoardQuery(
                 NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state)));
@@ -278,7 +279,7 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (IsImplicitCurrent(project, family))
+        if (IsLocalRead(project, family))
         {
             var local = taskService.SearchTasks(query, limit);
             if (!local.Success) return McpToolResponse<TaskSearchPayload>.FromFailure(local);
@@ -317,7 +318,7 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && IsImplicitCurrent(project, family))
+        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && IsLocalRead(project, family))
         {
             var local = boardService.GetNextTask(new NextTaskQuery(
                 NormalizeFilter(track), NormalizeFilter(milestone), readyOnly));
@@ -357,7 +358,7 @@ public sealed class PmMcpTools(
         string? project = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(project)) return GetLocalTask(taskId);
+        if (IsLocalRead(project, false)) return GetLocalTask(taskId);
 
         var denied = LinkedReadDenied<TaskDetailPayload>(project, false);
         if (denied != null) return denied;
@@ -593,7 +594,7 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (IsImplicitCurrent(project, family))
+        if (IsLocalRead(project, family))
         {
             var local = wikiService.ListPages();
             if (!local.Success) return McpToolResponse<WikiPageListPayload>.FromFailure(local);
@@ -604,8 +605,25 @@ public sealed class PmMcpTools(
                 $"Returned {localPages.Count} wiki page(s).", new WikiPageListPayload(localPages));
         }
 
-        var denied = LinkedReadDenied<WikiPageListPayload>(project, family);
+        var denied = LinkedWikiReadDenied<WikiPageListPayload>(project, family);
         if (denied != null) return denied;
+        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && linkedWikiContexts?.Configured == true)
+        {
+            var scoped = linkedWikiContexts.List(project, family);
+            if (!scoped.Success) return McpToolResponse<WikiPageListPayload>.FromFailure(scoped);
+            var scopedPages = scoped.Payload!.Items.Select(item => new WikiPageSummaryPayload(
+                item.Resource.Path, item.Resource.Title, item.Resource.ModifiedAt,
+                item.Resource.FilePath, ToOwner(item.Owner))).ToList();
+            if (family)
+            {
+                var local = wikiService.ListPages();
+                if (!local.Success) return McpToolResponse<WikiPageListPayload>.FromFailure(local);
+                scopedPages.InsertRange(0, local.Payload!.Select(page => new WikiPageSummaryPayload(
+                    page.Path, page.Title, page.ModifiedAt, page.FilePath)));
+            }
+            return McpToolResponse<WikiPageListPayload>.Ok(
+                $"Returned {scopedPages.Count} wiki page(s).", new WikiPageListPayload(scopedPages));
+        }
         var request = LinkedProjectReadRequest.FromOptions(project, family);
         if (!request.Success) return McpToolResponse<WikiPageListPayload>.FromFailure(request);
         var result = await linkedProjectReadService.ListWikiPagesAsync(request.Payload!, cancellationToken);
@@ -634,7 +652,7 @@ public sealed class PmMcpTools(
         string? project = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(project))
+        if (IsLocalRead(project, false))
         {
             var local = wikiService.ReadPage(path);
             return local.Success
@@ -643,8 +661,16 @@ public sealed class PmMcpTools(
                 : McpToolResponse<WikiPagePayload>.FromFailure(local);
         }
 
-        var denied = LinkedReadDenied<WikiPagePayload>(project, false);
+        var denied = LinkedWikiReadDenied<WikiPagePayload>(project, false);
         if (denied != null) return denied;
+        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && linkedWikiContexts?.Configured == true)
+        {
+            var scoped = linkedWikiContexts.Get(path, project!);
+            if (!scoped.Success) return McpToolResponse<WikiPagePayload>.FromFailure(scoped);
+            var scopedItem = scoped.Payload!.Items.Single();
+            return McpToolResponse<WikiPagePayload>.Ok($"Wiki page {scopedItem.Resource.Path} loaded.",
+                ToWikiPagePayload(scopedItem.Resource, scopedItem.Owner, []));
+        }
         var result = await linkedProjectReadService.GetWikiPageAsync(path, project, cancellationToken);
         if (!result.Success) return McpToolResponse<WikiPagePayload>.FromFailure(result);
         var item = result.Payload!.Items.Single();
@@ -655,8 +681,24 @@ public sealed class PmMcpTools(
     [McpServerTool(Name = "outline_wiki_page", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Returns a wiki page body version and ATX markdown heading outline for targeted patching.")]
-    public McpToolResponse<WikiPageOutlinePayload> OutlineWikiPage(string path)
+    public McpToolResponse<WikiPageOutlinePayload> OutlineWikiPage(
+        string path,
+        [Description("Select current or a linked wiki context granted to this run.")]
+        string? project = null)
     {
+        if (!IsLocalRead(project, false))
+        {
+            var denied = LinkedWikiReadDenied<WikiPageOutlinePayload>(project, false);
+            if (denied != null) return denied;
+            if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && linkedWikiContexts?.Configured == true)
+            {
+                var scoped = linkedWikiContexts.Outline(path, project!);
+                if (!scoped.Success) return McpToolResponse<WikiPageOutlinePayload>.FromFailure(scoped);
+                return McpToolResponse<WikiPageOutlinePayload>.Ok(
+                    $"Outlined wiki page {scoped.Payload!.Items.Single().Resource.Path}.",
+                    ToWikiPageOutlinePayload(scoped.Payload.Items.Single().Resource));
+            }
+        }
         var result = wikiService.OutlinePage(path);
         return result.Success
             ? McpToolResponse<WikiPageOutlinePayload>.Ok($"Outlined wiki page {result.Payload!.Path}.",
@@ -676,7 +718,7 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (IsImplicitCurrent(project, family))
+        if (IsLocalRead(project, family))
         {
             var local = wikiService.SearchPages(query, limit);
             if (!local.Success) return McpToolResponse<WikiSearchPayload>.FromFailure(local);
@@ -686,8 +728,27 @@ public sealed class PmMcpTools(
                 $"Returned {localPages.Count} wiki search result(s).", new WikiSearchPayload(localPages));
         }
 
-        var denied = LinkedReadDenied<WikiSearchPayload>(project, family);
+        var denied = LinkedWikiReadDenied<WikiSearchPayload>(project, family);
         if (denied != null) return denied;
+        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && linkedWikiContexts?.Configured == true)
+        {
+            var scoped = linkedWikiContexts.Search(query, limit, project, family);
+            if (!scoped.Success) return McpToolResponse<WikiSearchPayload>.FromFailure(scoped);
+            var scopedPages = scoped.Payload!.Items.Select(item => new WikiSearchResultPayload(
+                item.Resource.Path, item.Resource.Title, item.Resource.ModifiedAt, item.Resource.FilePath,
+                item.Resource.MatchCount, item.Resource.Snippet, ToOwner(item.Owner))).ToList();
+            if (family)
+            {
+                var local = wikiService.SearchPages(query, limit);
+                if (!local.Success) return McpToolResponse<WikiSearchPayload>.FromFailure(local);
+                scopedPages.AddRange(local.Payload!.Select(page => new WikiSearchResultPayload(
+                    page.Path, page.Title, page.ModifiedAt, page.FilePath, page.MatchCount, page.Snippet)));
+                scopedPages = scopedPages.OrderByDescending(page => page.MatchCount)
+                    .ThenBy(page => page.Path, StringComparer.Ordinal).Take(Math.Clamp(limit, 1, 100)).ToList();
+            }
+            return McpToolResponse<WikiSearchPayload>.Ok(
+                $"Returned {scopedPages.Count} wiki search result(s).", new WikiSearchPayload(scopedPages));
+        }
         var request = LinkedProjectReadRequest.FromOptions(project, family);
         if (!request.Success) return McpToolResponse<WikiSearchPayload>.FromFailure(request);
         var result = await linkedProjectReadService.SearchWikiPagesAsync(
@@ -1095,13 +1156,27 @@ public sealed class PmMcpTools(
     private static bool IsImplicitCurrent(string? project, bool family) =>
         !family && string.IsNullOrWhiteSpace(project);
 
+    private bool IsLocalRead(string? project, bool family) =>
+        IsImplicitCurrent(project, family) ||
+        capabilityContext.Profile == McpCapabilityProfile.RunWorker && !family &&
+        string.Equals(project?.Trim(), "current", StringComparison.OrdinalIgnoreCase);
+
     private McpToolResponse<T>? LinkedReadDenied<T>(string? project, bool family)
     {
         return capabilityContext.CanReadLinkedProjects(project, family)
             ? null
             : McpToolResponse<T>.Fail(
                 "mcp_project_scope_denied",
-                "The run-worker MCP profile may only read the current project.");
+                "The run-worker MCP profile may only read tasks from the current project.");
+    }
+
+    private McpToolResponse<T>? LinkedWikiReadDenied<T>(string? project, bool family)
+    {
+        return capabilityContext.CanReadLinkedWikiProjects(project, family)
+            ? null
+            : McpToolResponse<T>.Fail(
+                "mcp_project_scope_denied",
+                "The run-worker MCP profile may only read the current project and explicitly granted linked wiki contexts.");
     }
 
     private static LinkedProjectOwnerPayload ToOwner(LinkedProjectResourceOwner owner) =>

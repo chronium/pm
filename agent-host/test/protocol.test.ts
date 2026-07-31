@@ -43,6 +43,35 @@ test('protocol parsing rejects task IDs that could escape the task directory', (
   assert.throws(() => parseRunRequest(request), /path-safe/);
 });
 
+test('protocol 1.2 hashes immutable wiki context and rejects unsafe project paths', () => {
+  const request = createRequest('run-linked-context');
+  request.specification.protocolVersion = '1.2';
+  request.specification.linkedContexts = [
+    {
+      projectId: 'project-engine',
+      name: 'Shared engine',
+      alias: 'engine',
+      repository: {
+        remote: 'git@github.com:chronium/engine.git',
+        baseCommit: 'c'.repeat(40),
+      },
+      requirement: 'required',
+      scopes: ['wiki'],
+    },
+  ];
+  request.specificationHash = computeSpecificationHash(request.specification);
+
+  assert.doesNotThrow(() => parseRunRequest(request));
+  const requiredHash = request.specificationHash;
+  request.specification.linkedContexts[0]!.requirement = 'optional';
+  request.specificationHash = computeSpecificationHash(request.specification);
+  assert.notEqual(request.specificationHash, requiredHash);
+
+  request.specification.linkedContexts[0]!.projectId = '../engine';
+  request.specificationHash = computeSpecificationHash(request.specification);
+  assert.throws(() => parseRunRequest(request), /path-safe/);
+});
+
 test('protocol parsing ignores additive fields but rejects unknown semantic discriminators', () => {
   const additive = JSON.parse(readFileSync(fixturePath, 'utf8')) as Record<string, unknown>;
   additive['futureEnvelopeField'] = { enabled: true };

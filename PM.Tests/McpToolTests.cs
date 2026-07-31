@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
+using PM.AgentRuns;
 using PM.Application;
 using PM.Mcp;
 using PM.Project;
@@ -420,6 +421,66 @@ public class McpToolTests
         Assert.Equal("mcp_project_scope_denied", taskProject.ErrorCode);
         Assert.Equal("mcp_project_scope_denied", wikiFamily.ErrorCode);
         Assert.Equal("mcp_project_scope_denied", wikiProject.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RunWorkerReadsOnlyGrantedLinkedWikiProjection()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var assigned = TestData.Task("AGENT-0002", "Assigned task");
+        projectRoot.WriteTask(assigned);
+        projectRoot.UpdateTaskState(assigned, "todo");
+        Assert.True(new WikiService(projectRoot).CreatePage("local", "Local", "local body").Success);
+
+        var contextRoot = Path.Combine(workspace.Path, "contexts");
+        var projection = Path.Combine(contextRoot, "project-engine");
+        Directory.CreateDirectory(Path.Combine(projection, GlobalConfig.PmDirName, "wiki"));
+        File.Copy(
+            Path.Combine(projectRoot.RootPath!, GlobalConfig.PmConfigFile),
+            Path.Combine(projection, GlobalConfig.PmDirName, GlobalConfig.PmConfigFile));
+        await File.WriteAllTextAsync(
+            Path.Combine(projection, GlobalConfig.PmDirName, GlobalConfig.ProjectIdFile),
+            "project-engine\n");
+        Assert.True(ProjectRoot.TryOpenExact(projection, out var linkedRoot));
+        Assert.True(new WikiService(linkedRoot).CreatePage(
+            "reference/renderer", "Renderer", "shared renderer contract").Success);
+        var manifestPath = Path.Combine(contextRoot, "manifest.json");
+        await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(new
+        {
+            version = 1,
+            primaryProjectId = "project-current",
+            contexts = new[]
+            {
+                new
+                {
+                    projectId = "project-engine",
+                    name = "Shared engine",
+                    alias = "engine",
+                    revision = new string('a', 40),
+                    requirement = "required",
+                    status = "available",
+                    summary = "Exact wiki projection prepared read-only.",
+                },
+            },
+        }, AgentRunJson.Options));
+        var storeResult = McpLinkedWikiContextStore.Load(manifestPath);
+        Assert.True(storeResult.Success, storeResult.Message);
+        var store = storeResult.Payload!;
+        var tools = CreateTools(projectRoot,
+            capabilityContext: new McpCapabilityContext(
+                McpCapabilityProfile.RunWorker, "AGENT-0002", store),
+            linkedWikiContexts: store);
+
+        var linkedPage = await tools.GetWikiPage("reference/renderer", "engine");
+        var familyPages = await tools.ListWikiPages(family: true);
+        var linkedTask = await tools.GetTask("AGENT-0002", "engine");
+
+        Assert.True(linkedPage.Success, linkedPage.Message);
+        Assert.Equal("project-engine", linkedPage.Data!.Project!.ProjectId);
+        Assert.Contains("shared renderer contract", linkedPage.Data.Body);
+        Assert.Equal(2, familyPages.Data!.Pages.Count);
+        Assert.Equal("mcp_project_scope_denied", linkedTask.ErrorCode);
     }
 
     [Fact]
@@ -1049,7 +1110,8 @@ public class McpToolTests
         var defaultProfile = McpServerStartupOptions.Parse([]);
         var explicitNormal = McpServerStartupOptions.Parse(["--profile=normal"]);
         var runWorker = McpServerStartupOptions.Parse(
-            ["--profile", "run-worker", "--task-id", "AGENT-0002"]);
+            ["--profile", "run-worker", "--task-id", "AGENT-0002",
+                "--linked-context-manifest", Path.Combine(Path.GetTempPath(), "contexts.json")]);
 
         Assert.True(defaultProfile.Success);
         Assert.Equal(McpCapabilityProfile.Normal, defaultProfile.Payload!.Profile);
@@ -1059,6 +1121,8 @@ public class McpToolTests
         Assert.True(runWorker.Success);
         Assert.Equal(McpCapabilityProfile.RunWorker, runWorker.Payload!.Profile);
         Assert.Equal("AGENT-0002", runWorker.Payload.AssignedTaskId);
+        Assert.Equal(Path.Combine(Path.GetTempPath(), "contexts.json"),
+            runWorker.Payload.LinkedContextManifestPath);
     }
 
     [Fact]
@@ -1072,6 +1136,8 @@ public class McpToolTests
             ["--task-id", "AGENT-0002"],
             ["--profile", "run-worker", "--task-id", "../AGENT-0002"],
             ["--profile", "run-worker", "--task-id", "AGENT-0002", "--task-id", "AGENT-0003"],
+            ["--profile", "normal", "--linked-context-manifest", Path.Combine(Path.GetTempPath(), "contexts.json")],
+            ["--profile", "run-worker", "--task-id", "AGENT-0002", "--linked-context-manifest", "relative.json"],
             ["--unknown", "value"],
         ];
 
@@ -1173,7 +1239,8 @@ public class McpToolTests
 
     private static PmMcpTools CreateTools(ProjectRoot projectRoot, INextIdService? nextIdService = null,
         IProjectMembershipService? membershipService = null,
-        McpCapabilityContext? capabilityContext = null)
+        McpCapabilityContext? capabilityContext = null,
+        McpLinkedWikiContextStore? linkedWikiContexts = null)
     {
         nextIdService ??= new RecordingNextIdService();
         var linkedProjects = new LinkedProjectService(projectRoot);
@@ -1205,7 +1272,8 @@ public class McpToolTests
             linkedProjectFamily,
             linkedProjectReads,
             membershipService,
-            capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal));
+            capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal),
+            linkedWikiContexts);
     }
 
     private sealed class NullSubmoduleInspector : ILinkedProjectSubmoduleInspector

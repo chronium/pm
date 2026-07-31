@@ -11,7 +11,8 @@ public sealed partial class AgentRunService(
     IAgentRunGitInspector gitInspector,
     AgentRunCache cache,
     IAgentRunnerClient runners,
-    TimeProvider timeProvider) : IAgentRunService
+    TimeProvider timeProvider,
+    IAgentRunLinkedContextResolver? linkedContextResolver = null) : IAgentRunService
 {
     private const string PromptProfile = "task-execution";
 
@@ -33,12 +34,24 @@ public sealed partial class AgentRunService(
         var requestedAt = CanonicalNow();
         var runId = $"run-{Guid.CreateVersion7(requestedAt).ToString("N")}";
         var request = BuildRequest(runId, requestedAt, environment.Payload);
+        var finalChecks = environment.Payload.Checks;
+        if ((request.Specification.LinkedContexts?.Count ?? 0) > 0)
+        {
+            var runnerPreflight = await runners.Preflight(selection.RunnerId, request, cancellationToken);
+            if (!runnerPreflight.Success)
+                return AppResult<AgentRunPreflightResult>.Fail(runnerPreflight.ErrorCode!, runnerPreflight.Message!);
+            var checks = environment.Payload.Checks.Concat(runnerPreflight.Payload!.Checks).ToList();
+            if (!runnerPreflight.Payload.Ready)
+                return AppResult<AgentRunPreflightResult>.Ok(new AgentRunPreflightResult(
+                    false, null, null, null, checks));
+            finalChecks = checks;
+        }
         var save = await cache.SaveDraft(selection, request);
         if (!save.Success)
             return AppResult<AgentRunPreflightResult>.Fail(save.ErrorCode!, save.Message!);
 
         return AppResult<AgentRunPreflightResult>.Ok(new AgentRunPreflightResult(
-            true, runId, request.SpecificationHash, request, environment.Payload.Checks));
+            true, runId, request.SpecificationHash, request, finalChecks));
     }
 
     public async Task<AppResult<AgentRunRemoteStart>> Start(
@@ -78,6 +91,17 @@ public sealed partial class AgentRunService(
                 StringComparison.Ordinal))
             return AppResult<AgentRunRemoteStart>.Fail("stale_run_preflight",
                 "The task, repository, runner, or runtime selection changed after preflight.");
+
+        if ((current.Specification.LinkedContexts?.Count ?? 0) > 0)
+        {
+            var runnerPreflight = await runners.Preflight(cached.Payload.Selection.RunnerId, current,
+                cancellationToken);
+            if (!runnerPreflight.Success)
+                return AppResult<AgentRunRemoteStart>.Fail(runnerPreflight.ErrorCode!, runnerPreflight.Message!);
+            if (!runnerPreflight.Payload!.Ready)
+                return AppResult<AgentRunRemoteStart>.Fail("stale_run_preflight",
+                    "Runner access to one or more linked wiki contexts changed after preflight.");
+        }
 
         var started = await runners.Start(cached.Payload.Selection.RunnerId, cached.Payload.Request,
             cancellationToken);
@@ -238,6 +262,21 @@ public sealed partial class AgentRunService(
                 projectId, task.Payload!, null, null));
         }
 
+        var contextSelections = selection.LinkedContexts ?? [];
+        var contextResolutionService = linkedContextResolver ??
+                                       new AgentRunLinkedContextResolver(
+                                           LinkedProjectFamilyService.CreateDefault(projectRoot));
+        var linkedContexts = await contextResolutionService.Resolve(contextSelections, cancellationToken);
+        if (!linkedContexts.Success)
+            return AppResult<EnvironmentSnapshot>.Fail(linkedContexts.ErrorCode!, linkedContexts.Message!);
+        checks.AddRange(linkedContexts.Payload!.Checks);
+        if (!linkedContexts.Payload.Ready)
+        {
+            checks.Add(Skipped("runner", "Runner", "Runner checks were skipped until linked context checks pass."));
+            return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, false, checks,
+                projectId, task.Payload!, git.Payload.Snapshot, null, linkedContexts.Payload.Contexts));
+        }
+
         var registration = runners.Registration(selection.RunnerId);
         if (!registration.Success)
         {
@@ -246,6 +285,13 @@ public sealed partial class AgentRunService(
                 projectId, task.Payload!, git.Payload.Snapshot, null));
         }
         checks.Add(Passed("runner_registration", "Runner registration", "The selected runner is paired."));
+        if (linkedContexts.Payload.Contexts.Count > 0 && registration.Payload!.ProtocolVersion.Minor < 2)
+        {
+            checks.Add(Failed("linked_context_protocol", "Linked wiki context",
+                "The selected runner must negotiate protocol 1.2 for linked wiki context."));
+            return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, false, checks,
+                projectId, task.Payload!, git.Payload.Snapshot, null, linkedContexts.Payload.Contexts));
+        }
 
         var health = await runners.Health(selection.RunnerId, cancellationToken);
         if (!health.Success)
@@ -278,7 +324,8 @@ public sealed partial class AgentRunService(
             : Failed("runner_capacity", "Runner capacity", "The runner has no available execution slots."));
         var ready = selectionsValid && hasCapacity;
         return AppResult<EnvironmentSnapshot>.Ok(new EnvironmentSnapshot(selection, ready, checks,
-            projectId, task.Payload!, git.Payload.Snapshot, ready ? profile : null));
+            projectId, task.Payload!, git.Payload.Snapshot, ready ? profile : null,
+            linkedContexts.Payload.Contexts));
     }
 
     private AgentRunRequest BuildRequest(string runId, DateTimeOffset requestedAt, EnvironmentSnapshot environment)
@@ -296,7 +343,8 @@ public sealed partial class AgentRunService(
             new AgentRunRepository(environment.Git.RemoteUrl, environment.Git.HeadCommit),
             new AgentRunAgent(environment.Selection.ProviderId, environment.Selection.ModelId,
                 environment.Selection.EffortId, PromptProfile),
-            new AgentRunRuntime(environment.Selection.RunnerId, environment.Profile!));
+            new AgentRunRuntime(environment.Selection.RunnerId, environment.Profile!),
+            environment.LinkedContexts.Count == 0 ? null : environment.LinkedContexts);
         return new AgentRunRequest(AgentRunCanonicalJson.ComputeSpecificationHash(specification), specification);
     }
 
@@ -304,7 +352,11 @@ public sealed partial class AgentRunService(
     {
         if (selection == null || !IsIdentifier(selection.TaskId) || !IsIdentifier(selection.RunnerId) ||
             !IsIdentifier(selection.ProfileId) || !IsIdentifier(selection.ProviderId) ||
-            !IsIdentifier(selection.ModelId) || !IsIdentifier(selection.EffortId))
+            !IsIdentifier(selection.ModelId) || !IsIdentifier(selection.EffortId) ||
+            selection.LinkedContexts is { Count: > 31 } ||
+            (selection.LinkedContexts ?? []).Any(context => !IsIdentifier(context.ProjectId)) ||
+            (selection.LinkedContexts ?? []).Select(context => context.ProjectId)
+                .Distinct(StringComparer.Ordinal).Count() != (selection.LinkedContexts?.Count ?? 0))
             return AppResult.Fail("invalid_run_selection", "Task, runner, profile, provider, model, and effort are required.");
         return AppResult.Ok();
     }
@@ -345,7 +397,11 @@ public sealed partial class AgentRunService(
         string ProjectId,
         BoardTask Task,
         AgentRunGitSnapshot? Git,
-        AgentRunRuntimeProfile? Profile);
+        AgentRunRuntimeProfile? Profile,
+        IReadOnlyList<AgentRunLinkedContext>? Contexts = null)
+    {
+        public IReadOnlyList<AgentRunLinkedContext> LinkedContexts => Contexts ?? [];
+    }
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex IdentifierPattern();

@@ -3,6 +3,7 @@ import type { StoredRun, RunStore } from './persistence/run-store.js';
 import type { AgentDriver, RuntimeDriver, RuntimeHandle } from './drivers.js';
 import type { RuntimeUsage } from './drivers.js';
 import type { GitWorkspaceService } from './execution/workspace.js';
+import type { PreparedLinkedContext } from './execution/workspace.js';
 import { ValidationRunner, type ValidationResult } from './execution/validation.js';
 import type { ArtifactCollector } from './execution/artifacts.js';
 import type { RunFailure, RunFailureStage } from './protocol/types.js';
@@ -41,9 +42,24 @@ export class DriverRunProcessor implements RunProcessor {
     let cleaned = false;
     let agentUsage: RuntimeUsage | null = null;
     let validationUsage: RuntimeUsage | null = null;
+    let linkedContexts: PreparedLinkedContext[] = [];
     try {
       const prepared = await this.lifecycle.workspace.prepare(run.specification, signal);
       mirror = prepared.mirror;
+      linkedContexts = prepared.linkedContexts;
+      for (const context of linkedContexts)
+        this.store.appendEvent(run.runId, {
+          type: `mcp.linked_context_${context.status}`,
+          state: 'preparing_workspace',
+          summary: `${context.alias}: ${context.summary}`,
+          data: {
+            projectId: context.projectId,
+            alias: context.alias,
+            revision: context.revision,
+            requirement: context.requirement,
+            status: context.status,
+          },
+        });
       stage = 'runtime';
       this.store.transition(run.runId, 'starting_runtime', 'Starting runtime');
       runtime = await this.runtimeDriver.create(run.specification, signal);
@@ -171,6 +187,7 @@ export class DriverRunProcessor implements RunProcessor {
               executionFailure,
               startedAt,
               resourceUsage: { agent: agentUsage, validation: validationUsage },
+              linkedContexts,
             },
             collectionController.signal,
           );

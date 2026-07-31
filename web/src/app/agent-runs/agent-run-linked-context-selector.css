@@ -1,0 +1,94 @@
+:host {
+  display: contents;
+}
+.launch-section {
+  display: grid;
+  gap: var(--pm-space-4);
+  padding-block: var(--pm-space-4);
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+}
+.section-heading h3,
+.section-heading p,
+.context-note {
+  margin: 0;
+}
+.section-heading h3 {
+  font-size: var(--pm-font-size-md);
+}
+.section-heading p,
+.inline-status {
+  color: var(--pm-text-muted);
+}
+.section-heading p,
+.inline-status,
+.inline-error {
+  font-size: var(--pm-font-size-sm);
+}
+.inline-status,
+.inline-error {
+  margin: 0;
+}
+.inline-error {
+  color: var(--pm-danger);
+}
+.context-count,
+.context-project small,
+.context-note {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
+.context-list {
+  border-top: 1px solid var(--pm-border-subtle);
+}
+.context-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  min-height: 52px;
+  gap: var(--pm-space-3);
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+.context-project {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--pm-space-2);
+  cursor: pointer;
+}
+.context-project input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--pm-accent);
+}
+.context-project > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.context-project strong {
+  overflow: hidden;
+  font-size: var(--pm-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-requirement select {
+  width: 100%;
+  min-height: 34px;
+  padding: var(--pm-space-1) var(--pm-space-2);
+  border: 1px solid var(--pm-border-subtle);
+  border-radius: var(--pm-radius-sm);
+  background: color-mix(in oklch, var(--pm-surface-raised) 38%, transparent);
+  color: var(--pm-text-primary);
+}
+.context-requirement select:focus-visible {
+  border-color: var(--pm-accent);
+  outline: none;
+  box-shadow: var(--pm-focus-ring);
+}

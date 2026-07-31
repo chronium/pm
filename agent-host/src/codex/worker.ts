@@ -75,6 +75,10 @@ export function createCodexOptions(
   request: CodexWorkerRequest,
   environment: Record<string, string>,
 ): CodexOptions {
+  const linkedContextArguments =
+    (request.runRequest.specification.linkedContexts?.length ?? 0) > 0
+      ? ['--linked-context-manifest', '/pm-linked-contexts/manifest.json']
+      : [];
   return {
     env: environment,
     config: {
@@ -95,6 +99,7 @@ export function createCodexOptions(
             'run-worker',
             '--task-id',
             request.runRequest.specification.task.taskId,
+            ...linkedContextArguments,
           ],
           cwd: request.workspaceDirectory,
           required: true,

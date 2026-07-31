@@ -15,6 +15,29 @@ const taskIdPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 export interface PreparedWorkspace {
   readonly paths: RunPaths;
   readonly mirror: string;
+  readonly linkedContexts: PreparedLinkedContext[];
+}
+
+export interface PreparedLinkedContext {
+  readonly projectId: string;
+  readonly name: string;
+  readonly alias: string;
+  readonly revision: string;
+  readonly requirement: 'required' | 'optional';
+  readonly status: 'available' | 'unavailable';
+  readonly summary: string;
+}
+
+export interface RepositoryPreflightCheck {
+  readonly id: string;
+  readonly label: string;
+  readonly status: 'passed' | 'failed' | 'skipped';
+  readonly summary: string;
+}
+
+export interface RepositoryPreflightResult {
+  readonly ready: boolean;
+  readonly checks: RepositoryPreflightCheck[];
 }
 
 export class GitWorkspaceService {
@@ -41,6 +64,58 @@ export class GitWorkspaceService {
     return runIds.length;
   }
 
+  async preflight(
+    specification: RunSpecification,
+    signal: AbortSignal,
+  ): Promise<RepositoryPreflightResult> {
+    const checks: RepositoryPreflightCheck[] = [];
+    const repositories = [
+      {
+        id: 'primary_repository',
+        label: 'Primary repository',
+        remote: specification.repository.remote,
+        commit: specification.repository.baseCommit,
+        required: true,
+      },
+      ...(specification.linkedContexts ?? []).map((context) => ({
+        id: `linked_context_${context.projectId}`,
+        label: `Linked wiki context ${context.alias}`,
+        remote: context.repository.remote,
+        commit: context.repository.baseCommit,
+        required: context.requirement === 'required',
+      })),
+    ];
+
+    for (const repository of repositories) {
+      try {
+        this.policy.assertAllowed(repository.remote);
+        const mirror = this.layout.mirror(repository.remote);
+        await this.withMirrorLock(mirror, async () => {
+          await this.prepareMirror(mirror, repository.remote, signal);
+          await this.assertCommit(mirror, repository.commit, signal);
+        });
+        checks.push({
+          id: repository.id,
+          label: repository.label,
+          status: 'passed',
+          summary: `Exact commit ${repository.commit.slice(0, 12)} is allowlisted and available.`,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        checks.push({
+          id: repository.id,
+          label: repository.label,
+          status: repository.required ? 'failed' : 'skipped',
+          summary: repository.required
+            ? 'The exact repository revision is not allowlisted or available to this runner.'
+            : 'Optional linked wiki context is unavailable and will be omitted.',
+        });
+      }
+    }
+
+    return { ready: checks.every((check) => check.status !== 'failed'), checks };
+  }
+
   async prepare(specification: RunSpecification, signal: AbortSignal): Promise<PreparedWorkspace> {
     try {
       this.policy.assertAllowed(specification.repository.remote);
@@ -65,7 +140,8 @@ export class GitWorkspaceService {
       throw failRun('task_revision_mismatch');
     }
     await this.stageCodexAuth(paths.codexHome);
-    return { paths, mirror };
+    const linkedContexts = await this.prepareLinkedContexts(specification, paths, signal);
+    return { paths, mirror, linkedContexts };
   }
 
   async resetCodexHome(runId: string): Promise<void> {
@@ -77,7 +153,13 @@ export class GitWorkspaceService {
 
   async cleanup(runId: string): Promise<void> {
     const paths = this.layout.run(runId);
-    for (const path of [paths.workspace, paths.codexHome, paths.runtime, paths.scratch])
+    for (const path of [
+      paths.workspace,
+      paths.codexHome,
+      paths.runtime,
+      paths.scratch,
+      paths.contexts,
+    ])
       await rm(path, { recursive: true, force: true });
   }
 
@@ -85,11 +167,81 @@ export class GitWorkspaceService {
     await ensureOwnerDirectory(this.layout.dataRoot);
     await ensureOwnerDirectory(this.layout.runsRoot);
     await ensureOwnerDirectory(paths.runRoot);
-    for (const path of [paths.workspace, paths.codexHome, paths.artifacts, paths.scratch]) {
+    for (const path of [
+      paths.workspace,
+      paths.codexHome,
+      paths.artifacts,
+      paths.scratch,
+      paths.contexts,
+    ]) {
       await rm(path, { recursive: true, force: true });
       await mkdir(path, { recursive: true, mode: 0o700 });
       await chmod(path, 0o700);
     }
+  }
+
+  private async prepareLinkedContexts(
+    specification: RunSpecification,
+    paths: RunPaths,
+    signal: AbortSignal,
+  ): Promise<PreparedLinkedContext[]> {
+    const prepared: PreparedLinkedContext[] = [];
+    for (const context of specification.linkedContexts ?? []) {
+      const source = join(paths.scratch, `context-${context.projectId}`);
+      const projection = join(paths.contexts, context.projectId);
+      try {
+        this.policy.assertAllowed(context.repository.remote);
+        const mirror = this.layout.mirror(context.repository.remote);
+        await this.withMirrorLock(mirror, async () => {
+          await this.prepareMirror(mirror, context.repository.remote, signal);
+          await this.assertCommit(mirror, context.repository.baseCommit, signal);
+          await this.materialize(mirror, source, context.repository.baseCommit, signal);
+        });
+        const identity = (await readFile(join(source, '.pm', 'project_id.txt'), 'utf8')).trim();
+        if (identity !== context.projectId) throw new Error('Linked project identity mismatch.');
+        await mkdir(join(projection, '.pm'), { recursive: true, mode: 0o700 });
+        await writeFile(join(projection, '.pm', 'project_id.txt'), `${identity}\n`, {
+          mode: 0o600,
+        });
+        await writeFile(
+          join(projection, '.pm', 'pm_config.yaml'),
+          await readFile(join(source, '.pm', 'pm_config.yaml')),
+          { mode: 0o600 },
+        );
+        await copyWikiTree(join(source, '.pm', 'wiki'), join(projection, '.pm', 'wiki'));
+        prepared.push({
+          projectId: context.projectId,
+          name: context.name,
+          alias: context.alias,
+          revision: context.repository.baseCommit,
+          requirement: context.requirement,
+          status: 'available',
+          summary: 'Exact wiki projection prepared read-only.',
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        await rm(projection, { recursive: true, force: true });
+        if (context.requirement === 'required') throw failRun('linked_context_unavailable');
+        prepared.push({
+          projectId: context.projectId,
+          name: context.name,
+          alias: context.alias,
+          revision: context.repository.baseCommit,
+          requirement: context.requirement,
+          status: 'unavailable',
+          summary: 'Optional linked wiki context could not be prepared.',
+        });
+      } finally {
+        await rm(source, { recursive: true, force: true });
+      }
+    }
+
+    await writeFile(
+      paths.contextManifest,
+      `${JSON.stringify({ version: 1, primaryProjectId: specification.project.projectId, contexts: prepared }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    return prepared;
   }
 
   private async prepareMirror(mirror: string, remote: string, signal: AbortSignal): Promise<void> {
@@ -335,6 +487,25 @@ export class GitWorkspaceService {
       release();
       if (this.mirrorLocks.get(mirror) === queued) this.mirrorLocks.delete(mirror);
     }
+  }
+}
+
+async function copyWikiTree(source: string, destination: string): Promise<void> {
+  const sourceStats = await lstat(source);
+  if (!sourceStats.isDirectory() || sourceStats.isSymbolicLink())
+    throw new Error('Linked wiki root is invalid.');
+  await mkdir(destination, { recursive: true, mode: 0o700 });
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const sourcePath = join(source, entry.name);
+    const destinationPath = join(destination, entry.name);
+    if (entry.isSymbolicLink()) throw new Error('Linked wiki cannot contain symbolic links.');
+    if (entry.isDirectory()) {
+      await copyWikiTree(sourcePath, destinationPath);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.md'))
+      throw new Error('Linked wiki can contain only directories and Markdown files.');
+    await writeFile(destinationPath, await readFile(sourcePath), { mode: 0o600 });
   }
 }
 

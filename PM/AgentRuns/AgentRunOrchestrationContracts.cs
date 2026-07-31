@@ -9,7 +9,12 @@ public sealed record AgentRunSelection(
     string ProfileId,
     string ProviderId,
     string ModelId,
-    string EffortId);
+    string EffortId,
+    IReadOnlyList<AgentRunLinkedContextSelection>? LinkedContexts = null);
+
+public sealed record AgentRunLinkedContextSelection(
+    string ProjectId,
+    AgentRunLinkedContextRequirement Requirement = AgentRunLinkedContextRequirement.Required);
 
 [JsonConverter(typeof(JsonStringEnumConverter<AgentRunPreflightCheckStatus>))]
 public enum AgentRunPreflightCheckStatus
@@ -35,6 +40,10 @@ public sealed record AgentRunPreflightResult(
     string? RunId,
     string? Revision,
     AgentRunRequest? Request,
+    IReadOnlyList<AgentRunPreflightCheck> Checks);
+
+public sealed record AgentRunnerPreflightResult(
+    bool Ready,
     IReadOnlyList<AgentRunPreflightCheck> Checks);
 
 public sealed record AgentRunInspection(
@@ -100,6 +109,18 @@ public interface IAgentRunGitInspector
     Task<AppResult<AgentRunGitInspection>> Inspect(
         string projectDirectory,
         string taskId,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record AgentRunLinkedContextResolution(
+    IReadOnlyList<AgentRunLinkedContext> Contexts,
+    IReadOnlyList<AgentRunPreflightCheck> Checks,
+    bool Ready);
+
+public interface IAgentRunLinkedContextResolver
+{
+    Task<AppResult<AgentRunLinkedContextResolution>> Resolve(
+        IReadOnlyList<AgentRunLinkedContextSelection> selections,
         CancellationToken cancellationToken = default);
 }
 

@@ -27,7 +27,8 @@ public sealed record AgentRunPreflightRequest(
     string ProfileId,
     string ProviderId,
     string ModelId,
-    string EffortId);
+    string EffortId,
+    IReadOnlyList<AgentRunLinkedContextSelection>? LinkedContexts = null);
 
 public sealed record AgentRunActionRequest;
 
@@ -166,7 +167,8 @@ public static class AgentRunApiEndpoints
                 var (input, error) = await ApiJsonRequest.Read<AgentRunPreflightRequest>(request, cancellationToken);
                 if (error != null) return error;
                 var result = await runs.Preflight(new AgentRunSelection(input!.TaskId, input.RunnerId,
-                    input.ProfileId, input.ProviderId, input.ModelId, input.EffortId), cancellationToken);
+                    input.ProfileId, input.ProviderId, input.ModelId, input.EffortId, input.LinkedContexts),
+                    cancellationToken);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 ApiPreconditions.SetETag(request.HttpContext.Response,
                     result.Payload!.Revision ?? Hash(result.Payload));

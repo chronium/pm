@@ -16,6 +16,7 @@ import { computeSpecificationHash } from '../src/protocol/canonical-json.js';
 import { parseCapabilityManifest } from '../src/protocol/validation.js';
 import { AgentHostServer } from '../src/server.js';
 import { QueueOnlyExecutionController, RunCoordinator } from '../src/run-coordinator.js';
+import type { GitWorkspaceService } from '../src/execution/workspace.js';
 import {
   createIdentity,
   createRequest,
@@ -75,6 +76,19 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     capabilities,
     runStore,
     runCoordinator,
+    workspace: {
+      preflight: async () => ({
+        ready: true,
+        checks: [
+          {
+            id: 'primary_repository',
+            label: 'Primary repository',
+            status: 'passed',
+            summary: 'Exact commit is available.',
+          },
+        ],
+      }),
+    } as unknown as GitWorkspaceService,
     logger,
     now: () => new Date(serverNowSeconds * 1000),
     eventStreamOptions: {
@@ -137,6 +151,27 @@ test('HTTPS server pairs, authenticates, rejects replay, rotates, and revokes', 
     );
     assert.equal(discovered.status, 200);
     assert.equal(JSON.parse(discovered.body).runnerId, runStore.runnerId);
+
+    const preflightPath = '/v1/runs/preflight';
+    const preflightBody = JSON.stringify(createRequest('run-preflight'));
+    const preflight = await send(
+      port,
+      tlsFiles.certificatePath,
+      tls.fingerprint,
+      'POST',
+      preflightPath,
+      preflightBody,
+      signedHeaders(
+        identity,
+        'POST',
+        preflightPath,
+        preflightBody,
+        'nonce_preflight_123456',
+        '1.1',
+      ),
+    );
+    assert.equal(preflight.status, 200);
+    assert.equal(JSON.parse(preflight.body).ready, true);
 
     const replay = await send(
       port,

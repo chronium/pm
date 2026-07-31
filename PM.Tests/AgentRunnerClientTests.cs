@@ -164,6 +164,10 @@ public class AgentRunnerClientTests
         Assert.Equal(AgentRunProtocol.Current, client.Registration(server.RunnerId).Payload!.ProtocolVersion);
 
         var request = Request(server.RunnerId, "run-client-flow");
+        var preflight = await client.Preflight(server.RunnerId, request);
+        Assert.True(preflight.Success, preflight.Message);
+        Assert.True(preflight.Payload!.Ready);
+        Assert.Equal("primary_repository", Assert.Single(preflight.Payload.Checks).Id);
         var started = await client.Start(server.RunnerId, request);
         var duplicate = await client.Start(server.RunnerId, request);
         Assert.Equal(AgentRunRemoteStartDisposition.New, started.Payload!.Disposition);
@@ -425,6 +429,26 @@ public class AgentRunnerClientTests
                 context.Response.StatusCode = 204;
                 return;
             }
+            if (path == "/v1/runs/preflight" && context.Request.Method == "POST")
+            {
+                var request = JsonSerializer.Deserialize<AgentRunRequest>(body, AgentRunJson.Options)!;
+                Assert.True(AgentRunContractValidator.ValidateRequest(request).Success);
+                await Json(context, new
+                {
+                    ready = true,
+                    checks = new[]
+                    {
+                        new
+                        {
+                            id = "primary_repository",
+                            label = "Primary repository",
+                            status = "passed",
+                            summary = "Exact commit is available.",
+                        },
+                    },
+                });
+                return;
+            }
             if (path == "/v1/runs" && context.Request.Method == "POST")
             {
                 await StartRun(context, body);
@@ -546,7 +570,7 @@ public class AgentRunnerClientTests
             var signature = request.Headers["PM-Runner-Signature"].SingleOrDefault();
             var version = request.Headers["PM-Runner-Protocol-Version"].SingleOrDefault();
             if (clientId == null || clientId != _clientId || timestamp == null || nonce == null ||
-                signature == null || version is not ("1.0" or "1.1") || _clientPublicKey == null) return false;
+                signature == null || version is not ("1.0" or "1.1" or "1.2") || _clientPublicKey == null) return false;
             var canonical = string.Join('\n', "pm-runner-auth-v1", request.Method,
                 request.Path + request.QueryString, version, timestamp, nonce, clientId,
                 AgentRunnerRequestSigning.Sha256Hex(body));

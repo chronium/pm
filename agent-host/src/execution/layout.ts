@@ -8,6 +8,8 @@ export interface RunPaths {
   readonly runtime: string;
   readonly artifacts: string;
   readonly scratch: string;
+  readonly contexts: string;
+  readonly contextManifest: string;
 }
 
 export class RunnerLayout {
@@ -30,6 +32,8 @@ export class RunnerLayout {
       runtime: join(runRoot, 'runtime'),
       artifacts: join(runRoot, 'artifacts'),
       scratch: join(runRoot, 'scratch'),
+      contexts: join(runRoot, 'contexts'),
+      contextManifest: join(runRoot, 'contexts', 'manifest.json'),
     };
   }
 

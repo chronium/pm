@@ -10,7 +10,8 @@ public enum McpCapabilityProfile
 
 public sealed record McpServerStartupOptions(
     McpCapabilityProfile Profile,
-    string? AssignedTaskId = null)
+    string? AssignedTaskId = null,
+    string? LinkedContextManifestPath = null)
 {
     public const string RunWorkerProfileName = "run-worker";
 
@@ -20,6 +21,8 @@ public sealed record McpServerStartupOptions(
         string? taskId = null;
         var profileSeen = false;
         var taskIdSeen = false;
+        var linkedContextManifestSeen = false;
+        string? linkedContextManifestPath = null;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -40,6 +43,14 @@ public sealed record McpServerStartupOptions(
                 continue;
             }
 
+            if (TryReadOption(args, ref index, argument, "--linked-context-manifest",
+                    ref linkedContextManifestSeen, out var manifestPath, out var manifestError))
+            {
+                if (manifestError != null) return Invalid(manifestError);
+                linkedContextManifestPath = manifestPath;
+                continue;
+            }
+
             return Invalid($"Unknown MCP option: {argument}.");
         }
 
@@ -53,8 +64,8 @@ public sealed record McpServerStartupOptions(
         if (profile == null)
             return Invalid($"Unknown MCP profile: {profileName}.");
 
-        if (profile == McpCapabilityProfile.Normal && taskId != null)
-            return Invalid("--task-id is only valid with --profile run-worker.");
+        if (profile == McpCapabilityProfile.Normal && (taskId != null || linkedContextManifestPath != null))
+            return Invalid("--task-id and --linked-context-manifest are only valid with --profile run-worker.");
 
         if (profile == McpCapabilityProfile.RunWorker && taskId == null)
             return Invalid("--profile run-worker requires --task-id.");
@@ -62,7 +73,11 @@ public sealed record McpServerStartupOptions(
         if (taskId != null && !IsSafeTaskId(taskId))
             return Invalid("--task-id must be a safe task identifier without path separators.");
 
-        return AppResult<McpServerStartupOptions>.Ok(new McpServerStartupOptions(profile.Value, taskId));
+        if (linkedContextManifestPath != null && !Path.IsPathFullyQualified(linkedContextManifestPath))
+            return Invalid("--linked-context-manifest must be an absolute path.");
+
+        return AppResult<McpServerStartupOptions>.Ok(
+            new McpServerStartupOptions(profile.Value, taskId, linkedContextManifestPath));
     }
 
     private static bool TryReadOption(
@@ -119,7 +134,8 @@ public sealed record McpServerStartupOptions(
 
 public sealed record McpCapabilityContext(
     McpCapabilityProfile Profile,
-    string? AssignedTaskId = null)
+    string? AssignedTaskId = null,
+    McpLinkedWikiContextStore? LinkedWikiContexts = null)
 {
     public bool CanAppendNoteTo(string taskId) =>
         Profile == McpCapabilityProfile.Normal ||
@@ -129,4 +145,8 @@ public sealed record McpCapabilityContext(
         Profile == McpCapabilityProfile.Normal ||
         !family && (string.IsNullOrWhiteSpace(projectSelector) ||
                     string.Equals(projectSelector.Trim(), "current", StringComparison.OrdinalIgnoreCase));
+
+    public bool CanReadLinkedWikiProjects(string? projectSelector, bool family) =>
+        CanReadLinkedProjects(projectSelector, family) ||
+        LinkedWikiContexts?.Allows(projectSelector, family) == true;
 }

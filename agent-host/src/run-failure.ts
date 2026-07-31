@@ -27,6 +27,13 @@ const catalog: Record<RunFailureCode, Omit<RunFailure, 'code'>> = {
     recommendedAction: 'Refresh the task and launch a new run from its current revision.',
     retryable: false,
   },
+  linked_context_unavailable: {
+    stage: 'workspace',
+    summary: 'A required linked wiki context could not be prepared.',
+    recommendedAction:
+      'Verify the linked repository allowlist and published revision, then launch a new run.',
+    retryable: true,
+  },
   workspace_policy_unsupported: {
     stage: 'workspace',
     summary: 'The repository uses a feature the runner does not support.',

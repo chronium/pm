@@ -885,6 +885,22 @@ export interface components {
             currentTaskRevision: null | string;
             revision: string;
         };
+        AgentRunLinkedContext: {
+            projectId: string;
+            name: string;
+            alias: string;
+            repository: components["schemas"]["AgentRunRepository"];
+            requirement: components["schemas"]["AgentRunLinkedContextRequirement"];
+            scopes: components["schemas"]["AgentRunLinkedContextScope"][];
+        };
+        /** @enum {unknown} */
+        AgentRunLinkedContextRequirement: "required" | "optional";
+        /** @enum {unknown} */
+        AgentRunLinkedContextScope: "wiki";
+        AgentRunLinkedContextSelection: {
+            projectId: string;
+            requirement?: components["schemas"]["AgentRunLinkedContextRequirement"];
+        };
         AgentRunnerBuildInfo: {
             version: string;
             sourceRevision: string;
@@ -1053,6 +1069,7 @@ export interface components {
             providerId: string;
             modelId: string;
             effortId: string;
+            linkedContexts?: null | components["schemas"]["AgentRunLinkedContextSelection"][];
         };
         AgentRunPreflightResult: {
             ready: boolean;
@@ -1116,6 +1133,7 @@ export interface components {
             repository: components["schemas"]["AgentRunRepository"];
             agent: components["schemas"]["AgentRunAgent"];
             runtime: components["schemas"]["AgentRunRuntime"];
+            linkedContexts?: null | components["schemas"]["AgentRunLinkedContext"][];
         };
         /** @enum {unknown} */
         AgentRunState: "requested" | "accepted" | "queued" | "preparing_workspace" | "starting_runtime" | "starting_agent" | "running" | "validating" | "collecting_artifacts" | "completed" | "failed" | "cancelled";

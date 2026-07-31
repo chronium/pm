@@ -47,6 +47,34 @@ public static class AgentRunCanonicalJson
             writer.WriteString("baseCommit", specification.Repository.BaseCommit);
             writer.WriteEndObject();
 
+            if (specification.ProtocolVersion.Minor >= AgentRunProtocol.Current.Minor)
+            {
+                writer.WritePropertyName("linkedContexts");
+                writer.WriteStartArray();
+                foreach (var context in specification.LinkedContexts ?? [])
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("projectId", context.ProjectId);
+                    writer.WriteString("name", context.Name);
+                    writer.WriteString("alias", context.Alias);
+                    writer.WritePropertyName("repository");
+                    writer.WriteStartObject();
+                    writer.WriteString("remote", context.Repository.Remote);
+                    writer.WriteString("baseCommit", context.Repository.BaseCommit);
+                    writer.WriteEndObject();
+                    writer.WriteString("requirement", context.Requirement == AgentRunLinkedContextRequirement.Required
+                        ? "required"
+                        : "optional");
+                    writer.WritePropertyName("scopes");
+                    writer.WriteStartArray();
+                    foreach (var scope in context.Scopes)
+                        writer.WriteStringValue(scope == AgentRunLinkedContextScope.Wiki ? "wiki" : null);
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+
             writer.WritePropertyName("agent");
             writer.WriteStartObject();
             writer.WriteString("providerId", specification.Agent.ProviderId);

@@ -11,7 +11,11 @@ import {
   type CodexWorkerMessage,
   type CodexWorkerRequest,
 } from '../src/codex/protocol.js';
-import { executeCodexWorker, type CodexClientFactory } from '../src/codex/worker.js';
+import {
+  createCodexOptions,
+  executeCodexWorker,
+  type CodexClientFactory,
+} from '../src/codex/worker.js';
 import type {
   AgentDriverEvent,
   RuntimeHandle,
@@ -125,6 +129,51 @@ test('Codex worker config requires scoped PM MCP and unattended workspace-write'
         cache_write_input_tokens: 0,
         output_tokens: 4,
         reasoning_output_tokens: 2,
+      },
+    });
+  } finally {
+    temporary.dispose();
+  }
+});
+
+test('Codex worker passes linked context manifest after the scoped MCP arguments', () => {
+  const temporary = createTempDirectory();
+  try {
+    const request = workerRequest(temporary.path);
+    request.runRequest.specification.linkedContexts = [
+      {
+        projectId: 'shared-docs',
+        name: 'Shared documentation',
+        alias: 'shared',
+        repository: {
+          remote: 'https://example.test/shared.git',
+          baseCommit: 'b'.repeat(40),
+        },
+        requirement: 'required',
+        scopes: ['wiki'],
+      },
+    ];
+
+    const options = createCodexOptions(request, {});
+
+    assert.deepEqual(options.config?.['mcp_servers'], {
+      pm: {
+        command: 'dotnet',
+        args: [
+          '/opt/pm/PM.dll',
+          'mcp',
+          '--profile',
+          'run-worker',
+          '--task-id',
+          'PM-0001',
+          '--linked-context-manifest',
+          '/pm-linked-contexts/manifest.json',
+        ],
+        cwd: request.workspaceDirectory,
+        required: true,
+        startup_timeout_sec: 10,
+        tool_timeout_sec: 60,
+        default_tools_approval_mode: 'approve',
       },
     });
   } finally {

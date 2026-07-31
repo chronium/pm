@@ -21,6 +21,8 @@ export type AgentRunCancellation = components['schemas']['AgentRunCancellation']
 export type AgentRunState = components['schemas']['AgentRunState'];
 export type AgentRunPatchPreflightResult = components['schemas']['AgentRunPatchPreflightResult'];
 export type AgentRunPatchCollectionResult = components['schemas']['AgentRunPatchCollectionResult'];
+export type LinkedProjectFamily = components['schemas']['LinkedProjectFamilyResponse'];
+export type LinkedProjectMember = components['schemas']['LinkedProjectMemberResponse'];
 
 export interface AgentRunsApiError {
   status: number;
@@ -36,6 +38,12 @@ export class AgentRunsApiService {
 
   listRunners() {
     return this.http.get<AgentRunnerRegistration[]>('/api/v1/runners', {
+      observe: 'response' as const,
+    });
+  }
+
+  linkedProjects() {
+    return this.http.get<LinkedProjectFamily>('/api/v1/project/links', {
       observe: 'response' as const,
     });
   }

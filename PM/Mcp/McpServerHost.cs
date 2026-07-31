@@ -31,7 +31,12 @@ public static class McpServerHost
         builder.Logging.ClearProviders();
 
         builder.Services.AddSingleton(options);
-        builder.Services.AddSingleton(new McpCapabilityContext(options.Profile, options.AssignedTaskId));
+        var linkedWikiContexts = McpLinkedWikiContextStore.Load(options.LinkedContextManifestPath);
+        if (!linkedWikiContexts.Success)
+            throw new ArgumentException(linkedWikiContexts.Message, nameof(options));
+        builder.Services.AddSingleton(linkedWikiContexts.Payload!);
+        builder.Services.AddSingleton(new McpCapabilityContext(
+            options.Profile, options.AssignedTaskId, linkedWikiContexts.Payload));
         builder.Services.AddHttpClient<IPmWorkerClient, PmWorkerClient>();
         builder.Services.AddSingleton<INextIdService, NextIdService>();
         builder.Services.Configure<NextIdServiceOptions>(options => options.WriteFailuresToConsole = false);

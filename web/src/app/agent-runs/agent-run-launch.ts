@@ -22,7 +22,13 @@ import {
   type AgentRunPreflightResult,
   type AgentRunRemoteStart,
   type AgentRunRuntimeProfile,
+  type LinkedProjectFamily,
 } from './agent-runs-api.service';
+import {
+  AgentRunLinkedContextSelector,
+  type LinkedContextRequirement,
+  type LinkedContextSelections,
+} from './agent-run-linked-context-selector';
 import { PmEmptyState, PmErrorState, PmLoadingState } from '../ui/state/state';
 
 interface LaunchSelection {
@@ -41,7 +47,14 @@ interface LaunchRunnerState {
 
 @Component({
   selector: 'pm-agent-run-launch',
-  imports: [PmEmptyState, PmErrorState, PmLoadingState, RouterLink, TitleCasePipe],
+  imports: [
+    AgentRunLinkedContextSelector,
+    PmEmptyState,
+    PmErrorState,
+    PmLoadingState,
+    RouterLink,
+    TitleCasePipe,
+  ],
   templateUrl: './agent-run-launch.html',
   styleUrl: './agent-run-launch.css',
 })
@@ -59,6 +72,10 @@ export class AgentRunLaunch {
 
   protected readonly runners = signal<AgentRunnerRegistration[]>([]);
   protected readonly runnerStates = signal<Record<string, LaunchRunnerState>>({});
+  protected readonly linkedProjectFamily = signal<LinkedProjectFamily | null>(null);
+  protected readonly linkedProjectsLoading = signal(false);
+  protected readonly linkedProjectsError = signal<string | null>(null);
+  protected readonly linkedContexts = signal<Record<string, LinkedContextRequirement>>({});
   protected readonly loading = signal(false);
   protected readonly checking = signal(false);
   protected readonly starting = signal(false);
@@ -103,6 +120,13 @@ export class AgentRunLaunch {
         (provider) => provider.providerId === this.selectionModel().providerId,
       ) ?? null,
   );
+  protected readonly availableLinkedProjects = computed(() => {
+    const family = this.linkedProjectFamily();
+    if (!family) return [];
+    return [...family.members]
+      .filter((member) => member.readable && member.projectId !== family.activeProjectId)
+      .sort((left, right) => left.name.localeCompare(right.name));
+  });
   protected readonly canCheck = computed(
     () =>
       this.selectionForm().valid() &&
@@ -183,6 +207,11 @@ export class AgentRunLaunch {
     this.invalidatePreflight();
   }
 
+  protected selectLinkedContexts(selections: LinkedContextSelections): void {
+    this.linkedContexts.set({ ...selections });
+    this.invalidatePreflight();
+  }
+
   protected checkReadiness(): void {
     if (!this.canCheck()) return;
     const selection = this.selectionModel();
@@ -197,6 +226,9 @@ export class AgentRunLaunch {
         providerId: selection.providerId,
         modelId: selection.modelId,
         effortId: selection.effortId,
+        linkedContexts: Object.entries(this.linkedContexts())
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([projectId, requirement]) => ({ projectId, requirement })),
       })
       .subscribe({
         next: (response) => {
@@ -287,6 +319,10 @@ export class AgentRunLaunch {
   private reset(): void {
     this.runners.set([]);
     this.runnerStates.set({});
+    this.linkedProjectFamily.set(null);
+    this.linkedProjectsLoading.set(false);
+    this.linkedProjectsError.set(null);
+    this.linkedContexts.set({});
     this.selectionModel.set({
       runnerId: '',
       profileId: '',
@@ -307,6 +343,7 @@ export class AgentRunLaunch {
 
   private loadRunners(): void {
     this.loading.set(true);
+    this.loadLinkedProjects();
     this.api.listRunners().subscribe({
       next: (response) => {
         const registrations = response.body ?? [];
@@ -327,6 +364,22 @@ export class AgentRunLaunch {
       error: (error: unknown) => {
         this.loading.set(false);
         this.error.set(this.api.error(error, 'Agent runners could not be loaded.').message);
+      },
+    });
+  }
+
+  private loadLinkedProjects(): void {
+    this.linkedProjectsLoading.set(true);
+    this.api.linkedProjects().subscribe({
+      next: (response) => {
+        this.linkedProjectsLoading.set(false);
+        this.linkedProjectFamily.set(response.body);
+      },
+      error: (error: unknown) => {
+        this.linkedProjectsLoading.set(false);
+        this.linkedProjectsError.set(
+          this.api.error(error, 'Linked projects could not be loaded.').message,
+        );
       },
     });
   }
