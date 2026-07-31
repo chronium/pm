@@ -155,7 +155,7 @@ public sealed class LinkedProjectRegistryTests
         var staleResult = await resolver.ResolveAsync(active, Declaration("prj_stale", null));
 
         Assert.Equal(LinkedProjectResolutionStatus.Missing, missing.Status);
-        Assert.Equal(LinkedProjectResolutionStatus.StaleBinding, staleResult.Status);
+        Assert.Equal(LinkedProjectResolutionStatus.Missing, staleResult.Status);
         Assert.Null(missing.Project);
         Assert.Null(staleResult.Project);
     }

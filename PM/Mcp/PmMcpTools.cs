@@ -15,6 +15,7 @@ public sealed class PmMcpTools(
     BoardService boardService,
     WikiService wikiService,
     ProjectValidationService validationService,
+    LinkedProjectFamilyService linkedProjectFamilyService,
     IProjectMembershipService? membershipService,
     McpCapabilityContext capabilityContext)
 {
@@ -72,6 +73,40 @@ public sealed class PmMcpTools(
             ToMilestones(config.Milestones, config.MilestonePriorities));
 
         return McpToolResponse<ProjectPayload>.Ok($"Project {config.Name} loaded.", payload);
+    }
+
+    [McpServerTool(Name = "list_linked_projects", ReadOnly = true, Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Returns the bounded linked-project family and structured resolution warnings.")]
+    public async Task<McpToolResponse<LinkedProjectFamilyPayload>> ListLinkedProjects(
+        CancellationToken cancellationToken = default)
+    {
+        var result = await linkedProjectFamilyService.ResolveAsync(cancellationToken);
+        if (!result.Success)
+            return McpToolResponse<LinkedProjectFamilyPayload>.FromFailure(result);
+
+        var family = result.Payload!;
+        return McpToolResponse<LinkedProjectFamilyPayload>.Ok(
+            $"Returned {family.Members.Count} linked-project family member(s) with {family.Warnings.Count} warning(s).",
+            new LinkedProjectFamilyPayload(
+                family.ActiveProjectId,
+                family.Members.Select(member => new LinkedProjectMemberPayload(
+                    member.ProjectId,
+                    member.Name,
+                    member.Alias,
+                    LinkedProjectFamilyService.Format(member.Relationship),
+                    LinkedProjectFamilyService.Format(member.Status),
+                    LinkedProjectFamilyService.Format(member.Source),
+                    member.Readable,
+                    member.WriteTrusted)).ToList(),
+                family.Warnings.Select(warning => new LinkedProjectWarningPayload(
+                    warning.Code,
+                    warning.Message,
+                    warning.DeclaringProjectId,
+                    warning.TargetProjectId,
+                    warning.Alias,
+                    LinkedProjectFamilyService.Format(warning.Status),
+                    warning.RepairAction?.DisplayCommand)).ToList()));
     }
 
     [McpServerTool(Name = "get_local_identity", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -748,10 +783,14 @@ public sealed class PmMcpTools(
                 issue.Path,
                 issue.TaskId,
                 issue.WikiPath,
-                issue.State)).ToList());
+                issue.State,
+                issue.ProjectId,
+                issue.ProjectAlias)).ToList());
         return McpToolResponse<ProjectValidationPayload>.Ok(
-            validation.Valid
+            validation.Valid && validation.Issues.Count == 0
                 ? "Project validation passed."
+                : validation.Valid
+                    ? $"Project validation passed with {validation.Issues.Count} warning(s)."
                 : $"Project validation found {validation.Issues.Count} issue(s).",
             payload);
     }

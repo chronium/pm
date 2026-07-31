@@ -248,6 +248,46 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task LinkedProjectEndpointAndValidationReturnSanitizedWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(root.RootPath, GlobalConfig.ProjectIdFile), "prj_active\n");
+        root.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_missing",
+                    Alias = "missing",
+                    RepositoryUrl = "https://example.test/missing.git",
+                    PathHint = "missing",
+                },
+            ],
+        });
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var family = await client.GetFromJsonAsync<LinkedProjectFamilyResponse>("/api/v1/project/links");
+            Assert.NotNull(family);
+            Assert.Equal(2, family.Members.Count);
+            Assert.Contains(family.Warnings, warning =>
+                warning.Code == "linked_project_missing" && warning.TargetProjectId == "prj_missing");
+            Assert.DoesNotContain(root.RepositoryPath, JsonSerializer.Serialize(family));
+
+            var validation = await client.GetFromJsonAsync<ValidationResponse>("/api/v1/validation");
+            Assert.True(validation!.Valid);
+            var warning = Assert.Single(validation.Issues, issue => issue.Code == "linked_project_missing");
+            Assert.Equal("warning", warning.Severity);
+            Assert.Equal("prj_missing", warning.ProjectId);
+            Assert.Equal("missing", warning.ProjectAlias);
+        }
+    }
+
+    [Fact]
     public async Task OpenApiDescribesSettingsValidationBodiesPreconditionsAndETags()
     {
         using var workspace = new TempWorkingDirectory();
@@ -260,7 +300,8 @@ public partial class ApiContractTests
             var paths = document.GetProperty("paths");
             var expected = new[]
             {
-                "/api/v1/settings", "/api/v1/validation", "/api/v1/settings/statuses",
+                "/api/v1/settings", "/api/v1/validation", "/api/v1/project/links",
+                "/api/v1/settings/statuses",
                 "/api/v1/settings/statuses/{key}", "/api/v1/settings/tracks",
                 "/api/v1/settings/tracks/{key}", "/api/v1/settings/milestones",
                 "/api/v1/settings/milestones/{key}", "/api/v1/settings/milestones/{key}/priority",

@@ -19,7 +19,15 @@ public class DoctorCommand(ProjectValidationService validationService) : Command
         var validation = result.Payload!;
         if (validation.Valid)
         {
-            AnsiConsole.MarkupLine("Project validation passed.");
+            if (validation.Issues.Count == 0)
+                AnsiConsole.MarkupLine("Project validation passed.");
+            else
+            {
+                AnsiConsole.MarkupLineInterpolated(
+                    $"[yellow]Project validation passed with {validation.Issues.Count} warning(s).[/]");
+                foreach (var issue in validation.Issues)
+                    AnsiConsole.MarkupLine(FormatIssue(issue));
+            }
             return 0;
         }
 
@@ -46,6 +54,8 @@ public class DoctorCommand(ProjectValidationService validationService) : Command
         if (!string.IsNullOrWhiteSpace(issue.TaskId)) parts.Add($"task {issue.TaskId.EscapeMarkup()}");
         if (!string.IsNullOrWhiteSpace(issue.WikiPath)) parts.Add($"wiki {issue.WikiPath.EscapeMarkup()}");
         if (!string.IsNullOrWhiteSpace(issue.State)) parts.Add($"state {issue.State.EscapeMarkup()}");
+        if (!string.IsNullOrWhiteSpace(issue.ProjectId)) parts.Add($"project {issue.ProjectId.EscapeMarkup()}");
+        if (!string.IsNullOrWhiteSpace(issue.ProjectAlias)) parts.Add($"alias {issue.ProjectAlias.EscapeMarkup()}");
         if (!string.IsNullOrWhiteSpace(issue.Path)) parts.Add($"path {issue.Path.EscapeMarkup()}");
         return string.Join("; ", parts);
     }

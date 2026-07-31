@@ -57,6 +57,7 @@ serviceProvider.AddSingleton<TaskService>();
 serviceProvider.AddSingleton<ProjectCreationService>();
 serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<LinkedProjectService>();
+serviceProvider.AddSingleton<LinkedProjectFamilyService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<ProjectValidationService>();

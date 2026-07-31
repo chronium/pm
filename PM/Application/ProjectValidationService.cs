@@ -11,7 +11,9 @@ public sealed record ProjectValidationIssue(
     string? Path = null,
     string? TaskId = null,
     string? WikiPath = null,
-    string? State = null);
+    string? State = null,
+    string? ProjectId = null,
+    string? ProjectAlias = null);
 
 public sealed record ProjectValidationResult(bool Valid, IReadOnlyList<ProjectValidationIssue> Issues);
 
@@ -19,46 +21,80 @@ public sealed class ProjectValidationService
 {
     private readonly ProjectRoot projectRoot;
     private readonly LinkedProjectService linkedProjects;
+    private readonly LinkedProjectFamilyService linkedProjectFamily;
 
     public ProjectValidationService(ProjectRoot projectRoot)
-        : this(projectRoot, new LinkedProjectService(projectRoot))
+        : this(projectRoot, new LinkedProjectService(projectRoot),
+            LinkedProjectFamilyService.CreateDefault(projectRoot))
     {
     }
 
-    public ProjectValidationService(ProjectRoot projectRoot, LinkedProjectService linkedProjects)
+    public ProjectValidationService(
+        ProjectRoot projectRoot,
+        LinkedProjectService linkedProjects,
+        LinkedProjectFamilyService linkedProjectFamily)
     {
         this.projectRoot = projectRoot;
         this.linkedProjects = linkedProjects;
+        this.linkedProjectFamily = linkedProjectFamily;
     }
 
-    public AppResult<ProjectValidationResult> ValidateProject()
+    public AppResult<ProjectValidationResult> ValidateProject() =>
+        ValidateProjectAsync().GetAwaiter().GetResult();
+
+    public async Task<AppResult<ProjectValidationResult>> ValidateProjectAsync(
+        CancellationToken cancellationToken = default)
     {
         if (!projectRoot.Exists || projectRoot.Config == null)
             return AppResult<ProjectValidationResult>.Fail("missing_project", "Project not found. Run pm init first.");
 
         var issues = new List<ProjectValidationIssue>();
         ValidateConfigMetadata(issues);
-        ValidateLinkedProjects(issues);
+        await ValidateLinkedProjects(issues, cancellationToken);
         var tasksById = ValidateTaskFiles(issues);
         ValidateTaskDependencies(issues, tasksById);
         ValidateStateRefs(issues, tasksById);
         ValidateWikiPages(issues);
         ValidateTaskOrder(issues, tasksById);
 
-        return AppResult<ProjectValidationResult>.Ok(new ProjectValidationResult(issues.Count == 0, issues));
+        var valid = issues.All(issue =>
+            !string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase));
+        return AppResult<ProjectValidationResult>.Ok(new ProjectValidationResult(valid, issues));
     }
 
-    private void ValidateLinkedProjects(List<ProjectValidationIssue> issues)
+    private async Task ValidateLinkedProjects(
+        List<ProjectValidationIssue> issues,
+        CancellationToken cancellationToken)
     {
         var result = linkedProjects.GetManifest();
-        if (result.Success)
+        if (!result.Success)
+        {
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                result.ErrorCode ?? "invalid_linked_projects_manifest",
+                result.Message ?? "Linked-project manifest is invalid.",
+                projectRoot.LinkedProjectsPath));
             return;
+        }
+        if (!result.Payload!.Exists) return;
 
-        issues.Add(new ProjectValidationIssue(
-            "error",
-            result.ErrorCode ?? "invalid_linked_projects_manifest",
-            result.Message ?? "Linked-project manifest is invalid.",
-            projectRoot.LinkedProjectsPath));
+        var family = await linkedProjectFamily.ResolveAsync(cancellationToken);
+        if (!family.Success)
+        {
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                family.ErrorCode ?? "linked_project_validation_failed",
+                family.Message ?? "Linked-project topology could not be validated.",
+                projectRoot.LinkedProjectsPath));
+            return;
+        }
+
+        issues.AddRange(family.Payload!.Warnings.Select(warning => new ProjectValidationIssue(
+            "warning",
+            warning.Code,
+            warning.Message,
+            ProjectId: warning.TargetProjectId,
+            ProjectAlias: warning.Alias)));
     }
 
     private void ValidateConfigMetadata(List<ProjectValidationIssue> issues)

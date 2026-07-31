@@ -34,6 +34,8 @@ const validation: ValidationResponse = {
       taskId: 'PM-0001',
       wikiPath: null,
       state: 'missing',
+      projectId: null,
+      projectAlias: null,
     },
   ],
 };

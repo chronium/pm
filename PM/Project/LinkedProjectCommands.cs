@@ -6,25 +6,17 @@ using Spectre.Console.Cli;
 namespace PM.Project;
 
 public sealed class ProjectLinksCommand(
-    ProjectRoot projectRoot,
-    LinkedProjectService linkedProjects,
-    LinkedProjectResolver resolver) : AsyncCommand<ProjectLinksCommand.Settings>
+    LinkedProjectFamilyService familyService) : AsyncCommand<ProjectLinksCommand.Settings>
 {
     public override async Task<int> ExecuteAsync(
         CommandContext context,
         Settings settings,
         CancellationToken cancellationToken)
     {
-        var manifest = linkedProjects.GetManifest();
-        if (!manifest.Success)
-            return WriteError(manifest.Message ?? "Linked projects could not be read.");
-
-        var declarations = LinkedProjectSelector.Enumerate(manifest.Payload!.Manifest).ToList();
-        if (declarations.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[grey]No linked projects are declared.[/]");
-            return 0;
-        }
+        var result = await familyService.ResolveAsync(cancellationToken);
+        if (!result.Success)
+            return WriteError(result.Message ?? "Linked projects could not be resolved.");
+        var family = result.Payload!;
 
         var table = new Table()
             .AddColumn("Relationship")
@@ -33,38 +25,25 @@ public sealed class ProjectLinksCommand(
             .AddColumn("Status")
             .AddColumn("Source")
             .AddColumn("Repository");
-        var repairs = new List<(string Alias, LinkedProjectRepairAction Repair)>();
-        var diagnostics = new List<(string Alias, LinkedProjectResolutionDiagnostic Diagnostic)>();
-
-        foreach (var (relationship, declaration) in declarations)
+        foreach (var member in family.Members)
         {
-            var resolution = await resolver.ResolveAsync(projectRoot, declaration, cancellationToken);
             table.AddRow(
-                relationship.EscapeMarkup(),
-                declaration.Alias.EscapeMarkup(),
-                declaration.ProjectId.EscapeMarkup(),
-                Format(resolution.Status).EscapeMarkup(),
-                Format(resolution.Source).EscapeMarkup(),
-                (resolution.RepositoryPath ?? "-").EscapeMarkup());
-            if (resolution.RepairAction != null)
-                repairs.Add((declaration.Alias, resolution.RepairAction));
-            diagnostics.AddRange(resolution.Diagnostics.Select(diagnostic => (declaration.Alias, diagnostic)));
+                LinkedProjectFamilyService.Format(member.Relationship).EscapeMarkup(),
+                (member.Alias ?? "-").EscapeMarkup(),
+                member.ProjectId.EscapeMarkup(),
+                LinkedProjectFamilyService.Format(member.Status).EscapeMarkup(),
+                LinkedProjectFamilyService.Format(member.Source).EscapeMarkup(),
+                (member.RepositoryPath ?? "-").EscapeMarkup());
         }
 
         AnsiConsole.Write(table);
-        foreach (var (alias, diagnostic) in diagnostics)
+        foreach (var warning in family.Warnings)
             AnsiConsole.MarkupLineInterpolated(
-                $"[yellow]{alias.EscapeMarkup()} ({diagnostic.Code.EscapeMarkup()}):[/] {diagnostic.Message.EscapeMarkup()}");
-        foreach (var (alias, repair) in repairs)
-            AnsiConsole.MarkupLineInterpolated(
-                $"[yellow]{alias.EscapeMarkup()} can be initialized with:[/] {repair.DisplayCommand.EscapeMarkup()}");
+                $"[yellow]{(warning.Alias ?? warning.TargetProjectId).EscapeMarkup()} ({warning.Code.EscapeMarkup()}):[/] {warning.Message.EscapeMarkup()}");
+        foreach (var warning in family.Warnings.Where(warning => warning.RepairAction != null))
+            AnsiConsole.MarkupLineInterpolated($"[yellow]Repair:[/] {warning.RepairAction!.DisplayCommand.EscapeMarkup()}");
         return 0;
     }
-
-    private static string Format<T>(T value) where T : Enum =>
-        string.Concat(value.ToString().Select((character, index) =>
-            index > 0 && char.IsUpper(character) ? $"-{char.ToLowerInvariant(character)}" :
-            char.ToLowerInvariant(character).ToString()));
 
     private static int WriteError(string message)
     {

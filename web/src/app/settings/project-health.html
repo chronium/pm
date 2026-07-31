@@ -23,20 +23,49 @@
       </button>
     </div>
   } @else if (validation(); as result) {
-    @if (result.valid) {
+    @if (result.valid && result.issues.length === 0) {
       <p class="health-valid"><span aria-hidden="true">✓</span> Project validation passed.</p>
     } @else {
-      <p class="issue-summary">Project validation found {{ result.issues.length }} issue(s).</p>
+      @if (result.valid) {
+        <p class="health-warning" role="status">
+          Project validation passed with {{ result.issues.length }} warning(s).
+        </p>
+      } @else {
+        <p class="issue-summary">Project validation found {{ result.issues.length }} issue(s).</p>
+      }
       <ul class="issue-list">
         @for (issue of result.issues; track $index) {
           <li>
             <div class="issue-lead">
-              <span class="issue-severity">{{ issue.severity }}</span>
+              <span
+                class="issue-severity"
+                [class.issue-severity--warning]="issue.severity === 'warning'"
+                >{{ issue.severity }}</span
+              >
               <code>{{ issue.code }}</code>
             </div>
             <p>{{ issue.message }}</p>
-            @if (issue.taskId || issue.wikiPath || issue.state || issue.path) {
+            @if (
+              issue.projectId ||
+              issue.projectAlias ||
+              issue.taskId ||
+              issue.wikiPath ||
+              issue.state ||
+              issue.path
+            ) {
               <dl class="issue-context">
+                @if (issue.projectId) {
+                  <div>
+                    <dt>Project</dt>
+                    <dd>{{ issue.projectId }}</dd>
+                  </div>
+                }
+                @if (issue.projectAlias) {
+                  <div>
+                    <dt>Alias</dt>
+                    <dd>{{ issue.projectAlias }}</dd>
+                  </div>
+                }
                 @if (issue.taskId) {
                   <div>
                     <dt>Task</dt>
