@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { PollingCoordinator } from '../../core/polling-coordinator';
+import { ProjectLinksService } from '../../core/project-links.service';
 import type { TaskResponse } from '../task-api.service';
 import { TaskWorkspace } from './task-workspace';
 
@@ -64,16 +65,22 @@ describe('TaskWorkspace', () => {
     TestBed.resetTestingModule();
   });
 
-  async function render(mode: 'detail' | 'create', presentation: 'dialog' | 'page' = 'page') {
+  async function render(
+    mode: 'detail' | 'create',
+    presentation: 'dialog' | 'page' = 'page',
+    response: TaskResponse = task,
+  ) {
     const fixture = TestBed.createComponent(TaskWorkspace);
     fixture.componentRef.setInput('presentation', presentation);
     fixture.componentRef.setInput('mode', mode);
-    if (mode === 'detail') fixture.componentRef.setInput('taskId', task.id);
+    if (mode === 'detail') fixture.componentRef.setInput('taskId', response.id);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/v1/settings').flush(settings);
     if (mode === 'detail') {
-      http.expectOne(`/api/v1/tasks/${task.id}`).flush(task, { headers: { ETag: '"task-r1"' } });
+      http
+        .expectOne(`/api/v1/tasks/${response.id}`)
+        .flush(response, { headers: { ETag: '"task-r1"' } });
     }
     await fixture.whenStable();
     fixture.detectChanges();
@@ -314,5 +321,77 @@ describe('TaskWorkspace', () => {
 
     expect(element.textContent).toContain('Recommendation');
     expect(element.textContent).toContain('Selected high priority ready task.');
+  });
+
+  it('renders each dependency once with an explicit icon-backed state', async () => {
+    const { element } = await render('detail');
+    const dependency = element.querySelector('.dependency-item') as HTMLElement;
+    const state = dependency.querySelector('.dependency-state') as HTMLElement;
+
+    expect(dependency.querySelector('a')?.textContent?.trim()).toBe('PM-0029');
+    expect(state.textContent?.trim()).toBe('Waiting');
+    expect(state.classList).toContain('dependency-state--waiting');
+    expect(state.querySelector('ng-icon')).not.toBeNull();
+    expect(element.textContent).not.toContain('Waiting on PM-0029');
+  });
+
+  it('distinguishes waiting, missing, and ready dependencies with text and semantic color', async () => {
+    const stateTask: TaskResponse = {
+      ...task,
+      dependencies: {
+        ready: false,
+        dependsOn: ['PM-0029', 'PM-0030', 'PM-0031'],
+        waitingOn: ['PM-0029'],
+        missing: ['PM-0030'],
+        summary: 'Waiting on PM-0029; missing PM-0030',
+      },
+    };
+
+    const { element } = await render('detail', 'page', stateTask);
+    const states = [...element.querySelectorAll<HTMLElement>('.dependency-state')];
+
+    expect(states.map((state) => state.textContent?.trim())).toEqual([
+      'Waiting',
+      'Missing',
+      'Ready',
+    ]);
+    expect(states.map((state) => state.className)).toEqual([
+      'dependency-state dependency-state--waiting',
+      'dependency-state dependency-state--missing',
+      'dependency-state dependency-state--ready',
+    ]);
+  });
+
+  it('shortens canonical dependency references without discarding their link context', async () => {
+    const reference = 'pm://project/prj_pm_link_starfall/task/STAR-0001';
+    TestBed.overrideProvider(ProjectLinksService, {
+      useValue: {
+        resolve: () => ({
+          kind: 'available',
+          href: '/projects/prj_pm_link_starfall/tasks/STAR-0001',
+          local: true,
+        }),
+      },
+    });
+    const linkedTask: TaskResponse = {
+      ...task,
+      dependencies: {
+        ready: false,
+        dependsOn: [reference],
+        waitingOn: [reference],
+        missing: [],
+        summary: `Waiting on ${reference}`,
+      },
+    };
+
+    const { element } = await render('detail', 'page', linkedTask);
+    const dependency = element.querySelector('.dependency-item') as HTMLElement;
+    const link = dependency.querySelector('a') as HTMLAnchorElement;
+
+    expect(link.textContent?.trim()).toBe('STAR-0001');
+    expect(link.title).toBe(reference);
+    expect(link.getAttribute('href')).toBe('/projects/prj_pm_link_starfall/tasks/STAR-0001');
+    expect(dependency.querySelector('.dependency-state')?.textContent?.trim()).toBe('Waiting');
+    expect(element.textContent).not.toContain(reference);
   });
 });

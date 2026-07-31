@@ -309,11 +309,52 @@ h2 {
   overflow-wrap: anywhere;
 }
 .dependency-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pm-space-1) var(--pm-space-2);
-  margin-top: var(--pm-space-2);
+  display: grid;
+  gap: 0;
+  margin: var(--pm-space-2) 0 0;
+  padding: 0;
+  list-style: none;
   font-size: var(--pm-font-size-sm);
+}
+.dependency-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--pm-space-3);
+  min-height: 28px;
+}
+.dependency-item a,
+.dependency-item .pm-unavailable-link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dependency-item a {
+  color: var(--pm-accent-strong);
+}
+.dependency-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pm-space-1);
+  color: var(--pm-text-muted);
+  white-space: nowrap;
+}
+.dependency-state ng-icon {
+  width: 14px;
+  height: 14px;
+}
+.dependency-state--ready {
+  color: var(--pm-success);
+}
+.dependency-state--waiting {
+  color: var(--pm-warning);
+}
+.dependency-state--missing {
+  color: var(--pm-danger);
+}
+.dependency-state--unavailable {
+  color: var(--pm-text-subtle);
 }
 
 .dependency-list .pm-unavailable-link {
@@ -321,13 +362,6 @@ h2 {
   text-decoration: underline dotted;
   text-underline-offset: 0.16em;
   cursor: help;
-}
-.dependency-list > span:first-child {
-  flex-basis: 100%;
-  color: var(--pm-text-subtle);
-}
-.dependency-list a {
-  color: var(--pm-accent-strong);
 }
 .metadata-spacer {
   flex: 1;
