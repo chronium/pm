@@ -38,6 +38,7 @@ export class TopBarSearch {
   readonly options = input<readonly TopBarSearchOption[]>([]);
   readonly loading = input(false);
   readonly error = input<string | null>(null);
+  readonly notice = input<string | null>(null);
   readonly ariaLabel = input.required<string>();
   readonly listboxLabel = input.required<string>();
   readonly placeholder = input.required<string>();
@@ -56,6 +57,7 @@ export class TopBarSearch {
       (this.options().length > 0 ||
         this.loading() ||
         !!this.error() ||
+        !!this.notice() ||
         (this.openForQuery() && !!this.query().trim())),
   );
 

@@ -17,6 +17,29 @@ import { WikiSearch } from './wiki-search';
 @Injectable()
 class WikiSearchStoryBackend extends HttpBackend {
   handle(request: HttpRequest<unknown>) {
+    if (request.url === '/api/v1/project/links') {
+      return of(
+        new HttpResponse({
+          status: 200,
+          body: {
+            activeProjectId: 'storybook',
+            members: [
+              {
+                projectId: 'storybook',
+                name: 'Storybook project',
+                alias: null,
+                relationship: 'current',
+                status: 'resolved',
+                source: 'current',
+                readable: true,
+                writeTrusted: true,
+              },
+            ],
+            warnings: [],
+          },
+        }),
+      );
+    }
     const query = request.params.get('query');
     if (query === 'loading') return NEVER;
     if (query === 'error')

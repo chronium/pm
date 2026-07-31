@@ -151,6 +151,18 @@ export class ProjectContextService {
       .join('/')}`;
   }
 
+  wikiCreateUrl(): string {
+    return `${this.wikiRoot()}/new`;
+  }
+
+  wikiEditUrl(path: string): string {
+    return `${this.wikiRoot()}/edit/${this.encodeWikiPath(path)}`;
+  }
+
+  wikiMetadataUrl(path: string): string {
+    return `${this.wikiRoot()}/meta/${this.encodeWikiPath(path)}`;
+  }
+
   projectModeUrl(projectId: string, mode: 'tasks' | 'wiki' = this.mode()): string {
     const activeProjectId = this.family.hasValue() ? this.family.value().activeProjectId : null;
     const root =
@@ -208,6 +220,13 @@ export class ProjectContextService {
   private routeRoot(mode: 'tasks' | 'wiki'): string {
     const projectId = this.selectedProjectId();
     return projectId ? `/projects/${encodeURIComponent(projectId)}/${mode}` : `/${mode}`;
+  }
+
+  private encodeWikiPath(path: string): string {
+    return path
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
   }
 
   private taskFilterKey(projectId: string): string {

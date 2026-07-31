@@ -17,6 +17,7 @@ describe('WikiSearch', () => {
         provideRouter([
           { path: 'wiki', component: EmptyRoute },
           { path: 'wiki/guides/:page', component: EmptyRoute },
+          { path: 'projects/:projectId/wiki/guides/:page', component: EmptyRoute },
         ]),
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -29,8 +30,38 @@ describe('WikiSearch', () => {
     TestBed.resetTestingModule();
   });
 
-  function render() {
+  async function render() {
     const fixture = TestBed.createComponent(WikiSearch);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/project/links')
+      .flush({
+        activeProjectId: 'prj_current',
+        members: [
+          {
+            projectId: 'prj_current',
+            name: 'Current project',
+            alias: null,
+            relationship: 'current',
+            status: 'resolved',
+            source: 'current',
+            readable: true,
+            writeTrusted: true,
+          },
+          {
+            projectId: 'prj_child',
+            name: 'Child project',
+            alias: 'child',
+            relationship: 'child',
+            status: 'resolved',
+            source: 'manifest',
+            readable: true,
+            writeTrusted: false,
+          },
+        ],
+        warnings: [],
+      });
+    await TestBed.tick();
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement };
   }
@@ -48,16 +79,82 @@ describe('WikiSearch', () => {
   }
 
   it('does not open or request for an empty query', async () => {
-    const { fixture, element } = render();
+    const { fixture, element } = await render();
     const input = enter(element, '   ');
     await debounce();
     fixture.detectChanges();
-    expect(input.getAttribute('aria-expanded')).toBe('false');
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(element.textContent).toContain('project:');
     TestBed.inject(HttpTestingController).expectNone('/api/v1/wiki/search');
   });
 
+  it('suggests projects and searches a named linked project', async () => {
+    const { fixture, element } = await render();
+    const input = enter(element, 'project:ch');
+    fixture.detectChanges();
+    expect(element.textContent).toContain('child');
+    (element.querySelector('[role="option"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    input.value = `${input.value}guide`;
+    input.dispatchEvent(new Event('input'));
+    await debounce();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/projects/prj_child/wiki/search?query=guide&limit=20')
+      .flush([
+        {
+          path: 'guides/start',
+          title: 'Child guide',
+          modifiedAt: '2026-07-16T10:00:00Z',
+          matchCount: 1,
+          snippet: 'Guide',
+        },
+      ]);
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Child project');
+    (element.querySelector('[role="option"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/projects/prj_child/wiki/guides/start');
+  });
+
+  it('searches the family and reports degraded linked projects', async () => {
+    const { fixture, element } = await render();
+    enter(element, 'project:family rendering');
+    await debounce();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/project/links/wiki/search?query=rendering&limit=20')
+      .flush({
+        pages: [
+          {
+            projectId: 'prj_child',
+            projectName: 'Child project',
+            alias: 'child',
+            relationship: 'child',
+            path: 'architecture/rendering',
+            title: 'Rendering',
+            modifiedAt: '2026-07-16T10:00:00Z',
+            matchCount: 2,
+            snippet: 'Rendering pipeline',
+          },
+        ],
+        warnings: [
+          {
+            code: 'missing',
+            message: 'Sibling unavailable.',
+            declaringProjectId: 'prj_current',
+            targetProjectId: 'prj_missing',
+            alias: 'missing',
+            status: 'missing',
+            repairCommand: null,
+          },
+        ],
+      });
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Child project');
+    expect(element.textContent).toContain('1 linked project unavailable.');
+  });
+
   it('debounces, cancels stale requests, and safely renders result content', async () => {
-    const { fixture, element } = render();
+    const { fixture, element } = await render();
     enter(element, 'first');
     await debounce();
     const http = TestBed.inject(HttpTestingController);
@@ -82,7 +179,7 @@ describe('WikiSearch', () => {
   });
 
   it('shows API errors and navigates nested special-character paths', async () => {
-    const { fixture, element } = render();
+    const { fixture, element } = await render();
     const input = enter(element, 'guide');
     await debounce();
     const http = TestBed.inject(HttpTestingController);

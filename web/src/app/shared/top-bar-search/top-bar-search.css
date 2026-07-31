@@ -121,6 +121,14 @@ input:focus {
 .search-state.error {
   color: var(--pm-danger);
 }
+
+.search-notice {
+  margin: 0;
+  padding: var(--pm-space-2) var(--pm-space-3);
+  border-top: 1px solid var(--pm-border-subtle);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
 .mobile-search-button,
 .close-search {
   display: none;

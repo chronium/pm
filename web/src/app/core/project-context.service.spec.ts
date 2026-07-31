@@ -41,6 +41,11 @@ describe('ProjectContextService', () => {
     expect(context.apiUrl('/board')).toBe('/api/v1/projects/prj_child/board');
     expect(context.taskUrl('GAME-0001', true)).toBe('/projects/prj_child/tasks/dialog/GAME-0001');
     expect(context.wikiUrl('guide/start')).toBe('/projects/prj_child/wiki/guide/start');
+    expect(context.wikiCreateUrl()).toBe('/projects/prj_child/wiki/new');
+    expect(context.wikiEditUrl('guide/start')).toBe('/projects/prj_child/wiki/edit/guide/start');
+    expect(context.wikiMetadataUrl('guide/start')).toBe(
+      '/projects/prj_child/wiki/meta/guide/start',
+    );
 
     context.rememberTaskFilters({ track: 'GAME', state: 'todo' });
     expect(context.modeUrl('tasks')).toBe('/projects/prj_child/tasks?track=GAME&state=todo');

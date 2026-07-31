@@ -1,0 +1,107 @@
+.wiki-link-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(720px, calc(100dvh - 32px));
+  padding: 0;
+  border: 1px solid var(--pm-frosted-dialog-border);
+  border-radius: var(--pm-radius-md);
+  background: var(--pm-frosted-dialog-fill);
+  color: var(--pm-text-primary);
+  box-shadow: var(--pm-overlay-elevation);
+}
+
+.wiki-link-dialog::backdrop {
+  background: var(--pm-overlay-backdrop);
+}
+
+header,
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+  padding: var(--pm-space-3) var(--pm-space-4);
+}
+
+header {
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+
+footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--pm-border-subtle);
+}
+
+h2,
+.eyebrow {
+  margin: 0;
+}
+
+h2 {
+  font-size: var(--pm-font-size-lg);
+}
+
+.eyebrow {
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  text-transform: uppercase;
+}
+
+.wiki-link-fields,
+pm-form-field {
+  margin: var(--pm-space-3) var(--pm-space-4);
+}
+
+.wiki-link-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--pm-space-3);
+}
+
+.wiki-link-fields pm-form-field {
+  margin: 0;
+}
+
+.wiki-link-pages {
+  max-height: min(42dvh, 340px);
+  margin: 0 var(--pm-space-4);
+  overflow: auto;
+  border-block: 1px solid var(--pm-border-subtle);
+}
+
+.wiki-link-pages button {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: var(--pm-space-2);
+  border: 0;
+  border-bottom: 1px solid var(--pm-border-subtle);
+  background: transparent;
+  color: var(--pm-text-primary);
+  text-align: left;
+}
+
+.wiki-link-pages button:hover,
+.wiki-link-pages button:focus-visible,
+.wiki-link-pages button.selected {
+  background: var(--pm-surface-hover);
+}
+
+.wiki-link-pages code {
+  color: var(--pm-text-subtle);
+}
+
+.wiki-link-state {
+  margin: 0;
+  padding: var(--pm-space-4);
+  color: var(--pm-text-muted);
+}
+
+.wiki-link-state.error {
+  color: var(--pm-danger);
+}
+
+@media (max-width: 640px) {
+  .wiki-link-fields {
+    grid-template-columns: 1fr;
+  }
+}

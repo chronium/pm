@@ -12,6 +12,18 @@
   text-underline-offset: 0.16em;
   cursor: help;
 }
+
+.markdown-body .pm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .markdown-body :is(h1, h2, h3, h4, h5, h6) {
   margin: 1.5rem 0 0.5rem;
   line-height: 1.25;

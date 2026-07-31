@@ -2,49 +2,94 @@ import { inject, Injectable } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { of } from 'rxjs';
 
-import { StaticModeService } from './static-mode.service';
-import { StaticSnapshotStore } from './static-snapshot.interceptor';
+import { StaticModeService } from '../static/static-mode.service';
+import { StaticSnapshotStore } from '../static/static-snapshot.interceptor';
+import { ProjectContextService } from './project-context.service';
 
-export type StaticProjectLinkResolution =
+export type ProjectLinkResolution =
   | { kind: 'available'; href: string; local: boolean }
   | { kind: 'unavailable'; reason: string }
   | { kind: 'not-project-link' };
 
-interface CanonicalProjectReference {
+export interface CanonicalProjectReference {
   projectId: string;
   resource: 'task' | 'wiki';
   value: string;
 }
 
 @Injectable({ providedIn: 'root' })
-export class StaticProjectLinksService {
+export class ProjectLinksService {
   private readonly mode = inject(StaticModeService);
   private readonly store = inject(StaticSnapshotStore);
+  private readonly context = inject(ProjectContextService);
   private readonly snapshot = toSignal(this.mode.enabled ? this.store.snapshot : of(null), {
     initialValue: null,
   });
 
-  resolve(reference: string): StaticProjectLinkResolution {
-    if (!this.mode.enabled) return { kind: 'not-project-link' };
+  resolve(reference: string): ProjectLinkResolution {
     const parsed = parseCanonicalProjectReference(reference);
     if (!parsed) {
       return reference.startsWith('pm://')
         ? { kind: 'unavailable', reason: 'This project reference is malformed.' }
         : { kind: 'not-project-link' };
     }
+    if (this.mode.enabled) return this.resolveStatic(parsed);
+    this.context.enableLinkedProjectFamily();
+    return this.resolveLive(parsed);
+  }
 
+  private resolveLive(reference: CanonicalProjectReference): ProjectLinkResolution {
+    if (!this.context.family.hasValue()) {
+      return {
+        kind: 'unavailable',
+        reason: this.context.family.error()
+          ? 'Linked project information is unavailable.'
+          : 'Linked project information is still loading.',
+      };
+    }
+
+    const family = this.context.family.value();
+    const member = family.members.find((candidate) => candidate.projectId === reference.projectId);
+    if (!member)
+      return {
+        kind: 'unavailable',
+        reason: `Project ${reference.projectId} is not linked.`,
+      };
+    if (!member.readable) {
+      const warning = family.warnings.find(
+        (candidate) => candidate.targetProjectId === reference.projectId,
+      );
+      const repair = warning?.repairCommand ? ` Repair with: ${warning.repairCommand}` : '';
+      return {
+        kind: 'unavailable',
+        reason: `${warning?.message ?? `${member.name} is ${member.status}.`}${repair}`,
+      };
+    }
+
+    const route = routePath(reference);
+    const root =
+      member.projectId === family.activeProjectId
+        ? ''
+        : `/projects/${encodeURIComponent(member.projectId)}`;
+    return { kind: 'available', href: `${root}${route}`, local: true };
+  }
+
+  private resolveStatic(reference: CanonicalProjectReference): ProjectLinkResolution {
     const snapshot = this.snapshot();
     if (!snapshot)
       return { kind: 'unavailable', reason: 'Linked project information is still loading.' };
-    const route = staticRoute(parsed);
-    if (snapshot.projectId === parsed.projectId)
+    const route = routePath(reference);
+    if (snapshot.projectId === reference.projectId)
       return { kind: 'available', href: `#${route}`, local: true };
 
     const project = snapshot.linkedProjects.find(
-      (candidate) => candidate.projectId === parsed.projectId,
+      (candidate) => candidate.projectId === reference.projectId,
     );
     if (!project)
-      return { kind: 'unavailable', reason: `Project ${parsed.projectId} is not linked.` };
+      return {
+        kind: 'unavailable',
+        reason: `Project ${reference.projectId} is not linked.`,
+      };
     if (!project.publicSiteUrl)
       return {
         kind: 'unavailable',
@@ -88,7 +133,16 @@ export function parseCanonicalProjectReference(
   }
 }
 
-function staticRoute(reference: CanonicalProjectReference): string {
+export function formatCanonicalProjectReference(reference: CanonicalProjectReference): string {
+  const projectId = encodeURIComponent(reference.projectId);
+  const value = reference.value
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  return `pm://project/${projectId}/${reference.resource}/${value}`;
+}
+
+function routePath(reference: CanonicalProjectReference): string {
   const value = reference.value
     .split('/')
     .map((segment) => encodeURIComponent(segment))

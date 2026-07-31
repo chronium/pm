@@ -29,12 +29,28 @@ public sealed record LinkedProjectFamilyResponse(
     IReadOnlyList<LinkedProjectMemberResponse> Members,
     IReadOnlyList<LinkedProjectWarningResponse> Warnings);
 
+public sealed record LinkedWikiSearchResultResponse(
+    string ProjectId,
+    string ProjectName,
+    string? Alias,
+    string Relationship,
+    string Path,
+    string Title,
+    DateTime ModifiedAt,
+    int MatchCount,
+    string Snippet);
+
+public sealed record LinkedWikiSearchResponse(
+    IReadOnlyList<LinkedWikiSearchResultResponse> Pages,
+    IReadOnlyList<LinkedProjectWarningResponse> Warnings);
+
 public static class LinkedProjectApiEndpoints
 {
     public static void MapLinkedProjectApi(
         this RouteGroupBuilder api,
         LinkedProjectFamilyService familyService,
-        LinkedProjectRegistryStore registry)
+        LinkedProjectRegistryStore registry,
+        LinkedProjectReadService? linkedReads = null)
     {
         api.MapGet("/project/links", async (HttpRequest request, CancellationToken cancellationToken) =>
             {
@@ -50,6 +66,42 @@ public static class LinkedProjectApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+
+        if (linkedReads != null)
+        {
+            api.MapGet("/project/links/wiki/search", async (
+                    HttpRequest request,
+                    string query,
+                    int limit = 20,
+                    CancellationToken cancellationToken = default) =>
+                {
+                    var result = await linkedReads.SearchWikiPagesAsync(
+                        query,
+                        limit,
+                        new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+                        cancellationToken);
+                    if (!result.Success)
+                        return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+
+                    return Results.Ok(new LinkedWikiSearchResponse(
+                        result.Payload!.Items.Select(item => new LinkedWikiSearchResultResponse(
+                            item.Owner.ProjectId,
+                            item.Owner.ProjectName,
+                            item.Owner.Alias,
+                            LinkedProjectFamilyService.Format(item.Owner.Relationship),
+                            item.Resource.Path,
+                            item.Resource.Title,
+                            BoardApiEndpoints.ToUtc(item.Resource.ModifiedAt),
+                            item.Resource.MatchCount,
+                            item.Resource.Snippet)).ToList(),
+                        result.Payload.Warnings.Select(ToWarningResponse).ToList()));
+                })
+                .WithName("SearchLinkedProjectFamilyWikiPages")
+                .WithSummary("Search readable wiki pages across the linked-project family")
+                .Produces<LinkedWikiSearchResponse>()
+                .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+                .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
+        }
 
         api.MapPost("/project/links/{projectId}/write-trust", async (
                 HttpRequest request,
@@ -122,12 +174,15 @@ public static class LinkedProjectApiEndpoints
                 LinkedProjectFamilyService.Format(member.Source),
                 member.Readable,
                 member.WriteTrusted)).ToList(),
-            family.Warnings.Select(warning => new LinkedProjectWarningResponse(
-                warning.Code,
-                warning.Message,
-                warning.DeclaringProjectId,
-                warning.TargetProjectId,
-                warning.Alias,
-                LinkedProjectFamilyService.Format(warning.Status),
-                warning.RepairAction?.DisplayCommand)).ToList());
+            family.Warnings.Select(ToWarningResponse).ToList());
+
+    private static LinkedProjectWarningResponse ToWarningResponse(LinkedProjectFamilyWarning warning) =>
+        new(
+            warning.Code,
+            warning.Message,
+            warning.DeclaringProjectId,
+            warning.TargetProjectId,
+            warning.Alias,
+            LinkedProjectFamilyService.Format(warning.Status),
+            warning.RepairAction?.DisplayCommand);
 }

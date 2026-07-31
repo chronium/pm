@@ -63,6 +63,7 @@ type WikiWorkspacePane = 'editor' | 'preview';
           [disabled]="disabled()"
           [label]="label()"
           [externalPreview]="true"
+          [enableProjectWikiLinks]="true"
           (touch)="touch.emit()"
         />
       </section>

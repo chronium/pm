@@ -42,7 +42,8 @@ public static class ApiV1Endpoints
         IAgentRunnerClient? agentRunnerClient = null,
         LinkedProjectFamilyService? linkedProjectFamilyService = null,
         LinkedProjectMutationService? linkedProjectMutationService = null,
-        LinkedProjectRegistryStore? linkedProjectRegistry = null)
+        LinkedProjectRegistryStore? linkedProjectRegistry = null,
+        LinkedProjectReadService? linkedProjectReadService = null)
     {
         var api = endpoints.MapGroup(Prefix)
             .AddEndpointFilter((context, next) => ReloadProjectConfig(context, next, projectRoot))
@@ -88,7 +89,7 @@ public static class ApiV1Endpoints
         var linkedProjects = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
         var linkedRegistry = linkedProjectRegistry ?? new LinkedProjectRegistryStore();
         var linkedMutations = linkedProjectMutationService ?? LinkedProjectMutationService.ForCurrent(taskService);
-        api.MapLinkedProjectApi(linkedProjects, linkedRegistry);
+        api.MapLinkedProjectApi(linkedProjects, linkedRegistry, linkedProjectReadService);
         api.MapLinkedProjectReadApi(linkedProjects, linkedMutations);
         if (membershipService != null) api.MapProjectMembershipApi(membershipService);
         if (agentRunService != null && agentRunnerClient != null)

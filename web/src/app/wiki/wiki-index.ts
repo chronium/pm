@@ -16,7 +16,9 @@ import { ProjectContextService } from '../core/project-context.service';
         <h1>Wiki</h1>
       </div>
       @if (!projectContext.readOnly()) {
-        <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
+        <a class="pm-button pm-button--primary" [routerLink]="projectContext.wikiCreateUrl()"
+          >New page</a
+        >
       }
     </header>
     @if (store.indexLoading()) {
@@ -32,7 +34,9 @@ import { ProjectContextService } from '../core/project-context.service';
       <pm-empty-state
         ><p>No wiki pages yet.</p>
         @if (!projectContext.readOnly()) {
-          <a class="pm-button pm-button--primary" routerLink="/wiki/new">Create the first page</a>
+          <a class="pm-button pm-button--primary" [routerLink]="projectContext.wikiCreateUrl()"
+            >Create the first page</a
+          >
         }
       </pm-empty-state>
     } @else {

@@ -29,7 +29,9 @@ import { ProjectContextService } from '../core/project-context.service';
           <h1>{{ folderName() }}</h1>
         </div>
         @if (!projectContext.readOnly()) {
-          <a class="pm-button pm-button--primary" routerLink="/wiki/new">New page</a>
+          <a class="pm-button pm-button--primary" [routerLink]="projectContext.wikiCreateUrl()"
+            >New page</a
+          >
         }
       </header>
       <div class="wiki-list" aria-label="Pages in folder">
@@ -89,11 +91,11 @@ import { ProjectContextService } from '../core/project-context.service';
             <div class="wiki-actions">
               <a
                 class="pm-button pm-button--secondary"
-                [routerLink]="['/wiki/meta', ...page.path.split('/')]"
+                [routerLink]="projectContext.wikiMetadataUrl(page.path)"
                 >Metadata</a
               ><a
                 class="pm-button pm-button--primary"
-                [routerLink]="['/wiki/edit', ...page.path.split('/')]"
+                [routerLink]="projectContext.wikiEditUrl(page.path)"
                 >Edit</a
               >
             </div>
