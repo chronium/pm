@@ -92,12 +92,15 @@ public sealed class LinkedProjectRegistryStore(
         if (!existing.Success && existing.ErrorCode is not "project_not_registered")
             return AppResult<LinkedProjectBinding>.Fail(existing.ErrorCode!, existing.Message!);
 
+        var preserveWriteTrust = existing.Success &&
+                                 PathsEqual(existing.Payload!.RepositoryPath, opened.Payload!.RepositoryPath) &&
+                                 existing.Payload.WriteTrusted;
         return Save(new StoredLinkedProjectBinding(
             SchemaVersion,
             normalizedProjectId,
             opened.Payload!.RepositoryPath,
             _timeProvider.GetUtcNow(),
-            false));
+            preserveWriteTrust));
     }
 
     public AppResult<LinkedProjectBinding> GrantWriteTrust(string projectId)
@@ -151,12 +154,20 @@ public sealed class LinkedProjectRegistryStore(
             return AppResult<LinkedProjectBinding>.Fail(
                 "missing_project_id", "The active project does not have a valid stable project ID.");
 
+        var repositoryPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectRoot.RepositoryPath));
+        var existing = Get(projectId);
+        if (!existing.Success && existing.ErrorCode is not "project_not_registered")
+            return AppResult<LinkedProjectBinding>.Fail(existing.ErrorCode!, existing.Message!);
+
+        var preserveWriteTrust = existing.Success &&
+                                 PathsEqual(existing.Payload!.RepositoryPath, repositoryPath) &&
+                                 existing.Payload.WriteTrusted;
         return Save(new StoredLinkedProjectBinding(
             SchemaVersion,
             projectId,
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectRoot.RepositoryPath)),
+            repositoryPath,
             _timeProvider.GetUtcNow(),
-            false));
+            preserveWriteTrust));
     }
 
     public AppResult Remove(string projectId)

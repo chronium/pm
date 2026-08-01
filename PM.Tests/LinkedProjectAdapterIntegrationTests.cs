@@ -125,6 +125,19 @@ public sealed class LinkedProjectAdapterIntegrationTests
 
         var registry = fixture.Registry();
         Assert.True(registry.GrantWriteTrust("prj_starfall").Success);
+        var reopened = registry.Remember(fixture.Starfall);
+        Assert.True(reopened.Success);
+        Assert.True(reopened.Payload!.WriteTrusted);
+        var trustedFamily = await Call(client, "list_linked_projects");
+        Assert.NotEqual(true, trustedFamily.IsError);
+        using (var document = JsonDocument.Parse(Json(trustedFamily)))
+        {
+            var starfall = Assert.Single(document.RootElement
+                .GetProperty("data")
+                .GetProperty("members")
+                .EnumerateArray(), member => member.GetProperty("projectId").GetString() == "prj_starfall");
+            Assert.True(starfall.GetProperty("writeTrusted").GetBoolean());
+        }
         var mutated = await Call(
             client, "append_task_note", ("taskId", "STAR-0001"), ("note", "MCP integration note"),
             ("project", "starfall"));

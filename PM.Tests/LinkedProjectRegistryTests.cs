@@ -81,6 +81,10 @@ public sealed class LinkedProjectRegistryTests
         Assert.True(trusted.Payload!.WriteTrusted);
         Assert.Equal(first.RepositoryPath, registry.OpenWriteTrusted("prj_one").Payload!.RepositoryPath);
 
+        var sameBinding = registry.Bind("prj_one", first.RepositoryPath);
+        Assert.True(sameBinding.Success);
+        Assert.True(sameBinding.Payload!.WriteTrusted);
+
         var revoked = registry.RevokeWriteTrust("prj_one");
         Assert.True(revoked.Success);
         Assert.False(revoked.Payload!.WriteTrusted);
@@ -90,6 +94,29 @@ public sealed class LinkedProjectRegistryTests
         var rebound = registry.Bind("prj_one", second.RepositoryPath, replace: true);
         Assert.True(rebound.Success);
         Assert.False(rebound.Payload!.WriteTrusted);
+    }
+
+    [Fact]
+    public async Task RememberPreservesTrustOnlyForTheSameCanonicalRepository()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var first = await CreateProject(Path.Combine(workspace.Path, "first"), "prj_one");
+        var second = await CreateProject(Path.Combine(workspace.Path, "second"), "prj_one");
+        var registry = Registry(Path.Combine(workspace.Path, "registry"));
+        Assert.True(registry.Bind("prj_one", first.RepositoryPath).Success);
+        Assert.True(registry.GrantWriteTrust("prj_one").Success);
+
+        var rememberedSame = registry.Remember(first);
+
+        Assert.True(rememberedSame.Success);
+        Assert.True(rememberedSame.Payload!.WriteTrusted);
+        Assert.Equal(first.RepositoryPath, rememberedSame.Payload.RepositoryPath);
+
+        var rememberedReplacement = registry.Remember(second);
+
+        Assert.True(rememberedReplacement.Success);
+        Assert.False(rememberedReplacement.Payload!.WriteTrusted);
+        Assert.Equal(second.RepositoryPath, rememberedReplacement.Payload.RepositoryPath);
     }
 
     [Fact]
@@ -284,13 +311,17 @@ public sealed class LinkedProjectRegistryTests
 
         try
         {
+            var registry = new LinkedProjectRegistryStore(
+                new LinkedProjectRegistryStoreOptions { RootPath = registryPath });
+            Assert.True(registry.Bind("prj_active", project.RepositoryPath).Success);
+            Assert.True(registry.GrantWriteTrust("prj_active").Success);
             using var host = McpServerHost.CreateBuilder([]).Build();
             _ = host.Services.GetRequiredService<ProjectRoot>();
 
-            var registered = new LinkedProjectRegistryStore(
-                new LinkedProjectRegistryStoreOptions { RootPath = registryPath }).Get("prj_active");
+            var registered = registry.Get("prj_active");
             Assert.True(registered.Success);
             Assert.Equal(project.RepositoryPath, registered.Payload!.RepositoryPath);
+            Assert.True(registered.Payload.WriteTrusted);
         }
         finally
         {
