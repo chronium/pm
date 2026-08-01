@@ -1289,6 +1289,8 @@ public class ApplicationServiceTests
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.Equal("Blocked", config.TaskStates["blocked"]);
         Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
+        Assert.True(File.Exists(Path.Combine(
+            projectRoot.StatesPath, "blocked", GlobalConfig.DirectoryPlaceholderFile)));
         Assert.Equal("duplicate_status", service.AddStatus("blocked", "Duplicate").ErrorCode);
         Assert.Equal("invalid_status", service.AddStatus(" ", "Missing").ErrorCode);
     }
@@ -1336,6 +1338,53 @@ public class ApplicationServiceTests
 
         Assert.Equal("last_status", singleStatusService.RemoveStatus("todo").ErrorCode);
         Assert.True(Directory.Exists(Path.Combine(singleStatusRoot.StatesPath, "todo")));
+    }
+
+    [Fact]
+    public async Task CreateTaskRepairsCloneLikeLayoutAndBoundsRemainingStorageFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        Directory.Delete(projectRoot.TasksPath, true);
+        Directory.Delete(projectRoot.StatesPath, true);
+        var nextIds = new RecordingNextIdService(ids: [1, 2]);
+        var service = new TaskService(projectRoot, nextIds);
+
+        var created = await service.CreateTask("First task", "PM", null, "Body", false);
+
+        Assert.True(created.Success);
+        Assert.True(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0001.md")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
+
+        Directory.Delete(projectRoot.TasksPath, true);
+        File.WriteAllText(projectRoot.TasksPath, "not a directory");
+        var failed = await service.CreateTask("Cannot store", "PM", null, "Body", false);
+
+        Assert.False(failed.Success);
+        Assert.Equal("task_storage_write_failed", failed.ErrorCode);
+        Assert.Contains("will not be reused", failed.Message);
+        Assert.Equal(2, nextIds.GetNextIdCalls);
+        Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0002.ref")));
+    }
+
+    [Fact]
+    public async Task MoveTaskReturnsBoundedFailureAndKeepsCurrentState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0001", "Keep state");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var reviewPath = Path.Combine(projectRoot.StatesPath, "review");
+        Directory.Delete(reviewPath, true);
+        File.WriteAllText(reviewPath, "not a directory");
+        var service = new TaskService(projectRoot, new RecordingNextIdService());
+
+        var result = service.MoveTask(task.Id, "review");
+
+        Assert.False(result.Success);
+        Assert.Equal("task_state_write_failed", result.ErrorCode);
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
     }
 
     [Fact]

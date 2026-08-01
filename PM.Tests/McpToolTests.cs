@@ -551,6 +551,71 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task CreateTaskRepairsMissingStorageInTrustedLinkedProject()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await workspace.CreateProject(TestData.Config(name: "Parent"));
+        File.WriteAllText(Path.Combine(active.RootPath, GlobalConfig.ProjectIdFile), "prj_parent\n");
+        var childRepository = Path.Combine(workspace.Path, "child");
+        Directory.CreateDirectory(childRepository);
+        var previousDirectory = Environment.CurrentDirectory;
+        ProjectRoot child;
+        try
+        {
+            Environment.CurrentDirectory = childRepository;
+            child = new ProjectRoot();
+            await child.CreateProject(TestData.Config(
+                name: "Child",
+                idPrefix: "CHILD",
+                tracks: new Dictionary<string, string> { ["CHILD"] = "Child" }));
+        }
+        finally
+        {
+            Environment.CurrentDirectory = previousDirectory;
+        }
+
+        File.WriteAllText(Path.Combine(child.RootPath, GlobalConfig.ProjectIdFile), "prj_child\n");
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_child",
+                    Alias = "child",
+                    RepositoryUrl = "https://github.com/chronium/pm-storage-child.git",
+                    PathHint = "child",
+                },
+            ],
+        });
+        var registry = new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+        {
+            RootPath = Path.Combine(workspace.Path, "registry"),
+        });
+        Assert.True(registry.Bind("prj_child", child.RepositoryPath).Success);
+        Assert.True(registry.GrantWriteTrust("prj_child").Success);
+        var linkedProjects = new LinkedProjectService(active);
+        var family = new LinkedProjectFamilyService(
+            active,
+            linkedProjects,
+            new LinkedProjectResolver(registry, new NullSubmoduleInspector()));
+        var nextIds = new RecordingNextIdService();
+        var mutations = new LinkedProjectMutationService(active, nextIds, family, registry);
+        var tools = CreateTools(active, nextIds,
+            linkedProjectFamily: family,
+            linkedProjectMutations: mutations);
+        Directory.Delete(child.TasksPath, true);
+        Directory.Delete(child.StatesPath, true);
+
+        var result = await tools.CreateTask("First linked task", "CHILD", project: "child");
+
+        Assert.True(result.Success);
+        Assert.Equal("prj_child", result.Data!.Mutation!.ProjectId);
+        Assert.True(File.Exists(Path.Combine(child.TasksPath, "CHILD-0001.md")));
+        Assert.True(File.Exists(Path.Combine(child.StatesPath, "todo", "CHILD-0001.ref")));
+    }
+
+    [Fact]
     public async Task BulkCreateTasksForTrackReturnsCreatedTasksAndPartialFailure()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1243,14 +1308,16 @@ public class McpToolTests
     private static PmMcpTools CreateTools(ProjectRoot projectRoot, INextIdService? nextIdService = null,
         IProjectMembershipService? membershipService = null,
         McpCapabilityContext? capabilityContext = null,
-        McpLinkedWikiContextStore? linkedWikiContexts = null)
+        McpLinkedWikiContextStore? linkedWikiContexts = null,
+        LinkedProjectFamilyService? linkedProjectFamily = null,
+        LinkedProjectMutationService? linkedProjectMutations = null)
     {
         nextIdService ??= new RecordingNextIdService();
         var linkedProjects = new LinkedProjectService(projectRoot);
         var registryBasePath = projectRoot.Exists
             ? projectRoot.RepositoryPath
             : Environment.CurrentDirectory;
-        var linkedProjectFamily = new LinkedProjectFamilyService(
+        linkedProjectFamily ??= new LinkedProjectFamilyService(
             projectRoot,
             linkedProjects,
             new LinkedProjectResolver(
@@ -1264,6 +1331,22 @@ public class McpToolTests
             linkedProjectFamily,
             nextIdService,
             new LinkedProjectGitInspector());
+        if (linkedProjectMutations != null)
+            return new PmMcpTools(
+                projectRoot,
+                new TaskService(projectRoot, nextIdService),
+                new ProjectCreationService(projectRoot, nextIdService),
+                new ProjectConfigService(projectRoot),
+                new BoardService(projectRoot),
+                new WikiService(projectRoot),
+                new ProjectValidationService(projectRoot, linkedProjects, linkedProjectFamily),
+                linkedProjectFamily,
+                linkedProjectReads,
+                linkedProjectMutations,
+                membershipService,
+                capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal),
+                linkedWikiContexts);
+
         return new PmMcpTools(
             projectRoot,
             new TaskService(projectRoot, nextIdService),

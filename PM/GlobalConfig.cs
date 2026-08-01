@@ -12,6 +12,7 @@ public static class GlobalConfig
     public static string StatesDirName = "states";
     public static string WikiDirName = "wiki";
     public static string TaskOrderFile = "task_order.yaml";
+    public static string DirectoryPlaceholderFile = ".gitkeep";
 
     public static bool DryRun = false;
 

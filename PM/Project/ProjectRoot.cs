@@ -165,7 +165,7 @@ public class ProjectRoot : IProjectRoot
     {
         if (RootPath == null) throw new InvalidOperationException("Project root path is not set.");
 
-        FileSystem.CreateDirectory(TasksPath);
+        CreateTrackedDirectory(TasksPath);
         FileSystem.CreateDirectory(StatesPath);
         FileSystem.CreateDirectory(WikiPath);
 
@@ -177,7 +177,21 @@ public class ProjectRoot : IProjectRoot
         if (RootPath == null) throw new InvalidOperationException("Project root path is not set.");
 
         foreach (var key in Config!.TaskStates.Keys)
-            FileSystem.CreateDirectory(Path.Combine(StatesPath, key));
+            CreateTrackedStateDirectory(key);
+    }
+
+    private static void CreateTrackedDirectory(string path)
+    {
+        FileSystem.CreateDirectory(path);
+        var placeholderPath = Path.Combine(path, GlobalConfig.DirectoryPlaceholderFile);
+        if (!FileSystem.FileExists(placeholderPath))
+            FileSystem.WriteAllText(placeholderPath, string.Empty);
+    }
+
+    public void CreateTrackedStateDirectory(string state)
+    {
+        FileSystem.CreateDirectory(StatesPath);
+        CreateTrackedDirectory(Path.Combine(StatesPath, state));
     }
 
     public async Task CreateProject(ProjectConfig config, CancellationToken cancellationToken = default)
@@ -208,6 +222,7 @@ public class ProjectRoot : IProjectRoot
 
     public void WriteTaskFile(string id, string content)
     {
+        FileSystem.CreateDirectory(TasksPath);
         FileSystem.WriteAllText(GetTaskPath(id), content);
     }
 
@@ -227,18 +242,50 @@ public class ProjectRoot : IProjectRoot
     public void UpdateTaskState(TaskItem task, string state)
     {
         var track = ResolveTaskTrack(task);
-        if (TryGetState(task, out var currentState))
-        {
-            FileSystem.DeleteFile(Path.Combine(StatesPath, currentState, $"{task.Id}.ref"));
-            MoveTaskOrderScope(task.Id, new TaskOrderScope(track, currentState, task.Milestone),
-                new TaskOrderScope(track, state, task.Milestone));
-        }
-
+        var hasCurrentState = TryGetState(task, out var currentState);
         var stateDir = Path.Combine(StatesPath, state);
-        var stateRelativePath = Path.GetRelativePath(stateDir, TasksPath);
+        FileSystem.CreateDirectory(stateDir);
 
-        FileSystem.WriteAllText(Path.Combine(StatesPath, state, $"{task.Id}.ref"),
+        var stateRelativePath = Path.GetRelativePath(stateDir, TasksPath);
+        var destinationPath = Path.Combine(stateDir, $"{task.Id}.ref");
+        var destinationExisted = FileSystem.FileExists(destinationPath);
+        var destinationContent = destinationExisted ? FileSystem.ReadAllText(destinationPath) : null;
+        var taskOrderExisted = FileSystem.FileExists(TaskOrderPath);
+        var taskOrderContent = taskOrderExisted ? FileSystem.ReadAllText(TaskOrderPath) : null;
+
+        FileSystem.WriteAllText(destinationPath,
             $"{stateRelativePath}/{task.Id}.{GlobalConfig.DefaultTaskExtension}");
+
+        if (!hasCurrentState || string.Equals(currentState, state, StringComparison.Ordinal))
+            return;
+
+        try
+        {
+            MoveTaskOrderScope(task.Id, new TaskOrderScope(track, currentState!, task.Milestone),
+                new TaskOrderScope(track, state, task.Milestone));
+            FileSystem.DeleteFile(Path.Combine(StatesPath, currentState!, $"{task.Id}.ref"));
+        }
+        catch
+        {
+            RestoreFile(destinationPath, destinationExisted, destinationContent);
+            RestoreFile(TaskOrderPath, taskOrderExisted, taskOrderContent);
+            throw;
+        }
+    }
+
+    private static void RestoreFile(string path, bool existed, string? content)
+    {
+        try
+        {
+            if (existed)
+                FileSystem.WriteAllText(path, content ?? string.Empty);
+            else if (FileSystem.FileExists(path))
+                FileSystem.DeleteFile(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Preserve the original storage failure.
+        }
     }
 
     public bool TryGetState(TaskItem task, [MaybeNullWhen(false)] out string state)

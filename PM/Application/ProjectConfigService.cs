@@ -61,7 +61,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             return AppResult.Fail("duplicate_status", $"Status {key} already exists.");
 
         config.TaskStates[key] = name;
-        FileSystem.CreateDirectory(Path.Combine(projectRoot.StatesPath, key));
+        projectRoot.CreateTrackedStateDirectory(key);
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }
@@ -107,14 +107,23 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             if (FileSystem.ReadFiles(statePath, "*.ref").Count != 0)
                 return AppResult.Fail("status_in_use", $"Status {key} is referenced by one or more tasks.");
 
-            if (FileSystem.ReadFiles(statePath).Count != 0)
+            var otherFiles = FileSystem.ReadFiles(statePath)
+                .Where(file => !string.Equals(file.Name, GlobalConfig.DirectoryPlaceholderFile,
+                    StringComparison.Ordinal))
+                .ToList();
+            if (otherFiles.Count != 0)
                 return AppResult.Fail("status_directory_not_empty",
                     $"Status {key} directory contains non-task files and cannot be removed.");
         }
 
         config.TaskStates.Remove(key);
         if (FileSystem.DirectoryExists(statePath))
+        {
+            var placeholderPath = Path.Combine(statePath, GlobalConfig.DirectoryPlaceholderFile);
+            if (FileSystem.FileExists(placeholderPath))
+                FileSystem.DeleteFile(placeholderPath);
             FileSystem.DeleteDirectory(statePath);
+        }
 
         config.WriteConfig(projectRoot);
         return AppResult.Ok();

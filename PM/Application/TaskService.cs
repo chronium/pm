@@ -104,8 +104,17 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         var task = BuildTask(title, track, milestone, description, idPadded);
         if (!dryRun)
         {
-            projectRoot.WriteTask(task);
-            projectRoot.UpdateTaskState(task, config.TaskStates.Keys.First());
+            try
+            {
+                projectRoot.WriteTask(task);
+                projectRoot.UpdateTaskState(task, config.TaskStates.Keys.First());
+            }
+            catch (Exception exception) when (IsStorageException(exception))
+            {
+                TryDeletePartialTask(task);
+                return AppResult<TaskItem>.Fail("task_storage_write_failed",
+                    $"Task {task.Id} could not be stored. Its allocated ID will not be reused.");
+            }
         }
 
         return AppResult<TaskItem>.Ok(task);
@@ -313,8 +322,15 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         if (!projectRoot.TryGetState(task, out _))
             return AppResult.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
 
-        projectRoot.UpdateTaskState(task, targetState);
-        return AppResult.Ok();
+        try
+        {
+            projectRoot.UpdateTaskState(task, targetState);
+            return AppResult.Ok();
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            return AppResult.Fail("task_state_write_failed", $"Task {taskId} could not be moved to {targetState}.");
+        }
     }
 
     public AppResult RemoveTask(string taskId)
@@ -641,13 +657,52 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             Description = description ?? string.Empty,
         };
 
-        projectRoot.MoveTaskOrderScope(task.Id,
-            new TaskOrderScope(projectRoot.ResolveTaskTrack(task), currentState, task.Milestone),
-            new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), currentState, updated.Milestone));
-        projectRoot.WriteTask(updated);
-        projectRoot.UpdateTaskState(updated, targetState);
-        return AppResult<TaskItem>.Ok(updated);
+        try
+        {
+            projectRoot.MoveTaskOrderScope(task.Id,
+                new TaskOrderScope(projectRoot.ResolveTaskTrack(task), currentState, task.Milestone),
+                new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), currentState, updated.Milestone));
+            projectRoot.WriteTask(updated);
+            projectRoot.UpdateTaskState(updated, targetState);
+            return AppResult<TaskItem>.Ok(updated);
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            TryRestoreTask(task, updated, currentState);
+            return AppResult<TaskItem>.Fail("task_storage_write_failed", $"Task {taskId} could not be updated.");
+        }
     }
+
+    private void TryDeletePartialTask(TaskItem task)
+    {
+        try
+        {
+            projectRoot.DeleteTask(task);
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            // Preserve the bounded create failure.
+        }
+    }
+
+    private void TryRestoreTask(TaskItem task, TaskItem updated, string state)
+    {
+        try
+        {
+            projectRoot.MoveTaskOrderScope(task.Id,
+                new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), state, updated.Milestone),
+                new TaskOrderScope(projectRoot.ResolveTaskTrack(task), state, task.Milestone));
+            projectRoot.WriteTask(task);
+            projectRoot.UpdateTaskState(task, state);
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            // Preserve the bounded update failure.
+        }
+    }
+
+    private static bool IsStorageException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException;
 
     private static string AppendNote(string description, string note)
     {

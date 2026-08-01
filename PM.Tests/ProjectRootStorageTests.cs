@@ -1,3 +1,4 @@
+using PM.Application;
 using PM.Project;
 using PM.Tasks;
 using PM.Wiki;
@@ -6,6 +7,22 @@ namespace PM.Tests;
 
 public class ProjectRootStorageTests
 {
+    [Fact]
+    public async Task ProjectInitializationTracksEmptyTaskAndStateDirectories()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+
+        Assert.True(File.Exists(Path.Combine(projectRoot.TasksPath, GlobalConfig.DirectoryPlaceholderFile)));
+        foreach (var state in projectRoot.Config!.TaskStates.Keys)
+            Assert.True(File.Exists(Path.Combine(
+                projectRoot.StatesPath, state, GlobalConfig.DirectoryPlaceholderFile)));
+
+        var validation = new ProjectValidationService(projectRoot).ValidateProject();
+        Assert.True(validation.Success);
+        Assert.True(validation.Payload!.Valid);
+    }
+
     [Fact]
     public async Task WritingTaskCreatesMarkdownFileWithYamlFrontmatter()
     {
@@ -115,6 +132,23 @@ public class ProjectRootStorageTests
     }
 
     [Fact]
+    public async Task WritingTaskAndStateRepairsMissingStorageDirectories()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        Directory.Delete(projectRoot.TasksPath, true);
+        Directory.Delete(projectRoot.StatesPath, true);
+        var task = TestData.Task("PM-0006", "First cloned task");
+
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        Assert.True(File.Exists(Path.Combine(projectRoot.TasksPath, "PM-0006.md")));
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0006.ref")));
+        Assert.True(new ProjectValidationService(projectRoot).ValidateProject().Payload!.Valid);
+    }
+
+    [Fact]
     public async Task UpdatingTaskStateCreatesRefFile()
     {
         using var workspace = new TempWorkingDirectory();
@@ -137,11 +171,32 @@ public class ProjectRootStorageTests
         var task = TestData.Task("PM-0003", "Move between states");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
+        Directory.Delete(Path.Combine(projectRoot.StatesPath, "review"), true);
 
         projectRoot.UpdateTaskState(task, "review");
 
         Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0003.ref")));
         Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "review", "PM-0003.ref")));
+    }
+
+    [Fact]
+    public async Task FailedStateDestinationPreservesSourceRefAndTaskOrder()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var task = TestData.Task("PM-0007", "Preserve current state");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var todoScope = new TaskOrderScope("PM", "todo", null);
+        projectRoot.SetTaskOrder(todoScope, [task.Id]);
+        var reviewPath = Path.Combine(projectRoot.StatesPath, "review");
+        Directory.Delete(reviewPath, true);
+        File.WriteAllText(reviewPath, "not a directory");
+
+        Assert.Throws<IOException>(() => projectRoot.UpdateTaskState(task, "review"));
+
+        Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0007.ref")));
+        Assert.Equal([task.Id], projectRoot.GetTaskOrder(todoScope));
     }
 
     [Fact]
