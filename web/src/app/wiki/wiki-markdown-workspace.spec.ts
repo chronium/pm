@@ -38,18 +38,25 @@ describe('WikiMarkdownWorkspace', () => {
     const workspace = fixture.debugElement.query(By.directive(WikiMarkdownWorkspace))
       .componentInstance as WikiMarkdownWorkspace;
 
-    workspace.value.set('**Draft** <script>alert(1)</script>');
-    fixture.detectChanges();
-    expect(fixture.componentInstance.pageForm().dirty()).toBe(true);
-    expect(element.querySelector('strong')).toBeNull();
+    vi.useFakeTimers();
+    try {
+      workspace.value.set('**Draft** <script>alert(1)</script>');
+      fixture.detectChanges();
+      expect(fixture.componentInstance.pageForm().dirty()).toBe(true);
+      expect(element.querySelector('strong')).toBeNull();
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    fixture.detectChanges();
-    expect(element.querySelector('strong')).toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    fixture.detectChanges();
-    expect(element.querySelector('strong')?.textContent).toBe('Draft');
-    expect(element.querySelector('script')).toBeNull();
+      vi.advanceTimersByTime(119);
+      fixture.detectChanges();
+      expect(element.querySelector('strong')).toBeNull();
+
+      vi.advanceTimersByTime(1);
+      fixture.detectChanges();
+      expect(element.querySelector('strong')?.textContent).toBe('Draft');
+      expect(element.querySelector('script')).toBeNull();
+    } finally {
+      fixture.destroy();
+      vi.useRealTimers();
+    }
   });
 
   it('uses external-preview controls and propagates its disabled state', async () => {
