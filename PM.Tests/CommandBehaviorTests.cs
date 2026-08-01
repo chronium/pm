@@ -135,6 +135,169 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task LinkedProjectManifestCommandsManageDeclarationsAndOptionalMetadata()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "prj_active\n");
+        var linkedProjects = new LinkedProjectService(projectRoot);
+
+        var setParent = await CaptureConsole(() =>
+            new ProjectSetParentCommand(linkedProjects).Execute(null!, new ProjectSetParentCommand.Settings
+            {
+                ProjectId = "prj_games",
+                Alias = "games",
+                RepositoryUrl = "https://example.test/games.git",
+                PathHint = "..",
+            }, CancellationToken.None));
+        var addRoyale = await CaptureConsole(() =>
+            new ProjectAddChildCommand(linkedProjects).Execute(null!, new ProjectAddChildCommand.Settings
+            {
+                ProjectId = "prj_royale",
+                Alias = "royale",
+                RepositoryUrl = "https://example.test/royale.git",
+                PathHint = "royale",
+                PublicSiteUrl = "https://docs.example.test/royale/",
+            }, CancellationToken.None));
+        var addStarfall = new ProjectAddChildCommand(linkedProjects).Execute(null!,
+            new ProjectAddChildCommand.Settings
+            {
+                ProjectId = "prj_starfall",
+                Alias = "starfall",
+                RepositoryUrl = "https://example.test/starfall.git",
+                PathHint = "starfall",
+            }, CancellationToken.None);
+        var updateRoyale = await CaptureConsole(() =>
+            new ProjectUpdateChildCommand(linkedProjects).Execute(null!,
+                new ProjectUpdateChildCommand.Settings
+                {
+                    ProjectId = "prj_royale",
+                    Alias = "royale-game",
+                    ClearPathHint = true,
+                    ClearPublicSiteUrl = true,
+                }, CancellationToken.None));
+        var reorder = new ProjectReorderChildrenCommand(linkedProjects).Execute(null!,
+            new ProjectReorderChildrenCommand.Settings
+            {
+                ProjectIds = ["prj_starfall", "prj_royale"],
+            }, CancellationToken.None);
+
+        var manifest = linkedProjects.GetManifest().Payload!.Manifest;
+        var royale = manifest.Children.Single(child => child.ProjectId == "prj_royale");
+        Assert.Equal(0, setParent.ExitCode);
+        Assert.Contains("Set parent prj_games", setParent.Output);
+        Assert.Equal(0, addRoyale.ExitCode);
+        Assert.Contains("Added child prj_royale", addRoyale.Output);
+        Assert.Equal(0, addStarfall);
+        Assert.Equal(0, updateRoyale.ExitCode);
+        Assert.Contains("Updated child prj_royale", updateRoyale.Output);
+        Assert.Equal(0, reorder);
+        Assert.Equal("prj_games", manifest.Parent!.ProjectId);
+        Assert.Equal(["prj_starfall", "prj_royale"],
+            manifest.Children.Select(child => child.ProjectId));
+        Assert.Equal("royale-game", royale.Alias);
+        Assert.Equal("https://example.test/royale.git", royale.RepositoryUrl);
+        Assert.Null(royale.PathHint);
+        Assert.Null(royale.PublicSiteUrl);
+
+        Assert.Equal(0, new ProjectRemoveParentCommand(linkedProjects).Execute(null!,
+            new ProjectRemoveParentCommand.Settings(), CancellationToken.None));
+        Assert.Equal(0, new ProjectRemoveChildCommand(linkedProjects).Execute(null!,
+            new ProjectRemoveChildCommand.Settings { ProjectId = "prj_royale" }, CancellationToken.None));
+        Assert.Equal(0, new ProjectRemoveChildCommand(linkedProjects).Execute(null!,
+            new ProjectRemoveChildCommand.Settings { ProjectId = "prj_starfall" }, CancellationToken.None));
+        Assert.False(File.Exists(projectRoot.LinkedProjectsPath));
+    }
+
+    [Fact]
+    public async Task LinkedProjectUpdateChildRejectsInvalidOrAmbiguousChangesWithoutMutation()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(
+            Path.Combine(projectRoot.RootPath, GlobalConfig.ProjectIdFile), "prj_active\n");
+        var linkedProjects = new LinkedProjectService(projectRoot);
+        Assert.True(linkedProjects.AddChild(new LinkedProjectDeclaration
+        {
+            ProjectId = "prj_child",
+            Alias = "child",
+            RepositoryUrl = "https://example.test/child.git",
+            PathHint = "child",
+        }).Success);
+
+        var noChanges = new ProjectUpdateChildCommand.Settings { ProjectId = "prj_child" }.Validate();
+        var conflicting = new ProjectUpdateChildCommand.Settings
+        {
+            ProjectId = "prj_child",
+            PathHint = "new-child",
+            ClearPathHint = true,
+        }.Validate();
+        var (invalidExitCode, invalidOutput) = await CaptureConsole(() =>
+            new ProjectUpdateChildCommand(linkedProjects).Execute(null!,
+                new ProjectUpdateChildCommand.Settings
+                {
+                    ProjectId = "prj_child",
+                    Alias = "invalid alias",
+                }, CancellationToken.None));
+
+        var child = linkedProjects.GetManifest().Payload!.Manifest.Children.Single();
+        Assert.False(noChanges.Successful);
+        Assert.Contains("at least one", noChanges.Message);
+        Assert.False(conflicting.Successful);
+        Assert.Contains("cannot be used together", conflicting.Message);
+        Assert.Equal(1, invalidExitCode);
+        Assert.Contains("alias is not valid", invalidOutput);
+        Assert.Equal("child", child.Alias);
+        Assert.Equal("child", child.PathHint);
+    }
+
+    [Fact]
+    public async Task LinkedProjectManifestCommandsProduceReciprocalFamilyAcceptedByDoctor()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var games = await CreateLinkedProject(Path.Combine(workspace.Path, "games"), "prj_games");
+        var royale = await CreateLinkedProject(Path.Combine(workspace.Path, "games", "royale"), "prj_royale");
+        var starfall = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "games", "starfall"), "prj_starfall");
+
+        var gamesLinks = new LinkedProjectService(games);
+        Assert.Equal(0, new ProjectAddChildCommand(gamesLinks).Execute(null!,
+            DeclarationSettings<ProjectAddChildCommand.Settings>(
+                "prj_royale", "royale", "https://example.test/royale.git", "royale"),
+            CancellationToken.None));
+        Assert.Equal(0, new ProjectAddChildCommand(gamesLinks).Execute(null!,
+            DeclarationSettings<ProjectAddChildCommand.Settings>(
+                "prj_starfall", "starfall", "https://example.test/starfall.git", "starfall"),
+            CancellationToken.None));
+        Assert.Equal(0, new ProjectSetParentCommand(new LinkedProjectService(royale)).Execute(null!,
+            DeclarationSettings<ProjectSetParentCommand.Settings>(
+                "prj_games", "games", "https://example.test/games.git", ".."),
+            CancellationToken.None));
+        Assert.Equal(0, new ProjectSetParentCommand(new LinkedProjectService(starfall)).Execute(null!,
+            DeclarationSettings<ProjectSetParentCommand.Settings>(
+                "prj_games", "games", "https://example.test/games.git", ".."),
+            CancellationToken.None));
+
+        var registry = new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+        {
+            RootPath = Path.Combine(workspace.Path, "registry"),
+        });
+        foreach (var project in new[] { games, royale, starfall })
+        {
+            var links = new LinkedProjectService(project);
+            var family = new LinkedProjectFamilyService(project, links,
+                new LinkedProjectResolver(registry, new EmptyLinkedProjectSubmoduleInspector()));
+            var validation = await new ProjectValidationService(project, links, family)
+                .ValidateProjectAsync(CancellationToken.None);
+
+            Assert.True(validation.Success);
+            Assert.True(validation.Payload!.Valid);
+            Assert.Empty(validation.Payload.Issues);
+        }
+    }
+
+    [Fact]
     public async Task DoctorInvalidProjectReturnsOneAndPrintsIssueContext()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1436,6 +1599,38 @@ public class CommandBehaviorTests
         Assert.False(config.Milestones.ContainsKey("m2"));
         Assert.False(config.MilestonePriorities.ContainsKey("m2"));
     }
+
+    private static async Task<ProjectRoot> CreateLinkedProject(string repositoryPath, string projectId)
+    {
+        Directory.CreateDirectory(repositoryPath);
+        var previousDirectory = Environment.CurrentDirectory;
+        Environment.CurrentDirectory = repositoryPath;
+        try
+        {
+            var project = new ProjectRoot();
+            await project.CreateProject(TestData.Config());
+            await File.WriteAllTextAsync(
+                Path.Combine(project.RootPath, GlobalConfig.ProjectIdFile), $"{projectId}\n");
+            return project;
+        }
+        finally
+        {
+            Environment.CurrentDirectory = previousDirectory;
+        }
+    }
+
+    private static T DeclarationSettings<T>(
+        string projectId,
+        string alias,
+        string repositoryUrl,
+        string? pathHint = null)
+        where T : LinkedProjectDeclarationSettings, new() => new()
+    {
+        ProjectId = projectId,
+        Alias = alias,
+        RepositoryUrl = repositoryUrl,
+        PathHint = pathHint,
+    };
 
     private static SyntaxHighlighter CreateHighlighter()
     {

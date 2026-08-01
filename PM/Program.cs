@@ -101,6 +101,12 @@ app.Configure(config =>
         project.AddCommand<ProjectSetRoleCommand>("set-role");
         project.AddCommand<ProjectRemoveMemberCommand>("remove-member");
         project.AddCommand<ProjectLinksCommand>("links");
+        project.AddCommand<ProjectSetParentCommand>("set-parent");
+        project.AddCommand<ProjectRemoveParentCommand>("remove-parent");
+        project.AddCommand<ProjectAddChildCommand>("add-child");
+        project.AddCommand<ProjectUpdateChildCommand>("update-child");
+        project.AddCommand<ProjectRemoveChildCommand>("remove-child");
+        project.AddCommand<ProjectReorderChildrenCommand>("reorder-children");
         project.AddCommand<ProjectBindCommand>("bind");
         project.AddCommand<ProjectUnbindCommand>("unbind");
         project.AddCommand<ProjectTrustCommand>("trust");

@@ -1,7 +1,7 @@
 ---
 title: Linked Projects
 createdAt: 2026-07-31T15:55:14.2753290Z
-modifiedAt: 2026-07-31T15:55:38.1967610Z
+modifiedAt: 2026-08-01T04:44:14.8504550Z
 ---
 
 # Linked Projects
@@ -43,6 +43,40 @@ pm task next --family
 ```
 
 MCP read tools expose the same `project` and `family` selection model. Results retain the owning project ID so callers do not confuse identical local task or wiki paths.
+
+Each command changes only the active repository. For a parent named Games with Royale and Starfall children, configure the parent checkout first:
+
+```sh
+pm project add-child prj_royale \
+  --alias royale \
+  --repository-url https://github.com/example/royale.git \
+  --path-hint royale
+pm project add-child prj_starfall \
+  --alias starfall \
+  --repository-url https://github.com/example/starfall.git \
+  --path-hint starfall
+```
+
+Then configure each child from its own checkout:
+
+```sh
+pm project set-parent prj_games \
+  --alias games \
+  --repository-url https://github.com/example/games.git \
+  --path-hint ..
+```
+
+Use the stable IDs shown by `pm project links`; aliases are labels rather than identity. Optional `--public-site-url` values make independently published static sites available from the project switcher. Declaration maintenance remains explicit:
+
+```sh
+pm project update-child prj_royale --alias royale-game
+pm project update-child prj_royale --clear-public-site-url
+pm project reorder-children prj_starfall prj_royale
+pm project remove-child prj_starfall
+pm project remove-parent
+```
+
+After configuring both sides, run `pm doctor` in all repositories. Missing or non-reciprocal declarations are reported as warnings and are never repaired by mutating another checkout automatically.
 
 ## References and writes
 
