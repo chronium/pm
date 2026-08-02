@@ -226,7 +226,9 @@ public sealed record WikiPageOutlinePayload(
     DateTime ModifiedAt,
     string FilePath,
     string Version,
-    IReadOnlyList<WikiHeadingOutlinePayload> Headings);
+    IReadOnlyList<WikiHeadingOutlinePayload> Headings,
+    LinkedProjectOwnerPayload? Project = null,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null);
 
 public sealed record WikiHeadingOutlinePayload(
     string Id,

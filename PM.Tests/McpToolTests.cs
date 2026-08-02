@@ -473,12 +473,16 @@ public class McpToolTests
             linkedWikiContexts: store);
 
         var linkedPage = await tools.GetWikiPage("reference/renderer", "engine");
+        var linkedOutline = await tools.OutlineWikiPage("reference/renderer", "engine");
         var familyPages = await tools.ListWikiPages(family: true);
         var linkedTask = await tools.GetTask("AGENT-0002", "engine");
 
         Assert.True(linkedPage.Success, linkedPage.Message);
         Assert.Equal("project-engine", linkedPage.Data!.Project!.ProjectId);
         Assert.Contains("shared renderer contract", linkedPage.Data.Body);
+        Assert.True(linkedOutline.Success, linkedOutline.Message);
+        Assert.Equal("project-engine", linkedOutline.Data!.Project!.ProjectId);
+        Assert.Equal("reference/renderer", linkedOutline.Data.Path);
         Assert.Equal(2, familyPages.Data!.Pages.Count);
         Assert.Equal("mcp_project_scope_denied", linkedTask.ErrorCode);
     }
@@ -778,7 +782,7 @@ public class McpToolTests
                                                                     Child details.
                                                                     """);
 
-        var outline = tools.OutlineWikiPage("architecture/rendering");
+        var outline = await tools.OutlineWikiPage("architecture/rendering");
         var heading = Assert.Single(outline.Data!.Headings, item => item.Title == "Pipeline");
         var patched = tools.PatchWikiPage("architecture/rendering", outline.Data.Version, heading.Id,
             WikiPatchOperation.AppendToSection, "New details.");
@@ -844,6 +848,7 @@ public class McpToolTests
         {
             nameof(PmMcpTools.GetTask),
             nameof(PmMcpTools.GetWikiPage),
+            nameof(PmMcpTools.OutlineWikiPage),
         };
 
         foreach (var methodName in aggregateMethods.Concat(detailMethods))
@@ -876,7 +881,7 @@ public class McpToolTests
 
         Assert.Equal("invalid_wiki_path", tools.CreateWikiPage("../escape", "Escape").ErrorCode);
         Assert.Equal("missing_wiki_page", (await tools.GetWikiPage("missing")).ErrorCode);
-        Assert.Equal("missing_wiki_page", tools.OutlineWikiPage("missing").ErrorCode);
+        Assert.Equal("missing_wiki_page", (await tools.OutlineWikiPage("missing")).ErrorCode);
         Assert.True(tools.CreateWikiPage("notes", "Notes").Success);
         Assert.Equal("duplicate_wiki_page", tools.CreateWikiPage("notes", "Duplicate").ErrorCode);
         Assert.Equal("invalid_wiki_markdown", tools.UpdateWikiPageMarkdown("notes", "not markdown").ErrorCode);

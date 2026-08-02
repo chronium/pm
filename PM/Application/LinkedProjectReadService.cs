@@ -403,6 +403,34 @@ public sealed class LinkedProjectReadService
                 targets.Payload.Warnings));
     }
 
+    public async Task<AppResult<LinkedProjectReadResult<WikiPageOutlineData>>> OutlineWikiPageAsync(
+        string path,
+        string? projectSelector = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return AppResult<LinkedProjectReadResult<WikiPageOutlineData>>.Fail(
+                "invalid_wiki_path", "Wiki page path is required.");
+
+        var request = string.IsNullOrWhiteSpace(projectSelector) ||
+                      string.Equals(projectSelector.Trim(), "current", StringComparison.OrdinalIgnoreCase)
+            ? new LinkedProjectReadRequest()
+            : new LinkedProjectReadRequest(LinkedProjectReadScope.Project, projectSelector);
+        var targets = await ResolveTargetsAsync(request, cancellationToken);
+        if (!targets.Success) return Failure<WikiPageOutlineData>(targets);
+
+        var member = targets.Payload!.Members.Single();
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = new WikiService(member.Project!).OutlinePage(path.Trim());
+        if (!result.Success) return Failure<WikiPageOutlineData>(result.ErrorCode, result.Message);
+
+        var owner = await BuildOwnerAsync(member, cancellationToken);
+        return AppResult<LinkedProjectReadResult<WikiPageOutlineData>>.Ok(
+            new LinkedProjectReadResult<WikiPageOutlineData>(
+                [new LinkedProjectResource<WikiPageOutlineData>(owner, result.Payload!)],
+                targets.Payload.Warnings));
+    }
+
     public async Task<AppResult<LinkedProjectReadResult<WikiSearchResult>>> SearchWikiPagesAsync(
         string query,
         int limit = 20,

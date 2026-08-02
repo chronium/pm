@@ -81,6 +81,7 @@ public sealed class LinkedProjectReadServiceTests
         var byParent = await service.GetTaskAsync("PM-0001", "parent");
         var byId = await service.GetTaskAsync("PM-0001", "prj_games");
         var wiki = await service.GetWikiPageAsync("guide", "games");
+        var outline = await service.OutlineWikiPageAsync("guide", "parent");
         var unknown = await service.GetTaskAsync("PM-0001", "unknown");
 
         var parentTask = Assert.Single(byParent.Payload!.Items);
@@ -88,6 +89,8 @@ public sealed class LinkedProjectReadServiceTests
         Assert.Contains("<!-- exact task markdown -->", parentTask.Resource.Markdown);
         Assert.Equal("prj_games", Assert.Single(byId.Payload!.Items).Owner.ProjectId);
         Assert.Equal("prj_games", Assert.Single(wiki.Payload!.Items).Owner.ProjectId);
+        Assert.Equal("prj_games", Assert.Single(outline.Payload!.Items).Owner.ProjectId);
+        Assert.Equal("guide", Assert.Single(outline.Payload.Items).Resource.Path);
         Assert.False(unknown.Success);
         Assert.Equal("unknown_linked_project", unknown.ErrorCode);
     }

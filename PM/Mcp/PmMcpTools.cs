@@ -777,30 +777,40 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "outline_wiki_page", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns a wiki page body version and ATX markdown heading outline for targeted patching.")]
-    public McpToolResponse<WikiPageOutlinePayload> OutlineWikiPage(
+    [Description("Returns a wiki page body version and ATX markdown heading outline for targeted patching, with optional linked-project selection.")]
+    public async Task<McpToolResponse<WikiPageOutlinePayload>> OutlineWikiPage(
         string path,
-        [Description("Select current or a linked wiki context granted to this run.")]
-        string? project = null)
+        [Description("Select current, parent, a stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        if (!IsLocalRead(project, false))
+        if (IsLocalRead(project, false))
         {
-            var denied = LinkedWikiReadDenied<WikiPageOutlinePayload>(project, false);
-            if (denied != null) return denied;
-            if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && linkedWikiContexts?.Configured == true)
-            {
-                var scoped = linkedWikiContexts.Outline(path, project!);
-                if (!scoped.Success) return McpToolResponse<WikiPageOutlinePayload>.FromFailure(scoped);
-                return McpToolResponse<WikiPageOutlinePayload>.Ok(
-                    $"Outlined wiki page {scoped.Payload!.Items.Single().Resource.Path}.",
-                    ToWikiPageOutlinePayload(scoped.Payload.Items.Single().Resource));
-            }
+            var local = wikiService.OutlinePage(path);
+            return local.Success
+                ? McpToolResponse<WikiPageOutlinePayload>.Ok($"Outlined wiki page {local.Payload!.Path}.",
+                    ToWikiPageOutlinePayload(local.Payload))
+                : McpToolResponse<WikiPageOutlinePayload>.FromFailure(local);
         }
-        var result = wikiService.OutlinePage(path);
-        return result.Success
-            ? McpToolResponse<WikiPageOutlinePayload>.Ok($"Outlined wiki page {result.Payload!.Path}.",
-                ToWikiPageOutlinePayload(result.Payload))
-            : McpToolResponse<WikiPageOutlinePayload>.FromFailure(result);
+
+        var denied = LinkedWikiReadDenied<WikiPageOutlinePayload>(project, false);
+        if (denied != null) return denied;
+        if (capabilityContext.Profile == McpCapabilityProfile.RunWorker && linkedWikiContexts?.Configured == true)
+        {
+            var scoped = linkedWikiContexts.Outline(path, project!);
+            if (!scoped.Success) return McpToolResponse<WikiPageOutlinePayload>.FromFailure(scoped);
+            var scopedItem = scoped.Payload!.Items.Single();
+            return McpToolResponse<WikiPageOutlinePayload>.Ok(
+                $"Outlined wiki page {scopedItem.Resource.Path}.",
+                ToWikiPageOutlinePayload(scopedItem.Resource, scopedItem.Owner, []));
+        }
+
+        var result = await linkedProjectReadService.OutlineWikiPageAsync(path, project, cancellationToken);
+        if (!result.Success) return McpToolResponse<WikiPageOutlinePayload>.FromFailure(result);
+        var item = result.Payload!.Items.Single();
+        return McpToolResponse<WikiPageOutlinePayload>.Ok(
+            $"Outlined wiki page {item.Resource.Path}.",
+            ToWikiPageOutlinePayload(item.Resource, item.Owner, result.Payload.Warnings));
     }
 
     [McpServerTool(Name = "search_wiki_pages", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -1287,7 +1297,10 @@ public sealed class PmMcpTools(
             warnings == null ? null : ToWarnings(warnings));
     }
 
-    private static WikiPageOutlinePayload ToWikiPageOutlinePayload(WikiPageOutlineData page)
+    private static WikiPageOutlinePayload ToWikiPageOutlinePayload(
+        WikiPageOutlineData page,
+        LinkedProjectResourceOwner? owner = null,
+        IReadOnlyList<LinkedProjectFamilyWarning>? warnings = null)
     {
         return new WikiPageOutlinePayload(
             page.Path,
@@ -1302,7 +1315,9 @@ public sealed class PmMcpTools(
                     heading.Title,
                     heading.Breadcrumb,
                     heading.Preview))
-                .ToList());
+                .ToList(),
+            owner == null ? null : ToOwner(owner),
+            warnings == null ? null : ToWarnings(warnings));
     }
 
     private static string? NormalizeFilter(string? value)
