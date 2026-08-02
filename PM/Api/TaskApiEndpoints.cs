@@ -48,7 +48,8 @@ public sealed record NextTaskResponse(bool Found, BoardTaskSummaryResponse? Task
 public static class TaskApiEndpoints
 {
     public static void MapTaskApi(this RouteGroupBuilder api, BoardService boardService,
-        TaskService taskService, ResourceRevisionService revisions)
+        TaskService taskService, ResourceRevisionService revisions,
+        LinkedProjectReadService? linkedReads = null)
     {
         api.MapGet("/tasks/search", (HttpRequest request, string query, int limit = 20,
                 string? track = null, string? milestone = null, string? state = null) =>
@@ -70,13 +71,24 @@ public static class TaskApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
-        api.MapGet("/tasks/next", (HttpRequest request, string? track = null,
-                string? milestone = null, bool readyOnly = true) =>
+        api.MapGet("/tasks/next", async (HttpRequest request, string? track = null,
+                string? milestone = null, bool readyOnly = true,
+                CancellationToken cancellationToken = default) =>
             {
-                var result = boardService.GetNextTask(new NextTaskQuery(
-                    Normalize(track),
-                    Normalize(milestone),
-                    readyOnly), BoardService.WebDescriptionPreviewLength);
+                var query = new NextTaskQuery(Normalize(track), Normalize(milestone), readyOnly);
+                if (linkedReads == null)
+                {
+                    var local = boardService.GetNextTask(query, BoardService.WebDescriptionPreviewLength);
+                    if (!local.Success) return ApiResults.Failure(local.ErrorCode, local.Message, request.Path);
+                    return Results.Ok(new NextTaskResponse(
+                        local.Payload!.Found,
+                        local.Payload.Task == null ? null : BoardApiEndpoints.ToSummary(local.Payload.Task),
+                        local.Payload.Reason));
+                }
+
+                var result = await linkedReads.GetNextTaskAsync(
+                    new LinkedProjectReadRequest(), query,
+                    BoardService.WebDescriptionPreviewLength, cancellationToken);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var next = result.Payload!;
                 return Results.Ok(new NextTaskResponse(
@@ -90,7 +102,8 @@ public static class TaskApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
-        api.MapGet("/tasks/{id}", (HttpRequest request, string id) => ReadTask(request, id, boardService, revisions))
+        api.MapGet("/tasks/{id}", (HttpRequest request, string id, CancellationToken cancellationToken) =>
+                ReadCurrentTask(request, id, boardService, revisions, linkedReads, cancellationToken))
             .WithName("GetTask")
             .WithSummary("Get task details")
             .Produces<TaskResponse>()
@@ -108,7 +121,8 @@ public static class TaskApiEndpoints
                     input.Description ?? string.Empty, false, cancellationToken);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
 
-                var response = GetResponse(result.Payload!.Id, boardService, revisions, request);
+                var response = await GetCurrentResponse(
+                    result.Payload!.Id, boardService, revisions, linkedReads, request, cancellationToken);
                 if (response.Error != null) return response.Error;
                 ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
                 return Results.Created($"/api/v1/tasks/{result.Payload.Id}", response.Value);
@@ -145,7 +159,8 @@ public static class TaskApiEndpoints
                 var result = taskService.UpdateTaskDetails(id, input.Title, input.State, input.Description,
                     input.Priority, placement);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-                return Refreshed(request, id, boardService, revisions);
+                return await RefreshedCurrent(
+                    request, id, boardService, revisions, linkedReads, cancellationToken);
             })
             .WithName("UpdateTask")
             .WithSummary("Update task details")
@@ -165,7 +180,8 @@ public static class TaskApiEndpoints
                 if (precondition != null) return precondition;
                 var result = taskService.MoveTask(id, input.State);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-                return Refreshed(request, id, boardService, revisions);
+                return await RefreshedCurrent(
+                    request, id, boardService, revisions, linkedReads, cancellationToken);
             })
             .WithName("UpdateTaskState")
             .WithSummary("Update a task state")
@@ -187,7 +203,8 @@ public static class TaskApiEndpoints
                 if (precondition != null) return precondition;
                 var result = taskService.AppendTaskNote(id, input.Note);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-                return Refreshed(request, id, boardService, revisions);
+                return await RefreshedCurrent(
+                    request, id, boardService, revisions, linkedReads, cancellationToken);
             })
             .WithName("AppendTaskNote")
             .WithSummary("Append a note to a task")
@@ -224,10 +241,42 @@ public static class TaskApiEndpoints
         return Results.Ok(response.Value);
     }
 
+    private static async Task<IResult> ReadCurrentTask(
+        HttpRequest request,
+        string id,
+        BoardService boardService,
+        ResourceRevisionService revisions,
+        LinkedProjectReadService? linkedReads,
+        CancellationToken cancellationToken)
+    {
+        var response = await GetCurrentResponse(
+            id, boardService, revisions, linkedReads, request, cancellationToken);
+        if (response.Error != null) return response.Error;
+        var conditional = ApiPreconditions.EvaluateIfNoneMatch(request, response.Value!.Revision);
+        if (conditional != null) return conditional;
+        ApiPreconditions.SetETag(request.HttpContext.Response, response.Value.Revision);
+        return Results.Ok(response.Value);
+    }
+
     internal static IResult Refreshed(HttpRequest request, string id, BoardService boardService,
         ResourceRevisionService revisions)
     {
         var response = GetResponse(id, boardService, revisions, request);
+        if (response.Error != null) return response.Error;
+        ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
+        return Results.Ok(response.Value);
+    }
+
+    private static async Task<IResult> RefreshedCurrent(
+        HttpRequest request,
+        string id,
+        BoardService boardService,
+        ResourceRevisionService revisions,
+        LinkedProjectReadService? linkedReads,
+        CancellationToken cancellationToken)
+    {
+        var response = await GetCurrentResponse(
+            id, boardService, revisions, linkedReads, request, cancellationToken);
         if (response.Error != null) return response.Error;
         ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
         return Results.Ok(response.Value);
@@ -241,6 +290,30 @@ public static class TaskApiEndpoints
         var revision = revisions.GetTaskRevision(id);
         if (!revision.Success) return (null, ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path));
         return (ToResponse(task.Payload!, revision.Payload!), null);
+    }
+
+    private static async Task<(TaskResponse? Value, IResult? Error)> GetCurrentResponse(
+        string id,
+        BoardService boardService,
+        ResourceRevisionService revisions,
+        LinkedProjectReadService? linkedReads,
+        HttpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var task = boardService.GetTask(id);
+        if (!task.Success) return (null, ApiResults.Failure(task.ErrorCode, task.Message, request.Path));
+        var item = task.Payload!;
+        if (linkedReads != null)
+        {
+            var enriched = await linkedReads.EnrichCurrentTaskAsync(item, cancellationToken);
+            if (!enriched.Success)
+                return (null, ApiResults.Failure(enriched.ErrorCode, enriched.Message, request.Path));
+            item = enriched.Payload!;
+        }
+
+        var revision = revisions.GetTaskRevision(id);
+        if (!revision.Success) return (null, ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path));
+        return (ToResponse(item, revision.Payload!), null);
     }
 
     internal static TaskResponse ToResponse(BoardTask item, string revision) => new(

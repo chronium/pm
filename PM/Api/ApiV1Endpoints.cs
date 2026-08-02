@@ -81,8 +81,8 @@ public static class ApiV1Endpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
 
-        api.MapBoardApi(boardService, revisions);
-        api.MapTaskApi(boardService, taskService, revisions);
+        api.MapBoardApi(boardService, revisions, linkedProjectReadService);
+        api.MapTaskApi(boardService, taskService, revisions, linkedProjectReadService);
         api.MapWikiApi(wikiService, revisions);
         api.MapSettingsApi(configService, revisions);
         api.MapValidationApi(validationService);

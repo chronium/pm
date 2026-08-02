@@ -143,6 +143,52 @@ public sealed class LinkedProjectReadService
             new LinkedProjectReadResult<BoardTask>(items, warnings.Items, truncated));
     }
 
+    public async Task<AppResult<BoardData>> EnrichCurrentBoardAsync(
+        BoardData board,
+        CancellationToken cancellationToken = default)
+    {
+        if (!board.Tasks.Any(task => HasQualifiedDependency(task.Task)) ||
+            !activeProject.TryReadProjectId(out var projectId))
+            return AppResult<BoardData>.Ok(board);
+
+        var graph = await taskGraphService.BuildAsync(cancellationToken);
+        if (!graph.Success)
+            return AppResult<BoardData>.Fail(graph.ErrorCode!, graph.Message!);
+
+        BoardTask Enrich(BoardTask task) => task with
+        {
+            Dependencies = graph.Payload!.GetDependencyStatus(projectId, task.Task),
+        };
+
+        return AppResult<BoardData>.Ok(board with
+        {
+            Tasks = board.Tasks.Select(Enrich).ToList(),
+            MilestoneGroups = board.MilestoneGroups.Select(group => group with
+            {
+                States = group.States.Select(state => state with
+                {
+                    Tasks = state.Tasks.Select(Enrich).ToList(),
+                }).ToList(),
+            }).ToList(),
+        });
+    }
+
+    public async Task<AppResult<BoardTask>> EnrichCurrentTaskAsync(
+        BoardTask task,
+        CancellationToken cancellationToken = default)
+    {
+        if (!HasQualifiedDependency(task.Task) || !activeProject.TryReadProjectId(out var projectId))
+            return AppResult<BoardTask>.Ok(task);
+
+        var graph = await taskGraphService.BuildAsync(cancellationToken);
+        return graph.Success
+            ? AppResult<BoardTask>.Ok(task with
+            {
+                Dependencies = graph.Payload!.GetDependencyStatus(projectId, task.Task),
+            })
+            : AppResult<BoardTask>.Fail(graph.ErrorCode!, graph.Message!);
+    }
+
     public async Task<AppResult<LinkedProjectReadResult<BoardTask>>> GetTaskAsync(
         string taskId,
         string? projectSelector = null,

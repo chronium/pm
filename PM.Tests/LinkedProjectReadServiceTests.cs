@@ -285,6 +285,51 @@ public sealed class LinkedProjectReadServiceTests
     }
 
     [Fact]
+    public async Task CurrentChildReadsResolveCanonicalDependenciesThroughReadableUntrustedParent()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateProject(Path.Combine(workspace.Path, "games", "starfall"), "prj_starfall", "Starfall");
+        LinkParentAndChildren(parent, [(child, "starfall")]);
+        AddTask(parent, "PM-0001", "Coordinator contract", state: "done");
+        AddTask(child, "GAME-0001", "Completed parent dependency",
+            dependsOn: ["pm://project/prj_games/task/PM-0001"]);
+        AddTask(child, "GAME-0002", "Missing parent task",
+            dependsOn: ["pm://project/prj_games/task/PM-9999"]);
+        AddTask(child, "GAME-0003", "Unavailable project",
+            dependsOn: ["pm://project/prj_absent/task/PM-0001"]);
+        var family = Family(child, workspace);
+        var service = new LinkedProjectReadService(
+            child, family, new UnusedNextIdService(), new FixedGitInspector(null, null));
+
+        var resolvedFamily = await family.ResolveAsync();
+        var parentMember = resolvedFamily.Payload!.Members.Single(member => member.ProjectId == "prj_games");
+        var localBoard = new BoardService(child).GetBoard(new BoardQuery()).Payload!;
+        var board = await service.EnrichCurrentBoardAsync(localBoard);
+        var detail = await service.EnrichCurrentTaskAsync(new BoardService(child).GetTask("GAME-0001").Payload!);
+        var next = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(), new NextTaskQuery(ReadyOnly: true));
+
+        Assert.True(parentMember.Readable);
+        Assert.False(parentMember.WriteTrusted);
+        var completed = board.Payload!.Tasks.Single(task => task.Task.Id == "GAME-0001").Dependencies;
+        var missing = board.Payload.Tasks.Single(task => task.Task.Id == "GAME-0002").Dependencies;
+        var unavailable = board.Payload.Tasks.Single(task => task.Task.Id == "GAME-0003").Dependencies;
+        Assert.True(completed.Ready);
+        Assert.Equal(["pm://project/prj_games/task/PM-0001"], completed.Completed);
+        Assert.Equal(["pm://project/prj_games/task/PM-9999"], missing.Missing);
+        Assert.Equal(["pm://project/prj_absent/task/PM-0001"], unavailable.Unavailable);
+        Assert.True(detail.Payload!.Dependencies.Ready);
+        Assert.Equal("GAME-0001", next.Payload!.Task!.Task.Id);
+
+        Assert.True(parent.TryGetById("PM-0001", out var parentTask));
+        parent.UpdateTaskState(parentTask, "todo");
+        var waiting = await service.EnrichCurrentTaskAsync(new BoardService(child).GetTask("GAME-0001").Payload!);
+        Assert.False(waiting.Payload!.Dependencies.Ready);
+        Assert.Equal(["pm://project/prj_games/task/PM-0001"], waiting.Payload.Dependencies.WaitingOn);
+    }
+
+    [Fact]
     public async Task CrossProjectCyclesWarnWithoutInvalidatingReads()
     {
         using var workspace = new TempWorkingDirectory();

@@ -44,7 +44,8 @@ public sealed record BoardResponse(
 public static class BoardApiEndpoints
 {
     public static void MapBoardApi(this RouteGroupBuilder api, BoardService boardService,
-        ResourceRevisionService revisions)
+        ResourceRevisionService revisions,
+        LinkedProjectReadService? linkedReads = null)
     {
         api.MapGet("/board/navigation", (HttpRequest request) =>
             {
@@ -68,13 +69,22 @@ public static class BoardApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
-        api.MapGet("/board", (HttpRequest request, string? track, string? milestone, string? state) =>
+        api.MapGet("/board", async (HttpRequest request, string? track, string? milestone, string? state,
+                CancellationToken cancellationToken) =>
             {
                 var query = new BoardQuery(Normalize(track), Normalize(milestone), Normalize(state));
                 var result = boardService.GetBoard(query);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                var board = result.Payload!;
+                if (linkedReads != null)
+                {
+                    var enriched = await linkedReads.EnrichCurrentBoardAsync(board, cancellationToken);
+                    if (!enriched.Success)
+                        return ApiResults.Failure(enriched.ErrorCode, enriched.Message, request.Path);
+                    board = enriched.Payload!;
+                }
 
-                var revisionResult = revisions.GetBoardRevision(result.Payload!);
+                var revisionResult = revisions.GetBoardRevision(board);
                 if (!revisionResult.Success)
                     return ApiResults.Failure(revisionResult.ErrorCode, revisionResult.Message, request.Path);
                 var revision = revisionResult.Payload!;
@@ -82,7 +92,7 @@ public static class BoardApiEndpoints
                 if (conditional != null) return conditional;
 
                 ApiPreconditions.SetETag(request.HttpContext.Response, revision);
-                return Results.Ok(ToResponse(result.Payload!, revision));
+                return Results.Ok(ToResponse(board, revision));
             })
             .WithName("GetBoard")
             .WithSummary("Get the task board")

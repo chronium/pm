@@ -152,6 +152,74 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task CurrentWebReadsResolveReadableUntrustedParentDependencies()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateLinkedProject(
+            Path.Combine(parent.RepositoryPath, "starfall"), "prj_starfall", "Starfall");
+        parent.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children = [Declaration("prj_starfall", "starfall", "starfall")],
+        });
+        child.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = Declaration("prj_games", "games", ".."),
+        });
+        var dependency = TestData.Task("GAME-0001", "Coordinator contract", track: "GAME");
+        parent.WriteTask(dependency);
+        parent.UpdateTaskState(dependency, "done");
+        var task = TestData.Task(
+            "GAME-0002",
+            "Consume coordinator contract",
+            track: "GAME",
+            dependsOn: ["pm://project/prj_games/task/GAME-0001"]);
+        child.WriteTask(task);
+        child.UpdateTaskState(task, "todo");
+        var family = LinkedFamily(child, workspace);
+
+        var resolved = await family.ResolveAsync();
+        var parentMember = resolved.Payload!.Members.Single(member => member.ProjectId == "prj_games");
+        Assert.True(parentMember.Readable);
+        Assert.False(parentMember.WriteTrusted);
+
+        var (app, client) = await CreateApiClient(child, linkedProjectFamilyService: family);
+        await using (app)
+        using (client)
+        {
+            var board = await client.GetFromJsonAsync<BoardResponse>("/api/v1/board");
+            var boardTask = Assert.Single(board!.MilestoneGroups.SelectMany(group => group.States)
+                .SelectMany(state => state.Tasks), candidate => candidate.Id == task.Id);
+            var detail = await client.GetFromJsonAsync<TaskResponse>("/api/v1/tasks/GAME-0002");
+            var next = await client.GetFromJsonAsync<NextTaskResponse>("/api/v1/tasks/next?readyOnly=true");
+
+            Assert.True(boardTask.Dependencies.Ready);
+            Assert.True(detail!.Dependencies.Ready);
+            Assert.True(next!.Found);
+            Assert.Equal("GAME-0002", next.Task!.Id);
+
+            using var denied = new HttpRequestMessage(HttpMethod.Post,
+                "/api/v1/projects/prj_games/tasks")
+            {
+                Content = JsonContent.Create(new CreateTaskRequest("Denied write", "GAME")),
+            };
+            denied.Headers.Add(ApiV1Endpoints.ClientHeader, "api-test");
+            var deniedResponse = await client.SendAsync(denied);
+            Assert.Equal(HttpStatusCode.Forbidden, deniedResponse.StatusCode);
+            Assert.Equal("linked_project_write_untrusted",
+                (await deniedResponse.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+
+            parent.UpdateTaskState(dependency, "todo");
+            detail = await client.GetFromJsonAsync<TaskResponse>("/api/v1/tasks/GAME-0002");
+            next = await client.GetFromJsonAsync<NextTaskResponse>("/api/v1/tasks/next?readyOnly=true");
+            Assert.False(detail!.Dependencies.Ready);
+            Assert.Contains("pm://project/prj_games/task/GAME-0001", detail.Dependencies.WaitingOn);
+            Assert.False(next!.Found);
+        }
+    }
+
+    [Fact]
     public async Task LinkedProjectApiGrantsLocalTrustAndReturnsMutationReceipts()
     {
         using var workspace = new TempWorkingDirectory();

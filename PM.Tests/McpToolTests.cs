@@ -402,6 +402,34 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task CurrentMcpTaskReadsResolveReadableUntrustedParentDependencies()
+    {
+        using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        var family = new LinkedProjectFamilyService(
+            fixture.Starfall,
+            new LinkedProjectService(fixture.Starfall),
+            new LinkedProjectResolver(fixture.Registry(), new NullSubmoduleInspector()));
+        var tools = CreateTools(fixture.Starfall, linkedProjectFamily: family);
+        var resolved = await family.ResolveAsync();
+        var parent = resolved.Payload!.Members.Single(member => member.ProjectId == "prj_games");
+
+        var list = await tools.ListTasks();
+        var detail = await tools.GetTask("STAR-0001");
+        var search = await tools.SearchTasks("Publish Starfall contract");
+        var next = await tools.GetNextTask(readyOnly: true);
+
+        Assert.True(parent.Readable);
+        Assert.False(parent.WriteTrusted);
+        var listed = Assert.Single(list.Data!.Tasks);
+        Assert.True(listed.DependenciesReady);
+        Assert.Empty(listed.MissingDependencies);
+        Assert.True(detail.Data!.DependenciesReady);
+        Assert.True(Assert.Single(search.Data!.Tasks).DependenciesReady);
+        Assert.True(next.Data!.Found);
+        Assert.Equal("STAR-0001", next.Data.Task!.Id);
+    }
+
+    [Fact]
     public async Task RunWorkerReadToolsRejectLinkedProjectScope()
     {
         using var workspace = new TempWorkingDirectory();

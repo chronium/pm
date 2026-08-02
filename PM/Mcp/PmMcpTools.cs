@@ -255,7 +255,9 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (IsLocalRead(project, family))
+        if (IsLocalRead(project, family) &&
+            (capabilityContext.Profile == McpCapabilityProfile.RunWorker ||
+             !projectRoot.TryReadProjectId(out _)))
         {
             var local = boardService.GetBoard(new BoardQuery(
                 NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state)));
@@ -300,7 +302,9 @@ public sealed class PmMcpTools(
         bool family = false,
         CancellationToken cancellationToken = default)
     {
-        if (IsLocalRead(project, family))
+        if (IsLocalRead(project, family) &&
+            (capabilityContext.Profile == McpCapabilityProfile.RunWorker ||
+             !projectRoot.TryReadProjectId(out _)))
         {
             var local = taskService.SearchTasks(query, limit);
             if (!local.Success) return McpToolResponse<TaskSearchPayload>.FromFailure(local);
@@ -379,7 +383,10 @@ public sealed class PmMcpTools(
         string? project = null,
         CancellationToken cancellationToken = default)
     {
-        if (IsLocalRead(project, false)) return GetLocalTask(taskId);
+        if (IsLocalRead(project, false) &&
+            (capabilityContext.Profile == McpCapabilityProfile.RunWorker ||
+             !projectRoot.TryReadProjectId(out _)))
+            return GetLocalTask(taskId);
 
         var denied = LinkedReadDenied<TaskDetailPayload>(project, false);
         if (denied != null) return denied;
