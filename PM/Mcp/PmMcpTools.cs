@@ -612,20 +612,24 @@ public sealed class PmMcpTools(
     {
         var result = linkedProjectMutations.ExecuteAsync(
             project,
-            target => ToMcpMutation(target, target.Tasks.PatchTaskMetadata(
-                taskId, title, track, milestone, description, priority, dependsOn)),
+            target => target.Tasks.PatchTaskMetadata(
+                taskId, title, track, milestone, description, priority, dependsOn),
             MutationAccess,
             cancellationToken).GetAwaiter().GetResult();
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);
 
-        var mutation = result.Payload!.Value;
+        var mutation = result.Payload!;
+        var task = ReadTaskAfterMutation(taskId, mutation.Receipt, cancellationToken);
+        if (!task.Success)
+            return McpToolResponse<TaskMutationPayload>.FromFailure(task);
+
         return McpToolResponse<TaskMutationPayload>.Ok(
-            mutation.Changed ? $"Updated task {taskId}." : $"Task {taskId} already matched.",
+            mutation.Value.Changed ? $"Updated task {taskId}." : $"Task {taskId} already matched.",
             new TaskMutationPayload(
-                mutation.Changed,
-                mutation.Task,
-                ToReceipt(result.Payload.Receipt)));
+                mutation.Value.Changed,
+                task.Payload!,
+                ToReceipt(mutation.Receipt)));
     }
 
     [McpServerTool(Name = "append_task_note", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
@@ -643,18 +647,22 @@ public sealed class PmMcpTools(
 
         var result = linkedProjectMutations.ExecuteAsync(
             project,
-            target => ToMcpMutation(target, target.Tasks.AppendTaskNote(taskId, note)),
+            target => target.Tasks.AppendTaskNote(taskId, note),
             MutationAccess,
             cancellationToken).GetAwaiter().GetResult();
         if (!result.Success)
             return McpToolResponse<TaskMutationPayload>.FromFailure(result);
 
-        var mutation = result.Payload!.Value;
+        var mutation = result.Payload!;
+        var task = ReadTaskAfterMutation(taskId, mutation.Receipt, cancellationToken);
+        if (!task.Success)
+            return McpToolResponse<TaskMutationPayload>.FromFailure(task);
+
         return McpToolResponse<TaskMutationPayload>.Ok($"Appended note to task {taskId}.",
             new TaskMutationPayload(
-                mutation.Changed,
-                mutation.Task,
-                ToReceipt(result.Payload.Receipt)));
+                mutation.Value.Changed,
+                task.Payload!,
+                ToReceipt(mutation.Receipt)));
     }
 
     [McpServerTool(Name = "reorder_tasks", Destructive = true, Idempotent = true, OpenWorld = false,
@@ -1229,20 +1237,19 @@ public sealed class PmMcpTools(
             task.Description);
     }
 
-    private static AppResult<McpTaskMutationValue> ToMcpMutation(
-        LinkedProjectMutationTarget target,
-        AppResult<TaskMutationResult> result)
+    private AppResult<TaskDetailPayload> ReadTaskAfterMutation(
+        string taskId,
+        ProjectMutationReceipt receipt,
+        CancellationToken cancellationToken)
     {
-        if (!result.Success)
-            return AppResult<McpTaskMutationValue>.Fail(result.ErrorCode!, result.Message!);
-
-        var task = target.Board.GetTask(result.Payload!.Task.Id);
-        if (!task.Success)
-            return AppResult<McpTaskMutationValue>.Fail(task.ErrorCode!, task.Message!);
-
-        return AppResult<McpTaskMutationValue>.Ok(new McpTaskMutationValue(
-            result.Payload.Changed,
-            ToTaskDetailPayload(task.Payload!, null, [])));
+        var selector = string.Equals(receipt.ProjectId, ActiveProjectId, StringComparison.Ordinal) ||
+                       string.Equals(receipt.ProjectId, "current", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : receipt.ProjectId;
+        var task = GetTask(taskId, selector, cancellationToken).GetAwaiter().GetResult();
+        return task.Success
+            ? AppResult<TaskDetailPayload>.Ok(task.Data!)
+            : AppResult<TaskDetailPayload>.Fail(task.ErrorCode!, task.Message!);
     }
 
     private McpToolResponse<TaskDetailPayload> GetLocalTask(string taskId)
@@ -1412,5 +1419,4 @@ public sealed class PmMcpTools(
             ? AppResult<bool>.Ok(true)
             : AppResult<bool>.Fail(result.ErrorCode!, result.Message!);
 
-    private sealed record McpTaskMutationValue(bool Changed, TaskDetailPayload Task);
 }

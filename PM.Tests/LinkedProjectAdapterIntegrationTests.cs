@@ -143,6 +143,15 @@ public sealed class LinkedProjectAdapterIntegrationTests
             ("project", "starfall"));
         Assert.NotEqual(true, mutated.IsError);
         Assert.Contains("prj_starfall", Json(mutated));
+        AssertResolvedSharedDependency(mutated);
+        var metadata = await Call(
+            client, "update_task_metadata", ("taskId", "STAR-0001"), ("priority", "low"),
+            ("project", "starfall"));
+        Assert.NotEqual(true, metadata.IsError);
+        AssertResolvedSharedDependency(metadata);
+        var reread = await Call(
+            client, "get_task", ("taskId", "STAR-0001"), ("project", "starfall"));
+        AssertResolvedSharedDependency(reread);
         Assert.Contains("MCP integration note", ReadTaskMarkdown(fixture.Starfall, "STAR-0001"));
         Assert.DoesNotContain(errors, line => line.Contains("fail", StringComparison.OrdinalIgnoreCase));
     }
@@ -190,6 +199,18 @@ public sealed class LinkedProjectAdapterIntegrationTests
         client.CallToolAsync(name, arguments.ToDictionary(argument => argument.Name, argument => (object?)argument.Value));
 
     private static string Json(CallToolResult result) => JsonSerializer.Serialize(result.StructuredContent);
+
+    private static void AssertResolvedSharedDependency(CallToolResult result)
+    {
+        using var document = JsonDocument.Parse(Json(result));
+        var data = document.RootElement.GetProperty("data");
+        var task = data.TryGetProperty("task", out var mutationTask) ? mutationTask : data;
+        Assert.True(task.GetProperty("dependenciesReady").GetBoolean());
+        Assert.Equal(
+            ["pm://project/prj_games/task/SHARED-0001"],
+            task.GetProperty("completedDependencies").EnumerateArray().Select(item => item.GetString()).ToList());
+        Assert.Empty(task.GetProperty("unavailableDependencies").EnumerateArray());
+    }
 
     private static string ReadTaskMarkdown(PM.Project.ProjectRoot root, string taskId) =>
         File.ReadAllText(Path.Combine(root.TasksPath, $"{taskId}.{GlobalConfig.DefaultTaskExtension}"));
