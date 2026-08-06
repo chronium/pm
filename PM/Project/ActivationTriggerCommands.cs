@@ -5,6 +5,16 @@ using Spectre.Console.Cli;
 
 namespace PM.Project;
 
+public interface IActivationTriggerCommandPrompts
+{
+    bool Confirm(string prompt);
+}
+
+public sealed class ActivationTriggerCommandPrompts : IActivationTriggerCommandPrompts
+{
+    public bool Confirm(string prompt) => AnsiConsole.Confirm(prompt, false);
+}
+
 public sealed class ActivationTriggerAddCommand(ActivationTriggerService triggers)
     : Command<ActivationTriggerAddCommand.Settings>
 {
@@ -141,6 +151,74 @@ public sealed class ActivationTriggerAttachCommand(ActivationTriggerService trig
     }
 }
 
+public sealed class ActivationTriggerRedefineCommand(
+    ActivationTriggerService triggers,
+    IActivationTriggerCommandPrompts prompts)
+    : Command<ActivationTriggerRedefineCommand.Settings>
+{
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        if (settings.Clear == (settings.Requirements != null))
+            return ActivationTriggerCommandOutput.Fail(
+                "Specify exactly one of --requirements or --clear.");
+
+        var requirements = settings.Clear
+            ? AppResult<IReadOnlyList<ActivationRequirement>>.Ok([])
+            : ActivationRequirementInput.ParseRequired(settings.Requirements!);
+        if (!requirements.Success) return ActivationTriggerCommandOutput.Fail(requirements.Message);
+
+        var preview = triggers.PreviewRedefinition(settings.Key, requirements.Payload!);
+        if (!preview.Success) return ActivationTriggerCommandOutput.Fail(preview.Message);
+        ActivationTriggerCommandOutput.WritePreview(preview.Payload!);
+
+        var approved = settings.Yes;
+        if (preview.Payload!.RequiresConfirmation && !approved)
+        {
+            approved = prompts.Confirm(
+                $"Redefinition will make eligible milestone(s) inactive and remove " +
+                $"{preview.Payload.TaskIdsLosingEligibility.Count} task(s) from activation eligibility. Continue?");
+            if (!approved)
+            {
+                AnsiConsole.MarkupLine("[yellow]Activation trigger redefinition cancelled.[/]");
+                return 1;
+            }
+        }
+
+        var result = triggers.RedefineTrigger(
+            settings.Key,
+            requirements.Payload!,
+            preview.Payload.Revision,
+            approved);
+        return result.Success
+            ? ActivationTriggerCommandOutput.Redefined(result.Payload!)
+            : ActivationTriggerCommandOutput.Fail(result.Message);
+    }
+
+    public sealed class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<key>")]
+        [Description("Active activation trigger key")]
+        public string Key { get; init; } = string.Empty;
+
+        [CommandOption("--requirements <REQUIREMENTS>")]
+        [Description("Comma-separated task:<id> or milestone:<key> requirements")]
+        public string? Requirements { get; init; }
+
+        [CommandOption("--clear")]
+        [Description("Replace the definition with a manual-only trigger")]
+        public bool Clear { get; init; }
+
+        [CommandOption("--yes")]
+        [Description("Confirm milestone eligibility loss without prompting")]
+        public bool Yes { get; init; }
+
+        public override ValidationResult Validate() =>
+            Clear == (Requirements != null)
+                ? ValidationResult.Error("Specify exactly one of --requirements or --clear.")
+                : ValidationResult.Success();
+    }
+}
+
 public sealed class ActivationTriggerDetachCommand(ActivationTriggerService triggers)
     : Command<ActivationTriggerDetachCommand.Settings>
 {
@@ -250,6 +328,44 @@ internal static class ActivationRequirementInput
 
 internal static class ActivationTriggerCommandOutput
 {
+    public static void WritePreview(ActivationTriggerRedefinitionPreview preview)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"Redefinition preview for [green]{preview.TriggerKey.EscapeMarkup()}[/]:");
+        AnsiConsole.MarkupLineInterpolated(
+            $"Proposed activation: [blue]{(preview.WillReactivateAutomatically ? "automatic" : "pending")}[/]");
+
+        var table = new Table()
+            .AddColumn("Milestone")
+            .AddColumn("Before")
+            .AddColumn("After")
+            .AddColumn("Eligible tasks")
+            .AddColumn("Losing eligibility");
+        foreach (var impact in preview.Milestones)
+            table.AddRow(
+                impact.MilestoneKey.EscapeMarkup(),
+                impact.Before.ToString().EscapeMarkup(),
+                impact.After.ToString().EscapeMarkup(),
+                FormatTaskIds(impact.CurrentlyEligibleTaskIds),
+                FormatTaskIds(impact.TaskIdsLosingEligibility));
+        AnsiConsole.Write(table);
+    }
+
+    public static int Redefined(ActivationTriggerRedefinitionResult result)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"Redefined activation trigger [green]{result.TriggerKey.EscapeMarkup()}[/].");
+        var activation = result.IsActive
+            ? $"active {result.ActivationMode!.Value.ToString().ToLowerInvariant()}"
+            : "pending";
+        AnsiConsole.MarkupLineInterpolated($"Activation: [blue]{activation.EscapeMarkup()}[/].");
+        var affected = result.AffectedMilestones.Count == 0
+            ? "none"
+            : string.Join(", ", result.AffectedMilestones);
+        AnsiConsole.MarkupLineInterpolated($"Affected milestones: [blue]{affected.EscapeMarkup()}[/].");
+        return 0;
+    }
+
     public static int Changed(string operation, ActivationTriggerMutationResult result)
     {
         AnsiConsole.MarkupLineInterpolated(
@@ -267,4 +383,7 @@ internal static class ActivationTriggerCommandOutput
             $"[red]{(message ?? "Activation trigger operation failed.").EscapeMarkup()}[/]");
         return 1;
     }
+
+    private static string FormatTaskIds(IReadOnlyList<string> taskIds) =>
+        (taskIds.Count == 0 ? "-" : string.Join(", ", taskIds)).EscapeMarkup();
 }

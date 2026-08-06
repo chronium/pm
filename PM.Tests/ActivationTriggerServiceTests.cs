@@ -195,8 +195,244 @@ public class ActivationTriggerServiceTests
         Assert.True(ProjectConfig.ReadConfig(root).Milestones.ContainsKey("source"));
     }
 
-    private static ActivationTriggerService CreateService(ProjectRoot root) =>
-        new(root, new MilestoneActivationResolver(root), new MilestoneActivationValidationService(root));
+    [Fact]
+    public async Task RedefinitionPreviewReportsEligibilityLossAndPendingMutationRequiresApproval()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var (root, newRequirement, _) = await CreateRedefinitionProject(workspace, newRequirementDone: false);
+        var before = File.ReadAllText(root.ConfigPath);
+        var service = CreateService(root, new FixedTimeProvider(DateTimeOffset.Parse("2026-08-06T12:00:00Z")));
+        ActivationRequirement[] requirements =
+            [new() { Kind = ActivationRequirementKind.Task, Source = newRequirement.Id }];
+
+        var preview = service.PreviewRedefinition("entry", requirements);
+
+        Assert.True(preview.Success);
+        Assert.False(preview.Payload!.WillReactivateAutomatically);
+        Assert.True(preview.Payload.RequiresConfirmation);
+        Assert.Equal(["PM-0003"], preview.Payload.CurrentlyEligibleTaskIds);
+        Assert.Equal(["PM-0003"], preview.Payload.TaskIdsLosingEligibility);
+        var impact = Assert.Single(preview.Payload.Milestones);
+        Assert.Equal(MilestoneLifecycle.Active, impact.Before);
+        Assert.Equal(MilestoneLifecycle.Inactive, impact.After);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+
+        var unconfirmed = service.RedefineTrigger(
+            "entry", requirements, preview.Payload.Revision, allowDeactivation: false);
+        Assert.Equal("activation_trigger_redefine_confirmation_required", unconfirmed.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+
+        var changed = service.RedefineTrigger(
+            "entry", requirements, preview.Payload.Revision, allowDeactivation: true);
+        Assert.True(changed.Success);
+        Assert.False(changed.Payload!.IsActive);
+        var stored = ProjectConfig.ReadConfig(root).ActivationTriggers["entry"];
+        Assert.Null(stored.Activation);
+        Assert.Equal(newRequirement.Id, Assert.Single(stored.Requirements).Source);
+    }
+
+    [Fact]
+    public async Task SatisfiedRedefinitionCreatesFreshAutomaticActivationWithoutConfirmation()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var (root, newRequirement, _) = await CreateRedefinitionProject(workspace, newRequirementDone: true);
+        var now = DateTimeOffset.Parse("2026-08-06T12:34:56Z");
+        var service = CreateService(root, new FixedTimeProvider(now));
+        ActivationRequirement[] requirements =
+            [new() { Kind = ActivationRequirementKind.Task, Source = newRequirement.Id }];
+
+        var preview = service.PreviewRedefinition("entry", requirements);
+        Assert.True(preview.Success);
+        Assert.True(preview.Payload!.WillReactivateAutomatically);
+        Assert.False(preview.Payload.RequiresConfirmation);
+        Assert.All(preview.Payload.Milestones, impact => Assert.Equal(impact.Before, impact.After));
+
+        var changed = service.RedefineTrigger(
+            "entry", requirements, preview.Payload.Revision, allowDeactivation: false);
+
+        Assert.True(changed.Success);
+        Assert.True(changed.Payload!.IsActive);
+        Assert.Equal(ActivationMode.Automatic, changed.Payload.ActivationMode);
+        Assert.Equal(now, changed.Payload.ActivatedAt);
+        var activation = ProjectConfig.ReadConfig(root).ActivationTriggers["entry"].Activation;
+        Assert.NotNull(activation);
+        Assert.Equal(ActivationMode.Automatic, activation.Mode);
+        Assert.Equal(now, activation.At);
+    }
+
+    [Fact]
+    public async Task RedefinitionRejectsInactiveTriggersAndStalePreviewsWithoutWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var (root, newRequirement, _) = await CreateRedefinitionProject(workspace, newRequirementDone: false);
+        var service = CreateService(root);
+        ActivationRequirement[] requirements =
+            [new() { Kind = ActivationRequirementKind.Task, Source = newRequirement.Id }];
+        var preview = service.PreviewRedefinition("entry", requirements);
+        Assert.True(preview.Success);
+        var before = File.ReadAllText(root.ConfigPath);
+
+        var changedProposal = service.RedefineTrigger(
+            "entry", [], preview.Payload!.Revision, allowDeactivation: true);
+        Assert.Equal("activation_trigger_redefine_stale", changedProposal.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+
+        root.UpdateTaskState(newRequirement, "done");
+        var stale = service.RedefineTrigger(
+            "entry", requirements, preview.Payload!.Revision, allowDeactivation: true);
+
+        Assert.Equal("activation_trigger_redefine_stale", stale.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+
+        root.Config!.ActivationTriggers["entry"].Activation = null;
+        root.Config.WriteConfig(root);
+        Assert.Equal("activation_trigger_inactive",
+            service.PreviewRedefinition("entry", requirements).ErrorCode);
+    }
+
+    [Fact]
+    public async Task RedefinitionValidatesReferencesAndActivationCyclesBeforePreview()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var (root, _, eligibleTask) = await CreateRedefinitionProject(workspace, newRequirementDone: false);
+        var service = CreateService(root);
+        var before = File.ReadAllText(root.ConfigPath);
+
+        var missing = service.PreviewRedefinition("entry",
+            [new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-9999" }]);
+        var cycle = service.PreviewRedefinition("entry",
+            [new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = eligibleTask.Id }]);
+
+        Assert.Equal("unknown_activation_task", missing.ErrorCode);
+        Assert.Equal("activation_cycle", cycle.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+    }
+
+    [Fact]
+    public async Task RedefinitionRestoresExactConfigurationWhenReloadFails()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var (root, newRequirement, _) = await CreateRedefinitionProject(workspace, newRequirementDone: false);
+        var persistence = new FaultingProjectConfigPersistence(root) { ReloadFailuresAfterWrite = 1 };
+        var service = CreateService(root, persistence: persistence);
+        ActivationRequirement[] requirements =
+            [new() { Kind = ActivationRequirementKind.Task, Source = newRequirement.Id }];
+        var preview = service.PreviewRedefinition("entry", requirements);
+        var before = File.ReadAllText(root.ConfigPath);
+        var oldActivation = root.Config!.ActivationTriggers["entry"].Activation;
+
+        var result = service.RedefineTrigger(
+            "entry", requirements, preview.Payload!.Revision, allowDeactivation: true);
+
+        Assert.Equal("activation_trigger_redefine_failed", result.ErrorCode);
+        Assert.Equal(2, persistence.WriteCount);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+        var restored = root.Config.ActivationTriggers["entry"];
+        Assert.NotNull(restored.Activation);
+        Assert.Equal(oldActivation!.At, restored.Activation.At);
+        Assert.Equal(oldActivation.Mode, restored.Activation.Mode);
+        Assert.Equal("PM-0001", Assert.Single(restored.Requirements).Source);
+    }
+
+    [Fact]
+    public async Task RedefinitionReportsRollbackFailureSeparately()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var (root, newRequirement, _) = await CreateRedefinitionProject(workspace, newRequirementDone: false);
+        var persistence = new FaultingProjectConfigPersistence(root)
+        {
+            ReloadFailuresAfterWrite = 1,
+            FailRestoreWrite = true,
+        };
+        var service = CreateService(root, persistence: persistence);
+        ActivationRequirement[] requirements =
+            [new() { Kind = ActivationRequirementKind.Task, Source = newRequirement.Id }];
+        var preview = service.PreviewRedefinition("entry", requirements);
+
+        var result = service.RedefineTrigger(
+            "entry", requirements, preview.Payload!.Revision, allowDeactivation: true);
+
+        Assert.Equal("activation_trigger_redefine_rollback_failed", result.ErrorCode);
+    }
+
+    private static ActivationTriggerService CreateService(
+        ProjectRoot root,
+        TimeProvider? timeProvider = null,
+        IProjectConfigPersistence? persistence = null) =>
+        new(
+            root,
+            new MilestoneActivationResolver(root),
+            new MilestoneActivationValidationService(root),
+            timeProvider ?? TimeProvider.System,
+            persistence ?? new ProjectConfigPersistence(root));
+
+    private static async Task<(ProjectRoot Root, TaskItem NewRequirement, TaskItem EligibleTask)>
+        CreateRedefinitionProject(TempWorkingDirectory workspace, bool newRequirementDone)
+    {
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0001" },
+                    ],
+                    Activation = new ActivationRecord
+                    {
+                        At = DateTimeOffset.Parse("2026-08-06T08:00:00Z"),
+                        Mode = ActivationMode.Automatic,
+                    },
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("entry");
+        var root = await workspace.CreateProject(config);
+        var oldRequirement = TestData.Task("PM-0001", "Old requirement");
+        var newRequirement = TestData.Task("PM-0002", "New requirement");
+        var eligibleTask = TestData.Task("PM-0003", "Eligible beta work", milestone: "beta");
+        foreach (var task in new[] { oldRequirement, newRequirement, eligibleTask }) root.WriteTask(task);
+        root.UpdateTaskState(oldRequirement, "done");
+        root.UpdateTaskState(newRequirement, newRequirementDone ? "done" : "todo");
+        root.UpdateTaskState(eligibleTask, "todo");
+        return (root, newRequirement, eligibleTask);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class FaultingProjectConfigPersistence(ProjectRoot root) : IProjectConfigPersistence
+    {
+        private readonly ProjectConfigPersistence inner = new(root);
+
+        public int ReloadFailuresAfterWrite { get; init; }
+        public bool FailRestoreWrite { get; init; }
+        public int WriteCount { get; private set; }
+        private int reloadFailures;
+
+        public string ReadText() => inner.ReadText();
+
+        public void WriteTextAtomic(string yaml)
+        {
+            WriteCount++;
+            if (FailRestoreWrite && WriteCount == 2) throw new IOException("Restore failed.");
+            inner.WriteTextAtomic(yaml);
+        }
+
+        public bool Reload()
+        {
+            if (WriteCount > 0 && reloadFailures < ReloadFailuresAfterWrite)
+            {
+                reloadFailures++;
+                return false;
+            }
+
+            return inner.Reload();
+        }
+    }
 
     private sealed class RecordingNextIdService : INextIdService
     {

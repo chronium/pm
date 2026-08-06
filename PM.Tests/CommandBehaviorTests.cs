@@ -1767,7 +1767,9 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot));
+            new MilestoneActivationValidationService(projectRoot),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
 
         var add = new ActivationTriggerAddCommand(service);
         var (addCode, addOutput) = await CaptureConsole(() => add.Execute(null!,
@@ -1814,7 +1816,9 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot));
+            new MilestoneActivationValidationService(projectRoot),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
 
         var add = new ActivationTriggerAddCommand(service);
         Assert.Equal(1, add.Execute(null!,
@@ -1828,6 +1832,70 @@ public class CommandBehaviorTests
             new ActivationTriggerSetRequirementsCommand.Settings
                 { Key = "bad", Requirements = "task:PM-0001", Clear = true },
             CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ActivationTriggerRedefinePreviewsCancellationAndConfirmedPendingOutcome()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0001" },
+                    ],
+                    Activation = new ActivationRecord
+                    {
+                        At = DateTimeOffset.Parse("2026-08-06T08:00:00Z"),
+                        Mode = ActivationMode.Automatic,
+                    },
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("entry");
+        var projectRoot = await workspace.CreateProject(config);
+        var oldRequirement = TestData.Task("PM-0001", "Old requirement");
+        var newRequirement = TestData.Task("PM-0002", "New requirement");
+        var eligible = TestData.Task("PM-0003", "Eligible work", milestone: "beta");
+        foreach (var task in new[] { oldRequirement, newRequirement, eligible }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(oldRequirement, "done");
+        projectRoot.UpdateTaskState(newRequirement, "todo");
+        projectRoot.UpdateTaskState(eligible, "todo");
+        var service = new ActivationTriggerService(
+            projectRoot,
+            new MilestoneActivationResolver(projectRoot),
+            new MilestoneActivationValidationService(projectRoot),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
+        var prompts = new RecordingActivationTriggerPrompts { Response = false };
+        var command = new ActivationTriggerRedefineCommand(service, prompts);
+        var before = File.ReadAllText(projectRoot.ConfigPath);
+
+        var (cancelCode, cancelOutput) = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerRedefineCommand.Settings
+                { Key = "entry", Requirements = "task:PM-0002" },
+            CancellationToken.None));
+
+        Assert.Equal(1, cancelCode);
+        Assert.Equal(1, prompts.ConfirmCalls);
+        Assert.Contains("PM-0003", cancelOutput);
+        Assert.Contains("Inactive", cancelOutput);
+        Assert.Contains("cancelled", cancelOutput);
+        Assert.Equal(before, File.ReadAllText(projectRoot.ConfigPath));
+
+        var (changedCode, changedOutput) = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerRedefineCommand.Settings
+                { Key = "entry", Requirements = "task:PM-0002", Yes = true },
+            CancellationToken.None));
+
+        Assert.Equal(0, changedCode);
+        Assert.Equal(1, prompts.ConfirmCalls);
+        Assert.Contains("Activation: pending", changedOutput);
+        Assert.Null(ProjectConfig.ReadConfig(projectRoot).ActivationTriggers["entry"].Activation);
     }
 
     private static async Task<(int ExitCode, string Output)> ExecuteListCommand(
@@ -1901,6 +1969,18 @@ public class CommandBehaviorTests
         {
             HealthyCalls++;
             return Task.FromResult(true);
+        }
+    }
+
+    private sealed class RecordingActivationTriggerPrompts : IActivationTriggerCommandPrompts
+    {
+        public bool Response { get; init; }
+        public int ConfirmCalls { get; private set; }
+
+        public bool Confirm(string prompt)
+        {
+            ConfirmCalls++;
+            return Response;
         }
     }
 

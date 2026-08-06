@@ -1,4 +1,9 @@
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 using PM.Project;
+using PM.Tasks;
+using YamlDotNet.Core;
 
 namespace PM.Application;
 
@@ -6,20 +11,49 @@ public sealed record ActivationTriggerMutationResult(
     string TriggerKey,
     IReadOnlyList<string> AffectedMilestones);
 
+public sealed record ActivationTriggerMilestoneImpact(
+    string MilestoneKey,
+    MilestoneLifecycle Before,
+    MilestoneLifecycle After,
+    IReadOnlyList<string> CurrentlyEligibleTaskIds,
+    IReadOnlyList<string> TaskIdsLosingEligibility);
+
+public sealed record ActivationTriggerRedefinitionPreview(
+    string TriggerKey,
+    string Revision,
+    bool WillReactivateAutomatically,
+    bool RequiresConfirmation,
+    IReadOnlyList<ActivationTriggerMilestoneImpact> Milestones,
+    IReadOnlyList<string> CurrentlyEligibleTaskIds,
+    IReadOnlyList<string> TaskIdsLosingEligibility);
+
+public sealed record ActivationTriggerRedefinitionResult(
+    string TriggerKey,
+    bool IsActive,
+    ActivationMode? ActivationMode,
+    DateTimeOffset? ActivatedAt,
+    IReadOnlyList<string> AffectedMilestones);
+
 public sealed class ActivationTriggerService
 {
     private readonly ProjectRoot projectRoot;
     private readonly MilestoneActivationResolver resolver;
     private readonly MilestoneActivationValidationService validator;
+    private readonly TimeProvider timeProvider;
+    private readonly IProjectConfigPersistence persistence;
 
     public ActivationTriggerService(
         ProjectRoot projectRoot,
         MilestoneActivationResolver resolver,
-        MilestoneActivationValidationService validator)
+        MilestoneActivationValidationService validator,
+        TimeProvider timeProvider,
+        IProjectConfigPersistence persistence)
     {
         this.projectRoot = projectRoot;
         this.resolver = resolver;
         this.validator = validator;
+        this.timeProvider = timeProvider;
+        this.persistence = persistence;
     }
 
     public AppResult<IReadOnlyList<ResolvedActivationTrigger>> ListTriggers()
@@ -28,6 +62,75 @@ public sealed class ActivationTriggerService
         return snapshot.Success
             ? AppResult<IReadOnlyList<ResolvedActivationTrigger>>.Ok(snapshot.Payload!.ActivationTriggers)
             : AppResult<IReadOnlyList<ResolvedActivationTrigger>>.Fail(snapshot.ErrorCode!, snapshot.Message!);
+    }
+
+    public AppResult<ActivationTriggerRedefinitionPreview> PreviewRedefinition(
+        string key,
+        IReadOnlyList<ActivationRequirement> requirements)
+    {
+        var evaluation = EvaluateRedefinition(key, requirements);
+        return evaluation.Success
+            ? AppResult<ActivationTriggerRedefinitionPreview>.Ok(evaluation.Payload!.Preview)
+            : AppResult<ActivationTriggerRedefinitionPreview>.Fail(evaluation.ErrorCode!, evaluation.Message!);
+    }
+
+    public AppResult<ActivationTriggerRedefinitionResult> RedefineTrigger(
+        string key,
+        IReadOnlyList<ActivationRequirement> requirements,
+        string expectedRevision,
+        bool allowDeactivation)
+    {
+        if (string.IsNullOrWhiteSpace(expectedRevision))
+            return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                "activation_trigger_redefine_revision_required",
+                "Activation trigger redefinition requires a preview revision.");
+
+        var evaluationResult = EvaluateRedefinition(key, requirements);
+        if (!evaluationResult.Success)
+            return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                evaluationResult.ErrorCode!, evaluationResult.Message!);
+
+        var evaluation = evaluationResult.Payload!;
+        if (!string.Equals(expectedRevision, evaluation.Preview.Revision, StringComparison.Ordinal))
+            return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                "activation_trigger_redefine_stale",
+                "Activation trigger redefinition impact changed. Run the command again to review a fresh preview.");
+        if (evaluation.Preview.RequiresConfirmation && !allowDeactivation)
+            return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                "activation_trigger_redefine_confirmation_required",
+                "Activation trigger redefinition would make one or more eligible milestones inactive.");
+
+        var prospectiveYaml = YamlSerde.Serialize(evaluation.ProspectiveConfig);
+        try
+        {
+            persistence.WriteTextAtomic(prospectiveYaml);
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                "activation_trigger_redefine_failed",
+                $"Activation trigger {evaluation.Preview.TriggerKey} could not be redefined: {exception.Message}");
+        }
+
+        if (!GlobalConfig.DryRun && !persistence.Reload())
+        {
+            if (!TryRestoreConfig(evaluation.OriginalYaml))
+                return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                    "activation_trigger_redefine_rollback_failed",
+                    $"Activation trigger {evaluation.Preview.TriggerKey} could not be redefined and the previous configuration could not be restored.");
+
+            return AppResult<ActivationTriggerRedefinitionResult>.Fail(
+                "activation_trigger_redefine_failed",
+                $"Activation trigger {evaluation.Preview.TriggerKey} could not be redefined; the previous definition and activation provenance were restored.");
+        }
+
+        var activation = evaluation.ProspectiveConfig.ActivationTriggers[evaluation.Preview.TriggerKey].Activation;
+        return AppResult<ActivationTriggerRedefinitionResult>.Ok(new ActivationTriggerRedefinitionResult(
+            evaluation.Preview.TriggerKey,
+            activation != null,
+            activation?.Mode,
+            activation?.At,
+            evaluation.Preview.Milestones.Select(milestone => milestone.MilestoneKey).ToList()));
     }
 
     public AppResult<ActivationTriggerMutationResult> AddTrigger(
@@ -167,6 +270,146 @@ public sealed class ActivationTriggerService
             prospective => prospective.Milestones[milestoneKey].RequiredActivationTriggers.Remove(key));
     }
 
+    private AppResult<RedefinitionEvaluation> EvaluateRedefinition(
+        string key,
+        IReadOnlyList<ActivationRequirement> requirements)
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<RedefinitionEvaluation>.Fail(
+                "missing_project", "Project not found. Run pm init first.");
+
+        key = key.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return AppResult<RedefinitionEvaluation>.Fail(
+                "invalid_activation_trigger", "Activation trigger key is required.");
+
+        string originalYaml;
+        ProjectConfig config;
+        try
+        {
+            if (!persistence.Reload())
+                return AppResult<RedefinitionEvaluation>.Fail(
+                    "activation_trigger_config_reload_failed",
+                    "Activation trigger configuration could not be reloaded for impact evaluation.");
+            originalYaml = persistence.ReadText();
+            config = ProjectConfig.Deserialize(originalYaml);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                           InvalidDataException or YamlException)
+        {
+            return AppResult<RedefinitionEvaluation>.Fail(
+                "invalid_project", $"Project configuration could not be read: {exception.Message}");
+        }
+
+        if (config.RequiresMilestoneSchemaMigration)
+            return AppResult<RedefinitionEvaluation>.Fail(
+                "milestone_schema_migration_required",
+                "Legacy milestone configuration must be migrated with pm doctor --fix before project settings can be changed.");
+        if (!config.ActivationTriggers.TryGetValue(key, out var trigger))
+            return AppResult<RedefinitionEvaluation>.Fail(
+                "missing_activation_trigger", $"Activation trigger {key} not found.");
+        if (trigger.Activation == null)
+            return AppResult<RedefinitionEvaluation>.Fail(
+                "activation_trigger_inactive",
+                $"Activation trigger {key} is inactive. Use set-requirements to change its requirements.");
+
+        var tasksById = projectRoot.GetAllTasks()
+            .GroupBy(task => task.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var stateByTaskId = tasksById.Values.ToDictionary(
+            task => task.Id,
+            task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+            StringComparer.Ordinal);
+        var normalizedRequirements = CloneRequirements(requirements);
+        var revision = BuildRedefinitionRevision(
+            key,
+            normalizedRequirements,
+            originalYaml,
+            tasksById,
+            stateByTaskId);
+        var before = resolver.Resolve(config, tasksById, stateByTaskId);
+
+        var prospective = ProjectConfig.Deserialize(originalYaml);
+        var prospectiveTrigger = prospective.ActivationTriggers[key];
+        prospectiveTrigger.Requirements = normalizedRequirements;
+        prospectiveTrigger.Activation = null;
+
+        if (FirstValidationError(validator.ValidateProspectiveConfig(prospective)) is { } definitionError)
+            return AppResult<RedefinitionEvaluation>.Fail(definitionError.Code, definitionError.Message);
+
+        var pending = resolver.Resolve(prospective, tasksById, stateByTaskId);
+        var pendingTrigger = pending.ActivationTriggers.Single(item =>
+            string.Equals(item.Key, key, StringComparison.Ordinal));
+        if (pendingTrigger.RequirementsSatisfied)
+        {
+            prospectiveTrigger.Activation = new ActivationRecord
+            {
+                At = timeProvider.GetUtcNow(),
+                Mode = ActivationMode.Automatic,
+            };
+        }
+
+        if (FirstValidationError(validator.ValidateProspectiveConfig(prospective)) is { } activationError)
+            return AppResult<RedefinitionEvaluation>.Fail(activationError.Code, activationError.Message);
+
+        var after = resolver.Resolve(prospective, tasksById, stateByTaskId);
+        var beforeTrigger = before.ActivationTriggers.Single(item =>
+            string.Equals(item.Key, key, StringComparison.Ordinal));
+        var beforeMilestones = before.Milestones.ToDictionary(item => item.Key, StringComparer.Ordinal);
+        var afterMilestones = after.Milestones.ToDictionary(item => item.Key, StringComparer.Ordinal);
+        var impacts = beforeTrigger.ConsumingMilestones
+            .Order(StringComparer.Ordinal)
+            .Select(milestoneKey =>
+            {
+                var beforeMilestone = beforeMilestones[milestoneKey];
+                var afterMilestone = afterMilestones[milestoneKey];
+                var currentlyEligibleTasks = IsEligibleLifecycle(beforeMilestone.Lifecycle)
+                    ? tasksById.Values
+                        .Where(task => string.Equals(task.Milestone, milestoneKey, StringComparison.Ordinal))
+                        .Where(task => !stateByTaskId.TryGetValue(task.Id, out var state) ||
+                                       !string.Equals(state, "done", StringComparison.Ordinal))
+                        .Select(task => task.Id)
+                        .Order(StringComparer.Ordinal)
+                        .ToList()
+                    : [];
+                var losingEligibility = afterMilestone.Lifecycle == MilestoneLifecycle.Inactive
+                    ? currentlyEligibleTasks
+                    : [];
+                return new ActivationTriggerMilestoneImpact(
+                    milestoneKey,
+                    beforeMilestone.Lifecycle,
+                    afterMilestone.Lifecycle,
+                    currentlyEligibleTasks,
+                    losingEligibility);
+            })
+            .ToList();
+        var requiresConfirmation = impacts.Any(impact =>
+            IsEligibleLifecycle(impact.Before) && impact.After == MilestoneLifecycle.Inactive);
+        var currentlyEligibleTaskIds = impacts
+            .SelectMany(impact => impact.CurrentlyEligibleTaskIds)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var taskIdsLosingEligibility = impacts
+            .SelectMany(impact => impact.TaskIdsLosingEligibility)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var preview = new ActivationTriggerRedefinitionPreview(
+            key,
+            revision,
+            prospectiveTrigger.Activation?.Mode == ActivationMode.Automatic,
+            requiresConfirmation,
+            impacts,
+            currentlyEligibleTaskIds,
+            taskIdsLosingEligibility);
+
+        return AppResult<RedefinitionEvaluation>.Ok(new RedefinitionEvaluation(
+            preview,
+            prospective,
+            originalYaml));
+    }
+
     private AppResult<ProjectConfig> GetConfig()
     {
         if (!projectRoot.Exists || projectRoot.Config == null)
@@ -198,8 +441,8 @@ public sealed class ActivationTriggerService
 
         try
         {
-            prospective.WriteConfigAtomic(projectRoot);
-            if (!GlobalConfig.DryRun && !projectRoot.TryReloadConfig())
+            persistence.WriteTextAtomic(YamlSerde.Serialize(prospective));
+            if (!GlobalConfig.DryRun && !persistence.Reload())
                 return AppResult<ActivationTriggerMutationResult>.Fail(
                     "activation_trigger_config_reload_failed",
                     "Activation trigger configuration was written but could not be reloaded.");
@@ -234,10 +477,73 @@ public sealed class ActivationTriggerService
             .Order(StringComparer.Ordinal)
             .ToList();
 
+    private bool TryRestoreConfig(string yaml)
+    {
+        try
+        {
+            persistence.WriteTextAtomic(yaml);
+            return persistence.Reload();
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            return false;
+        }
+    }
+
+    private static ProjectValidationIssue? FirstValidationError(ProjectValidationResult validation) =>
+        validation.Issues.FirstOrDefault(issue =>
+            string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsEligibleLifecycle(MilestoneLifecycle lifecycle) =>
+        lifecycle is MilestoneLifecycle.Active or MilestoneLifecycle.ReadyToDeliver;
+
+    private static string BuildRedefinitionRevision(
+        string triggerKey,
+        IReadOnlyList<ActivationRequirement> requirements,
+        string yaml,
+        IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateByTaskId)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendHashValue(hash, "activation-trigger-redefinition");
+        AppendHashValue(hash, triggerKey);
+        foreach (var requirement in requirements)
+        {
+            AppendHashValue(hash, requirement.Kind.ToString());
+            AppendHashValue(hash, requirement.Source);
+        }
+        AppendHashValue(hash, yaml);
+        foreach (var task in tasksById.Values.OrderBy(task => task.Id, StringComparer.Ordinal))
+        {
+            AppendHashValue(hash, task.Id);
+            AppendHashValue(hash, task.Milestone ?? string.Empty);
+            AppendHashValue(hash, stateByTaskId.GetValueOrDefault(task.Id, string.Empty));
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    private static void AppendHashValue(IncrementalHash hash, string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        Span<byte> length = stackalloc byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32BigEndian(length, bytes.Length);
+        hash.AppendData(length);
+        hash.AppendData(bytes);
+    }
+
+    private static bool IsStorageException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException;
+
     private static AppResult<ActivationTriggerMutationResult> ConfigFailure(AppResult<ProjectConfig> result) =>
         AppResult<ActivationTriggerMutationResult>.Fail(result.ErrorCode!, result.Message!);
 
     private static AppResult<ActivationTriggerMutationResult> MissingTrigger(string key) =>
         AppResult<ActivationTriggerMutationResult>.Fail(
             "missing_activation_trigger", $"Activation trigger {key} not found.");
+
+    private sealed record RedefinitionEvaluation(
+        ActivationTriggerRedefinitionPreview Preview,
+        ProjectConfig ProspectiveConfig,
+        string OriginalYaml);
 }

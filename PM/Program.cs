@@ -68,7 +68,9 @@ serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<MilestoneActivationResolver>();
 serviceProvider.AddSingleton<MilestoneActivationGraphService>();
 serviceProvider.AddSingleton<MilestoneActivationValidationService>();
+serviceProvider.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
 serviceProvider.AddSingleton<ActivationTriggerService>();
+serviceProvider.AddSingleton<IActivationTriggerCommandPrompts, ActivationTriggerCommandPrompts>();
 serviceProvider.AddSingleton<ProjectValidationService>();
 serviceProvider.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
 serviceProvider.AddSingleton<IProjectCommandPrompts, ProjectCommandPrompts>();
@@ -156,6 +158,7 @@ app.Configure(config =>
             trigger.AddCommand<ActivationTriggerRemoveCommand>(GlobalConfig.TriggerRemoveCommandName);
             trigger.AddCommand<ActivationTriggerSetRequirementsCommand>(
                 GlobalConfig.TriggerSetRequirementsCommandName);
+            trigger.AddCommand<ActivationTriggerRedefineCommand>(GlobalConfig.TriggerRedefineCommandName);
             trigger.AddCommand<ActivationTriggerAttachCommand>(GlobalConfig.TriggerAttachCommandName);
             trigger.AddCommand<ActivationTriggerDetachCommand>(GlobalConfig.TriggerDetachCommandName);
             trigger.AddCommand<ActivationTriggerListCommand>(GlobalConfig.TriggerListCommandName);

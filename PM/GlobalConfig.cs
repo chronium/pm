@@ -60,6 +60,7 @@ public static class GlobalConfig
     public static string TriggerRenameCommandName => "rename";
     public static string TriggerRemoveCommandName => "remove";
     public static string TriggerSetRequirementsCommandName => "set-requirements";
+    public static string TriggerRedefineCommandName => "redefine";
     public static string TriggerAttachCommandName => "attach";
     public static string TriggerDetachCommandName => "detach";
     public static string TriggerListCommandName => "list";
