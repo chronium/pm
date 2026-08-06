@@ -3,8 +3,24 @@ using PM.Tasks;
 
 namespace PM.Application;
 
-public sealed class MilestoneActivationValidationService(ProjectRoot projectRoot)
+public sealed class MilestoneActivationValidationService
 {
+    private readonly ProjectRoot projectRoot;
+    private readonly MilestoneActivationGraphService activationGraph;
+
+    public MilestoneActivationValidationService(ProjectRoot projectRoot)
+        : this(projectRoot, new MilestoneActivationGraphService())
+    {
+    }
+
+    public MilestoneActivationValidationService(
+        ProjectRoot projectRoot,
+        MilestoneActivationGraphService activationGraph)
+    {
+        this.projectRoot = projectRoot;
+        this.activationGraph = activationGraph;
+    }
+
     public ProjectValidationResult ValidateProspectiveConfig(ProjectConfig config)
     {
         var tasksById = new Dictionary<string, TaskItem>(StringComparer.Ordinal);
@@ -26,8 +42,23 @@ public sealed class MilestoneActivationValidationService(ProjectRoot projectRoot
 
         ValidateTriggers(issues, config, tasksById, configPath);
         ValidateMilestones(issues, config, tasksById, stateByTaskId, configPath);
+        ValidateActivationCycles(issues, config, tasksById, configPath);
 
         return issues;
+    }
+
+    private void ValidateActivationCycles(
+        List<ProjectValidationIssue> issues,
+        ProjectConfig config,
+        IReadOnlyDictionary<string, TaskItem> tasksById,
+        string configPath)
+    {
+        foreach (var cycle in activationGraph.Build(config, tasksById).Cycles)
+            AddError(
+                issues,
+                "activation_cycle",
+                $"Milestone activation cycle detected: {string.Join(" -> ", cycle.Path)}.",
+                configPath);
     }
 
     private void ValidateTriggers(

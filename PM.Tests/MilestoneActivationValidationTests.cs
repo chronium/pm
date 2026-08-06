@@ -20,7 +20,7 @@ public sealed class MilestoneActivationValidationTests
             ["automatic"] = new()
             {
                 Title = "Automatic gate",
-                Requirements = [TaskRequirement("PM-0001")],
+                Requirements = [TaskRequirement("PM-0004")],
                 Activation = new()
                 {
                     At = Timestamp,
@@ -69,6 +69,7 @@ public sealed class MilestoneActivationValidationTests
         WriteTask(root, TestData.Task("PM-0001", "Done", milestone: "ordinary"), "done");
         WriteTask(root, TestData.Task("PM-0002", "Accepted", milestone: "exceptional"), "todo");
         WriteTask(root, TestData.Task("PM-0003", "Pending", milestone: "pending"), "todo");
+        WriteTask(root, TestData.Task("PM-0004", "Unassigned prerequisite"), "done");
 
         var result = new MilestoneActivationValidationService(root).ValidateProspectiveConfig(config);
 

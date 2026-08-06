@@ -66,6 +66,7 @@ serviceProvider.AddSingleton<LinkedProjectMutationService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<MilestoneActivationResolver>();
+serviceProvider.AddSingleton<MilestoneActivationGraphService>();
 serviceProvider.AddSingleton<MilestoneActivationValidationService>();
 serviceProvider.AddSingleton<ProjectValidationService>();
 serviceProvider.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
