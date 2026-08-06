@@ -10,18 +10,33 @@ import {
   type RenameMilestoneRequest,
   type RenameSettingsOptionRequest,
   type SetMilestonePriorityRequest,
+  type SetMilestoneDescriptionRequest,
   type SetProjectAccentRequest,
   type SettingsApiError,
   type SettingsMutationResponse,
   type SettingsResponse,
   type ValidationResponse,
+  type MilestoneRequiredTriggersPreviewResponse,
 } from './settings-api.service';
 
 export type SettingsCollection = 'project' | 'status' | 'track' | 'milestone';
 export interface SettingsOperation {
-  kind: 'create' | 'rename' | 'update' | 'priority' | 'remove';
+  kind:
+    | 'create'
+    | 'rename'
+    | 'update'
+    | 'priority'
+    | 'description'
+    | 'preview'
+    | 'activation'
+    | 'remove';
   collection: SettingsCollection;
   key: string | null;
+}
+
+export interface MilestoneGatePreview {
+  impact: MilestoneRequiredTriggersPreviewResponse;
+  activationRevision: string;
 }
 
 @Injectable()
@@ -148,6 +163,76 @@ export class SettingsStore {
       this.api.setMilestonePriority(key, request, revision),
     );
   }
+  setMilestoneDescription(key: string, request: SetMilestoneDescriptionRequest) {
+    return this.enqueue({ kind: 'description', collection: 'milestone', key }, (revision) =>
+      this.api.setMilestoneDescription(key, request, revision),
+    );
+  }
+
+  async previewMilestoneRequiredTriggers(
+    key: string,
+    triggerKeys: string[],
+  ): Promise<MilestoneGatePreview | null> {
+    const operation: SettingsOperation = { kind: 'preview', collection: 'milestone', key };
+    return this.runActivationOperation(operation, async () => {
+      const activation = await firstValueFrom(this.api.readActivation());
+      if (!activation.body) throw new Error('The activation switchboard returned no data.');
+      const preview = await firstValueFrom(
+        this.api.previewMilestoneRequiredTriggers(key, triggerKeys, activation.body.revision),
+      );
+      if (!preview.body) throw new Error('The activation preview returned no data.');
+      return {
+        impact: preview.body,
+        activationRevision: this.responseRevision(preview) ?? activation.body.revision,
+      };
+    });
+  }
+
+  async applyMilestoneRequiredTriggers(
+    key: string,
+    triggerKeys: string[],
+    preview: MilestoneGatePreview,
+  ): Promise<boolean> {
+    const operation: SettingsOperation = { kind: 'activation', collection: 'milestone', key };
+    this.mutationCount.update((count) => count + 1);
+    this.activeOperation.set(operation);
+    this.operationErrorState.set(null);
+    let applied = false;
+    try {
+      await firstValueFrom(
+        this.api.setMilestoneRequiredTriggers(
+          key,
+          triggerKeys,
+          preview.impact.previewRevision,
+          preview.impact.requiresConfirmation,
+          preview.activationRevision,
+        ),
+      );
+      applied = true;
+      const settings = await firstValueFrom(this.api.readSettings());
+      if (!settings.body) throw new Error('The refreshed project settings returned no data.');
+      this.acceptSettings(settings.body);
+      this.validationResource.reload();
+      return true;
+    } catch (error) {
+      const mapped = this.api.error(
+        error,
+        applied
+          ? 'Activation gates changed, but current settings could not be refreshed.'
+          : 'The activation gate change failed.',
+      );
+      this.operationErrorState.set({ operation, error: mapped });
+      if (applied) {
+        this.stale.set(true);
+        this.reloadLatest();
+        return true;
+      }
+      return false;
+    } finally {
+      this.activeOperation.set(null);
+      this.mutationCount.update((count) => count - 1);
+    }
+  }
   removeMilestone(key: string) {
     return this.enqueue({ kind: 'remove', collection: 'milestone', key }, (revision) =>
       this.api.removeMilestone(key, revision),
@@ -198,6 +283,15 @@ export class SettingsStore {
       : null;
   }
 
+  errorForOperation(kind: SettingsOperation['kind'], key: string): string | null {
+    const current = this.operationError();
+    return current?.operation.collection === 'milestone' &&
+      current.operation.key === key &&
+      current.operation.kind === kind
+      ? current.error.message
+      : null;
+  }
+
   isPending(operation: SettingsOperation): boolean {
     const current = this.operation();
     return (
@@ -224,9 +318,7 @@ export class SettingsStore {
       try {
         const response = await firstValueFrom(request(revision));
         if (response.body) {
-          this.retainedSettings.set(response.body);
-          this.acceptedRevision.set(response.body.revision);
-          this.pendingExternalSettings.set(null);
+          this.acceptSettings(response.body);
         }
         succeeded = true;
         this.validationResource.reload();
@@ -250,6 +342,39 @@ export class SettingsStore {
       () => undefined,
     );
     return result;
+  }
+
+  private async runActivationOperation<T>(
+    operation: SettingsOperation,
+    request: () => Promise<T>,
+  ): Promise<T | null> {
+    this.mutationCount.update((count) => count + 1);
+    this.activeOperation.set(operation);
+    this.operationErrorState.set(null);
+    try {
+      return await request();
+    } catch (error) {
+      this.operationErrorState.set({
+        operation,
+        error: this.api.error(error, 'The activation impact could not be reviewed.'),
+      });
+      return null;
+    } finally {
+      this.activeOperation.set(null);
+      this.mutationCount.update((count) => count - 1);
+    }
+  }
+
+  private acceptSettings(settings: SettingsResponse): void {
+    this.retainedSettings.set(settings);
+    this.acceptedRevision.set(settings.revision);
+    this.pendingExternalSettings.set(null);
+    this.stale.set(false);
+  }
+
+  private responseRevision(response: HttpResponse<unknown>): string | null {
+    const etag = response.headers.get('ETag');
+    return etag?.startsWith('"') && etag.endsWith('"') ? etag.slice(1, -1) : etag;
   }
 
   private finishReload(): void {

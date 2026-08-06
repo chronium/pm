@@ -27,7 +27,21 @@ const settings: SettingsResponse = {
       key: 'angular-web-with-a-long-key',
       title: 'Angular web replacement with a long title that demonstrates wrapping',
       priority: 'high',
+      description:
+        'Deliver the complete local workflow with documented exclusions and acceptance evidence.',
+      requiredActivationTriggers: [],
     },
+  ],
+  activationTriggers: [
+    {
+      key: 'beta-entry',
+      title: 'Beta entry criteria',
+      requirements: [
+        { kind: 'task', source: 'PM-0089' },
+        { kind: 'milestone', source: 'foundation' },
+      ],
+    },
+    { key: 'launch-authorized', title: 'Launch authorized', requirements: [] },
   ],
   tracks: [
     { key: 'PM', name: 'Product management' },
@@ -110,7 +124,7 @@ export const Edit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Milestones' }));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Edit milestone title' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Edit deliverable' }));
     await expect(canvas.getByLabelText('Milestone title')).toHaveValue(
       settings.milestones[0]!.title,
     );

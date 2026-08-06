@@ -1,7 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
+import { MarkdownEditor } from '../markdown/markdown-editor';
 import type { SettingsResponse, ValidationResponse } from './settings-api.service';
 import { SettingsPage } from './settings-page';
 
@@ -18,11 +20,17 @@ const settings: SettingsResponse = {
       key: 'long/milestone',
       title: 'A very long milestone title that wraps without obscuring its controls',
       priority: 'high',
-      description: '',
+      description: 'Deliver a usable release with documented acceptance evidence.',
       requiredActivationTriggers: [],
     },
   ],
-  activationTriggers: [],
+  activationTriggers: [
+    {
+      key: 'beta-entry',
+      title: 'Beta entry criteria',
+      requirements: [{ kind: 'task', source: 'PM-0001' }],
+    },
+  ],
   priorityOptions: ['none', 'medium', 'high'],
   revision: 'r1',
 };
@@ -55,6 +63,15 @@ const membership = {
   authenticated: true,
   members: [{ ...identity, role: 'admin', isLocal: true }],
 };
+
+Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+  configurable: true,
+  value: () => new DOMRect(),
+});
+Object.defineProperty(Range.prototype, 'getClientRects', {
+  configurable: true,
+  value: () => [],
+});
 
 describe('SettingsPage', () => {
   beforeEach(async () =>
@@ -103,9 +120,10 @@ describe('SettingsPage', () => {
     expect(element.textContent).toContain('A very long milestone title');
     expect(element.querySelector('.settings-navigation')?.textContent).toContain('Linked projects');
     expect(element.querySelectorAll('.settings-row input')).toHaveLength(0);
-    expect(
-      element.querySelector('button[aria-label="Edit milestone title"]')?.getAttribute('title'),
-    ).toBe('Edit milestone title');
+    expect(element.textContent).toContain('documented acceptance evidence');
+    expect(element.querySelector('.milestone-row button')?.textContent).toContain(
+      'Edit deliverable',
+    );
   });
 
   it('saves a project-wide accent from General settings', async () => {
@@ -173,13 +191,61 @@ describe('SettingsPage', () => {
     expect(element.querySelector('form.create-form')).toBeNull();
   });
 
-  it('saves milestone title and priority as separate atomic mutations', async () => {
+  it('opens the deliverable editor immediately after creating a milestone', async () => {
     const { fixture, element, http } = await render();
-    (
-      element.querySelector('button[aria-label="Edit milestone title"]') as HTMLButtonElement
-    ).click();
+    const section = element.querySelector(
+      '.settings-section[aria-labelledby="milestones-heading"]',
+    ) as HTMLElement;
+    (section.querySelector('.section-heading button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    const title = element.querySelector('.milestone-row input') as HTMLInputElement;
+    const form = section.querySelector('form.milestone-create') as HTMLFormElement;
+    const key = form.querySelector('#milestone-key') as HTMLInputElement;
+    const title = form.querySelector('#milestone-title') as HTMLInputElement;
+    key.value = 'launch';
+    key.dispatchEvent(new Event('input'));
+    title.value = 'Launch';
+    title.dispatchEvent(new Event('input'));
+    form.dispatchEvent(new Event('submit'));
+    await Promise.resolve();
+
+    const request = http.expectOne('/api/v1/settings/milestones');
+    expect(request.request.body).toEqual({ key: 'launch', title: 'Launch', priority: 'none' });
+    request.flush({
+      ...settings,
+      milestones: [
+        ...settings.milestones,
+        {
+          key: 'launch',
+          title: 'Launch',
+          priority: 'none',
+          description: '',
+          requiredActivationTriggers: [],
+        },
+      ],
+      revision: 'r2',
+    });
+    await Promise.resolve();
+    TestBed.flushEffects();
+    http.expectOne('/api/v1/validation').flush(validation);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(element.querySelector('.deliverable-dialog h2')?.textContent).toBe('Launch');
+    expect((element.querySelector('#deliverable-title') as HTMLInputElement).value).toBe('Launch');
+  });
+
+  it('opens the deliverable editor and saves title, priority, and description independently', async () => {
+    const { fixture, element, http } = await render();
+    (element.querySelector('.milestone-row .pm-button--secondary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const dialog = element.querySelector('.deliverable-dialog') as HTMLDialogElement;
+    expect(dialog.open || dialog.hasAttribute('open')).toBe(true);
+    expect(dialog.textContent).toContain('Outcome:');
+    expect(dialog.textContent).toContain('Evidence:');
+
+    const title = dialog.querySelector('#deliverable-title') as HTMLInputElement;
     title.value = 'Launch';
     title.dispatchEvent(new Event('input'));
     (title.closest('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
@@ -197,9 +263,7 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    (element.querySelector('.priority-action') as HTMLButtonElement).click();
-    fixture.detectChanges();
-    const select = element.querySelector('.priority-form select') as HTMLSelectElement;
+    const select = dialog.querySelector('#deliverable-priority') as HTMLSelectElement;
     select.value = 'medium';
     select.dispatchEvent(new Event('input'));
     (select.closest('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
@@ -215,6 +279,106 @@ describe('SettingsPage', () => {
     await Promise.resolve();
     TestBed.flushEffects();
     http.expectOne('/api/v1/validation').flush(validation);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const markdown = fixture.debugElement.query(By.directive(MarkdownEditor))
+      .componentInstance as MarkdownEditor;
+    markdown.value.set('Outcome: ship the beta.\n\nEvidence: acceptance recording.');
+    fixture.detectChanges();
+    const saveDescription = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Save description',
+    )!;
+    expect(saveDescription.disabled).toBe(false);
+    saveDescription.click();
+    await Promise.resolve();
+    const description = http.expectOne('/api/v1/settings/milestones/long%2Fmilestone/description');
+    expect(description.request.body).toEqual({
+      description: 'Outcome: ship the beta.\n\nEvidence: acceptance recording.',
+    });
+    expect(description.request.headers.get('If-Match')).toBe('"r3"');
+    description.flush({
+      ...settings,
+      milestones: [
+        {
+          ...settings.milestones[0]!,
+          title: 'Launch',
+          priority: 'medium',
+          description: 'Outcome: ship the beta.\n\nEvidence: acceptance recording.',
+        },
+      ],
+      revision: 'r4',
+    });
+    await Promise.resolve();
+    TestBed.flushEffects();
+    http.expectOne('/api/v1/validation').flush(validation);
+  });
+
+  it('previews gate eligibility loss before applying the reviewed activation change', async () => {
+    const { fixture, element, http } = await render();
+    (element.querySelector('.milestone-row .pm-button--secondary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const dialog = element.querySelector('.deliverable-dialog') as HTMLDialogElement;
+    const gate = dialog.querySelector('.trigger-option input') as HTMLInputElement;
+    gate.click();
+    fixture.detectChanges();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Review gate changes'))!
+      .click();
+    await Promise.resolve();
+    http.expectOne('/api/v1/activation').flush({
+      revision: 'activation-r1',
+      triggers: [],
+      milestones: [],
+    });
+    await Promise.resolve();
+    http
+      .expectOne('/api/v1/activation/milestones/long%2Fmilestone/required-triggers-preview')
+      .flush(
+        {
+          milestoneKey: 'long/milestone',
+          previewRevision: 'preview-r1',
+          currentTriggerKeys: [],
+          proposedTriggerKeys: ['beta-entry'],
+          before: 'active',
+          after: 'inactive',
+          currentlyEligibleTaskIds: ['PM-0001'],
+          taskIdsLosingEligibility: ['PM-0001'],
+          requiresConfirmation: true,
+        },
+        { headers: { ETag: '"activation-r1"' } },
+      );
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dialog.textContent).toContain('PM-0001');
+    const apply = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('make 1 task(s) ineligible'),
+    )!;
+    apply.click();
+    await Promise.resolve();
+    const applyRequest = http.expectOne(
+      '/api/v1/activation/milestones/long%2Fmilestone/required-triggers',
+    );
+    expect(applyRequest.request.body).toEqual({
+      triggerKeys: ['beta-entry'],
+      previewRevision: 'preview-r1',
+      allowDeactivation: true,
+    });
+    applyRequest.flush({ revision: 'activation-r2' });
+    await Promise.resolve();
+    http.expectOne('/api/v1/settings').flush({
+      ...settings,
+      milestones: [{ ...settings.milestones[0]!, requiredActivationTriggers: ['beta-entry'] }],
+      revision: 'r2',
+    });
+    await Promise.resolve();
+    TestBed.flushEffects();
+    http.expectOne('/api/v1/validation').flush(validation);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dialog.textContent).not.toContain('Eligibility impact');
   });
 
   it('confirms removal, shows row restrictions, and disables actions during a pending mutation', async () => {

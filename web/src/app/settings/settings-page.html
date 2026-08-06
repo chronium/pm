@@ -21,7 +21,7 @@
       </button>
     </pm-error-state>
   } @else if (store.settings(); as settings) {
-    @if (conflictPhase(); as phase) {
+    @if (!selectedMilestoneKey() && conflictPhase(); as phase) {
       <pm-external-change-banner
         [phase]="phase"
         heading="Project settings changed elsewhere."
@@ -295,12 +295,17 @@
           <div class="section-heading">
             <div>
               <h2 id="milestones-heading">Milestones</h2>
-              <p>Release groups and their inherited task priority.</p>
+              <p>Deliverables with explicit outcomes, scope, evidence, and activation gates.</p>
             </div>
             <button
               type="button"
               class="pm-button pm-button--secondary"
-              [disabled]="store.pending() || store.stale() || adding() === 'milestone'"
+              [disabled]="
+                projectContext.readOnly() ||
+                store.pending() ||
+                store.stale() ||
+                adding() === 'milestone'
+              "
               (click)="beginAdd('milestone')"
             >
               Add milestone
@@ -360,7 +365,12 @@
                 ><button
                   type="submit"
                   class="pm-button pm-button--primary"
-                  [disabled]="store.pending() || store.stale() || !milestoneCreateForm().valid()"
+                  [disabled]="
+                    projectContext.readOnly() ||
+                    store.pending() ||
+                    store.stale() ||
+                    !milestoneCreateForm().valid()
+                  "
                 >
                   Add milestone
                 </button>
@@ -376,101 +386,31 @@
             @for (milestone of settings.milestones; track milestone.key) {
               <div class="settings-row milestone-row" role="listitem">
                 <code class="item-key">{{ milestone.key }}</code>
-                @if (
-                  editor()?.collection === 'milestone' &&
-                  editor()?.key === milestone.key &&
-                  editor()?.field === 'title'
-                ) {
-                  <form class="inline-form" (submit)="saveEdit($event)" novalidate>
-                    <pm-form-field
-                      ><label class="visually-hidden" [for]="'milestone-title-' + $index"
-                        >Milestone title</label
-                      ><input
-                        [id]="'milestone-title-' + $index"
-                        pmControl
-                        [formField]="editForm.value"
-                        autofocus
-                    /></pm-form-field>
-                    <div class="form-actions">
-                      <button
-                        type="button"
-                        class="pm-button pm-button--ghost"
-                        (click)="cancelAll()"
-                      >
-                        Cancel</button
-                      ><button
-                        type="submit"
-                        class="pm-button pm-button--primary"
-                        [disabled]="store.pending() || store.stale() || !editForm().valid()"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </form>
-                } @else {
-                  <span class="item-value">{{ milestone.title }}</span>
-                }
-                @if (
-                  editor()?.collection === 'milestone' &&
-                  editor()?.key === milestone.key &&
-                  editor()?.field === 'priority'
-                ) {
-                  <form class="priority-form" (submit)="saveEdit($event)">
-                    <label class="visually-hidden" [for]="'milestone-priority-' + $index"
-                      >Milestone priority</label
-                    ><select
-                      [id]="'milestone-priority-' + $index"
-                      pmControl
-                      [formField]="editForm.value"
-                      autofocus
-                    >
-                      @for (priority of settings.priorityOptions; track priority) {
-                        <option [value]="priority">{{ priority }}</option>
-                      }</select
-                    ><button type="button" class="pm-button pm-button--ghost" (click)="cancelAll()">
-                      Cancel</button
-                    ><button
-                      type="submit"
-                      class="pm-button pm-button--primary"
-                      [disabled]="store.pending() || store.stale()"
-                    >
-                      Save
-                    </button>
-                  </form>
-                } @else {
-                  <span class="priority-value">Priority: {{ milestone.priority }}</span>
-                }
+                <div class="milestone-summary">
+                  <strong class="item-value">{{ milestone.title }}</strong>
+                  <span class="milestone-description">
+                    {{ milestone.description || 'No deliverable description yet.' }}
+                  </span>
+                </div>
+                <div class="milestone-metadata">
+                  <span>Priority: {{ milestone.priority }}</span>
+                  <span>
+                    {{ milestone.requiredActivationTriggers.length }} activation
+                    {{ milestone.requiredActivationTriggers.length === 1 ? 'gate' : 'gates' }}
+                  </span>
+                </div>
                 <div class="row-actions milestone-actions">
                   <button
                     type="button"
-                    class="icon-action"
-                    [disabled]="store.pending() || store.stale()"
-                    aria-label="Edit milestone title"
-                    title="Edit milestone title"
-                    (click)="
-                      beginEdit(
-                        { collection: 'milestone', key: milestone.key, field: 'title' },
-                        milestone.title
-                      )
-                    "
+                    class="pm-button pm-button--secondary"
+                    [disabled]="store.pending()"
+                    (click)="openMilestoneEditor(milestone.key)"
                   >
-                    <ng-icon name="cssPen" aria-hidden="true" /></button
-                  ><button
-                    type="button"
-                    class="pm-button pm-button--ghost priority-action"
-                    [disabled]="store.pending() || store.stale()"
-                    (click)="
-                      beginEdit(
-                        { collection: 'milestone', key: milestone.key, field: 'priority' },
-                        milestone.priority
-                      )
-                    "
-                  >
-                    Change priority</button
+                    Edit deliverable</button
                   ><button
                     type="button"
                     class="icon-action danger-action"
-                    [disabled]="store.pending() || store.stale()"
+                    [disabled]="projectContext.readOnly() || store.pending() || store.stale()"
                     aria-label="Remove milestone"
                     title="Remove milestone"
                     (click)="requestRemoval('milestone', milestone.key, milestone.title)"
@@ -617,6 +557,17 @@
     </div>
   }
 </div>
+@if (selectedMilestone(); as milestone) {
+  <pm-milestone-deliverable-editor
+    [open]="true"
+    [milestone]="milestone"
+    [activationTriggers]="store.settings()?.activationTriggers ?? []"
+    [priorityOptions]="store.settings()?.priorityOptions ?? []"
+    [readOnly]="projectContext.readOnly()"
+    (dirtyChange)="milestoneEditorDirty.set($event)"
+    (openChange)="setMilestoneEditorOpen($event)"
+  />
+}
 <pm-confirm-dialog
   [open]="!!removal()"
   [pending]="store.pending()"

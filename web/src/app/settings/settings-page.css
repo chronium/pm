@@ -113,7 +113,7 @@
   border-bottom: 1px solid var(--pm-border-subtle);
 }
 .milestone-row {
-  grid-template-columns: minmax(140px, 0.35fr) minmax(180px, 1fr) minmax(120px, 0.35fr) auto;
+  grid-template-columns: minmax(120px, 0.28fr) minmax(220px, 1fr) minmax(130px, 0.32fr) auto;
 }
 .item-key,
 .item-value,
@@ -125,9 +125,24 @@
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-xs);
 }
-.priority-value {
+.priority-value,
+.milestone-description,
+.milestone-metadata {
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-sm);
+}
+.milestone-summary,
+.milestone-metadata {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.milestone-description {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .row-actions {
   display: flex;
@@ -160,9 +175,6 @@
 }
 .icon-action ng-icon {
   font-size: 18px;
-}
-.priority-action {
-  white-space: nowrap;
 }
 .settings-form {
   display: grid;
@@ -261,7 +273,8 @@ pm-error-state p {
   .milestone-row {
     grid-template-columns: minmax(80px, 0.35fr) minmax(0, 1fr) auto;
   }
-  .priority-value {
+  .priority-value,
+  .milestone-metadata {
     grid-column: 2;
   }
   .milestone-actions {
@@ -300,7 +313,9 @@ pm-error-state p {
     grid-column: 1;
   }
   .item-value,
-  .priority-value {
+  .priority-value,
+  .milestone-summary,
+  .milestone-metadata {
     grid-column: 1;
   }
   .row-actions,

@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, effect, HostListener, inject, Injector, signal } from '@angular/core';
+import { Component, computed, effect, HostListener, inject, Injector, signal } from '@angular/core';
 import { FormField, form, required } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { cssPen, cssTrash } from '@ng-icons/css.gg';
@@ -22,11 +22,13 @@ import {
 } from '../core/accent.service';
 import { AccentPicker } from '../shared/accent-picker/accent-picker';
 import { LinkedProjects } from './linked-projects';
+import { ProjectContextService } from '../core/project-context.service';
+import { MilestoneDeliverableEditor } from './milestone-deliverable-editor';
 
 interface Editor {
-  collection: SettingsCollection;
+  collection: 'status' | 'track';
   key: string;
-  field: 'name' | 'title' | 'priority';
+  field: 'name';
 }
 interface Removal {
   collection: SettingsCollection;
@@ -58,6 +60,7 @@ type SettingsSection =
     AgentRunners,
     AccentPicker,
     ExternalChangeBanner,
+    MilestoneDeliverableEditor,
   ],
   providers: [SettingsStore, PollingCoordinator, provideIcons({ cssPen, cssTrash })],
   templateUrl: './settings-page.html',
@@ -68,6 +71,7 @@ export class SettingsPage implements DirtyRoute {
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   private readonly accent = inject(AccentService);
+  protected readonly projectContext = inject(ProjectContextService);
   protected readonly activeSection = signal<SettingsSection>(
     this.document.defaultView?.location.hash === '#agent-runners' ? 'runners' : 'overview',
   );
@@ -76,9 +80,18 @@ export class SettingsPage implements DirtyRoute {
   protected readonly removal = signal<Removal | null>(null);
   protected readonly conflictPhase = signal<ExternalChangePhase | null>(null);
   protected readonly confirmDiscardOpen = signal(false);
+  protected readonly selectedMilestoneKey = signal<string | null>(null);
+  protected readonly milestoneEditorDirty = signal(false);
+  protected readonly selectedMilestone = computed(() => {
+    const key = this.selectedMilestoneKey();
+    return key
+      ? (this.store.settings()?.milestones.find((item) => item.key === key) ?? null)
+      : null;
+  });
   private draftSnapshot: SettingsDraft | null = null;
   private leaveResolver: ((answer: boolean) => void) | null = null;
   private allowLeave = false;
+  private milestoneEditorOpener: HTMLElement | null = null;
 
   protected readonly optionCreateModel = signal({ key: '', name: '' });
   protected readonly optionCreateForm = form(
@@ -117,6 +130,15 @@ export class SettingsPage implements DirtyRoute {
     effect(() => this.store.setDirty(this.dirty()));
     effect(() => {
       if (this.store.pendingExternal()) this.conflictPhase.set('pending');
+    });
+    effect(() => {
+      if (
+        this.selectedMilestoneKey() &&
+        !this.store.pendingExternal() &&
+        this.conflictPhase() === 'pending'
+      ) {
+        this.conflictPhase.set(null);
+      }
     });
     effect(() => {
       const settings = this.store.settings();
@@ -214,7 +236,24 @@ export class SettingsPage implements DirtyRoute {
     ) {
       this.adding.set(null);
       this.resolveConflictAfterSave();
+      this.openMilestoneEditor(value.key.trim());
     }
+  }
+
+  protected openMilestoneEditor(key: string): void {
+    this.store.clearOperationError();
+    this.adding.set(null);
+    this.editor.set(null);
+    this.milestoneEditorOpener =
+      this.document.activeElement instanceof HTMLElement ? this.document.activeElement : null;
+    this.selectedMilestoneKey.set(key);
+  }
+
+  protected setMilestoneEditorOpen(open: boolean): void {
+    if (open) return;
+    this.selectedMilestoneKey.set(null);
+    this.milestoneEditorDirty.set(false);
+    queueMicrotask(() => this.milestoneEditorOpener?.focus());
   }
 
   protected async saveEdit(event: Event): Promise<void> {
@@ -228,10 +267,6 @@ export class SettingsPage implements DirtyRoute {
       success = await this.store.renameStatus(editor.key, { name: value });
     if (editor.collection === 'track')
       success = await this.store.renameTrack(editor.key, { name: value });
-    if (editor.collection === 'milestone' && editor.field === 'title')
-      success = await this.store.renameMilestone(editor.key, { title: value });
-    if (editor.collection === 'milestone' && editor.field === 'priority')
-      success = await this.store.setMilestonePriority(editor.key, { priority: value });
     if (success) {
       this.editor.set(null);
       this.resolveConflictAfterSave();
@@ -326,7 +361,8 @@ export class SettingsPage implements DirtyRoute {
       !!this.editor() ||
       this.optionCreateForm().dirty() ||
       this.milestoneCreateForm().dirty() ||
-      this.editForm().dirty()
+      this.editForm().dirty() ||
+      this.milestoneEditorDirty()
     );
   }
 

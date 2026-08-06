@@ -42,10 +42,18 @@ tracks:
   E2E: Product
   OPS: Operations
 milestones:
-  current: Current Release
-  later: Later
-milestonePriorities:
-  current: high
+  current:
+    title: Current Release
+    description: ''
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null
+  later:
+    title: Later
+    description: ''
+    priority: none
+    requiredActivationTriggers: []
+    delivery: null
 `,
   );
   await writeFile(join(pm, 'project_id.txt'), 'playwright-project\n');
@@ -186,8 +194,12 @@ taskStates:
 tracks:
   LINK: Linked work
 milestones:
-  shared: Shared Release
-milestonePriorities: {}
+  shared:
+    title: Shared Release
+    description: ''
+    priority: none
+    requiredActivationTriggers: []
+    delivery: null
 `,
   );
   await writeFile(join(linkedPm, 'project_id.txt'), 'linked-project\n');
@@ -242,8 +254,12 @@ taskStates:
 tracks:
   STAR: Starfall work
 milestones:
-  sibling: Sibling Release
-milestonePriorities: {}
+  sibling:
+    title: Sibling Release
+    description: ''
+    priority: none
+    requiredActivationTriggers: []
+    delivery: null
 `,
   );
   await writeFile(join(siblingPm, 'project_id.txt'), 'sibling-project\n');

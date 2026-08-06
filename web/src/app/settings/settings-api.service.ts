@@ -13,7 +13,14 @@ export type RenameSettingsOptionRequest = components['schemas']['RenameSettingsO
 export type CreateMilestoneRequest = components['schemas']['CreateMilestoneRequest'];
 export type RenameMilestoneRequest = components['schemas']['RenameMilestoneRequest'];
 export type SetMilestonePriorityRequest = components['schemas']['SetMilestonePriorityRequest'];
+export type SetMilestoneDescriptionRequest =
+  components['schemas']['SetMilestoneDescriptionRequest'];
 export type SetProjectAccentRequest = components['schemas']['SetProjectAccentRequest'];
+export type SettingsActivationTrigger = components['schemas']['SettingsActivationTriggerResponse'];
+export type ActivationSwitchboardResponse = components['schemas']['ActivationSwitchboardResponse'];
+export type MilestoneRequiredTriggersPreviewResponse =
+  components['schemas']['MilestoneRequiredTriggersPreviewResponse'];
+export type ActivationMutationResponse = components['schemas']['ActivationMutationResponse'];
 export type SettingsMutationResponse = HttpResponse<SettingsResponse>;
 
 export interface SettingsApiError {
@@ -89,6 +96,10 @@ export class SettingsApiService {
     );
   }
 
+  readSettings() {
+    return this.http.get<SettingsResponse>('/api/v1/settings', { observe: 'response' });
+  }
+
   renameMilestone(key: string, request: RenameMilestoneRequest, revision: string) {
     return this.http.put<SettingsResponse>(this.milestoneUrl(key), request, this.options(revision));
   }
@@ -97,6 +108,42 @@ export class SettingsApiService {
     return this.http.put<SettingsResponse>(
       `${this.milestoneUrl(key)}/priority`,
       request,
+      this.options(revision),
+    );
+  }
+
+  setMilestoneDescription(key: string, request: SetMilestoneDescriptionRequest, revision: string) {
+    return this.http.put<SettingsResponse>(
+      `${this.milestoneUrl(key)}/description`,
+      request,
+      this.options(revision),
+    );
+  }
+
+  readActivation() {
+    return this.http.get<ActivationSwitchboardResponse>('/api/v1/activation', {
+      observe: 'response',
+    });
+  }
+
+  previewMilestoneRequiredTriggers(key: string, triggerKeys: string[], revision: string) {
+    return this.http.post<MilestoneRequiredTriggersPreviewResponse>(
+      `/api/v1/activation/milestones/${encodeURIComponent(key)}/required-triggers-preview`,
+      { triggerKeys },
+      this.options(revision),
+    );
+  }
+
+  setMilestoneRequiredTriggers(
+    key: string,
+    triggerKeys: string[],
+    previewRevision: string,
+    allowDeactivation: boolean,
+    revision: string,
+  ) {
+    return this.http.put<ActivationMutationResponse>(
+      `/api/v1/activation/milestones/${encodeURIComponent(key)}/required-triggers`,
+      { triggerKeys, previewRevision, allowDeactivation },
       this.options(revision),
     );
   }
