@@ -19,9 +19,13 @@ public sealed class MilestoneActivationValidationService(ProjectRoot projectRoot
     {
         var issues = new List<ProjectValidationIssue>();
         var configPath = projectRoot.ConfigPath;
+        var stateByTaskId = tasksById.Values.ToDictionary(
+            task => task.Id,
+            task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+            StringComparer.Ordinal);
 
         ValidateTriggers(issues, config, tasksById, configPath);
-        ValidateMilestones(issues, config, tasksById, configPath);
+        ValidateMilestones(issues, config, tasksById, stateByTaskId, configPath);
 
         return issues;
     }
@@ -152,6 +156,7 @@ public sealed class MilestoneActivationValidationService(ProjectRoot projectRoot
         List<ProjectValidationIssue> issues,
         ProjectConfig config,
         IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateByTaskId,
         string configPath)
     {
         foreach (var (milestoneKey, milestone) in config.Milestones)
@@ -192,7 +197,13 @@ public sealed class MilestoneActivationValidationService(ProjectRoot projectRoot
                     $"Milestone {milestoneKey} has no assigned tasks.",
                     configPath));
 
-            ValidateDelivery(issues, milestoneKey, milestone.Delivery, assignedTasks, configPath);
+            ValidateDelivery(
+                issues,
+                milestoneKey,
+                milestone.Delivery,
+                assignedTasks,
+                stateByTaskId,
+                configPath);
         }
     }
 
@@ -201,48 +212,38 @@ public sealed class MilestoneActivationValidationService(ProjectRoot projectRoot
         string milestoneKey,
         MilestoneDelivery? delivery,
         IReadOnlyList<TaskItem> assignedTasks,
+        IReadOnlyDictionary<string, string> stateByTaskId,
         string configPath)
     {
         if (delivery is null) return;
 
-        if (delivery.At == default)
+        var evaluation = MilestoneDeliveryEvaluator.Evaluate(delivery, assignedTasks, stateByTaskId);
+
+        if (!evaluation.HasTimestamp)
             AddError(issues, "invalid_delivery_timestamp",
                 $"Milestone {milestoneKey} has no delivery timestamp.", configPath);
-
-        var acceptedTaskIds = delivery.AcceptedTaskIds ?? [];
-        var unfinishedTaskIds = assignedTasks
-            .Where(task => !IsDone(task))
-            .Select(task => task.Id)
-            .ToHashSet(StringComparer.Ordinal);
 
         switch (delivery.Mode)
         {
             case MilestoneDeliveryMode.Ordinary:
-                if (assignedTasks.Count == 0 || unfinishedTaskIds.Count > 0 ||
-                    !string.IsNullOrWhiteSpace(delivery.Reason) || acceptedTaskIds.Count > 0)
+                if (!evaluation.ModeFieldsValid)
                     AddError(issues, "invalid_ordinary_delivery",
                         $"Ordinary delivery for milestone {milestoneKey} requires at least one assigned task, all assigned tasks done, and no exceptional-delivery fields.",
                         configPath);
                 break;
 
             case MilestoneDeliveryMode.Exceptional:
-                if (string.IsNullOrWhiteSpace(delivery.Reason))
+                if (!evaluation.HasReason)
                     AddError(issues, "exceptional_delivery_reason_required",
                         $"Exceptional delivery for milestone {milestoneKey} requires a reason.", configPath);
 
-                var acceptedSet = acceptedTaskIds.ToHashSet(StringComparer.Ordinal);
-                if (unfinishedTaskIds.Count == 0 || acceptedSet.Count != acceptedTaskIds.Count ||
-                    !acceptedSet.SetEquals(unfinishedTaskIds))
+                if (!evaluation.SnapshotValid)
                     AddError(issues, "invalid_exceptional_delivery_snapshot",
                         $"Exceptional delivery for milestone {milestoneKey} must record every currently unfinished assigned task exactly once.",
                         configPath);
                 break;
         }
     }
-
-    private bool IsDone(TaskItem task) =>
-        projectRoot.TryGetState(task, out var state) &&
-        string.Equals(state, "done", StringComparison.Ordinal);
 
     private static ProjectValidationResult CreateResult(IReadOnlyList<ProjectValidationIssue> issues) =>
         new(issues.All(issue => !string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)), issues);
