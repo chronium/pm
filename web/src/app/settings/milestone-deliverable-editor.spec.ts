@@ -59,6 +59,45 @@ describe('MilestoneDeliverableEditor', () => {
     expect(openChanges).toEqual([false]);
   });
 
+  it('shows deliverable prompts as subdued empty-description guidance and editor placeholder', async () => {
+    TestBed.configureTestingModule({
+      imports: [MilestoneDeliverableEditor],
+      providers: [{ provide: SettingsStore, useFactory: storeStub }],
+    });
+    const fixture = TestBed.createComponent(MilestoneDeliverableEditor);
+    fixture.componentRef.setInput('open', true);
+    fixture.componentRef.setInput('milestone', { ...milestone, description: '' });
+    fixture.componentRef.setInput('activationTriggers', []);
+    fixture.componentRef.setInput('priorityOptions', ['none', 'high']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const guidance = element.querySelector('.description-placeholder') as HTMLElement;
+
+    expect(guidance.textContent).toContain('Outcome:');
+    expect(guidance.textContent).toContain('Scope:');
+    expect(guidance.textContent).toContain('Exclusions:');
+    expect(guidance.textContent).toContain('Evidence:');
+    expect(getComputedStyle(guidance).userSelect).toBe('none');
+
+    (
+      element.querySelector(
+        'button[aria-label="Edit deliverable description"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      (
+        element.querySelector(
+          'textarea[aria-label="Milestone deliverable description"]',
+        ) as HTMLTextAreaElement
+      ).placeholder,
+    ).toContain('Outcome: what becomes usable or accepted?');
+  });
+
   it('keeps a dirty draft open until discard is explicitly confirmed', async () => {
     TestBed.configureTestingModule({
       imports: [MilestoneDeliverableEditor],

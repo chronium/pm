@@ -27,6 +27,12 @@ interface DeliverableBaseline {
 })
 export class MilestoneDeliverableEditor {
   protected readonly store = inject(SettingsStore);
+  protected readonly descriptionPlaceholder = `Describe the result, not a duplicate task list.
+
+Outcome: what becomes usable or accepted?
+Scope: what belongs in this delivery?
+Exclusions: what is intentionally deferred?
+Evidence: how will completion be demonstrated?`;
 
   readonly open = input(false);
   readonly milestone = input<SettingsMilestone | null>(null);

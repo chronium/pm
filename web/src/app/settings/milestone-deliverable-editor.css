@@ -222,21 +222,23 @@ hr {
   transform: translateY(var(--pm-space-2));
 }
 
-.description-guidance {
-  margin: 0 0 var(--pm-space-3);
-  color: var(--pm-text-muted);
+.description-placeholder {
+  max-width: 580px;
+  padding: var(--pm-space-1) var(--pm-space-2);
+  color: var(--pm-text-subtle);
   font-size: var(--pm-font-size-sm);
+  opacity: 0.72;
+  user-select: none;
 }
 
-.description-guidance summary {
-  width: fit-content;
-  cursor: pointer;
+.description-placeholder p {
+  margin: 0;
 }
 
-.description-guidance ul {
+.description-placeholder ul {
   display: grid;
-  gap: 2px;
-  margin: var(--pm-space-2) 0 0;
+  gap: var(--pm-space-1);
+  margin: var(--pm-space-3) 0 0;
   padding-left: var(--pm-space-5);
 }
 

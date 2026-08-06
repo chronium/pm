@@ -112,6 +112,16 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
+export const EmptyDescription: Story = {
+  args: { milestone: { ...milestone, description: '' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const guidance = await canvas.findByLabelText('Deliverable description suggestions');
+    await expect(guidance).toHaveTextContent('Outcome:');
+    await expect(guidance).toHaveTextContent('Evidence:');
+  },
+};
+
 export const EligibilityImpact: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

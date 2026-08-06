@@ -188,23 +188,23 @@
           </div>
 
           @if (activeField() === 'description') {
-            <details class="description-guidance">
-              <summary>What should this deliverable cover?</summary>
+            <pm-markdown-editor
+              [formField]="descriptionForm.value"
+              label="Milestone deliverable description"
+              [placeholder]="descriptionPlaceholder"
+            />
+          } @else if (current.description.trim()) {
+            <pm-markdown-display [markdown]="current.description" />
+          } @else {
+            <div class="description-placeholder" aria-label="Deliverable description suggestions">
+              <p>Describe the result, not a duplicate task list.</p>
               <ul>
                 <li><strong>Outcome:</strong> what becomes usable or accepted?</li>
                 <li><strong>Scope:</strong> what belongs in this delivery?</li>
                 <li><strong>Exclusions:</strong> what is intentionally deferred?</li>
                 <li><strong>Evidence:</strong> how will completion be demonstrated?</li>
               </ul>
-            </details>
-            <pm-markdown-editor
-              [formField]="descriptionForm.value"
-              label="Milestone deliverable description"
-            />
-          } @else {
-            <pm-markdown-display
-              [markdown]="current.description || '_No deliverable description provided._'"
-            />
+            </div>
           }
           @if (error('description')) {
             <p class="operation-error" role="alert">{{ error('description') }}</p>

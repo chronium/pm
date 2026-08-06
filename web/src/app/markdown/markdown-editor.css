@@ -25,6 +25,12 @@ pm-markdown-editor .CodeMirror {
 pm-markdown-editor .CodeMirror-scroll {
   min-height: 180px;
 }
+pm-markdown-editor > textarea::placeholder,
+pm-markdown-editor .CodeMirror-placeholder {
+  color: var(--pm-text-subtle);
+  opacity: 0.72;
+  user-select: none;
+}
 pm-markdown-editor.markdown-editor--external-preview,
 pm-markdown-editor.markdown-editor--external-preview .EasyMDEContainer {
   height: 100%;

@@ -25,6 +25,7 @@ import { ProjectWikiLinkDialog } from './project-wiki-link-dialog';
       #textarea
       [disabled]="disabled()"
       [attr.aria-label]="label()"
+      [attr.placeholder]="placeholder() || null"
       (input)="fallbackInput($event)"
       (blur)="touch.emit()"
     ></textarea>
@@ -45,6 +46,7 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
   readonly value = model.required<string>();
   readonly disabled = input(false);
   readonly label = input('Markdown description');
+  readonly placeholder = input('');
   readonly externalPreview = input(false);
   readonly enableProjectWikiLinks = input(false);
   readonly touch = output<void>();
@@ -81,6 +83,7 @@ export class MarkdownEditor implements FormValueControl<string>, AfterViewInit, 
         spellChecker: false,
         status: false,
         minHeight: '180px',
+        placeholder: this.placeholder(),
         previewRender: (markdown) => this.renderer.render(markdown),
       };
       if (this.externalPreview() || this.enableProjectWikiLinks()) {
