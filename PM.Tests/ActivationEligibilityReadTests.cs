@@ -71,9 +71,11 @@ public sealed class ActivationEligibilityReadTests
 
         Assert.Equal("PM-0003", ready.Task!.Task.Id);
         Assert.True(ready.Task.Activation.IsEligible);
+        Assert.DoesNotContain("Eligible:", ready.Reason);
         Assert.Equal("PM-0004", includeBlocked.Task!.Task.Id);
         Assert.True(includeBlocked.Task.Activation.IsEligible);
         Assert.False(includeBlocked.Task.Dependencies.Ready);
+        Assert.Contains("Eligible: milestone active is active.", includeBlocked.Reason);
     }
 
     [Fact]

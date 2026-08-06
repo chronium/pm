@@ -393,8 +393,12 @@ public partial class BoardService(
             PriorityLevel.SourceMilestone => "milestone default",
             _ => "no priority source",
         };
-        return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}; {task.Dependencies.Summary}.";
+        return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}; " +
+               $"{task.Dependencies.Summary}.{BuildActivationSelectionContext(task)}";
     }
+
+    internal static string BuildActivationSelectionContext(BoardTask task) =>
+        string.IsNullOrWhiteSpace(task.Milestone) ? string.Empty : $" {task.Activation.Summary}";
 
     private static string BuildNoNextTaskReason(
         NextTaskQuery query,

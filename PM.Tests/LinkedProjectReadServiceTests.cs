@@ -431,6 +431,158 @@ public sealed class LinkedProjectReadServiceTests
     }
 
     [Fact]
+    public async Task RecommendationsKeepActivationAndDeliveryLocalToEachOwningProject()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parentConfig = TestData.Config(
+            name: "Games",
+            milestones: new Dictionary<string, string> { ["release"] = "Release" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Activation = new ActivationRecord
+                    {
+                        At = Timestamp,
+                        Mode = ActivationMode.Manual,
+                    },
+                },
+            });
+        parentConfig.Milestones["release"].RequiredActivationTriggers = ["entry"];
+        var inactiveConfig = TestData.Config(
+            name: "Royale",
+            idPrefix: "GAME",
+            tracks: new Dictionary<string, string> { ["GAME"] = "Game" },
+            milestones: new Dictionary<string, string> { ["release"] = "Release" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "SHARED-0001",
+                        },
+                    ],
+                },
+            });
+        inactiveConfig.Milestones["release"].RequiredActivationTriggers = ["entry"];
+        var deliveredConfig = TestData.Config(
+            name: "Operations",
+            idPrefix: "OPS",
+            tracks: new Dictionary<string, string> { ["OPS"] = "Operations" },
+            milestones: new Dictionary<string, string> { ["release"] = "Release" });
+        deliveredConfig.Milestones["release"].Delivery = new MilestoneDelivery
+        {
+            At = Timestamp,
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with one open task.",
+            AcceptedTaskIds = ["OPS-0001"],
+        };
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games", parentConfig);
+        var inactiveChild = await CreateProject(
+            Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale", inactiveConfig);
+        var deliveredChild = await CreateProject(
+            Path.Combine(workspace.Path, "games", "ops"), "prj_ops", "Operations", deliveredConfig);
+        LinkParentAndChildren(parent, [(inactiveChild, "royale"), (deliveredChild, "ops")]);
+        AddTask(parent, "SHARED-0001", "Parent-only source", state: "done");
+        AddTask(parent, "PM-0001", "Eligible parent", priority: "low", milestone: "release");
+        AddTask(inactiveChild, "SHARED-0001", "Child-local source", track: "GAME");
+        AddTask(inactiveChild, "GAME-0001", "Inactive child", priority: "urgent", milestone: "release");
+        AddTask(deliveredChild, "OPS-0001", "Delivered child", priority: "urgent", milestone: "release");
+        var service = Service(parent, workspace);
+
+        var current = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(), new NextTaskQuery(Milestone: "release", ReadyOnly: true));
+        var inactive = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Project, "royale"),
+            new NextTaskQuery(Milestone: "release", ReadyOnly: false));
+        var delivered = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Project, "ops"),
+            new NextTaskQuery(Milestone: "release", ReadyOnly: false));
+        var family = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+            new NextTaskQuery(Milestone: "release", ReadyOnly: false));
+        var childBoard = TestBoardServices.Create(inactiveChild).GetBoard(new BoardQuery()).Payload!;
+        var childTrigger = childBoard.MilestoneActivation.ActivationTriggers.Single(trigger => trigger.Key == "entry");
+
+        Assert.Equal("PM-0001", current.Payload!.Task!.Task.Id);
+        Assert.Contains("Eligible: milestone release is active.", current.Payload.Reason);
+        Assert.False(inactive.Payload!.Found);
+        Assert.Contains("unmet activation triggers: entry", inactive.Payload.Reason);
+        Assert.False(delivered.Payload!.Found);
+        Assert.Contains("milestone release is delivered", delivered.Payload.Reason);
+        Assert.Equal("PM-0001", family.Payload!.Task!.Task.Id);
+        Assert.Contains("Eligible: milestone release is active.", family.Payload.Reason);
+        Assert.False(childTrigger.RequirementsSatisfied);
+        Assert.Equal(0, childTrigger.SatisfiedRequirementCount);
+    }
+
+    [Fact]
+    public async Task FamilyRecommendationSelectsEligibleLinkedWorkAndPreservesUnavailableWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parentConfig = TestData.Config(
+            name: "Games",
+            milestones: new Dictionary<string, string> { ["release"] = "Release" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-9998",
+                        },
+                    ],
+                },
+            });
+        parentConfig.Milestones["release"].RequiredActivationTriggers = ["entry"];
+        var childConfig = TestData.Config(
+            name: "Royale",
+            idPrefix: "GAME",
+            tracks: new Dictionary<string, string> { ["GAME"] = "Game" },
+            milestones: new Dictionary<string, string> { ["release"] = "Release" });
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games", parentConfig);
+        var child = await CreateProject(
+            Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale", childConfig);
+        LinkParentAndChildren(parent, [(child, "royale")]);
+        parent.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                Declaration("prj_royale", "royale", Path.GetRelativePath(parent.RepositoryPath, child.RepositoryPath)),
+                Declaration("prj_missing", "missing", "missing"),
+            ],
+        });
+        AddTask(parent, "PM-0001", "Inactive urgent", priority: "urgent", milestone: "release");
+        AddTask(child, "GAME-0001", "Eligible linked", priority: "low", milestone: "release");
+        var service = Service(parent, workspace);
+
+        var family = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+            new NextTaskQuery(Milestone: "release", ReadyOnly: true));
+        var selected = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Project, "royale"),
+            new NextTaskQuery(Milestone: "release", ReadyOnly: true));
+
+        Assert.Equal("GAME-0001", family.Payload!.Task!.Task.Id);
+        Assert.Equal("prj_royale", family.Payload.Owner!.ProjectId);
+        Assert.Contains("Eligible: milestone release is active.", family.Payload.Reason);
+        Assert.Contains(family.Payload.Warnings, warning =>
+            warning.Code == "linked_project_missing" && warning.TargetProjectId == "prj_missing");
+        Assert.Equal("GAME-0001", selected.Payload!.Task!.Task.Id);
+        Assert.Contains("Eligible: milestone release is active.", selected.Payload.Reason);
+    }
+
+    [Fact]
     public async Task FamilyRecommendationFiltersMatchOnlyProjectsDefiningTheKey()
     {
         using var workspace = new TempWorkingDirectory();
@@ -586,12 +738,17 @@ public sealed class LinkedProjectReadServiceTests
         string? track = "PM",
         string state = "todo",
         string? priority = null,
-        IReadOnlyList<string>? dependsOn = null)
+        IReadOnlyList<string>? dependsOn = null,
+        string? milestone = null)
     {
-        var task = TestData.Task(id, title, description, track, priority: priority, dependsOn: dependsOn);
+        var task = TestData.Task(
+            id, title, description, track, milestone, priority: priority, dependsOn: dependsOn);
         root.WriteTask(task);
         root.UpdateTaskState(task, state);
     }
+
+    private static readonly DateTimeOffset Timestamp =
+        new(2026, 8, 6, 8, 15, 0, TimeSpan.Zero);
 
     private static void AssertOwner(
         LinkedProjectResourceOwner owner,

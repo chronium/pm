@@ -311,7 +311,7 @@ public sealed class LinkedProjectReadService
 
         var warnings = new ReadWarningCollector(targets.Payload.Warnings);
         var candidates = new List<RecommendationCandidate>();
-        ResolvedMilestone? scopedCurrentMilestone = null;
+        ResolvedMilestone? scopedMilestone = null;
         for (var projectIndex = 0; projectIndex < members.Count; projectIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -330,14 +330,14 @@ public sealed class LinkedProjectReadService
                 continue;
             }
 
-            if (request.Scope == LinkedProjectReadScope.Current && query.Milestone != null)
-                scopedCurrentMilestone = board.Payload!.MilestoneActivation.Milestones.SingleOrDefault(
+            if (request.Scope != LinkedProjectReadScope.Family && query.Milestone != null)
+                scopedMilestone = board.Payload!.MilestoneActivation.Milestones.SingleOrDefault(
                     milestone => string.Equals(milestone.Key, query.Milestone, StringComparison.Ordinal));
 
             var owner = await BuildOwnerAsync(member, cancellationToken);
             candidates.AddRange(board.Payload!.Tasks
                 .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
-                .Where(task => request.Scope != LinkedProjectReadScope.Current || task.Activation.IsEligible)
+                .Where(task => task.Activation.IsEligible)
                 .Select(task => new RecommendationCandidate(
                     member, owner, task, projectIndex,
                     GetStateIndex(member.Project!, task),
@@ -380,11 +380,12 @@ public sealed class LinkedProjectReadService
         if (selected == null)
             return AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
                 false, null, null,
-                BuildNoRecommendationReason(request, query, scopedCurrentMilestone), warnings.Items));
+                BuildNoRecommendationReason(request, query, scopedMilestone), warnings.Items));
 
         var reason = $"Selected {selected.Task.Priority} priority task in " +
                      $"{selected.Owner.ProjectName} ({selected.Owner.ProjectId}), state {selected.Task.State}; " +
-                     $"{selected.Task.Dependencies.Summary}.";
+                     $"{selected.Task.Dependencies.Summary}." +
+                     BoardService.BuildActivationSelectionContext(selected.Task);
         return AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
             true, selected.Task, selected.Owner, reason, warnings.Items));
     }
