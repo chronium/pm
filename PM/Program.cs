@@ -71,6 +71,8 @@ serviceProvider.AddSingleton<MilestoneActivationValidationService>();
 serviceProvider.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
 serviceProvider.AddSingleton<ActivationTriggerService>();
 serviceProvider.AddSingleton<IActivationTriggerCommandPrompts, ActivationTriggerCommandPrompts>();
+serviceProvider.AddSingleton<MilestoneDeliveryService>();
+serviceProvider.AddSingleton<IMilestoneDeliveryCommandPrompts, MilestoneDeliveryCommandPrompts>();
 serviceProvider.AddSingleton<ProjectValidationService>();
 serviceProvider.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
 serviceProvider.AddSingleton<IProjectCommandPrompts, ProjectCommandPrompts>();
@@ -147,6 +149,8 @@ app.Configure(config =>
             milestone.AddCommand<MilestoneRemoveCommand>(GlobalConfig.MilestoneRemoveCommandName);
             milestone.AddCommand<MilestonePriorityCommand>(GlobalConfig.MilestonePriorityCommandName);
             milestone.AddCommand<MilestoneListCommand>(GlobalConfig.MilestoneListCommandName);
+            milestone.AddCommand<MilestoneDeliverCommand>(GlobalConfig.MilestoneDeliverCommandName);
+            milestone.AddCommand<MilestoneReopenCommand>(GlobalConfig.MilestoneReopenCommandName);
         });
 
     config.AddBranch(GlobalConfig.TriggerBranchName,

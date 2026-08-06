@@ -480,51 +480,16 @@ public sealed class ActivationTriggerService
             originalYaml));
     }
 
-    private AppResult<CurrentActivationState> ReadCurrentActivationState()
-    {
-        if (!projectRoot.Exists || projectRoot.Config == null)
-            return AppResult<CurrentActivationState>.Fail(
-                "missing_project", "Project not found. Run pm init first.");
-
-        try
-        {
-            if (!persistence.Reload())
-                return AppResult<CurrentActivationState>.Fail(
-                    "activation_trigger_config_reload_failed",
-                    "Activation trigger configuration could not be reloaded.");
-
-            var originalYaml = persistence.ReadText();
-            var config = ProjectConfig.Deserialize(originalYaml);
-            if (config.RequiresMilestoneSchemaMigration)
-                return AppResult<CurrentActivationState>.Fail(
-                    "milestone_schema_migration_required",
-                    "Legacy milestone configuration must be migrated with pm doctor --fix before project settings can be changed.");
-
-            var tasksById = projectRoot.GetAllTasks()
-                .GroupBy(task => task.Id, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-            var stateByTaskId = tasksById.Values.ToDictionary(
-                task => task.Id,
-                task => projectRoot.TryGetState(task, out var taskState) ? taskState : string.Empty,
-                StringComparer.Ordinal);
-            var snapshot = resolver.Resolve(config, tasksById, stateByTaskId);
-            return AppResult<CurrentActivationState>.Ok(new CurrentActivationState(
-                originalYaml,
-                config,
-                tasksById,
-                stateByTaskId,
-                snapshot));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                           InvalidDataException or YamlException)
-        {
-            return AppResult<CurrentActivationState>.Fail(
-                "invalid_project", $"Project configuration could not be read: {exception.Message}");
-        }
-    }
+    private AppResult<MilestoneActivationProjectState> ReadCurrentActivationState() =>
+        MilestoneActivationProjectStateReader.Read(
+            projectRoot,
+            resolver,
+            persistence,
+            "activation_trigger_config_reload_failed",
+            "Activation trigger configuration could not be reloaded.");
 
     private AppResult<ResolvedActivationTrigger> PersistTransition(
-        CurrentActivationState state,
+        MilestoneActivationProjectState state,
         string key,
         Action<ProjectConfig> mutation)
     {
@@ -719,10 +684,4 @@ public sealed class ActivationTriggerService
         ProjectConfig ProspectiveConfig,
         string OriginalYaml);
 
-    private sealed record CurrentActivationState(
-        string OriginalYaml,
-        ProjectConfig Config,
-        IReadOnlyDictionary<string, TaskItem> TasksById,
-        IReadOnlyDictionary<string, string> StateByTaskId,
-        MilestoneActivationSnapshot Snapshot);
 }

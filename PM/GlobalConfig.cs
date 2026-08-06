@@ -55,6 +55,8 @@ public static class GlobalConfig
     public static string MilestoneRemoveCommandName => "remove";
     public static string MilestonePriorityCommandName => "priority";
     public static string MilestoneListCommandName => "list";
+    public static string MilestoneDeliverCommandName => "deliver";
+    public static string MilestoneReopenCommandName => "reopen";
     public static string TriggerBranchName => "trigger";
     public static string TriggerAddCommandName => "add";
     public static string TriggerRenameCommandName => "rename";

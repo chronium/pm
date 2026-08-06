@@ -1,7 +1,7 @@
 ---
 title: Milestone Deliverables and Activation Triggers
 createdAt: 2026-08-06T05:36:38.7041500Z
-modifiedAt: 2026-08-06T06:36:49.8307320Z
+modifiedAt: 2026-08-06T16:33:56.0331770Z
 ---
 
 Milestones are first-class deliverables rather than organizational buckets. A milestone describes an outcome, the scope that belongs to that outcome, the activation gates that permit work to begin, and the explicit delivery decision that accepts the result.
@@ -259,6 +259,8 @@ delivery:
 ~~~
 
 Delivery with unfinished tasks must require explicit confirmation. The stored snapshot distinguishes an intentional exception from later project corruption or edits.
+
+PM does not persist a delivery actor in v1. A delivery record contains only the delivery time, mode, exceptional reason, and accepted task snapshot. Git commit history provides authorship without copying local identity or machine metadata into the public project configuration.
 
 ## Partial-milestone activation
 

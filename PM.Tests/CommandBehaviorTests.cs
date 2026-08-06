@@ -1692,6 +1692,85 @@ public class CommandBehaviorTests
         Assert.False(config.Milestones.ContainsKey("m2"));
     }
 
+    [Fact]
+    public async Task MilestoneDeliverAndReopenCommandsHandleOrdinaryDeliveryWithoutPrompting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["release"] = "Release" }));
+        var task = TestData.Task("PM-0001", "Complete", milestone: "release");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "done");
+        var prompts = new RecordingMilestoneDeliveryPrompts { Response = false };
+        var service = CreateMilestoneDeliveryService(projectRoot);
+        var deliver = new MilestoneDeliverCommand(service, prompts);
+        var reopen = new MilestoneReopenCommand(service);
+
+        var (deliverCode, deliverOutput) = await CaptureConsole(() => deliver.Execute(null!,
+            new MilestoneDeliverCommand.Settings { Key = "release" }, CancellationToken.None));
+
+        Assert.Equal(0, deliverCode);
+        Assert.Equal(0, prompts.ConfirmCalls);
+        Assert.Contains("Delivered milestone release", deliverOutput);
+        Assert.Contains("Delivery: ordinary at", deliverOutput);
+        Assert.Contains("Tasks: 1 / 1 done", deliverOutput);
+        Assert.Contains("Lifecycle: Delivered", deliverOutput);
+
+        var (reopenCode, reopenOutput) = await CaptureConsole(() => reopen.Execute(null!,
+            new MilestoneReopenCommand.Settings { Key = "release" }, CancellationToken.None));
+
+        Assert.Equal(0, reopenCode);
+        Assert.Equal(0, prompts.ConfirmCalls);
+        Assert.Contains("Reopened milestone release", reopenOutput);
+        Assert.Contains("Lifecycle: ReadyToDeliver", reopenOutput);
+        Assert.Contains("Unmet activation triggers: none", reopenOutput);
+    }
+
+    [Fact]
+    public async Task MilestoneDeliverCommandPreviewsConfirmsAndReportsExceptionalDelivery()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" }));
+        var task = TestData.Task("PM-0001", "Open", milestone: "beta");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var prompts = new RecordingMilestoneDeliveryPrompts { Response = false };
+        var service = CreateMilestoneDeliveryService(projectRoot);
+        var command = new MilestoneDeliverCommand(service, prompts);
+
+        var (missingCode, missingOutput) = await CaptureConsole(() => command.Execute(null!,
+            new MilestoneDeliverCommand.Settings { Key = "beta" }, CancellationToken.None));
+        Assert.Equal(1, missingCode);
+        Assert.Equal(0, prompts.ConfirmCalls);
+        Assert.Contains("Provide --reason", missingOutput);
+
+        var (cancelCode, cancelOutput) = await CaptureConsole(() => command.Execute(null!,
+            new MilestoneDeliverCommand.Settings { Key = "beta", Reason = "Risk <accepted>" },
+            CancellationToken.None));
+        Assert.Equal(1, cancelCode);
+        Assert.Equal(1, prompts.ConfirmCalls);
+        Assert.Contains("Exceptional delivery preview", cancelOutput);
+        Assert.Contains("Accepted unfinished tasks: PM-0001", cancelOutput);
+        Assert.Contains("cancelled", cancelOutput);
+        Assert.Null(ProjectConfig.ReadConfig(projectRoot).Milestones["beta"].Delivery);
+
+        var (deliverCode, deliverOutput) = await CaptureConsole(() => command.Execute(null!,
+            new MilestoneDeliverCommand.Settings
+                { Key = "beta", Reason = "Risk <accepted>", Yes = true },
+            CancellationToken.None));
+
+        Assert.Equal(0, deliverCode);
+        Assert.Equal(1, prompts.ConfirmCalls);
+        Assert.Contains("Delivery: exceptional at", deliverOutput);
+        Assert.Contains("Reason: Risk <accepted>", deliverOutput);
+        Assert.Contains("Accepted unfinished tasks: PM-0001", deliverOutput);
+        var stored = ProjectConfig.ReadConfig(projectRoot).Milestones["beta"].Delivery!;
+        Assert.Equal(MilestoneDeliveryMode.Exceptional, stored.Mode);
+        Assert.Equal("Risk <accepted>", stored.Reason);
+        Assert.Equal(["PM-0001"], stored.AcceptedTaskIds);
+    }
+
     private static async Task<ProjectRoot> CreateLinkedProject(string repositoryPath, string projectId)
     {
         Directory.CreateDirectory(repositoryPath);
@@ -1736,6 +1815,14 @@ public class CommandBehaviorTests
 
     private static LinkedProjectMutationService WikiMutations(WikiService wikiService) =>
         LinkedProjectMutationService.ForCurrent(wikiService);
+
+    private static MilestoneDeliveryService CreateMilestoneDeliveryService(ProjectRoot projectRoot) =>
+        new(
+            projectRoot,
+            new MilestoneActivationResolver(projectRoot),
+            new MilestoneActivationValidationService(projectRoot),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
 
     private static LinkedProjectReadService CreateLinkedReads(ProjectRoot projectRoot)
     {
@@ -2064,6 +2151,18 @@ public class CommandBehaviorTests
     }
 
     private sealed class RecordingActivationTriggerPrompts : IActivationTriggerCommandPrompts
+    {
+        public bool Response { get; init; }
+        public int ConfirmCalls { get; private set; }
+
+        public bool Confirm(string prompt)
+        {
+            ConfirmCalls++;
+            return Response;
+        }
+    }
+
+    private sealed class RecordingMilestoneDeliveryPrompts : IMilestoneDeliveryCommandPrompts
     {
         public bool Response { get; init; }
         public int ConfirmCalls { get; private set; }
