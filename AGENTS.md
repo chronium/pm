@@ -132,7 +132,9 @@ Avoid unnecessary re-renders, repeated expensive computation, avoidable layout s
 - Follow existing naming, file organization, dependency injection, result handling, and testing conventions.
 - Make the smallest coherent change that solves the problem.
 - Avoid unrelated refactoring and broad visual restyling.
-- Do not retain obsolete compatibility shims solely to keep old tests or internal call sites compiling. Update those callers unless backward compatibility is an explicit requirement.
+- Do not preserve obsolete internal implementation paths merely because older code exists. Once an approved replacement is complete, remove the superseded code and update its internal callers, tests, and documentation.
+- Preserve backward compatibility in supported application usage and user data. Existing project formats, CLI/API/MCP contracts, and user workflows must continue to work through explicit migrations or deliberate boundary adapters unless a breaking change is separately approved.
+- An exception that retains a superseded internal implementation requires a demonstrated consumer or data need, a clear owner, and a documented removal condition.
 - Explain significant architectural deviations.
 - Remove obsolete code introduced by the change.
 - Update documentation and tests when behavior changes.
