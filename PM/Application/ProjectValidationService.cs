@@ -46,7 +46,7 @@ public sealed class ProjectValidationService
         LinkedProjectFamilyService linkedProjectFamily,
         LinkedProjectTaskGraphService linkedTaskGraph)
         : this(projectRoot, linkedProjects, linkedProjectFamily, linkedTaskGraph,
-            new MilestoneActivationValidationService(projectRoot))
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()))
     {
     }
 

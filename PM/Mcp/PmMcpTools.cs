@@ -1432,4 +1432,9 @@ public sealed class PmMcpTools(
             ? AppResult<bool>.Ok(true)
             : AppResult<bool>.Fail(result.ErrorCode!, result.Message!);
 
+    private static AppResult<bool> ToPayload<T>(AppResult<LifecycleMutationResult<T>> result) =>
+        result.Success
+            ? AppResult<bool>.Ok(true)
+            : AppResult<bool>.Fail(result.ErrorCode!, result.Message!);
+
 }

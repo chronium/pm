@@ -300,7 +300,8 @@ public sealed class LinkedProjectReadServiceTests
             dependsOn: ["pm://project/prj_absent/task/PM-0001"]);
         var family = Family(child, workspace);
         var service = new LinkedProjectReadService(
-            child, family, new UnusedNextIdService(), new FixedGitInspector(null, null));
+            child, family, new UnusedNextIdService(), new FixedGitInspector(null, null),
+            new TaskServiceFactory(TimeProvider.System));
 
         var resolvedFamily = await family.ResolveAsync();
         var parentMember = resolvedFamily.Payload!.Members.Single(member => member.ProjectId == "prj_games");
@@ -453,6 +454,7 @@ public sealed class LinkedProjectReadServiceTests
             Family(active, workspace),
             new UnusedNextIdService(),
             gitInspector ?? new FixedGitInspector(null, null),
+            new TaskServiceFactory(TimeProvider.System),
             maximumListResultCount);
 
     private static LinkedProjectFamilyService Family(ProjectRoot active, TempWorkingDirectory workspace) =>

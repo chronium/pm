@@ -107,7 +107,7 @@ public sealed class ProjectResourceReferenceTests
         var task = TestData.Task("PM-0001", "Task");
         root.WriteTask(task);
         root.UpdateTaskState(task, "todo");
-        var service = new TaskService(root, new UnusedNextIdService());
+        var service = TestTaskServices.Create(root, new UnusedNextIdService());
 
         var result = service.PatchTaskMetadata("PM-0001", dependsOn:
         [

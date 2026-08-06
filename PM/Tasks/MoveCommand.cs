@@ -45,6 +45,7 @@ public class MoveCommand(LinkedProjectMutationService mutations) : AsyncCommand<
         }
 
         AnsiConsole.MarkupLine($"[green]Task {settings.TaskId} moved to state {newState}[/]");
+        LifecycleMutationCommandOutput.Write(result.Payload!.ActivationImpact);
         LinkedProjectConsole.WriteReceipt(mutation.Receipt);
 
         return 0;

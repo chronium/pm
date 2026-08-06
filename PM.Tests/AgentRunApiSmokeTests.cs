@@ -111,7 +111,7 @@ public class AgentRunApiSmokeTests
         var app = builder.Build();
         app.MapApiV1(projectRoot, new ProjectConfigService(projectRoot),
             new ProjectValidationService(projectRoot), board,
-            new TaskService(projectRoot, new SmokeNextIdService()), new WikiService(projectRoot),
+            TestTaskServices.Create(projectRoot, new SmokeNextIdService()), new WikiService(projectRoot),
             new ResourceRevisionService(projectRoot, board), agentRunService: runService,
             agentRunnerClient: runnerClient);
         app.MapOpenApi("/openapi/{documentName}.json");

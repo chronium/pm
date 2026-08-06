@@ -632,7 +632,8 @@ public class McpToolTests
             linkedProjects,
             new LinkedProjectResolver(registry, new NullSubmoduleInspector()));
         var nextIds = new RecordingNextIdService();
-        var mutations = new LinkedProjectMutationService(active, nextIds, family, registry);
+        var mutations = new LinkedProjectMutationService(
+            active, nextIds, family, registry, new TaskServiceFactory(TimeProvider.System));
         var tools = CreateTools(active, nextIds,
             linkedProjectFamily: family,
             linkedProjectMutations: mutations);
@@ -1363,11 +1364,12 @@ public class McpToolTests
             projectRoot,
             linkedProjectFamily,
             nextIdService,
-            new LinkedProjectGitInspector());
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
         if (linkedProjectMutations != null)
             return new PmMcpTools(
                 projectRoot,
-                new TaskService(projectRoot, nextIdService),
+                TestTaskServices.Create(projectRoot, nextIdService),
                 new ProjectCreationService(projectRoot, nextIdService),
                 new ProjectConfigService(projectRoot),
                 new BoardService(projectRoot),
@@ -1382,7 +1384,7 @@ public class McpToolTests
 
         return new PmMcpTools(
             projectRoot,
-            new TaskService(projectRoot, nextIdService),
+            TestTaskServices.Create(projectRoot, nextIdService),
             new ProjectCreationService(projectRoot, nextIdService),
             new ProjectConfigService(projectRoot),
             new BoardService(projectRoot),

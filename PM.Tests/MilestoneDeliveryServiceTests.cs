@@ -33,11 +33,12 @@ public sealed class MilestoneDeliveryServiceTests
             "release", null, preview.Payload.Revision, allowExceptional: false);
 
         Assert.True(delivered.Success);
-        Assert.Equal(MilestoneLifecycle.Delivered, delivered.Payload!.Lifecycle);
-        Assert.Equal(MilestoneDeliveryMode.Ordinary, delivered.Payload.Delivery!.Mode);
-        Assert.Equal(now, delivered.Payload.Delivery.At);
-        Assert.Null(delivered.Payload.Delivery.Reason);
-        Assert.Empty(delivered.Payload.Delivery.AcceptedTaskIds);
+        var deliveredMilestone = delivered.Payload!.Value;
+        Assert.Equal(MilestoneLifecycle.Delivered, deliveredMilestone.Lifecycle);
+        Assert.Equal(MilestoneDeliveryMode.Ordinary, deliveredMilestone.Delivery!.Mode);
+        Assert.Equal(now, deliveredMilestone.Delivery.At);
+        Assert.Null(deliveredMilestone.Delivery.Reason);
+        Assert.Empty(deliveredMilestone.Delivery.AcceptedTaskIds);
         var stored = ProjectConfig.ReadConfig(root).Milestones["release"].Delivery!;
         Assert.Equal(now, stored.At);
         Assert.Equal(MilestoneDeliveryMode.Ordinary, stored.Mode);
@@ -77,11 +78,12 @@ public sealed class MilestoneDeliveryServiceTests
             "beta", "  Accepted for hardening.  ", preview.Payload.Revision, allowExceptional: true);
 
         Assert.True(delivered.Success);
-        Assert.Equal(MilestoneLifecycle.Delivered, delivered.Payload!.Lifecycle);
-        Assert.Equal(MilestoneDeliveryMode.Exceptional, delivered.Payload.Delivery!.Mode);
-        Assert.Equal(now, delivered.Payload.Delivery.At);
-        Assert.Equal("Accepted for hardening.", delivered.Payload.Delivery.Reason);
-        Assert.Equal(["PM-0002", "PM-0003"], delivered.Payload.Delivery.AcceptedTaskIds);
+        var deliveredMilestone = delivered.Payload!.Value;
+        Assert.Equal(MilestoneLifecycle.Delivered, deliveredMilestone.Lifecycle);
+        Assert.Equal(MilestoneDeliveryMode.Exceptional, deliveredMilestone.Delivery!.Mode);
+        Assert.Equal(now, deliveredMilestone.Delivery.At);
+        Assert.Equal("Accepted for hardening.", deliveredMilestone.Delivery.Reason);
+        Assert.Equal(["PM-0002", "PM-0003"], deliveredMilestone.Delivery.AcceptedTaskIds);
         var stored = ProjectConfig.ReadConfig(root).Milestones["beta"].Delivery!;
         Assert.Equal(["PM-0002", "PM-0003"], stored.AcceptedTaskIds);
     }
@@ -165,7 +167,7 @@ public sealed class MilestoneDeliveryServiceTests
         var triggers = new ActivationTriggerService(
             root,
             new MilestoneActivationResolver(root),
-            new MilestoneActivationValidationService(root),
+            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()),
             TimeProvider.System,
             new ProjectConfigPersistence(root));
         Assert.True(triggers.ResetTrigger("approval").Success);
@@ -181,6 +183,58 @@ public sealed class MilestoneDeliveryServiceTests
         Assert.Null(ProjectConfig.ReadConfig(root).Milestones["release"].Delivery);
         Assert.Null(ProjectConfig.ReadConfig(root).ActivationTriggers["approval"].Activation);
         Assert.Equal("milestone_not_delivered", service.ReopenMilestone("release").ErrorCode);
+    }
+
+    [Fact]
+    public async Task DeliveryLatchesAffectedMilestoneRequirementsInTheSameTransition()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["foundation"] = "Foundation",
+                ["beta"] = "Beta",
+            },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["foundation-delivered"] = new()
+                {
+                    Title = "Foundation delivered",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Milestone,
+                            Source = "foundation",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("foundation-delivered");
+        var root = await workspace.CreateProject(config);
+        WriteTask(root, TestData.Task("PM-0001", "Foundation work", milestone: "foundation"), "done");
+        WriteTask(root, TestData.Task("PM-0002", "Beta work", milestone: "beta"), "todo");
+        var now = DateTimeOffset.Parse("2026-08-06T19:00:00Z");
+        var service = CreateService(root, new FixedTimeProvider(now));
+        var preview = service.PreviewDelivery("foundation", null);
+
+        var result = service.DeliverMilestone(
+            "foundation", null, preview.Payload!.Revision, allowExceptional: false);
+
+        Assert.True(result.Success);
+        var impact = result.Payload!.ActivationImpact;
+        var trigger = Assert.Single(impact.ActivatedTriggers);
+        Assert.Equal("foundation-delivered", trigger.Key);
+        Assert.Equal(ActivationMode.Automatic, trigger.Activation!.Mode);
+        Assert.Equal(now, trigger.Activation.At);
+        var milestone = impact.MilestoneChanges.Single(change => change.MilestoneKey == "beta");
+        Assert.Equal("beta", milestone.MilestoneKey);
+        Assert.Equal(MilestoneLifecycle.Inactive, milestone.Before);
+        Assert.Equal(MilestoneLifecycle.Active, milestone.After);
+
+        var stored = ProjectConfig.ReadConfig(root);
+        Assert.Equal(now, stored.Milestones["foundation"].Delivery!.At);
+        Assert.Equal(now, stored.ActivationTriggers["foundation-delivered"].Activation!.At);
     }
 
     [Fact]
@@ -236,7 +290,9 @@ public sealed class MilestoneDeliveryServiceTests
         new(
             root,
             new MilestoneActivationResolver(root),
-            new MilestoneActivationValidationService(root),
+            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()),
+            new AutomaticActivationService(
+                new MilestoneActivationResolver(root), timeProvider ?? TimeProvider.System),
             timeProvider ?? TimeProvider.System,
             persistence ?? new ProjectConfigPersistence(root));
 

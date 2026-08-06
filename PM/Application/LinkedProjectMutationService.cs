@@ -49,7 +49,8 @@ public sealed class LinkedProjectMutationService(
     ProjectRoot activeProject,
     INextIdService nextIdService,
     LinkedProjectFamilyService familyService,
-    LinkedProjectRegistryStore registry)
+    LinkedProjectRegistryStore registry,
+    TaskServiceFactory taskServices)
 {
     public static LinkedProjectMutationService ForCurrent(TaskService tasks)
     {
@@ -58,7 +59,8 @@ public sealed class LinkedProjectMutationService(
             root,
             tasks.NextIdService,
             LinkedProjectFamilyService.CreateDefault(root),
-            new LinkedProjectRegistryStore());
+            new LinkedProjectRegistryStore(),
+            tasks.Factory);
     }
 
     public static LinkedProjectMutationService ForCurrent(WikiService wiki)
@@ -68,10 +70,14 @@ public sealed class LinkedProjectMutationService(
             root,
             DisabledNextIdService.Instance,
             LinkedProjectFamilyService.CreateDefault(root),
-            new LinkedProjectRegistryStore());
+            new LinkedProjectRegistryStore(),
+            new TaskServiceFactory(TimeProvider.System));
     }
 
     public LinkedProjectMutationTracker Track(LinkedProjectMutationTarget target) => new(target);
+
+    public TaskService CreateTaskService(ProjectRoot root, INextIdService nextIds) =>
+        taskServices.Create(root, nextIds);
 
     public async Task<AppResult<LinkedProjectMutationTarget>> ResolveTargetAsync(
         string? selector,
@@ -168,7 +174,7 @@ public sealed class LinkedProjectMutationService(
             projectId,
             isCurrent,
             root,
-            new TaskService(root, nextIdService),
+            taskServices.Create(root, nextIdService),
             board,
             new WikiService(root),
             new ResourceRevisionService(root, board));

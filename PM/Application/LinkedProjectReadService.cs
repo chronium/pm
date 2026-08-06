@@ -67,6 +67,7 @@ public sealed class LinkedProjectReadService
     private readonly ProjectRoot activeProject;
     private readonly LinkedProjectFamilyService familyService;
     private readonly INextIdService nextIdService;
+    private readonly TaskServiceFactory taskServices;
     private readonly ILinkedProjectGitInspector gitInspector;
     private readonly LinkedProjectTaskGraphService taskGraphService;
     private readonly int maximumListResultCount;
@@ -75,8 +76,9 @@ public sealed class LinkedProjectReadService
         ProjectRoot activeProject,
         LinkedProjectFamilyService familyService,
         INextIdService nextIdService,
-        ILinkedProjectGitInspector gitInspector)
-        : this(activeProject, familyService, nextIdService, gitInspector, MaximumListResultCount)
+        ILinkedProjectGitInspector gitInspector,
+        TaskServiceFactory taskServices)
+        : this(activeProject, familyService, nextIdService, gitInspector, taskServices, MaximumListResultCount)
     {
     }
 
@@ -85,11 +87,13 @@ public sealed class LinkedProjectReadService
         LinkedProjectFamilyService familyService,
         INextIdService nextIdService,
         ILinkedProjectGitInspector gitInspector,
+        TaskServiceFactory taskServices,
         int maximumListResultCount)
     {
         this.activeProject = activeProject;
         this.familyService = familyService;
         this.nextIdService = nextIdService;
+        this.taskServices = taskServices;
         this.gitInspector = gitInspector;
         taskGraphService = new LinkedProjectTaskGraphService(familyService);
         this.maximumListResultCount = Math.Clamp(maximumListResultCount, 1, MaximumListResultCount);
@@ -247,7 +251,7 @@ public sealed class LinkedProjectReadService
             var member = targets.Payload.Members[index];
             if (request.Scope == LinkedProjectReadScope.Family && !Supports(member.Project!, context)) continue;
 
-            var result = new TaskService(member.Project!, nextIdService).SearchTasks(query, limit, context);
+            var result = taskServices.Create(member.Project!, nextIdService).SearchTasks(query, limit, context);
             if (!result.Success)
             {
                 if (!CanContinue(request, member))

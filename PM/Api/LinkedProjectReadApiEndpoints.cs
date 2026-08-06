@@ -568,7 +568,7 @@ public static class LinkedProjectReadApiEndpoints
             member.Project,
             board,
             new ProjectConfigService(member.Project),
-            mutationTarget?.Tasks ?? new TaskService(member.Project, ReadOnlyNextIdService.Instance),
+            mutationTarget?.Tasks ?? mutations.CreateTaskService(member.Project, ReadOnlyNextIdService.Instance),
             mutationTarget?.Wiki ?? new WikiService(member.Project),
             mutationTarget?.Revisions ?? new ResourceRevisionService(member.Project, board),
             mutationTarget,

@@ -56,24 +56,26 @@ public sealed class TaskService
     private readonly ProjectRoot projectRoot;
     private readonly INextIdService nextIdService;
     private readonly MilestoneActivationGraphService activationGraph;
+    private readonly TaskLifecycleMutationService lifecycleMutations;
+    private readonly TaskServiceFactory factory;
 
-    public TaskService(ProjectRoot projectRoot, INextIdService nextIdService)
-        : this(projectRoot, nextIdService, new MilestoneActivationGraphService())
-    {
-    }
-
-    public TaskService(
+    internal TaskService(
         ProjectRoot projectRoot,
         INextIdService nextIdService,
-        MilestoneActivationGraphService activationGraph)
+        MilestoneActivationGraphService activationGraph,
+        TaskLifecycleMutationService lifecycleMutations,
+        TaskServiceFactory factory)
     {
         this.projectRoot = projectRoot;
         this.nextIdService = nextIdService;
         this.activationGraph = activationGraph;
+        this.lifecycleMutations = lifecycleMutations;
+        this.factory = factory;
     }
 
     public ProjectRoot ProjectRoot => projectRoot;
     public INextIdService NextIdService => nextIdService;
+    public TaskServiceFactory Factory => factory;
 
     private const int MaxBulkTaskCount = 100;
 
@@ -327,29 +329,37 @@ public sealed class TaskService
     private static string? NormalizeFilter(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    public AppResult MoveTask(string taskId, string targetState)
+    public AppResult<LifecycleMutationResult<TaskItem>> MoveTask(string taskId, string targetState)
     {
         if (!projectRoot.Exists)
-            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "missing_project", "Project not found. Run pm init first.");
 
         if (!projectRoot.Config!.TaskStates.ContainsKey(targetState))
-            return AppResult.Fail("invalid_state", $"State {targetState} not found.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "invalid_state", $"State {targetState} not found.");
 
         if (!projectRoot.TryGetById(taskId, out var task))
-            return AppResult.Fail("missing_task", $"Task with ID {taskId} not found.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "missing_task", $"Task with ID {taskId} not found.");
 
-        if (!projectRoot.TryGetState(task, out _))
-            return AppResult.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
+        if (!projectRoot.TryGetState(task, out var currentState))
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "missing_current_state", $"Task with ID {taskId} has no associated state.");
 
-        try
-        {
-            projectRoot.UpdateTaskState(task, targetState);
-            return AppResult.Ok();
-        }
-        catch (Exception exception) when (IsStorageException(exception))
-        {
-            return AppResult.Fail("task_state_write_failed", $"Task {taskId} could not be moved to {targetState}.");
-        }
+        var transition = lifecycleMutations.Execute(
+            task,
+            task,
+            currentState,
+            targetState,
+            () => projectRoot.UpdateTaskState(task, targetState),
+            "task_state_write_failed",
+            $"Task {taskId} could not be moved to {targetState}.");
+        return transition.Success
+            ? AppResult<LifecycleMutationResult<TaskItem>>.Ok(
+                new LifecycleMutationResult<TaskItem>(task, transition.Payload!))
+            : AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                transition.ErrorCode!, transition.Message!);
     }
 
     public AppResult RemoveTask(string taskId)
@@ -657,7 +667,7 @@ public sealed class TaskService
         return AppResult<TaskReorderResult>.Ok(new TaskReorderResult(track, state, milestone, normalizedIds, changed));
     }
 
-    public AppResult<TaskItem> UpdateTaskDetails(
+    public AppResult<LifecycleMutationResult<TaskItem>> UpdateTaskDetails(
         string taskId,
         string title,
         string targetState,
@@ -666,17 +676,19 @@ public sealed class TaskService
         TaskPlacementUpdate? placement = null)
     {
         if (!projectRoot.Exists)
-            return AppResult<TaskItem>.Fail("missing_project", "Project not found. Run pm init first.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "missing_project", "Project not found. Run pm init first.");
 
         if (string.IsNullOrWhiteSpace(title))
-            return AppResult<TaskItem>.Fail("invalid_title", "Task title is required.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail("invalid_title", "Task title is required.");
 
         if (!projectRoot.Config!.TaskStates.ContainsKey(targetState))
-            return AppResult<TaskItem>.Fail("invalid_state", $"State {targetState} not found.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "invalid_state", $"State {targetState} not found.");
 
         string? normalizedPriority = null;
         if (priority != null && !PriorityLevel.TryNormalizePatchValue(priority, out normalizedPriority))
-            return AppResult<TaskItem>.Fail("invalid_priority",
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail("invalid_priority",
                 $"Task priority must be inherit or one of {string.Join(", ", PriorityLevel.Values)}.");
 
         string? normalizedTrack = null;
@@ -686,22 +698,27 @@ public sealed class TaskService
             normalizedTrack = placement.Track?.Trim();
             if (string.IsNullOrWhiteSpace(normalizedTrack) ||
                 !projectRoot.Config.Tracks.ContainsKey(normalizedTrack))
-                return AppResult<TaskItem>.Fail("invalid_track", $"Track {normalizedTrack} not found.");
+                return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                    "invalid_track", $"Track {normalizedTrack} not found.");
 
             normalizedMilestone = string.IsNullOrWhiteSpace(placement.Milestone)
                 ? null
                 : placement.Milestone.Trim();
             if (placement.Milestone != null && string.IsNullOrWhiteSpace(placement.Milestone))
-                return AppResult<TaskItem>.Fail("invalid_milestone", "Task milestone must be configured or null.");
+                return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                    "invalid_milestone", "Task milestone must be configured or null.");
             if (normalizedMilestone != null && !projectRoot.Config.Milestones.ContainsKey(normalizedMilestone))
-                return AppResult<TaskItem>.Fail("invalid_milestone", $"Milestone {normalizedMilestone} not found.");
+                return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                    "invalid_milestone", $"Milestone {normalizedMilestone} not found.");
         }
 
         if (!projectRoot.TryGetById(taskId, out var task))
-            return AppResult<TaskItem>.Fail("missing_task", $"Task with ID {taskId} not found.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "missing_task", $"Task with ID {taskId} not found.");
 
         if (!projectRoot.TryGetState(task, out var currentState))
-            return AppResult<TaskItem>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
+            return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                "missing_current_state", $"Task with ID {taskId} has no associated state.");
 
         var updated = task with
         {
@@ -717,23 +734,30 @@ public sealed class TaskService
         {
             var preflight = PreflightMilestonePlacements([updated]);
             if (!preflight.Success)
-                return AppResult<TaskItem>.Fail(preflight.ErrorCode!, preflight.Message!);
+                return AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                    preflight.ErrorCode!, preflight.Message!);
         }
 
-        try
-        {
-            projectRoot.MoveTaskOrderScope(task.Id,
-                new TaskOrderScope(projectRoot.ResolveTaskTrack(task), currentState, task.Milestone),
-                new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), currentState, updated.Milestone));
-            projectRoot.WriteTask(updated);
-            projectRoot.UpdateTaskState(updated, targetState);
-            return AppResult<TaskItem>.Ok(updated);
-        }
-        catch (Exception exception) when (IsStorageException(exception))
-        {
-            TryRestoreTask(task, updated, currentState);
-            return AppResult<TaskItem>.Fail("task_storage_write_failed", $"Task {taskId} could not be updated.");
-        }
+        var transition = lifecycleMutations.Execute(
+            task,
+            updated,
+            currentState,
+            targetState,
+            () =>
+            {
+                projectRoot.MoveTaskOrderScope(task.Id,
+                    new TaskOrderScope(projectRoot.ResolveTaskTrack(task), currentState, task.Milestone),
+                    new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), currentState, updated.Milestone));
+                projectRoot.WriteTask(updated);
+                projectRoot.UpdateTaskState(updated, targetState);
+            },
+            "task_storage_write_failed",
+            $"Task {taskId} could not be updated.");
+        return transition.Success
+            ? AppResult<LifecycleMutationResult<TaskItem>>.Ok(
+                new LifecycleMutationResult<TaskItem>(updated, transition.Payload!))
+            : AppResult<LifecycleMutationResult<TaskItem>>.Fail(
+                transition.ErrorCode!, transition.Message!);
     }
 
     private void TryDeletePartialTask(TaskItem task)
@@ -762,22 +786,6 @@ public sealed class TaskService
             : AppResult.Fail(
                 "activation_cycle",
                 $"Task milestone placement would create an activation cycle: {string.Join(" -> ", cycle.Path)}.");
-    }
-
-    private void TryRestoreTask(TaskItem task, TaskItem updated, string state)
-    {
-        try
-        {
-            projectRoot.MoveTaskOrderScope(task.Id,
-                new TaskOrderScope(projectRoot.ResolveTaskTrack(updated), state, updated.Milestone),
-                new TaskOrderScope(projectRoot.ResolveTaskTrack(task), state, task.Milestone));
-            projectRoot.WriteTask(task);
-            projectRoot.UpdateTaskState(task, state);
-        }
-        catch (Exception exception) when (IsStorageException(exception))
-        {
-            // Preserve the bounded update failure.
-        }
     }
 
     private static bool IsStorageException(Exception exception) =>

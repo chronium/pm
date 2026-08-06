@@ -171,7 +171,7 @@ public class ApplicationServiceTests
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
         var nextIds = new RecordingNextIdService();
-        var service = new TaskService(projectRoot, nextIds);
+        var service = TestTaskServices.Create(projectRoot, nextIds);
 
         var invalidTrack = await service.CreateTask("Bad", "NOPE", null, "", false);
         var invalidMilestone = await service.CreateTask("Bad", "BUILD", "missing", "", false);
@@ -192,7 +192,7 @@ public class ApplicationServiceTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIds = new RecordingNextIdService();
-        var service = new TaskService(projectRoot, nextIds);
+        var service = TestTaskServices.Create(projectRoot, nextIds);
 
         var result = await service.CreateTask("Preview", "PM", null, "Body", true);
 
@@ -210,7 +210,7 @@ public class ApplicationServiceTests
         var projectRoot = await workspace.CreateProject(TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" }));
         var nextIds = new RecordingNextIdService(ids: [1, 2, 3]);
-        var service = new TaskService(projectRoot, nextIds);
+        var service = TestTaskServices.Create(projectRoot, nextIds);
 
         var result = await service.BulkCreateTasksForTrack("BUILD",
         [
@@ -232,7 +232,7 @@ public class ApplicationServiceTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var nextIds = new RecordingNextIdService();
-        var service = new TaskService(projectRoot, nextIds);
+        var service = TestTaskServices.Create(projectRoot, nextIds);
 
         var empty = await service.BulkCreateTasksForTrack("PM", []);
         var oversized = await service.BulkCreateTasksForTrack("PM",
@@ -254,7 +254,7 @@ public class ApplicationServiceTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var nextIds = new RecordingNextIdService(ids: [1], failWhenIdsExhausted: true);
-        var service = new TaskService(projectRoot, nextIds);
+        var service = TestTaskServices.Create(projectRoot, nextIds);
 
         var result = await service.BulkCreateTasksForTrack("PM",
             [new BulkTaskCreateInput("First"), new BulkTaskCreateInput("Second")]);
@@ -274,7 +274,7 @@ public class ApplicationServiceTests
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
         var task = TestData.Task("PM-0001", "Existing");
         projectRoot.WriteTask(task);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var missingMilestone = service.BulkAssignTasksToMilestone("missing", ["PM-0001"]);
         var empty = service.BulkAssignTasksToMilestone("m1", []);
@@ -303,7 +303,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(second);
         projectRoot.UpdateTaskState(first, "review");
         projectRoot.UpdateTaskState(second, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var result = service.BulkAssignTasksToMilestone("m2", ["PM-0001", "PM-0002"]);
 
@@ -328,7 +328,7 @@ public class ApplicationServiceTests
         var task = TestData.Task("PM-0001", "Move me",
             dependsOn: ["pm://project/prj_unavailable/task/OTHER-0001"]);
         projectRoot.WriteTask(task);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         Assert.Equal("invalid_state", service.MoveTask("PM-0001", "missing").ErrorCode);
         Assert.Equal("missing_task", service.MoveTask("PM-9999", "done").ErrorCode);
@@ -350,7 +350,7 @@ public class ApplicationServiceTests
         var task = TestData.Task("PM-0001", "Remove me");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var missing = service.RemoveTask("PM-9999");
         var removed = service.RemoveTask("PM-0001");
@@ -368,7 +368,7 @@ public class ApplicationServiceTests
         var projectRoot = await workspace.CreateProject();
         var task = TestData.Task("PM-0001", "Existing");
         projectRoot.WriteTask(task);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         Assert.Equal("invalid_edited_markdown", service.SaveEditedTaskContent("PM-0001", "not markdown").ErrorCode);
         Assert.Equal("changed_task_id",
@@ -389,18 +389,19 @@ public class ApplicationServiceTests
         var task = TestData.Task("PM-0001", "Existing", "Old body", track: "PM", milestone: "m1");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var updated = service.UpdateTaskDetails("PM-0001", "Updated", "done", "New body");
 
         Assert.True(updated.Success);
-        Assert.Equal("Updated", updated.Payload!.Title);
-        Assert.Equal("PM-0001", updated.Payload.Id);
-        Assert.Equal("PM", updated.Payload.Track);
-        Assert.Equal("m1", updated.Payload.Milestone);
-        Assert.Equal(task.CreatedAt, updated.Payload.CreatedAt);
-        Assert.Equal("New body", updated.Payload.Description);
-        Assert.True(updated.Payload.ModifiedAt > task.ModifiedAt);
+        var updatedTask = updated.Payload!.Value;
+        Assert.Equal("Updated", updatedTask.Title);
+        Assert.Equal("PM-0001", updatedTask.Id);
+        Assert.Equal("PM", updatedTask.Track);
+        Assert.Equal("m1", updatedTask.Milestone);
+        Assert.Equal(task.CreatedAt, updatedTask.CreatedAt);
+        Assert.Equal("New body", updatedTask.Description);
+        Assert.True(updatedTask.ModifiedAt > task.ModifiedAt);
         Assert.False(File.Exists(Path.Combine(projectRoot.StatesPath, "todo", "PM-0001.ref")));
         Assert.True(File.Exists(Path.Combine(projectRoot.StatesPath, "done", "PM-0001.ref")));
     }
@@ -412,7 +413,7 @@ public class ApplicationServiceTests
         var projectRoot = await workspace.CreateProject();
         var task = TestData.Task("PM-0001", "Existing");
         projectRoot.WriteTask(task);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         Assert.Equal("invalid_title", service.UpdateTaskDetails("PM-0001", " ", "todo", "").ErrorCode);
         Assert.Equal("invalid_state", service.UpdateTaskDetails("PM-0001", "Title", "missing", "").ErrorCode);
@@ -432,13 +433,13 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(task, "todo");
         projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), [task.Id]);
         projectRoot.SetTaskOrder(new TaskOrderScope("BUILD", "done", "m1"), []);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var result = service.UpdateTaskDetails(task.Id, "Updated", "done", "New body", "urgent",
             new TaskPlacementUpdate("BUILD", "m1"));
 
         Assert.True(result.Success);
-        var updated = result.Payload!;
+        var updated = result.Payload!.Value;
         Assert.Equal(task.Id, updated.Id);
         Assert.Equal(task.CreatedAt, updated.CreatedAt);
         Assert.Equal("BUILD", updated.Track);
@@ -459,16 +460,16 @@ public class ApplicationServiceTests
         var task = TestData.Task("PM-0001", "Existing", track: "PM", milestone: "m1");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var preserved = service.UpdateTaskDetails(task.Id, task.Title, "todo", task.Description);
-        Assert.Equal("PM", preserved.Payload!.Track);
-        Assert.Equal("m1", preserved.Payload.Milestone);
+        Assert.Equal("PM", preserved.Payload!.Value.Track);
+        Assert.Equal("m1", preserved.Payload.Value.Milestone);
 
         var unassigned = service.UpdateTaskDetails(task.Id, task.Title, "todo", task.Description,
             placement: new TaskPlacementUpdate("PM", null));
         Assert.True(unassigned.Success);
-        Assert.Null(unassigned.Payload!.Milestone);
+        Assert.Null(unassigned.Payload!.Value.Milestone);
     }
 
     [Theory]
@@ -485,7 +486,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
         var original = File.ReadAllText(projectRoot.GetTaskFilePath(task.Id));
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var result = service.UpdateTaskDetails(task.Id, "Changed", "done", "Changed", placement:
             new TaskPlacementUpdate(track, milestone));
@@ -511,7 +512,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(second, "todo");
         projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), ["PM-0001", "PM-0002"]);
         projectRoot.SetTaskOrder(new TaskOrderScope("BUILD", "todo", "m1"), []);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var updated = service.PatchTaskMetadata("PM-0001", title: " Updated ", track: "BUILD", milestone: "m1",
             description: "New body");
@@ -545,7 +546,7 @@ public class ApplicationServiceTests
         var task = TestData.Task("PM-0001", "Existing", milestone: "m1");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var set = service.PatchTaskMetadata("PM-0001", priority: "Urgent");
         var changed = service.PatchTaskMetadata("PM-0001", priority: "low");
@@ -580,7 +581,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(second);
         projectRoot.UpdateTaskState(first, "todo");
         projectRoot.UpdateTaskState(second, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var set = service.PatchTaskMetadata("PM-0001", dependsOn: [" PM-0002 ", "", "PM-0002", "BUILD-0001"]);
 
@@ -605,7 +606,7 @@ public class ApplicationServiceTests
         var task = TestData.Task("PM-0001", "Existing", "Body");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var result = service.AppendTaskNote("PM-0001", "First line\nSecond line");
 
@@ -629,7 +630,7 @@ public class ApplicationServiceTests
             projectRoot.UpdateTaskState(task, "todo");
         }
 
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
         var reordered = service.ReorderTasks("PM", "todo", ["PM-0002", "PM-0001", "PM-0003"]);
         var invalidDuplicate = service.ReorderTasks("PM", "todo", ["PM-0001", "PM-0001", "PM-0003"]);
         var invalidMissing = service.ReorderTasks("PM", "todo", ["PM-0001", "PM-0002"]);
@@ -665,7 +666,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(trackIdMatch, "todo");
         projectRoot.UpdateTaskState(stateMatch, "review");
 
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
         var needle = service.SearchTasks("needle");
         var priority = service.SearchTasks("URGENT");
         var dependencySearch = service.SearchTasks("DEP-0001");
@@ -708,7 +709,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
 
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var combined = Assert.Single(service.SearchTasks("needle").Payload!);
         var metadataOnly = Assert.Single(service.SearchTasks("metadata").Payload!);
@@ -729,7 +730,7 @@ public class ApplicationServiceTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
         for (var index = 1; index <= 105; index++)
         {
             var task = TestData.Task($"PM-{index:0000}", $"Common task {index}");
@@ -773,7 +774,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(matches[1], "review");
         projectRoot.UpdateTaskState(matches[2], "todo");
         projectRoot.UpdateTaskState(matches[3], "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var compact = service.SearchTasks("render track:build milestone:M1 milestone:m2 state: todo state:review");
         var prefix = service.SearchTasks("id:build-000");
@@ -797,7 +798,7 @@ public class ApplicationServiceTests
         var projectRoot = await workspace.CreateProject();
         var task = TestData.Task("PM-0001", "Compatibility", "owner:alex");
         projectRoot.WriteTask(task);
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         Assert.Equal("PM-0001", Assert.Single(service.SearchTasks("owner:alex").Payload!).Task.Id);
         Assert.Equal("invalid_task_query", service.SearchTasks("state:").ErrorCode);
@@ -819,7 +820,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(selected, "todo");
         projectRoot.UpdateTaskState(otherMilestone, "review");
         projectRoot.UpdateTaskState(otherTrack, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
         var context = new TaskSearchContext("BUILD", "M1", "todo");
 
         Assert.Equal("BUILD-0001", Assert.Single(service.SearchTasks("needle", context: context).Payload!).Task.Id);
@@ -840,7 +841,7 @@ public class ApplicationServiceTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         Assert.Equal("invalid_task_query", service.SearchTasks(query).ErrorCode);
     }
@@ -1346,7 +1347,7 @@ public class ApplicationServiceTests
         Directory.Delete(projectRoot.TasksPath, true);
         Directory.Delete(projectRoot.StatesPath, true);
         var nextIds = new RecordingNextIdService(ids: [1, 2]);
-        var service = new TaskService(projectRoot, nextIds);
+        var service = TestTaskServices.Create(projectRoot, nextIds);
 
         var created = await service.CreateTask("First task", "PM", null, "Body", false);
 
@@ -1376,7 +1377,7 @@ public class ApplicationServiceTests
         var reviewPath = Path.Combine(projectRoot.StatesPath, "review");
         Directory.Delete(reviewPath, true);
         File.WriteAllText(reviewPath, "not a directory");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
 
         var result = service.MoveTask(task.Id, "review");
 

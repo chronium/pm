@@ -565,7 +565,7 @@ public class CommandBehaviorTests
         var highlighter = new SyntaxHighlighter([
             new YamlLanguageDefinition(), new MarkdownLanguageDefinition(),
         ]);
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), highlighter,
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), highlighter,
             new RecordingEditorService());
         GlobalConfig.DryRun = true;
 
@@ -593,7 +593,7 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), CreateHighlighter(),
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), CreateHighlighter(),
             new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -617,7 +617,7 @@ public class CommandBehaviorTests
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), CreateHighlighter(),
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), CreateHighlighter(),
             new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -642,7 +642,7 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), CreateHighlighter(),
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), CreateHighlighter(),
             new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -657,7 +657,7 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), CreateHighlighter(),
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), CreateHighlighter(),
             new RecordingEditorService());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -672,7 +672,7 @@ public class CommandBehaviorTests
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIdService = new RecordingNextIdService();
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), CreateHighlighter(),
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), CreateHighlighter(),
             new RecordingEditorService());
         GlobalConfig.DryRun = true;
 
@@ -703,7 +703,7 @@ public class CommandBehaviorTests
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
         var nextIdService = new RecordingNextIdService();
         var editor = new RecordingEditorService { ExitCode = 1 };
-        var command = new TaskAddCommand(TaskMutations(new TaskService(projectRoot, nextIdService)), CreateHighlighter(),
+        var command = new TaskAddCommand(TaskMutations(TestTaskServices.Create(projectRoot, nextIdService)), CreateHighlighter(),
             editor);
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -732,7 +732,7 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.AppendAllText(path, "\nSecond line"),
         };
-        var command = new TaskNoteCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor);
+        var command = new TaskNoteCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor);
 
         var inline = await command.ExecuteAsync(null!,
             new TaskNoteCommand.Settings { TaskId = task.Id, Note = "Inline note" }, CancellationToken.None);
@@ -756,7 +756,7 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Task", "Body");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var service = new TaskService(projectRoot, new RecordingNextIdService());
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
         var editor = new RecordingEditorService
         {
             EditAction = path => File.WriteAllText(path, "Editor note"),
@@ -830,7 +830,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())),
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())),
             new RecordingEditorService(), CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -844,7 +844,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())),
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())),
             new RecordingEditorService(), CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -865,7 +865,7 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, "changed"),
         };
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor,
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor,
             CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -889,7 +889,7 @@ public class CommandBehaviorTests
             ExitCode = 1,
             EditAction = path => File.WriteAllText(path, "changed"),
         };
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor,
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor,
             CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -911,7 +911,7 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, "not frontmatter"),
         };
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor,
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor,
             CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -934,7 +934,7 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, TestData.Task("PM-0002", "Changed ID").ToMarkdown()),
         };
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor,
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor,
             CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -968,7 +968,7 @@ public class CommandBehaviorTests
                                                          Original body
                                                          """),
         };
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor,
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor,
             CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -995,7 +995,7 @@ public class CommandBehaviorTests
         {
             EditAction = path => File.WriteAllText(path, edited.ToMarkdown()),
         };
-        var command = new TaskEditCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())), editor,
+        var command = new TaskEditCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())), editor,
             CreateHighlighter());
 
         var exitCode = await command.ExecuteAsync(null!,
@@ -1016,7 +1016,7 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Existing task");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new TaskMetadataCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())));
+        var command = new TaskMetadataCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())));
 
         Assert.Equal(0,
             command.Execute(null!,
@@ -1045,7 +1045,7 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Existing task");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new TaskMetadataCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())));
+        var command = new TaskMetadataCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())));
 
         Assert.Equal(0,
             command.Execute(null!,
@@ -1210,7 +1210,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "review");
         var command = new TaskSearchCommand(
-            new TaskService(projectRoot, new RecordingNextIdService()),
+            TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
             CreateLinkedReads(projectRoot));
 
         var found = await CaptureConsole(() => command.ExecuteAsync(null!,
@@ -1486,7 +1486,7 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Remove me");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new TaskRemoveCommand(TaskMutations(new TaskService(projectRoot, new RecordingNextIdService())));
+        var command = new TaskRemoveCommand(TaskMutations(TestTaskServices.Create(projectRoot, new RecordingNextIdService())));
 
         Assert.Equal(1,
             command.Execute(null!, new TaskRemoveCommand.Settings { TaskId = "PM-9999" }, CancellationToken.None));
@@ -1727,6 +1727,51 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task MilestoneDeliverCommandReportsAutomaticActivationImpact()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["foundation"] = "Foundation",
+                ["beta"] = "Beta",
+            },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["foundation-delivered"] = new()
+                {
+                    Title = "Foundation delivered",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Milestone,
+                            Source = "foundation",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("foundation-delivered");
+        var projectRoot = await workspace.CreateProject(config);
+        var foundation = TestData.Task("PM-0001", "Foundation work", milestone: "foundation");
+        projectRoot.WriteTask(foundation);
+        projectRoot.UpdateTaskState(foundation, "done");
+        var beta = TestData.Task("PM-0002", "Beta work", milestone: "beta");
+        projectRoot.WriteTask(beta);
+        projectRoot.UpdateTaskState(beta, "todo");
+        var command = new MilestoneDeliverCommand(
+            CreateMilestoneDeliveryService(projectRoot),
+            new RecordingMilestoneDeliveryPrompts());
+
+        var (exitCode, output) = await CaptureConsole(() => command.Execute(null!,
+            new MilestoneDeliverCommand.Settings { Key = "foundation" }, CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Automatically activated trigger foundation-delivered", output);
+        Assert.Contains("Milestone beta: Inactive -> Active", output);
+    }
+
+    [Fact]
     public async Task MilestoneDeliverCommandPreviewsConfirmsAndReportsExceptionalDelivery()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1820,7 +1865,9 @@ public class CommandBehaviorTests
         new(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new AutomaticActivationService(
+                new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
 
@@ -1839,7 +1886,8 @@ public class CommandBehaviorTests
             projectRoot,
             family,
             new RecordingNextIdService(),
-            new LinkedProjectGitInspector());
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
     }
 
     [Fact]
@@ -1854,7 +1902,7 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
 
@@ -1903,7 +1951,7 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
 
@@ -1955,7 +2003,7 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
         var prompts = new RecordingActivationTriggerPrompts { Response = false };
@@ -1997,7 +2045,7 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
         var activate = new ActivationTriggerActivateCommand(service);
@@ -2051,7 +2099,7 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
         var command = new ActivationTriggerActivateCommand(service);

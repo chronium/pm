@@ -188,7 +188,7 @@ public class ActivationTriggerServiceTests
 
         Assert.Equal("activation_trigger_in_use", CreateService(root).RemoveTrigger("entry").ErrorCode);
         Assert.Equal("activation_requirement_in_use",
-            new TaskService(root, new RecordingNextIdService()).RemoveTask(task.Id).ErrorCode);
+            TestTaskServices.Create(root, new RecordingNextIdService()).RemoveTask(task.Id).ErrorCode);
         Assert.Equal("activation_requirement_in_use",
             new ProjectConfigService(root).RemoveMilestone("source").ErrorCode);
         Assert.True(File.Exists(Path.Combine(root.TasksPath, $"{task.Id}.md")));
@@ -583,7 +583,7 @@ public class ActivationTriggerServiceTests
         new(
             root,
             new MilestoneActivationResolver(root),
-            new MilestoneActivationValidationService(root),
+            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()),
             timeProvider ?? TimeProvider.System,
             persistence ?? new ProjectConfigPersistence(root));
 

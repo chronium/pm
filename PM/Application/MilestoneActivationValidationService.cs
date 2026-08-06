@@ -8,11 +8,6 @@ public sealed class MilestoneActivationValidationService
     private readonly ProjectRoot projectRoot;
     private readonly MilestoneActivationGraphService activationGraph;
 
-    public MilestoneActivationValidationService(ProjectRoot projectRoot)
-        : this(projectRoot, new MilestoneActivationGraphService())
-    {
-    }
-
     public MilestoneActivationValidationService(
         ProjectRoot projectRoot,
         MilestoneActivationGraphService activationGraph)

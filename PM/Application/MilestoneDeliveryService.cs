@@ -22,6 +22,7 @@ public sealed class MilestoneDeliveryService
     private readonly ProjectRoot projectRoot;
     private readonly MilestoneActivationResolver resolver;
     private readonly MilestoneActivationValidationService validator;
+    private readonly AutomaticActivationService automaticActivations;
     private readonly TimeProvider timeProvider;
     private readonly IProjectConfigPersistence persistence;
 
@@ -29,12 +30,14 @@ public sealed class MilestoneDeliveryService
         ProjectRoot projectRoot,
         MilestoneActivationResolver resolver,
         MilestoneActivationValidationService validator,
+        AutomaticActivationService automaticActivations,
         TimeProvider timeProvider,
         IProjectConfigPersistence persistence)
     {
         this.projectRoot = projectRoot;
         this.resolver = resolver;
         this.validator = validator;
+        this.automaticActivations = automaticActivations;
         this.timeProvider = timeProvider;
         this.persistence = persistence;
     }
@@ -47,29 +50,29 @@ public sealed class MilestoneDeliveryService
             : AppResult<MilestoneDeliveryPreview>.Fail(evaluation.ErrorCode!, evaluation.Message!);
     }
 
-    public AppResult<ResolvedMilestone> DeliverMilestone(
+    public AppResult<LifecycleMutationResult<ResolvedMilestone>> DeliverMilestone(
         string key,
         string? reason,
         string expectedRevision,
         bool allowExceptional)
     {
         if (string.IsNullOrWhiteSpace(expectedRevision))
-            return AppResult<ResolvedMilestone>.Fail(
+            return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
                 "milestone_delivery_revision_required",
                 "Milestone delivery requires a preview revision.");
 
         var evaluationResult = EvaluateDelivery(key, reason);
         if (!evaluationResult.Success)
-            return AppResult<ResolvedMilestone>.Fail(
+            return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
                 evaluationResult.ErrorCode!, evaluationResult.Message!);
 
         var evaluation = evaluationResult.Payload!;
         if (!string.Equals(expectedRevision, evaluation.Preview.Revision, StringComparison.Ordinal))
-            return AppResult<ResolvedMilestone>.Fail(
+            return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
                 "milestone_delivery_stale",
                 "Milestone delivery conditions changed. Run the command again to review a fresh preview.");
         if (evaluation.Preview.RequiresConfirmation && !allowExceptional)
-            return AppResult<ResolvedMilestone>.Fail(
+            return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
                 "milestone_delivery_confirmation_required",
                 "Exceptional milestone delivery requires explicit confirmation.");
 
@@ -83,14 +86,26 @@ public sealed class MilestoneDeliveryService
                 : null,
             AcceptedTaskIds = evaluation.Preview.UnfinishedTaskIds.ToList(),
         };
+        var impact = automaticActivations.Apply(
+            prospective,
+            evaluation.State.TasksById,
+            evaluation.State.StateByTaskId,
+            evaluation.State.Snapshot,
+            ActivationRequirementKind.Milestone,
+            evaluation.Preview.MilestoneKey);
 
-        return PersistTransition(
+        var persisted = PersistTransition(
             evaluation.State,
             prospective,
             evaluation.Preview.MilestoneKey,
             "milestone_delivery_failed",
             "milestone_delivery_rollback_failed",
             $"Milestone {evaluation.Preview.MilestoneKey} could not be delivered");
+        return persisted.Success
+            ? AppResult<LifecycleMutationResult<ResolvedMilestone>>.Ok(
+                new LifecycleMutationResult<ResolvedMilestone>(persisted.Payload!, impact))
+            : AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
+                persisted.ErrorCode!, persisted.Message!);
     }
 
     public AppResult<ResolvedMilestone> ReopenMilestone(string key)

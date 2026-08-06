@@ -51,7 +51,11 @@ public static class McpServerHost
                 _ = provider.GetRequiredService<LinkedProjectRegistryStore>().Remember(projectRoot);
             return projectRoot;
         });
-        builder.Services.AddSingleton<TaskService>();
+        builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+        builder.Services.AddSingleton<TaskServiceFactory>();
+        builder.Services.AddSingleton(provider => provider.GetRequiredService<TaskServiceFactory>().Create(
+            provider.GetRequiredService<ProjectRoot>(),
+            provider.GetRequiredService<INextIdService>()));
         builder.Services.AddSingleton<ProjectCreationService>();
         builder.Services.AddSingleton<ProjectConfigService>();
         builder.Services.AddSingleton<LinkedProjectService>();

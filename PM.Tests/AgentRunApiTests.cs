@@ -139,7 +139,7 @@ public class AgentRunApiTests
         var app = builder.Build();
         var board = new BoardService(root);
         app.MapApiV1(root, new ProjectConfigService(root), new ProjectValidationService(root), board,
-            new TaskService(root, new StubNextIdService()), new WikiService(root),
+            TestTaskServices.Create(root, new StubNextIdService()), new WikiService(root),
             new ResourceRevisionService(root, board), agentRunService: runs, agentRunnerClient: runners);
         app.MapOpenApi("/openapi/{documentName}.json");
         await app.StartAsync();

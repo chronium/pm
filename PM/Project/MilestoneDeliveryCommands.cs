@@ -96,8 +96,9 @@ internal static class MilestoneDeliveryCommandOutput
             $"Accepted unfinished tasks: [blue]{FormatTaskIds(preview.UnfinishedTaskIds)}[/].");
     }
 
-    public static int Delivered(ResolvedMilestone milestone)
+    public static int Delivered(LifecycleMutationResult<ResolvedMilestone> result)
     {
+        var milestone = result.Value;
         AnsiConsole.MarkupLineInterpolated(
             $"Delivered milestone [green]{milestone.Key.EscapeMarkup()}[/].");
         var delivery = milestone.Delivery!;
@@ -115,6 +116,7 @@ internal static class MilestoneDeliveryCommandOutput
 
         AnsiConsole.MarkupLineInterpolated(
             $"Lifecycle: [blue]{milestone.Lifecycle.ToString().EscapeMarkup()}[/].");
+        LifecycleMutationCommandOutput.Write(result.ActivationImpact);
         return 0;
     }
 

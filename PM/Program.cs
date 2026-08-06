@@ -54,7 +54,10 @@ serviceProvider.AddSingleton(provider =>
         _ = provider.GetRequiredService<LinkedProjectRegistryStore>().Remember(projectRoot);
     return projectRoot;
 });
-serviceProvider.AddSingleton<TaskService>();
+serviceProvider.AddSingleton<TaskServiceFactory>();
+serviceProvider.AddSingleton(provider => provider.GetRequiredService<TaskServiceFactory>().Create(
+    provider.GetRequiredService<ProjectRoot>(),
+    provider.GetRequiredService<INextIdService>()));
 serviceProvider.AddSingleton<ProjectCreationService>();
 serviceProvider.AddSingleton<ProjectConfigService>();
 serviceProvider.AddSingleton<LinkedProjectService>();
@@ -69,6 +72,7 @@ serviceProvider.AddSingleton<MilestoneActivationResolver>();
 serviceProvider.AddSingleton<MilestoneActivationGraphService>();
 serviceProvider.AddSingleton<MilestoneActivationValidationService>();
 serviceProvider.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
+serviceProvider.AddSingleton<AutomaticActivationService>();
 serviceProvider.AddSingleton<ActivationTriggerService>();
 serviceProvider.AddSingleton<IActivationTriggerCommandPrompts, ActivationTriggerCommandPrompts>();
 serviceProvider.AddSingleton<MilestoneDeliveryService>();

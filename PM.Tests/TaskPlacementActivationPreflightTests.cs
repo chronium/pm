@@ -19,7 +19,7 @@ public sealed class TaskPlacementActivationPreflightTests
         var original = CaptureStorage(root, task.Id);
 
         // This two-argument construction is also used for linked-project mutation targets.
-        var service = new TaskService(root, new UnusedNextIdService());
+        var service = TestTaskServices.Create(root, new UnusedNextIdService());
         var patch = service.PatchTaskMetadata(task.Id, milestone: "consumer");
         AssertPreflightFailure(patch.Success, patch.ErrorCode, patch.Message);
         AssertStorageUnchanged(root, task, original);
@@ -54,7 +54,7 @@ public sealed class TaskPlacementActivationPreflightTests
         root.SetTaskOrder(new TaskOrderScope("PM", "todo", "c"), [task.Id]);
         root.SetTaskOrder(new TaskOrderScope("PM", "todo", "a"), []);
         var original = CaptureStorage(root, task.Id);
-        var service = new TaskService(root, new UnusedNextIdService());
+        var service = TestTaskServices.Create(root, new UnusedNextIdService());
 
         var result = service.PatchTaskMetadata(task.Id, milestone: "a");
 
@@ -76,7 +76,7 @@ public sealed class TaskPlacementActivationPreflightTests
         WriteTask(root, task, "todo");
         root.SetTaskOrder(new TaskOrderScope("PM", "todo", "consumer"), [task.Id]);
         root.SetTaskOrder(new TaskOrderScope("PM", "todo", null), []);
-        var service = new TaskService(root, new UnusedNextIdService());
+        var service = TestTaskServices.Create(root, new UnusedNextIdService());
 
         var result = service.PatchTaskMetadata(task.Id, milestone: " ");
 
@@ -104,7 +104,7 @@ public sealed class TaskPlacementActivationPreflightTests
         root.SetTaskOrder(new TaskOrderScope("PM", "todo", "consumer"), []);
         var firstOriginal = CaptureStorage(root, first.Id);
         var secondOriginal = CaptureStorage(root, second.Id);
-        var service = new TaskService(root, new UnusedNextIdService());
+        var service = TestTaskServices.Create(root, new UnusedNextIdService());
 
         var result = service.BulkAssignTasksToMilestone("consumer", [first.Id, second.Id]);
 
@@ -130,7 +130,7 @@ public sealed class TaskPlacementActivationPreflightTests
         WriteTask(root, unassignedRequirement, "todo");
         root.SetTaskOrder(new TaskOrderScope("PM", "review", null), [assigned.Id]);
         root.SetTaskOrder(new TaskOrderScope("PM", "review", "consumer"), []);
-        var service = new TaskService(root, new UnusedNextIdService());
+        var service = TestTaskServices.Create(root, new UnusedNextIdService());
 
         var result = service.PatchTaskMetadata(assigned.Id, milestone: "consumer");
 

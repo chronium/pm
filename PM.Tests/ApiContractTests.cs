@@ -402,12 +402,13 @@ public partial class ApiContractTests
         var boardService = new BoardService(projectRoot);
         var nextIds = nextIdService ?? new ApiNextIdService();
         var family = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
-        var taskService = new TaskService(projectRoot, nextIds);
+        var taskService = TestTaskServices.Create(projectRoot, nextIds);
         var linkedReads = new LinkedProjectReadService(
             projectRoot,
             family,
             nextIds,
-            new LinkedProjectGitInspector());
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             taskService,
             new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,

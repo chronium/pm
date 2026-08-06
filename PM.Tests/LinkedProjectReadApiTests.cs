@@ -242,7 +242,8 @@ public partial class ApiContractTests
         Assert.True(registry.Bind("prj_royale", child.RepositoryPath).Success);
         var family = LinkedFamily(active, workspace, registry);
         var nextIds = new ApiNextIdService();
-        var mutations = new LinkedProjectMutationService(active, nextIds, family, registry);
+        var mutations = new LinkedProjectMutationService(
+            active, nextIds, family, registry, new TaskServiceFactory(TimeProvider.System));
         var (app, client) = await CreateApiClient(active, nextIdService: nextIds,
             linkedProjectFamilyService: family, linkedProjectMutationService: mutations,
             linkedProjectRegistry: registry);
