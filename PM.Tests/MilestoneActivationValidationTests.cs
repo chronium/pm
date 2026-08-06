@@ -71,7 +71,7 @@ public sealed class MilestoneActivationValidationTests
         WriteTask(root, TestData.Task("PM-0003", "Pending", milestone: "pending"), "todo");
         WriteTask(root, TestData.Task("PM-0004", "Unassigned prerequisite"), "done");
 
-        var result = new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()).ValidateProspectiveConfig(config);
+        var result = new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)).ValidateProspectiveConfig(config);
 
         Assert.True(result.Valid);
         Assert.Empty(result.Issues);
@@ -103,7 +103,7 @@ public sealed class MilestoneActivationValidationTests
         WriteTask(root, TestData.Task("PM-0001", "Source work", milestone: "source"), "todo");
         WriteTask(root, TestData.Task("PM-0002", "Consumer work", milestone: "consumer"), "todo");
 
-        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()).ValidateProspectiveConfig(config));
+        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)).ValidateProspectiveConfig(config));
 
         Assert.Contains("duplicate_activation_requirement", codes);
         Assert.Contains("missing_activation_requirement_source", codes);
@@ -161,7 +161,7 @@ public sealed class MilestoneActivationValidationTests
         var root = await workspace.CreateProject(config);
         WriteTask(root, TestData.Task("PM-0001", "Consumer work", milestone: "consumer"), "todo");
 
-        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()).ValidateProspectiveConfig(config));
+        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)).ValidateProspectiveConfig(config));
 
         Assert.Contains("invalid_activation_timestamp", codes);
         Assert.Contains("invalid_automatic_activation", codes);
@@ -197,7 +197,7 @@ public sealed class MilestoneActivationValidationTests
         WriteTask(root, TestData.Task("PM-0001", "Open ordinary work", milestone: "ordinary"), "todo");
         WriteTask(root, TestData.Task("PM-0002", "Open exceptional work", milestone: "exceptional"), "todo");
 
-        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()).ValidateProspectiveConfig(config));
+        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)).ValidateProspectiveConfig(config));
 
         Assert.Contains("invalid_delivery_timestamp", codes);
         Assert.Contains("invalid_ordinary_delivery", codes);
@@ -218,7 +218,7 @@ public sealed class MilestoneActivationValidationTests
             Title = "Unused gate",
         };
         var root = await workspace.CreateProject(config);
-        var reusable = new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()).ValidateProspectiveConfig(config);
+        var reusable = new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)).ValidateProspectiveConfig(config);
 
         var projectResult = new ProjectValidationService(root).ValidateProject();
 
@@ -242,10 +242,41 @@ public sealed class MilestoneActivationValidationTests
         config.Milestones["consumer"].RequiredActivationTriggers = ["entry"];
         var root = await workspace.CreateProject(config);
 
-        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()).ValidateProspectiveConfig(config));
+        var codes = Codes(new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)).ValidateProspectiveConfig(config));
 
         Assert.Contains("invalid_milestone_title", codes);
         Assert.Contains("invalid_activation_trigger_title", codes);
+    }
+
+    [Fact]
+    public async Task ReportsSatisfiedButUnlatchedTriggerAsRepairableWarning()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["beta-entry"] = new()
+                {
+                    Title = "Beta entry",
+                    Requirements = [TaskRequirement("PM-0001")],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("beta-entry");
+        var root = await workspace.CreateProject(config);
+        WriteTask(root, TestData.Task("PM-0001", "Imported prerequisite"), "done");
+        WriteTask(root, TestData.Task("PM-0002", "Beta work", milestone: "beta"), "todo");
+
+        var result = new MilestoneActivationValidationService(
+            root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root))
+            .ValidateProspectiveConfig(config);
+
+        Assert.True(result.Valid);
+        var warning = Assert.Single(result.Issues, issue =>
+            issue.Code == "activation_reconciliation_required");
+        Assert.Equal("warning", warning.Severity);
+        Assert.Contains("beta-entry", warning.Message);
+        Assert.Contains("pm trigger reconcile", warning.Message);
     }
 
     private static readonly DateTimeOffset Timestamp = new(2026, 8, 6, 8, 15, 0, TimeSpan.Zero);

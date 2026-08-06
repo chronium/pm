@@ -167,7 +167,8 @@ public sealed class MilestoneDeliveryServiceTests
         var triggers = new ActivationTriggerService(
             root,
             new MilestoneActivationResolver(root),
-            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)),
+            new AutomaticActivationService(new MilestoneActivationResolver(root), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(root));
         Assert.True(triggers.ResetTrigger("approval").Success);
@@ -290,7 +291,7 @@ public sealed class MilestoneDeliveryServiceTests
         new(
             root,
             new MilestoneActivationResolver(root),
-            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)),
             new AutomaticActivationService(
                 new MilestoneActivationResolver(root), timeProvider ?? TimeProvider.System),
             timeProvider ?? TimeProvider.System,

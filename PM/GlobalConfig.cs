@@ -68,6 +68,7 @@ public static class GlobalConfig
     public static string TriggerAttachCommandName => "attach";
     public static string TriggerDetachCommandName => "detach";
     public static string TriggerListCommandName => "list";
+    public static string TriggerReconcileCommandName => "reconcile";
     public static string StatusBranchName => "status";
     public static string StatusAddCommandName => "add";
     public static string StatusRenameCommandName => "rename";

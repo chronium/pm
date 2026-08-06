@@ -56,6 +56,44 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task DoctorReportsSatisfiedButUnlatchedTriggerWithRepairCommand()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["beta-entry"] = new()
+                {
+                    Title = "Beta entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-0001",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("beta-entry");
+        var projectRoot = await workspace.CreateProject(config);
+        var prerequisite = TestData.Task("PM-0001", "Imported prerequisite");
+        projectRoot.WriteTask(prerequisite);
+        projectRoot.UpdateTaskState(prerequisite, "done");
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot),
+            new ProjectConfigService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("activation_reconciliation_required", output);
+        Assert.Contains("pm trigger reconcile", output);
+    }
+
+    [Fact]
     public async Task DoctorDiagnosesLegacyMilestonesWithoutWriting()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1865,11 +1903,24 @@ public class CommandBehaviorTests
         new(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
             new AutomaticActivationService(
                 new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
+
+    private static ActivationTriggerService CreateActivationTriggerService(ProjectRoot projectRoot)
+    {
+        var resolver = new MilestoneActivationResolver(projectRoot);
+        return new ActivationTriggerService(
+            projectRoot,
+            resolver,
+            new MilestoneActivationValidationService(
+                projectRoot, new MilestoneActivationGraphService(), resolver),
+            new AutomaticActivationService(resolver, TimeProvider.System),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
+    }
 
     private static LinkedProjectReadService CreateLinkedReads(ProjectRoot projectRoot)
     {
@@ -1891,6 +1942,58 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task ActivationReconcileCommandSupportsDryRunAppliedAndNoOpOutput()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["beta-entry"] = new()
+                {
+                    Title = "Beta entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-0001",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("beta-entry");
+        var projectRoot = await workspace.CreateProject(config);
+        var prerequisite = TestData.Task("PM-0001", "Imported prerequisite");
+        projectRoot.WriteTask(prerequisite);
+        projectRoot.UpdateTaskState(prerequisite, "done");
+        var beta = TestData.Task("PM-0002", "Beta work", milestone: "beta");
+        projectRoot.WriteTask(beta);
+        projectRoot.UpdateTaskState(beta, "todo");
+        var command = new ActivationTriggerReconcileCommand(
+            CreateActivationTriggerService(projectRoot));
+        var before = File.ReadAllText(projectRoot.ConfigPath);
+
+        var dryRun = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerReconcileCommand.Settings { DryRun = true }, CancellationToken.None));
+        Assert.Equal(0, dryRun.ExitCode);
+        Assert.Contains("Would reconcile 1 activation trigger", dryRun.Output);
+        Assert.Contains("Milestone beta: Inactive -> Active", dryRun.Output);
+        Assert.Equal(before, File.ReadAllText(projectRoot.ConfigPath));
+
+        var applied = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerReconcileCommand.Settings(), CancellationToken.None));
+        Assert.Equal(0, applied.ExitCode);
+        Assert.Contains("Reconciled 1 activation trigger", applied.Output);
+        Assert.NotNull(ProjectConfig.ReadConfig(projectRoot).ActivationTriggers["beta-entry"].Activation);
+
+        var noOp = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerReconcileCommand.Settings(), CancellationToken.None));
+        Assert.Equal(0, noOp.ExitCode);
+        Assert.Contains("No activation triggers require reconciliation", noOp.Output);
+    }
+
+    [Fact]
     public async Task ActivationTriggerCommandsParseRequirementsAndReportImpact()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1902,7 +2005,8 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
+            new AutomaticActivationService(new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
 
@@ -1951,7 +2055,8 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
+            new AutomaticActivationService(new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
 
@@ -2003,7 +2108,8 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
+            new AutomaticActivationService(new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
         var prompts = new RecordingActivationTriggerPrompts { Response = false };
@@ -2045,7 +2151,8 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
+            new AutomaticActivationService(new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
         var activate = new ActivationTriggerActivateCommand(service);
@@ -2099,7 +2206,8 @@ public class CommandBehaviorTests
         var service = new ActivationTriggerService(
             projectRoot,
             new MilestoneActivationResolver(projectRoot),
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
+            new AutomaticActivationService(new MilestoneActivationResolver(projectRoot), TimeProvider.System),
             TimeProvider.System,
             new ProjectConfigPersistence(projectRoot));
         var command = new ActivationTriggerActivateCommand(service);

@@ -172,6 +172,7 @@ app.Configure(config =>
             trigger.AddCommand<ActivationTriggerAttachCommand>(GlobalConfig.TriggerAttachCommandName);
             trigger.AddCommand<ActivationTriggerDetachCommand>(GlobalConfig.TriggerDetachCommandName);
             trigger.AddCommand<ActivationTriggerListCommand>(GlobalConfig.TriggerListCommandName);
+            trigger.AddCommand<ActivationTriggerReconcileCommand>(GlobalConfig.TriggerReconcileCommandName);
         });
 
     config.AddBranch(GlobalConfig.StatusBranchName,

@@ -74,7 +74,8 @@ public sealed class MilestoneActivationGraphTests
         var prospectiveTask = unassigned with { Milestone = "consumer" };
         var prospectiveTasks = Tasks(prospectiveTask);
         var prospective = graphService.Build(config, prospectiveTasks);
-        var prospectiveIssues = new MilestoneActivationValidationService(root, graphService)
+        var prospectiveIssues = new MilestoneActivationValidationService(
+                root, graphService, new MilestoneActivationResolver(root))
             .Validate(config, prospectiveTasks);
 
         Assert.Empty(current.Cycles);

@@ -326,6 +326,20 @@ public sealed class ActivationTriggerListCommand(ActivationTriggerService trigge
     public sealed class Settings : CommandSettings;
 }
 
+public sealed class ActivationTriggerReconcileCommand(ActivationTriggerService triggers)
+    : Command<ActivationTriggerReconcileCommand.Settings>
+{
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var result = triggers.Reconcile(settings.DryRun);
+        return result.Success
+            ? ActivationTriggerCommandOutput.Reconciled(result.Payload!)
+            : ActivationTriggerCommandOutput.Fail(result.Message);
+    }
+
+    public sealed class Settings : CommonSettings;
+}
+
 internal static class ActivationRequirementInput
 {
     public static AppResult<IReadOnlyList<ActivationRequirement>> ParseOptional(string? value) =>
@@ -370,6 +384,28 @@ internal static class ActivationRequirementInput
 
 internal static class ActivationTriggerCommandOutput
 {
+    public static int Reconciled(ActivationReconciliationResult result)
+    {
+        var impact = result.ActivationImpact;
+        if (impact.ActivatedTriggers.Count == 0)
+        {
+            AnsiConsole.MarkupLine("No activation triggers require reconciliation.");
+            return 0;
+        }
+
+        var operation = result.DryRun ? "Would reconcile" : "Reconciled";
+        AnsiConsole.MarkupLineInterpolated(
+            $"{operation} [green]{impact.ActivatedTriggers.Count}[/] activation trigger(s).");
+        foreach (var trigger in impact.ActivatedTriggers)
+            AnsiConsole.MarkupLineInterpolated(
+                $"[green]{trigger.Key.EscapeMarkup()}[/]: automatic at [blue]{trigger.Activation!.At:u}[/], requirements [blue]{trigger.SatisfiedRequirementCount} / {trigger.RequirementCount}[/].");
+
+        foreach (var change in impact.MilestoneChanges)
+            AnsiConsole.MarkupLineInterpolated(
+                $"Milestone [green]{change.MilestoneKey.EscapeMarkup()}[/]: [blue]{change.Before.ToString().EscapeMarkup()} -> {change.After.ToString().EscapeMarkup()}[/].");
+        return 0;
+    }
+
     public static void WritePreview(ActivationTriggerRedefinitionPreview preview)
     {
         AnsiConsole.MarkupLineInterpolated(

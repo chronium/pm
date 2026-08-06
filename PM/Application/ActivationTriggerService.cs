@@ -34,11 +34,16 @@ public sealed record ActivationTriggerRedefinitionResult(
     DateTimeOffset? ActivatedAt,
     IReadOnlyList<string> AffectedMilestones);
 
+public sealed record ActivationReconciliationResult(
+    bool DryRun,
+    AutomaticActivationImpact ActivationImpact);
+
 public sealed class ActivationTriggerService
 {
     private readonly ProjectRoot projectRoot;
     private readonly MilestoneActivationResolver resolver;
     private readonly MilestoneActivationValidationService validator;
+    private readonly AutomaticActivationService automaticActivations;
     private readonly TimeProvider timeProvider;
     private readonly IProjectConfigPersistence persistence;
 
@@ -46,12 +51,14 @@ public sealed class ActivationTriggerService
         ProjectRoot projectRoot,
         MilestoneActivationResolver resolver,
         MilestoneActivationValidationService validator,
+        AutomaticActivationService automaticActivations,
         TimeProvider timeProvider,
         IProjectConfigPersistence persistence)
     {
         this.projectRoot = projectRoot;
         this.resolver = resolver;
         this.validator = validator;
+        this.automaticActivations = automaticActivations;
         this.timeProvider = timeProvider;
         this.persistence = persistence;
     }
@@ -62,6 +69,69 @@ public sealed class ActivationTriggerService
         return snapshot.Success
             ? AppResult<IReadOnlyList<ResolvedActivationTrigger>>.Ok(snapshot.Payload!.ActivationTriggers)
             : AppResult<IReadOnlyList<ResolvedActivationTrigger>>.Fail(snapshot.ErrorCode!, snapshot.Message!);
+    }
+
+    public AppResult<ActivationReconciliationResult> Reconcile(bool dryRun)
+    {
+        var stateResult = ReadCurrentActivationState();
+        if (!stateResult.Success)
+            return AppResult<ActivationReconciliationResult>.Fail(
+                stateResult.ErrorCode!, stateResult.Message!);
+
+        var state = stateResult.Payload!;
+        var prospective = ProjectConfig.Deserialize(state.OriginalYaml);
+        var impact = automaticActivations.ApplyAllSatisfied(
+            prospective,
+            state.TasksById,
+            state.StateByTaskId,
+            state.Snapshot);
+
+        if (FirstValidationError(validator.ValidateProspectiveConfig(prospective)) is { } validationError)
+            return AppResult<ActivationReconciliationResult>.Fail(
+                validationError.Code, validationError.Message);
+
+        var result = new ActivationReconciliationResult(dryRun, impact);
+        if (dryRun || impact.ActivatedTriggers.Count == 0)
+            return AppResult<ActivationReconciliationResult>.Ok(result);
+
+        try
+        {
+            persistence.WriteTextAtomic(YamlSerde.Serialize(prospective));
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            return AppResult<ActivationReconciliationResult>.Fail(
+                "activation_reconciliation_write_failed",
+                $"Automatic activation reconciliation could not be written: {exception.Message}");
+        }
+
+        try
+        {
+            if (persistence.Reload())
+            {
+                var refreshed = resolver.ResolveCurrentProject();
+                if (refreshed.Success && impact.ActivatedTriggers.All(expected =>
+                        refreshed.Payload!.ActivationTriggers.Any(actual =>
+                            string.Equals(actual.Key, expected.Key, StringComparison.Ordinal) &&
+                            actual.Activation?.Mode == ActivationMode.Automatic &&
+                            actual.Activation.At == expected.Activation!.At)))
+                    return AppResult<ActivationReconciliationResult>.Ok(result);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                           InvalidDataException or YamlException)
+        {
+            // Restore the exact previous configuration below.
+        }
+
+        if (!TryRestoreConfig(state.OriginalYaml))
+            return AppResult<ActivationReconciliationResult>.Fail(
+                "activation_reconciliation_rollback_failed",
+                "Automatic activation reconciliation failed and the previous configuration could not be restored.");
+
+        return AppResult<ActivationReconciliationResult>.Fail(
+            "activation_reconciliation_write_failed",
+            "Automatic activation reconciliation could not be verified; the previous configuration was restored.");
     }
 
     public AppResult<ResolvedActivationTrigger> ActivateTrigger(string key, string? reason)

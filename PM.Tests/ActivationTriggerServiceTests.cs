@@ -583,7 +583,9 @@ public class ActivationTriggerServiceTests
         new(
             root,
             new MilestoneActivationResolver(root),
-            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService()),
+            new MilestoneActivationValidationService(root, new MilestoneActivationGraphService(), new MilestoneActivationResolver(root)),
+            new AutomaticActivationService(
+                new MilestoneActivationResolver(root), timeProvider ?? TimeProvider.System),
             timeProvider ?? TimeProvider.System,
             persistence ?? new ProjectConfigPersistence(root));
 

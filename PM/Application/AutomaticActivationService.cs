@@ -23,7 +23,7 @@ public sealed class AutomaticActivationService(
     MilestoneActivationResolver resolver,
     TimeProvider timeProvider)
 {
-    public AutomaticActivationImpact Apply(
+    public AutomaticActivationImpact ApplyAffected(
         ProjectConfig prospective,
         IReadOnlyDictionary<string, TaskItem> tasksById,
         IReadOnlyDictionary<string, string> stateByTaskId,
@@ -38,6 +38,29 @@ public sealed class AutomaticActivationService(
                 string.Equals(requirement.Source, affectedSource, StringComparison.Ordinal)))
             .Select(entry => entry.Key)
             .ToHashSet(StringComparer.Ordinal);
+        return ApplyCandidates(prospective, tasksById, stateByTaskId, before, candidateKeys);
+    }
+
+    public AutomaticActivationImpact ApplyAllSatisfied(
+        ProjectConfig prospective,
+        IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateByTaskId,
+        MilestoneActivationSnapshot before)
+    {
+        var candidateKeys = prospective.ActivationTriggers
+            .Where(entry => entry.Value.Activation == null && (entry.Value.Requirements ?? []).Count > 0)
+            .Select(entry => entry.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        return ApplyCandidates(prospective, tasksById, stateByTaskId, before, candidateKeys);
+    }
+
+    private AutomaticActivationImpact ApplyCandidates(
+        ProjectConfig prospective,
+        IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateByTaskId,
+        MilestoneActivationSnapshot before,
+        IReadOnlySet<string> candidateKeys)
+    {
         if (candidateKeys.Count == 0) return AutomaticActivationImpact.None;
 
         var pending = resolver.Resolve(prospective, tasksById, stateByTaskId);

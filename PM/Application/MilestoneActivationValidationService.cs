@@ -7,13 +7,16 @@ public sealed class MilestoneActivationValidationService
 {
     private readonly ProjectRoot projectRoot;
     private readonly MilestoneActivationGraphService activationGraph;
+    private readonly MilestoneActivationResolver resolver;
 
     public MilestoneActivationValidationService(
         ProjectRoot projectRoot,
-        MilestoneActivationGraphService activationGraph)
+        MilestoneActivationGraphService activationGraph,
+        MilestoneActivationResolver resolver)
     {
         this.projectRoot = projectRoot;
         this.activationGraph = activationGraph;
+        this.resolver = resolver;
     }
 
     public ProjectValidationResult ValidateProspectiveConfig(ProjectConfig config)
@@ -35,7 +38,7 @@ public sealed class MilestoneActivationValidationService
             task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
             StringComparer.Ordinal);
 
-        ValidateTriggers(issues, config, tasksById, configPath);
+        ValidateTriggers(issues, config, tasksById, stateByTaskId, configPath);
         ValidateMilestones(issues, config, tasksById, stateByTaskId, configPath);
         ValidateActivationCycles(issues, config, tasksById, configPath);
 
@@ -60,6 +63,7 @@ public sealed class MilestoneActivationValidationService
         List<ProjectValidationIssue> issues,
         ProjectConfig config,
         IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateByTaskId,
         string configPath)
     {
         var consumedTriggers = config.Milestones.Values
@@ -83,6 +87,15 @@ public sealed class MilestoneActivationValidationService
                     $"Activation trigger {triggerKey} is not required by any milestone.",
                     configPath));
         }
+
+        var snapshot = resolver.Resolve(config, tasksById, stateByTaskId);
+        foreach (var trigger in snapshot.ActivationTriggers.Where(trigger =>
+                     !trigger.IsActive && trigger.RequirementCount > 0 && trigger.RequirementsSatisfied))
+            issues.Add(new ProjectValidationIssue(
+                "warning",
+                "activation_reconciliation_required",
+                $"Activation trigger {trigger.Key} has satisfied requirements but no activation record. Run pm trigger reconcile.",
+                configPath));
     }
 
     private static void ValidateRequirements(

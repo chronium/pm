@@ -42,7 +42,7 @@ public sealed class TaskLifecycleMutationService(
             var prospectiveStates = state.StateByTaskId.ToDictionary(entry => entry.Key, entry => entry.Value,
                 StringComparer.Ordinal);
             prospectiveStates[prospectiveTask.Id] = targetState;
-            impact = automaticActivations.Apply(
+            impact = automaticActivations.ApplyAffected(
                 prospectiveConfig,
                 prospectiveTasks,
                 prospectiveStates,

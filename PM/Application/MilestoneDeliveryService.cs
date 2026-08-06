@@ -86,7 +86,7 @@ public sealed class MilestoneDeliveryService
                 : null,
             AcceptedTaskIds = evaluation.Preview.UnfinishedTaskIds.ToList(),
         };
-        var impact = automaticActivations.Apply(
+        var impact = automaticActivations.ApplyAffected(
             prospective,
             evaluation.State.TasksById,
             evaluation.State.StateByTaskId,
