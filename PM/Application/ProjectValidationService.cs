@@ -23,6 +23,7 @@ public sealed class ProjectValidationService
     private readonly LinkedProjectService linkedProjects;
     private readonly LinkedProjectFamilyService linkedProjectFamily;
     private readonly LinkedProjectTaskGraphService linkedTaskGraph;
+    private readonly MilestoneActivationValidationService milestoneActivationValidation;
 
     public ProjectValidationService(ProjectRoot projectRoot)
         : this(projectRoot, new LinkedProjectService(projectRoot),
@@ -44,11 +45,23 @@ public sealed class ProjectValidationService
         LinkedProjectService linkedProjects,
         LinkedProjectFamilyService linkedProjectFamily,
         LinkedProjectTaskGraphService linkedTaskGraph)
+        : this(projectRoot, linkedProjects, linkedProjectFamily, linkedTaskGraph,
+            new MilestoneActivationValidationService(projectRoot))
+    {
+    }
+
+    public ProjectValidationService(
+        ProjectRoot projectRoot,
+        LinkedProjectService linkedProjects,
+        LinkedProjectFamilyService linkedProjectFamily,
+        LinkedProjectTaskGraphService linkedTaskGraph,
+        MilestoneActivationValidationService milestoneActivationValidation)
     {
         this.projectRoot = projectRoot;
         this.linkedProjects = linkedProjects;
         this.linkedProjectFamily = linkedProjectFamily;
         this.linkedTaskGraph = linkedTaskGraph;
+        this.milestoneActivationValidation = milestoneActivationValidation;
     }
 
     public AppResult<ProjectValidationResult> ValidateProject() =>
@@ -64,6 +77,7 @@ public sealed class ProjectValidationService
         ValidateConfigMetadata(issues);
         await ValidateLinkedProjects(issues, cancellationToken);
         var tasksById = ValidateTaskFiles(issues);
+        issues.AddRange(milestoneActivationValidation.Validate(projectRoot.Config, tasksById));
         ValidateTaskDependencies(issues, tasksById);
         ValidateStateRefs(issues, tasksById);
         ValidateWikiPages(issues);

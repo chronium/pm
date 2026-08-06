@@ -121,7 +121,8 @@ public class CommandBehaviorTests
 
         Assert.Equal(0, exitCode);
         Assert.Contains("Migrated milestone configuration", output);
-        Assert.Contains("Project validation passed.", output);
+        Assert.Contains("Project validation passed with 2 warning(s).", output);
+        Assert.Contains("empty_milestone", output);
         var migrated = File.ReadAllText(projectRoot.ConfigPath);
         Assert.DoesNotContain("milestonePriorities:", migrated);
         Assert.Contains("description:", migrated);

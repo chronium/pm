@@ -65,6 +65,7 @@ serviceProvider.AddSingleton<LinkedProjectReadService>();
 serviceProvider.AddSingleton<LinkedProjectMutationService>();
 serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
+serviceProvider.AddSingleton<MilestoneActivationValidationService>();
 serviceProvider.AddSingleton<ProjectValidationService>();
 serviceProvider.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
 serviceProvider.AddSingleton<IProjectCommandPrompts, ProjectCommandPrompts>();
