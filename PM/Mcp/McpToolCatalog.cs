@@ -11,6 +11,7 @@ public static class McpToolCatalog
         "get_project",
         "list_tracks",
         "list_milestones",
+        "get_activation_switchboard",
         "list_states",
         "validate_project",
         "list_tasks",

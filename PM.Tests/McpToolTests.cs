@@ -863,6 +863,28 @@ public class McpToolTests
     }
 
     [Fact]
+    public void ActivationRequirementSchemaAdvertisesAcceptedKinds()
+    {
+        var tools = CreateTools(new ProjectRoot());
+        var method = typeof(PmMcpTools).GetMethod(nameof(PmMcpTools.AddActivationTrigger))!;
+        var tool = McpServerTool.Create(method, tools);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(tool.ProtocolTool.InputSchema));
+        var root = document.RootElement;
+        var requirements = root.GetProperty("properties").GetProperty("requirements");
+        var requirement = requirements.GetProperty("items");
+        if (requirement.TryGetProperty("$ref", out var reference))
+        {
+            const string prefix = "#/$defs/";
+            requirement = root.GetProperty("$defs").GetProperty(reference.GetString()![prefix.Length..]);
+        }
+        var kind = requirement.GetProperty("properties").GetProperty("kind");
+
+        Assert.Equal(["task", "milestone"], ResolveSchemaEnumValues(root, kind));
+        Assert.Equal(ActivationRequirementInputKind.Task,
+            JsonSerializer.Deserialize<ActivationRequirementInputKind>("\"task\""));
+    }
+
+    [Fact]
     public void LinkedReadToolSchemasAdvertiseProjectSelectorsAndFamilyScope()
     {
         var tools = CreateTools(new ProjectRoot());
@@ -1068,6 +1090,148 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task ActivationSwitchboardMutationsReturnAuthoritativeRereadsAndReceipts()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var gateTask = TestData.Task("PM-0001", "Foundation capability", milestone: null);
+        projectRoot.WriteTask(gateTask);
+        projectRoot.UpdateTaskState(gateTask, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var addedMilestone = tools.AddMilestone(
+            "beta", "Public beta", "high", "Deliver the complete local beta workflow.");
+        Assert.True(addedMilestone.Success);
+        AssertMutationRereads(addedMilestone.Data!);
+        Assert.Equal("Deliver the complete local beta workflow.",
+            addedMilestone.Data!.Switchboard.Milestones.Single(item => item.Key == "beta").Description);
+
+        var betaTask = TestData.Task("PM-0002", "Package beta", milestone: "beta");
+        projectRoot.WriteTask(betaTask);
+        projectRoot.UpdateTaskState(betaTask, "done");
+        var addedTrigger = tools.AddActivationTrigger(
+            "beta-entry",
+            "Beta entry criteria",
+            [new ActivationRequirementInputPayload(ActivationRequirementInputKind.Task, gateTask.Id)]);
+        Assert.True(addedTrigger.Success);
+        AssertMutationRereads(addedTrigger.Data!);
+
+        var attached = tools.AttachActivationTriggerToMilestone("beta-entry", "beta");
+        Assert.True(attached.Success);
+        AssertMutationRereads(attached.Data!);
+        Assert.Equal("inactive", attached.Data!.Switchboard.Milestones.Single(item => item.Key == "beta").Lifecycle);
+
+        var overridden = tools.OverrideActivationTrigger("beta-entry", "Beta hardening can finish the capability.");
+
+        Assert.True(overridden.Success);
+        AssertMutationRereads(overridden.Data!);
+        var overriddenTrigger = overridden.Data!.Switchboard.ActivationTriggers.Single();
+        Assert.Equal("override", overriddenTrigger.Activation!.Mode);
+        Assert.Equal(0, overriddenTrigger.SatisfiedRequirementCount);
+        Assert.True(Assert.Single(overriddenTrigger.Requirements).WasWaivedAtActivation);
+        Assert.Equal("ready_to_deliver",
+            overridden.Data.Switchboard.Milestones.Single(item => item.Key == "beta").Lifecycle);
+
+        projectRoot.UpdateTaskState(gateTask, "done");
+        var satisfiedOverride = tools.GetActivationSwitchboard();
+        Assert.True(satisfiedOverride.Success);
+        Assert.Equal("override", Assert.Single(satisfiedOverride.Data!.ActivationTriggers).Activation!.Mode);
+        Assert.True(Assert.Single(satisfiedOverride.Data.ActivationTriggers).RequirementsSatisfied);
+        Assert.Equal("activation_trigger_reset_blocked", tools.ResetActivationTrigger("beta-entry").ErrorCode);
+
+        projectRoot.UpdateTaskState(gateTask, "todo");
+        var reset = tools.ResetActivationTrigger("beta-entry");
+        Assert.True(reset.Success);
+        AssertMutationRereads(reset.Data!);
+        Assert.Null(Assert.Single(reset.Data!.Switchboard.ActivationTriggers).Activation);
+
+        projectRoot.UpdateTaskState(gateTask, "done");
+        var dryRun = tools.ReconcileActivationTriggers(dryRun: true);
+        Assert.True(dryRun.Success);
+        Assert.False(dryRun.Data!.Changed);
+        Assert.Null(dryRun.Data.Mutation);
+        Assert.Equal(["beta-entry"], dryRun.Data.Impact!.AutomaticActivation!.ActivatedTriggers);
+        Assert.Null(Assert.Single(dryRun.Data.Switchboard.ActivationTriggers).Activation);
+
+        var reconciled = tools.ReconcileActivationTriggers();
+        Assert.True(reconciled.Success);
+        AssertMutationRereads(reconciled.Data!);
+        Assert.Equal("automatic", Assert.Single(reconciled.Data!.Switchboard.ActivationTriggers).Activation!.Mode);
+
+        var deliveryPreview = tools.PreviewMilestoneDelivery("beta");
+        Assert.True(deliveryPreview.Success);
+        Assert.False(deliveryPreview.Data!.RequiresConfirmation);
+        var delivered = tools.DeliverMilestone("beta", deliveryPreview.Data.Revision);
+        Assert.True(delivered.Success);
+        AssertMutationRereads(delivered.Data!);
+        Assert.Equal("delivered", Assert.Single(delivered.Data!.Switchboard.Milestones).Lifecycle);
+
+        var reopened = tools.ReopenMilestone("beta");
+        Assert.True(reopened.Success);
+        AssertMutationRereads(reopened.Data!);
+        Assert.Equal("ready_to_deliver", Assert.Single(reopened.Data!.Switchboard.Milestones).Lifecycle);
+
+        void AssertMutationRereads(ActivationMutationPayload mutation)
+        {
+            Assert.True(mutation.Changed);
+            var receipt = Assert.IsType<ProjectMutationReceiptPayload>(mutation.Mutation);
+            Assert.Contains($".pm/{GlobalConfig.PmConfigFile}", receipt.ChangedPaths);
+            var reread = tools.GetActivationSwitchboard();
+            Assert.True(reread.Success);
+            Assert.Equal(
+                JsonSerializer.Serialize(reread.Data),
+                JsonSerializer.Serialize(mutation.Switchboard));
+        }
+    }
+
+    [Fact]
+    public async Task ActivationSwitchboardPreservesStructuredWarningCodes()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["empty"] = "Empty deliverable" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["unused"] = new() { Title = "Unused", Requirements = [] },
+            }));
+
+        var result = CreateTools(projectRoot).GetActivationSwitchboard();
+
+        Assert.True(result.Success);
+        Assert.True(result.Data!.Valid);
+        Assert.Contains(result.Data.Issues, issue =>
+            issue.Severity == "warning" && issue.Code == "empty_milestone");
+        Assert.Contains(result.Data.Issues, issue =>
+            issue.Severity == "warning" && issue.Code == "unused_activation_trigger");
+    }
+
+    [Fact]
+    public async Task RunWorkerCannotInvokeActivationControlPlaneTools()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot,
+            capabilityContext: new McpCapabilityContext(McpCapabilityProfile.RunWorker, "PM-0001"));
+        var requirements = Array.Empty<ActivationRequirementInputPayload>();
+
+        var failures = new[]
+        {
+            tools.ActivateActivationTrigger("gate").ErrorCode,
+            tools.OverrideActivationTrigger("gate", "reason").ErrorCode,
+            tools.ResetActivationTrigger("gate").ErrorCode,
+            tools.PreviewActivationTriggerRedefinition("gate", requirements).ErrorCode,
+            tools.RedefineActivationTrigger("gate", requirements, "revision").ErrorCode,
+            tools.PreviewMilestoneDelivery("beta").ErrorCode,
+            tools.DeliverMilestone("beta", "revision").ErrorCode,
+            tools.ReopenMilestone("beta").ErrorCode,
+            tools.ReconcileActivationTriggers().ErrorCode,
+        };
+
+        Assert.All(failures, code => Assert.Equal("mcp_control_plane_denied", code));
+        Assert.True(tools.GetActivationSwitchboard().Success);
+    }
+
+    [Fact]
     public async Task AddTrackAndMilestoneReturnDuplicateAndInvalidErrors()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1259,11 +1423,19 @@ public class McpToolTests
 
         Assert.True(names.SetEquals(McpToolCatalog.RunWorkerToolNames));
         Assert.Contains("get_task", names);
+        Assert.Contains("get_activation_switchboard", names);
         Assert.Contains("append_task_note", names);
         Assert.DoesNotContain("move_task", names);
         Assert.DoesNotContain("update_task_markdown", names);
         Assert.DoesNotContain("patch_wiki_page", names);
         Assert.DoesNotContain("create_project_invitation", names);
+        Assert.DoesNotContain("activate_activation_trigger", names);
+        Assert.DoesNotContain("override_activation_trigger", names);
+        Assert.DoesNotContain("reset_activation_trigger", names);
+        Assert.DoesNotContain("redefine_activation_trigger", names);
+        Assert.DoesNotContain("deliver_milestone", names);
+        Assert.DoesNotContain("reopen_milestone", names);
+        Assert.DoesNotContain("reconcile_activation_triggers", names);
     }
 
     [Fact]
@@ -1366,25 +1538,32 @@ public class McpToolTests
             nextIdService,
             new LinkedProjectGitInspector(),
             new TaskServiceFactory(TimeProvider.System));
-        if (linkedProjectMutations != null)
-            return new PmMcpTools(
-                projectRoot,
-                TestTaskServices.Create(projectRoot, nextIdService),
-                new ProjectCreationService(projectRoot, nextIdService),
-                new ProjectConfigService(projectRoot),
-                TestBoardServices.Create(projectRoot),
-                new WikiService(projectRoot),
-                new ProjectValidationService(projectRoot, linkedProjects, linkedProjectFamily),
-                linkedProjectFamily,
-                linkedProjectReads,
-                linkedProjectMutations,
-                membershipService,
-                capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal),
-                linkedWikiContexts);
-
+        var taskService = TestTaskServices.Create(projectRoot, nextIdService);
+        var activationResolver = new MilestoneActivationResolver(projectRoot);
+        var activationValidator = new MilestoneActivationValidationService(
+            projectRoot,
+            new MilestoneActivationGraphService(),
+            activationResolver);
+        var persistence = new ProjectConfigPersistence(projectRoot);
+        var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
+        var activationTriggers = new ActivationTriggerService(
+            projectRoot,
+            activationResolver,
+            activationValidator,
+            automaticActivations,
+            TimeProvider.System,
+            persistence);
+        var milestoneDeliveries = new MilestoneDeliveryService(
+            projectRoot,
+            activationResolver,
+            activationValidator,
+            automaticActivations,
+            TimeProvider.System,
+            persistence);
+        linkedProjectMutations ??= LinkedProjectMutationService.ForCurrent(taskService);
         return new PmMcpTools(
             projectRoot,
-            TestTaskServices.Create(projectRoot, nextIdService),
+            taskService,
             new ProjectCreationService(projectRoot, nextIdService),
             new ProjectConfigService(projectRoot),
             TestBoardServices.Create(projectRoot),
@@ -1392,6 +1571,11 @@ public class McpToolTests
             new ProjectValidationService(projectRoot, linkedProjects, linkedProjectFamily),
             linkedProjectFamily,
             linkedProjectReads,
+            linkedProjectMutations,
+            activationResolver,
+            activationValidator,
+            activationTriggers,
+            milestoneDeliveries,
             membershipService,
             capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal),
             linkedWikiContexts);

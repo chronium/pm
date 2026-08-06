@@ -218,7 +218,11 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         return AppResult.Ok();
     }
 
-    public AppResult AddMilestone(string key, string title, string? priority = null)
+    public AppResult AddMilestone(
+        string key,
+        string title,
+        string? priority = null,
+        string? description = null)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
@@ -240,9 +244,29 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         config.Milestones[key] = new MilestoneDefinition
         {
             Title = title,
+            Description = description ?? string.Empty,
             Priority = normalizedPriority,
         };
 
+        config.WriteConfig(projectRoot);
+        return AppResult.Ok();
+    }
+
+    public AppResult SetMilestoneDescription(string key, string description)
+    {
+        if (!projectRoot.Exists)
+            return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
+
+        key = key.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return AppResult.Fail("invalid_milestone", "Milestone key is required.");
+
+        var config = projectRoot.Config!;
+        if (!config.Milestones.ContainsKey(key))
+            return AppResult.Fail("missing_milestone", $"Milestone {key} not found.");
+
+        config.Milestones[key].Description = description ?? string.Empty;
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }

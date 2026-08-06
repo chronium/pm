@@ -34,6 +34,108 @@ public sealed record OptionPayload(string Key, string Name);
 
 public sealed record MilestonePayload(string Key, string Name, string Priority);
 
+public sealed record ActivationRequirementInputPayload(
+    ActivationRequirementInputKind Kind,
+    string Source);
+
+public sealed record ResolvedActivationRequirementReferencePayload(
+    string Kind,
+    string Source);
+
+public sealed record ResolvedActivationRequirementPayload(
+    string Kind,
+    string Source,
+    bool IsSatisfied,
+    bool WasWaivedAtActivation);
+
+public sealed record ResolvedActivationProvenancePayload(
+    DateTimeOffset At,
+    string Mode,
+    string? Reason,
+    IReadOnlyList<ResolvedActivationRequirementReferencePayload> WaivedRequirements);
+
+public sealed record ResolvedActivationTriggerPayload(
+    string Key,
+    string Title,
+    bool IsActive,
+    ResolvedActivationProvenancePayload? Activation,
+    int SatisfiedRequirementCount,
+    int RequirementCount,
+    bool RequirementsSatisfied,
+    bool IsLatchedDespiteUnmetRequirements,
+    IReadOnlyList<ResolvedActivationRequirementPayload> Requirements,
+    IReadOnlyList<string> ConsumingMilestones);
+
+public sealed record ResolvedMilestoneDeliveryPayload(
+    DateTimeOffset At,
+    string Mode,
+    string? Reason,
+    IReadOnlyList<string> AcceptedTaskIds,
+    bool IsValid);
+
+public sealed record ResolvedMilestonePayload(
+    string Key,
+    string Title,
+    string Description,
+    string Priority,
+    string Lifecycle,
+    int AssignedTaskCount,
+    int DoneTaskCount,
+    IReadOnlyList<string> RequiredActivationTriggers,
+    IReadOnlyList<string> UnmetActivationTriggers,
+    ResolvedMilestoneDeliveryPayload? Delivery);
+
+public sealed record ActivationSwitchboardPayload(
+    bool Valid,
+    IReadOnlyList<ResolvedActivationTriggerPayload> ActivationTriggers,
+    IReadOnlyList<ResolvedMilestonePayload> Milestones,
+    IReadOnlyList<ProjectValidationIssuePayload> Issues);
+
+public sealed record MilestoneLifecycleChangePayload(
+    string MilestoneKey,
+    string Before,
+    string After);
+
+public sealed record AutomaticActivationImpactPayload(
+    IReadOnlyList<string> ActivatedTriggers,
+    IReadOnlyList<MilestoneLifecycleChangePayload> MilestoneChanges);
+
+public sealed record ActivationMutationDetailsPayload(
+    IReadOnlyList<string>? AffectedMilestones = null,
+    AutomaticActivationImpactPayload? AutomaticActivation = null);
+
+public sealed record ActivationMutationPayload(
+    bool Changed,
+    ProjectMutationReceiptPayload? Mutation,
+    ActivationSwitchboardPayload Switchboard,
+    ActivationMutationDetailsPayload? Impact = null);
+
+public sealed record ActivationTriggerMilestoneImpactPayload(
+    string MilestoneKey,
+    string Before,
+    string After,
+    IReadOnlyList<string> CurrentlyEligibleTaskIds,
+    IReadOnlyList<string> TaskIdsLosingEligibility);
+
+public sealed record ActivationTriggerRedefinitionPreviewPayload(
+    string TriggerKey,
+    string Revision,
+    bool WillReactivateAutomatically,
+    bool RequiresConfirmation,
+    IReadOnlyList<ActivationTriggerMilestoneImpactPayload> Milestones,
+    IReadOnlyList<string> CurrentlyEligibleTaskIds,
+    IReadOnlyList<string> TaskIdsLosingEligibility);
+
+public sealed record MilestoneDeliveryPreviewPayload(
+    string MilestoneKey,
+    string Title,
+    string Revision,
+    string Mode,
+    int AssignedTaskCount,
+    int DoneTaskCount,
+    IReadOnlyList<string> UnfinishedTaskIds,
+    bool RequiresConfirmation);
+
 public sealed record LocalIdentityPayload(string UserId, string DisplayName, string PublicKey, string Fingerprint);
 
 public sealed record ProjectMemberPayload(

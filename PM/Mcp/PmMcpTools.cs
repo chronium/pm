@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using PM.Application;
+using PM.Files;
 using PM.Project;
 using PM.Tasks;
 
@@ -18,30 +19,14 @@ public sealed class PmMcpTools(
     LinkedProjectFamilyService linkedProjectFamilyService,
     LinkedProjectReadService linkedProjectReadService,
     LinkedProjectMutationService linkedProjectMutations,
+    MilestoneActivationResolver activationResolver,
+    MilestoneActivationValidationService activationValidator,
+    ActivationTriggerService activationTriggers,
+    MilestoneDeliveryService milestoneDeliveries,
     IProjectMembershipService? membershipService,
     McpCapabilityContext capabilityContext,
     McpLinkedWikiContextStore? linkedWikiContexts = null)
 {
-    public PmMcpTools(
-        ProjectRoot projectRoot,
-        TaskService taskService,
-        ProjectCreationService projectCreationService,
-        ProjectConfigService configService,
-        BoardService boardService,
-        WikiService wikiService,
-        ProjectValidationService validationService,
-        LinkedProjectFamilyService linkedProjectFamilyService,
-        LinkedProjectReadService linkedProjectReadService,
-        IProjectMembershipService? membershipService,
-        McpCapabilityContext capabilityContext,
-        McpLinkedWikiContextStore? linkedWikiContexts = null)
-        : this(projectRoot, taskService, projectCreationService, configService, boardService, wikiService,
-            validationService, linkedProjectFamilyService, linkedProjectReadService,
-            LinkedProjectMutationService.ForCurrent(taskService), membershipService, capabilityContext,
-            linkedWikiContexts)
-    {
-    }
-
     [McpServerTool(Name = "create_project", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Initializes a PM project in the current directory.")]
@@ -419,6 +404,20 @@ public sealed class PmMcpTools(
             ? McpToolResponse<IReadOnlyList<MilestonePayload>>.Ok(
                 $"Returned {project.Data!.Milestones.Count} milestone(s).", project.Data.Milestones)
             : McpToolResponse<IReadOnlyList<MilestonePayload>>.Fail(project.ErrorCode!, project.Message!);
+    }
+
+    [McpServerTool(Name = "get_activation_switchboard", ReadOnly = true, Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Returns structured milestone deliverables, resolved activation triggers, provenance, current requirement status, and validation issues for the active project.")]
+    public McpToolResponse<ActivationSwitchboardPayload> GetActivationSwitchboard()
+    {
+        var result = ResolveActivationSwitchboard();
+        return result.Success
+            ? McpToolResponse<ActivationSwitchboardPayload>.Ok(
+                $"Returned {result.Payload!.Milestones.Count} milestone(s) and " +
+                $"{result.Payload.ActivationTriggers.Count} activation trigger(s).",
+                result.Payload)
+            : McpToolResponse<ActivationSwitchboardPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "list_states", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -1064,46 +1063,240 @@ public sealed class PmMcpTools(
     }
 
     [McpServerTool(Name = "add_milestone", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
-    [Description("Adds a new milestone.")]
-    public McpToolResponse<MutatedPayload> AddMilestone(string key, string title, string? priority = null)
-    {
-        var result = configService.AddMilestone(key, title, priority);
-        return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Added milestone {key}.", new MutatedPayload(true))
-            : McpToolResponse<MutatedPayload>.FromFailure(result);
-    }
+    [Description("Adds a structured milestone deliverable to the active project.")]
+    public McpToolResponse<ActivationMutationPayload> AddMilestone(
+        string key,
+        string title,
+        string? priority = null,
+        string? description = null) =>
+        ExecuteControlPlaneMutation(
+            () => ToPayload(configService.AddMilestone(key, title, priority, description)),
+            _ => $"Added milestone {key}.");
 
     [McpServerTool(Name = "set_milestone_priority", Destructive = false, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Sets a milestone priority to none, low, medium, high, or urgent.")]
-    public McpToolResponse<MutatedPayload> SetMilestonePriority(string key, string priority)
-    {
-        var result = configService.SetMilestonePriority(key, priority);
-        return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Updated milestone {key} priority.", new MutatedPayload(true))
-            : McpToolResponse<MutatedPayload>.FromFailure(result);
-    }
+    public McpToolResponse<ActivationMutationPayload> SetMilestonePriority(string key, string priority) =>
+        ExecuteControlPlaneMutation(
+            () => ToPayload(configService.SetMilestonePriority(key, priority)),
+            _ => $"Updated milestone {key} priority.");
+
+    [McpServerTool(Name = "set_milestone_description", Destructive = false, Idempotent = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Sets the Markdown deliverable description for a milestone in the active project.")]
+    public McpToolResponse<ActivationMutationPayload> SetMilestoneDescription(string key, string description) =>
+        ExecuteControlPlaneMutation(
+            () => ToPayload(configService.SetMilestoneDescription(key, description)),
+            _ => $"Updated milestone {key} description.");
 
     [McpServerTool(Name = "remove_milestone", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Removes an unused milestone.")]
-    public McpToolResponse<MutatedPayload> RemoveMilestone(string key)
-    {
-        var result = configService.RemoveMilestone(key);
-        return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Removed milestone {key}.", new MutatedPayload(true))
-            : McpToolResponse<MutatedPayload>.FromFailure(result);
-    }
+    public McpToolResponse<ActivationMutationPayload> RemoveMilestone(string key) =>
+        ExecuteControlPlaneMutation(
+            () => ToPayload(configService.RemoveMilestone(key)),
+            _ => $"Removed milestone {key}.");
 
     [McpServerTool(Name = "rename_milestone", Destructive = false, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Renames a milestone title without changing its key.")]
-    public McpToolResponse<MutatedPayload> RenameMilestone(string key, string title)
+    public McpToolResponse<ActivationMutationPayload> RenameMilestone(string key, string title) =>
+        ExecuteControlPlaneMutation(
+            () => ToPayload(configService.RenameMilestone(key, title)),
+            _ => $"Renamed milestone {key}.");
+
+    [McpServerTool(Name = "add_activation_trigger", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Adds a reusable activation trigger definition to the active project.")]
+    public McpToolResponse<ActivationMutationPayload> AddActivationTrigger(
+        string key,
+        string title,
+        IReadOnlyList<ActivationRequirementInputPayload> requirements)
     {
-        var result = configService.RenameMilestone(key, title);
-        return result.Success
-            ? McpToolResponse<MutatedPayload>.Ok($"Renamed milestone {key}.", new MutatedPayload(true))
-            : McpToolResponse<MutatedPayload>.FromFailure(result);
+        var denied = ControlPlaneDenied<ActivationMutationPayload>();
+        if (denied != null) return denied;
+        var parsed = ToActivationRequirements(requirements);
+        if (!parsed.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(parsed);
+
+        return ExecuteTrustedControlPlaneMutation(
+            () => activationTriggers.AddTrigger(key, title, parsed.Payload!),
+            _ => $"Added activation trigger {key}.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
     }
+
+    [McpServerTool(Name = "rename_activation_trigger", Destructive = false, Idempotent = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Renames an activation trigger without changing its key or requirements.")]
+    public McpToolResponse<ActivationMutationPayload> RenameActivationTrigger(string key, string title) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.RenameTrigger(key, title),
+            _ => $"Renamed activation trigger {key}.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+
+    [McpServerTool(Name = "remove_activation_trigger", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Removes an activation trigger that is not required by a milestone.")]
+    public McpToolResponse<ActivationMutationPayload> RemoveActivationTrigger(string key) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.RemoveTrigger(key),
+            _ => $"Removed activation trigger {key}.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+
+    [McpServerTool(Name = "set_activation_trigger_requirements", Destructive = true, Idempotent = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Replaces the requirements of an inactive activation trigger; an empty list makes it manual-only.")]
+    public McpToolResponse<ActivationMutationPayload> SetActivationTriggerRequirements(
+        string key,
+        IReadOnlyList<ActivationRequirementInputPayload> requirements)
+    {
+        var denied = ControlPlaneDenied<ActivationMutationPayload>();
+        if (denied != null) return denied;
+        var parsed = ToActivationRequirements(requirements);
+        if (!parsed.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(parsed);
+
+        return ExecuteTrustedControlPlaneMutation(
+            () => activationTriggers.SetRequirements(key, parsed.Payload!),
+            _ => $"Updated activation trigger {key} requirements.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+    }
+
+    [McpServerTool(Name = "attach_activation_trigger_to_milestone", Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Makes a milestone require an activation trigger.")]
+    public McpToolResponse<ActivationMutationPayload> AttachActivationTriggerToMilestone(
+        string key,
+        string milestone) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.AttachTrigger(key, milestone),
+            _ => $"Attached activation trigger {key} to milestone {milestone}.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+
+    [McpServerTool(Name = "detach_activation_trigger_from_milestone", Destructive = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Removes an activation trigger requirement from a milestone.")]
+    public McpToolResponse<ActivationMutationPayload> DetachActivationTriggerFromMilestone(
+        string key,
+        string milestone) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.DetachTrigger(key, milestone),
+            _ => $"Detached activation trigger {key} from milestone {milestone}.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+
+    [McpServerTool(Name = "preview_activation_trigger_redefinition", ReadOnly = true, Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Previews an active trigger requirement redefinition and returns the revision required to apply it.")]
+    public McpToolResponse<ActivationTriggerRedefinitionPreviewPayload> PreviewActivationTriggerRedefinition(
+        string key,
+        IReadOnlyList<ActivationRequirementInputPayload> requirements)
+    {
+        var denied = ControlPlaneDenied<ActivationTriggerRedefinitionPreviewPayload>();
+        if (denied != null) return denied;
+        var parsed = ToActivationRequirements(requirements);
+        if (!parsed.Success)
+            return McpToolResponse<ActivationTriggerRedefinitionPreviewPayload>.FromFailure(parsed);
+
+        var result = activationTriggers.PreviewRedefinition(key, parsed.Payload!);
+        return result.Success
+            ? McpToolResponse<ActivationTriggerRedefinitionPreviewPayload>.Ok(
+                $"Previewed activation trigger {key} redefinition.",
+                ToRedefinitionPreview(result.Payload!))
+            : McpToolResponse<ActivationTriggerRedefinitionPreviewPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "redefine_activation_trigger", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Replaces an active trigger definition using a preview revision and explicit eligibility-loss confirmation.")]
+    public McpToolResponse<ActivationMutationPayload> RedefineActivationTrigger(
+        string key,
+        IReadOnlyList<ActivationRequirementInputPayload> requirements,
+        string expectedRevision,
+        bool allowDeactivation = false)
+    {
+        var denied = ControlPlaneDenied<ActivationMutationPayload>();
+        if (denied != null) return denied;
+        var parsed = ToActivationRequirements(requirements);
+        if (!parsed.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(parsed);
+
+        return ExecuteTrustedControlPlaneMutation(
+            () => activationTriggers.RedefineTrigger(
+                key, parsed.Payload!, expectedRevision, allowDeactivation),
+            _ => $"Redefined activation trigger {key}.",
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+    }
+
+    [McpServerTool(Name = "activate_activation_trigger", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Manually activates a manual-only activation trigger.")]
+    public McpToolResponse<ActivationMutationPayload> ActivateActivationTrigger(string key) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.ActivateTrigger(key, null),
+            _ => $"Activated activation trigger {key}.");
+
+    [McpServerTool(Name = "override_activation_trigger", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Activates a trigger with unmet requirements and records the override reason and waived requirements.")]
+    public McpToolResponse<ActivationMutationPayload> OverrideActivationTrigger(string key, string reason) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.ActivateTrigger(key, reason),
+            _ => $"Overrode activation trigger {key}.");
+
+    [McpServerTool(Name = "reset_activation_trigger", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Removes an activation record when the trigger's current requirements are not all satisfied.")]
+    public McpToolResponse<ActivationMutationPayload> ResetActivationTrigger(string key) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.ResetTrigger(key),
+            _ => $"Reset activation trigger {key}.");
+
+    [McpServerTool(Name = "reconcile_activation_triggers", Destructive = false, Idempotent = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Latches inactive triggers whose requirements are satisfied; dry-run reports impact without writing.")]
+    public McpToolResponse<ActivationMutationPayload> ReconcileActivationTriggers(bool dryRun = false) =>
+        ExecuteControlPlaneMutation(
+            () => activationTriggers.Reconcile(dryRun),
+            result => result.DryRun
+                ? "Previewed automatic activation reconciliation."
+                : "Reconciled automatic activations.",
+            result => new ActivationMutationDetailsPayload(
+                AutomaticActivation: ToAutomaticActivationImpact(result.ActivationImpact)));
+
+    [McpServerTool(Name = "preview_milestone_delivery", ReadOnly = true, Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Previews milestone delivery and returns the revision required to deliver it.")]
+    public McpToolResponse<MilestoneDeliveryPreviewPayload> PreviewMilestoneDelivery(
+        string key,
+        string? reason = null)
+    {
+        var denied = ControlPlaneDenied<MilestoneDeliveryPreviewPayload>();
+        if (denied != null) return denied;
+
+        var result = milestoneDeliveries.PreviewDelivery(key, reason);
+        return result.Success
+            ? McpToolResponse<MilestoneDeliveryPreviewPayload>.Ok(
+                $"Previewed milestone {key} delivery.", ToMilestoneDeliveryPreview(result.Payload!))
+            : McpToolResponse<MilestoneDeliveryPreviewPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "deliver_milestone", Destructive = false, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Delivers a milestone using a preview revision and explicit exceptional-delivery confirmation.")]
+    public McpToolResponse<ActivationMutationPayload> DeliverMilestone(
+        string key,
+        string expectedRevision,
+        string? reason = null,
+        bool allowExceptional = false) =>
+        ExecuteControlPlaneMutation(
+            () => milestoneDeliveries.DeliverMilestone(key, reason, expectedRevision, allowExceptional),
+            _ => $"Delivered milestone {key}.",
+            result => new ActivationMutationDetailsPayload(
+                AutomaticActivation: ToAutomaticActivationImpact(result.ActivationImpact)));
+
+    [McpServerTool(Name = "reopen_milestone", Destructive = true, OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description("Removes a milestone delivery record and re-evaluates its activation lifecycle.")]
+    public McpToolResponse<ActivationMutationPayload> ReopenMilestone(string key) =>
+        ExecuteControlPlaneMutation(
+            () => milestoneDeliveries.ReopenMilestone(key),
+            _ => $"Reopened milestone {key}.");
 
     [McpServerTool(Name = "validate_project", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -1415,6 +1608,213 @@ public sealed class PmMcpTools(
             _ => string.Empty,
         };
     }
+
+    private AppResult<ActivationSwitchboardPayload> ResolveActivationSwitchboard()
+    {
+        var snapshot = activationResolver.ResolveCurrentProject();
+        if (!snapshot.Success)
+            return AppResult<ActivationSwitchboardPayload>.Fail(snapshot.ErrorCode!, snapshot.Message!);
+
+        var tasksById = new Dictionary<string, TaskItem>(StringComparer.Ordinal);
+        foreach (var task in projectRoot.GetAllTasks())
+            tasksById.TryAdd(task.Id, task);
+        var issues = activationValidator.Validate(projectRoot.Config!, tasksById);
+
+        return AppResult<ActivationSwitchboardPayload>.Ok(new ActivationSwitchboardPayload(
+            issues.All(issue => !string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)),
+            snapshot.Payload!.ActivationTriggers.Select(ToActivationTriggerPayload).ToList(),
+            snapshot.Payload.Milestones.Select(ToResolvedMilestonePayload).ToList(),
+            issues.Select(ToValidationIssuePayload).ToList()));
+    }
+
+    private McpToolResponse<T>? ControlPlaneDenied<T>() =>
+        capabilityContext.Profile == McpCapabilityProfile.Normal
+            ? null
+            : McpToolResponse<T>.Fail(
+                "mcp_control_plane_denied",
+                "The run-worker MCP profile cannot perform milestone activation control-plane operations.");
+
+    private McpToolResponse<ActivationMutationPayload> ExecuteControlPlaneMutation<T>(
+        Func<AppResult<T>> operation,
+        Func<T, string> summary,
+        Func<T, ActivationMutationDetailsPayload?>? impact = null)
+    {
+        var denied = ControlPlaneDenied<ActivationMutationPayload>();
+        return denied ?? ExecuteTrustedControlPlaneMutation(operation, summary, impact);
+    }
+
+    private McpToolResponse<ActivationMutationPayload> ExecuteTrustedControlPlaneMutation<T>(
+        Func<AppResult<T>> operation,
+        Func<T, string> summary,
+        Func<T, ActivationMutationDetailsPayload?>? impact = null)
+    {
+        using var mutations = FileSystem.TrackMutations(projectRoot.RepositoryPath);
+        var result = operation();
+        if (!result.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(result);
+
+        var switchboard = ResolveActivationSwitchboard();
+        if (!switchboard.Success)
+            return McpToolResponse<ActivationMutationPayload>.FromFailure(switchboard);
+
+        var changedPaths = mutations.ChangedPaths;
+        var receipt = changedPaths.Count == 0
+            ? null
+            : new ProjectMutationReceiptPayload(ActiveProjectId ?? "current", changedPaths);
+        return McpToolResponse<ActivationMutationPayload>.Ok(
+            summary(result.Payload!),
+            new ActivationMutationPayload(
+                changedPaths.Count > 0,
+                receipt,
+                switchboard.Payload!,
+                impact?.Invoke(result.Payload!)));
+    }
+
+    private static AppResult<IReadOnlyList<ActivationRequirement>> ToActivationRequirements(
+        IReadOnlyList<ActivationRequirementInputPayload>? requirements)
+    {
+        if (requirements == null)
+            return AppResult<IReadOnlyList<ActivationRequirement>>.Fail(
+                "invalid_activation_requirements", "Activation requirements are required.");
+
+        var result = new List<ActivationRequirement>(requirements.Count);
+        foreach (var requirement in requirements)
+        {
+            if (string.IsNullOrWhiteSpace(requirement.Source))
+                return AppResult<IReadOnlyList<ActivationRequirement>>.Fail(
+                    "missing_activation_requirement_source",
+                    "Every activation requirement must have a source.");
+            result.Add(new ActivationRequirement
+            {
+                Kind = requirement.Kind == ActivationRequirementInputKind.Task
+                    ? ActivationRequirementKind.Task
+                    : ActivationRequirementKind.Milestone,
+                Source = requirement.Source.Trim(),
+            });
+        }
+
+        return AppResult<IReadOnlyList<ActivationRequirement>>.Ok(result);
+    }
+
+    private static ResolvedActivationTriggerPayload ToActivationTriggerPayload(
+        ResolvedActivationTrigger trigger) =>
+        new(
+            trigger.Key,
+            trigger.Title,
+            trigger.IsActive,
+            trigger.Activation == null
+                ? null
+                : new ResolvedActivationProvenancePayload(
+                    trigger.Activation.At,
+                    ToActivationModeValue(trigger.Activation.Mode),
+                    trigger.Activation.Reason,
+                    trigger.Activation.WaivedRequirements.Select(requirement =>
+                        new ResolvedActivationRequirementReferencePayload(
+                            ToRequirementKindValue(requirement.Kind), requirement.Source)).ToList()),
+            trigger.SatisfiedRequirementCount,
+            trigger.RequirementCount,
+            trigger.RequirementsSatisfied,
+            trigger.IsLatchedDespiteUnmetRequirements,
+            trigger.Requirements.Select(requirement => new ResolvedActivationRequirementPayload(
+                ToRequirementKindValue(requirement.Kind),
+                requirement.Source,
+                requirement.IsSatisfied,
+                requirement.WasWaivedAtActivation)).ToList(),
+            trigger.ConsumingMilestones);
+
+    private static ResolvedMilestonePayload ToResolvedMilestonePayload(ResolvedMilestone milestone) =>
+        new(
+            milestone.Key,
+            milestone.Title,
+            milestone.Description,
+            milestone.Priority,
+            ToMilestoneLifecycleValue(milestone.Lifecycle),
+            milestone.AssignedTaskCount,
+            milestone.DoneTaskCount,
+            milestone.RequiredActivationTriggers,
+            milestone.UnmetActivationTriggers,
+            milestone.Delivery == null
+                ? null
+                : new ResolvedMilestoneDeliveryPayload(
+                    milestone.Delivery.At,
+                    ToMilestoneDeliveryModeValue(milestone.Delivery.Mode),
+                    milestone.Delivery.Reason,
+                    milestone.Delivery.AcceptedTaskIds,
+                    milestone.Delivery.IsValid));
+
+    private static ProjectValidationIssuePayload ToValidationIssuePayload(ProjectValidationIssue issue) =>
+        new(
+            issue.Severity,
+            issue.Code,
+            issue.Message,
+            issue.Path,
+            issue.TaskId,
+            issue.WikiPath,
+            issue.State,
+            issue.ProjectId,
+            issue.ProjectAlias);
+
+    private static ActivationTriggerRedefinitionPreviewPayload ToRedefinitionPreview(
+        ActivationTriggerRedefinitionPreview preview) =>
+        new(
+            preview.TriggerKey,
+            preview.Revision,
+            preview.WillReactivateAutomatically,
+            preview.RequiresConfirmation,
+            preview.Milestones.Select(milestone => new ActivationTriggerMilestoneImpactPayload(
+                milestone.MilestoneKey,
+                ToMilestoneLifecycleValue(milestone.Before),
+                ToMilestoneLifecycleValue(milestone.After),
+                milestone.CurrentlyEligibleTaskIds,
+                milestone.TaskIdsLosingEligibility)).ToList(),
+            preview.CurrentlyEligibleTaskIds,
+            preview.TaskIdsLosingEligibility);
+
+    private static MilestoneDeliveryPreviewPayload ToMilestoneDeliveryPreview(MilestoneDeliveryPreview preview) =>
+        new(
+            preview.MilestoneKey,
+            preview.Title,
+            preview.Revision,
+            ToMilestoneDeliveryModeValue(preview.Mode),
+            preview.AssignedTaskCount,
+            preview.DoneTaskCount,
+            preview.UnfinishedTaskIds,
+            preview.RequiresConfirmation);
+
+    private static AutomaticActivationImpactPayload ToAutomaticActivationImpact(
+        AutomaticActivationImpact impact) =>
+        new(
+            impact.ActivatedTriggers.Select(trigger => trigger.Key).ToList(),
+            impact.MilestoneChanges.Select(change => new MilestoneLifecycleChangePayload(
+                change.MilestoneKey,
+                ToMilestoneLifecycleValue(change.Before),
+                ToMilestoneLifecycleValue(change.After))).ToList());
+
+    private static string ToRequirementKindValue(ActivationRequirementKind kind) =>
+        kind == ActivationRequirementKind.Task ? "task" : "milestone";
+
+    private static string ToActivationModeValue(ActivationMode mode) => mode switch
+    {
+        ActivationMode.Automatic => "automatic",
+        ActivationMode.Manual => "manual",
+        ActivationMode.Override => "override",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
+    };
+
+    private static string ToMilestoneLifecycleValue(MilestoneLifecycle lifecycle) => lifecycle switch
+    {
+        MilestoneLifecycle.Delivered => "delivered",
+        MilestoneLifecycle.Inactive => "inactive",
+        MilestoneLifecycle.ReadyToDeliver => "ready_to_deliver",
+        MilestoneLifecycle.Active => "active",
+        _ => throw new ArgumentOutOfRangeException(nameof(lifecycle), lifecycle, null),
+    };
+
+    private static string ToMilestoneDeliveryModeValue(MilestoneDeliveryMode mode) => mode switch
+    {
+        MilestoneDeliveryMode.Ordinary => "ordinary",
+        MilestoneDeliveryMode.Exceptional => "exceptional",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
+    };
 
     private LinkedProjectMutationAccess MutationAccess =>
         capabilityContext.Profile == McpCapabilityProfile.RunWorker
