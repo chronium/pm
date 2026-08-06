@@ -1898,6 +1898,97 @@ public class CommandBehaviorTests
         Assert.Null(ProjectConfig.ReadConfig(projectRoot).ActivationTriggers["entry"].Activation);
     }
 
+    [Fact]
+    public async Task ActivationTriggerActivateAndResetCommandsReportRefreshedManualState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["launch"] = new() { Title = "Launch authorized" },
+            }));
+        var service = new ActivationTriggerService(
+            projectRoot,
+            new MilestoneActivationResolver(projectRoot),
+            new MilestoneActivationValidationService(projectRoot),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
+        var activate = new ActivationTriggerActivateCommand(service);
+        var reset = new ActivationTriggerResetCommand(service);
+
+        var (activateCode, activateOutput) = await CaptureConsole(() => activate.Execute(null!,
+            new ActivationTriggerActivateCommand.Settings { Key = "launch" }, CancellationToken.None));
+
+        Assert.Equal(0, activateCode);
+        Assert.Contains("Activated activation trigger launch", activateOutput);
+        Assert.Contains("Activation: manual at", activateOutput);
+        Assert.Contains("Requirements: 0 / 0 satisfied", activateOutput);
+        Assert.Contains("Consuming milestones: none", activateOutput);
+
+        var (resetCode, resetOutput) = await CaptureConsole(() => reset.Execute(null!,
+            new ActivationTriggerResetCommand.Settings { Key = "launch" }, CancellationToken.None));
+
+        Assert.Equal(0, resetCode);
+        Assert.Contains("Reset activation trigger launch", resetOutput);
+        Assert.Contains("Activation: manual activation required", resetOutput);
+        Assert.Contains("Requirements: 0 / 0 satisfied", resetOutput);
+
+        var (repeatCode, repeatOutput) = await CaptureConsole(() => reset.Execute(null!,
+            new ActivationTriggerResetCommand.Settings { Key = "launch" }, CancellationToken.None));
+        Assert.Equal(1, repeatCode);
+        Assert.Contains("already inactive", repeatOutput);
+    }
+
+    [Fact]
+    public async Task ActivationTriggerActivateCommandRequiresAndReportsOverrideReasonAndWaivers()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0001" },
+                    ],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers.Add("entry");
+        var projectRoot = await workspace.CreateProject(config);
+        var task = TestData.Task("PM-0001", "Foundation");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new ActivationTriggerService(
+            projectRoot,
+            new MilestoneActivationResolver(projectRoot),
+            new MilestoneActivationValidationService(projectRoot),
+            TimeProvider.System,
+            new ProjectConfigPersistence(projectRoot));
+        var command = new ActivationTriggerActivateCommand(service);
+
+        var (missingCode, missingOutput) = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerActivateCommand.Settings { Key = "entry" }, CancellationToken.None));
+        Assert.Equal(1, missingCode);
+        Assert.Contains("Provide --reason", missingOutput);
+
+        var (overrideCode, overrideOutput) = await CaptureConsole(() => command.Execute(null!,
+            new ActivationTriggerActivateCommand.Settings
+                { Key = "entry", Reason = "Risk <accepted>" },
+            CancellationToken.None));
+
+        Assert.Equal(0, overrideCode);
+        Assert.Contains("Activation: override at", overrideOutput);
+        Assert.Contains("Override reason: Risk <accepted>", overrideOutput);
+        Assert.Contains("Waived requirements: task:PM-0001", overrideOutput);
+        Assert.Contains("Consuming milestones: beta", overrideOutput);
+        var stored = ProjectConfig.ReadConfig(projectRoot).ActivationTriggers["entry"].Activation!;
+        Assert.Equal(ActivationMode.Override, stored.Mode);
+        Assert.Equal("Risk <accepted>", stored.Reason);
+    }
+
     private static async Task<(int ExitCode, string Output)> ExecuteListCommand(
         ListCommand command,
         ListCommand.Settings settings)

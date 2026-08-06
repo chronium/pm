@@ -151,6 +151,48 @@ public sealed class ActivationTriggerAttachCommand(ActivationTriggerService trig
     }
 }
 
+public sealed class ActivationTriggerActivateCommand(ActivationTriggerService triggers)
+    : Command<ActivationTriggerActivateCommand.Settings>
+{
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var result = triggers.ActivateTrigger(settings.Key, settings.Reason);
+        return result.Success
+            ? ActivationTriggerCommandOutput.Transitioned("Activated", result.Payload!)
+            : ActivationTriggerCommandOutput.Fail(result.Message);
+    }
+
+    public sealed class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<key>")]
+        [Description("Activation trigger key")]
+        public string Key { get; init; } = string.Empty;
+
+        [CommandOption("--reason <REASON>")]
+        [Description("Reason for overriding the trigger's unmet requirements")]
+        public string? Reason { get; init; }
+    }
+}
+
+public sealed class ActivationTriggerResetCommand(ActivationTriggerService triggers)
+    : Command<ActivationTriggerResetCommand.Settings>
+{
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var result = triggers.ResetTrigger(settings.Key);
+        return result.Success
+            ? ActivationTriggerCommandOutput.Transitioned("Reset", result.Payload!)
+            : ActivationTriggerCommandOutput.Fail(result.Message);
+    }
+
+    public sealed class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<key>")]
+        [Description("Activation trigger key")]
+        public string Key { get; init; } = string.Empty;
+    }
+}
+
 public sealed class ActivationTriggerRedefineCommand(
     ActivationTriggerService triggers,
     IActivationTriggerCommandPrompts prompts)
@@ -363,6 +405,34 @@ internal static class ActivationTriggerCommandOutput
             ? "none"
             : string.Join(", ", result.AffectedMilestones);
         AnsiConsole.MarkupLineInterpolated($"Affected milestones: [blue]{affected.EscapeMarkup()}[/].");
+        return 0;
+    }
+
+    public static int Transitioned(string operation, ResolvedActivationTrigger trigger)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"{operation} activation trigger [green]{trigger.Key.EscapeMarkup()}[/].");
+
+        var activation = trigger.Activation == null
+            ? trigger.RequirementCount == 0 ? "manual activation required" : "pending"
+            : $"{trigger.Activation.Mode.ToString().ToLowerInvariant()} at {trigger.Activation.At:u}";
+        AnsiConsole.MarkupLineInterpolated($"Activation: [blue]{activation.EscapeMarkup()}[/].");
+        AnsiConsole.MarkupLineInterpolated(
+            $"Requirements: [blue]{trigger.SatisfiedRequirementCount} / {trigger.RequirementCount} satisfied[/].");
+
+        if (trigger.Activation?.Mode == ActivationMode.Override)
+        {
+            AnsiConsole.MarkupLineInterpolated(
+                $"Override reason: [blue]{trigger.Activation.Reason!.EscapeMarkup()}[/].");
+            var waived = string.Join(", ", trigger.Activation.WaivedRequirements.Select(requirement =>
+                $"{requirement.Kind.ToString().ToLowerInvariant()}:{requirement.Source}"));
+            AnsiConsole.MarkupLineInterpolated($"Waived requirements: [blue]{waived.EscapeMarkup()}[/].");
+        }
+
+        var milestones = trigger.ConsumingMilestones.Count == 0
+            ? "none"
+            : string.Join(", ", trigger.ConsumingMilestones);
+        AnsiConsole.MarkupLineInterpolated($"Consuming milestones: [blue]{milestones.EscapeMarkup()}[/].");
         return 0;
     }
 

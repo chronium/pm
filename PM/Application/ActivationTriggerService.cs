@@ -64,6 +64,101 @@ public sealed class ActivationTriggerService
             : AppResult<IReadOnlyList<ResolvedActivationTrigger>>.Fail(snapshot.ErrorCode!, snapshot.Message!);
     }
 
+    public AppResult<ResolvedActivationTrigger> ActivateTrigger(string key, string? reason)
+    {
+        var stateResult = ReadCurrentActivationState();
+        if (!stateResult.Success)
+            return AppResult<ResolvedActivationTrigger>.Fail(stateResult.ErrorCode!, stateResult.Message!);
+
+        key = key.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "invalid_activation_trigger", "Activation trigger key is required.");
+
+        var state = stateResult.Payload!;
+        var trigger = state.Snapshot.ActivationTriggers.SingleOrDefault(item =>
+            string.Equals(item.Key, key, StringComparison.Ordinal));
+        if (trigger == null)
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "missing_activation_trigger", $"Activation trigger {key} not found.");
+        if (trigger.IsActive)
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "activation_trigger_active", $"Activation trigger {key} is already active.");
+
+        ActivationRecord activation;
+        if (trigger.RequirementCount == 0)
+        {
+            if (reason != null)
+                return AppResult<ResolvedActivationTrigger>.Fail(
+                    "activation_reason_not_allowed",
+                    $"Manual-only activation trigger {key} does not accept an override reason.");
+
+            activation = new ActivationRecord
+            {
+                At = timeProvider.GetUtcNow(),
+                Mode = ActivationMode.Manual,
+            };
+        }
+        else
+        {
+            if (trigger.RequirementsSatisfied)
+                return AppResult<ResolvedActivationTrigger>.Fail(
+                    "activation_reconciliation_required",
+                    $"Activation trigger {key} has satisfied requirements but no activation record. Run pm trigger reconcile.");
+            if (string.IsNullOrWhiteSpace(reason))
+                return AppResult<ResolvedActivationTrigger>.Fail(
+                    "override_reason_required",
+                    $"Activation trigger {key} has unmet requirements. Provide --reason to override them.");
+
+            activation = new ActivationRecord
+            {
+                At = timeProvider.GetUtcNow(),
+                Mode = ActivationMode.Override,
+                Reason = reason.Trim(),
+                WaivedRequirements = trigger.Requirements
+                    .Where(requirement => !requirement.IsSatisfied)
+                    .Select(requirement => new ActivationRequirement
+                    {
+                        Kind = requirement.Kind,
+                        Source = requirement.Source,
+                    })
+                    .ToList(),
+            };
+        }
+
+        return PersistTransition(state, key,
+            prospective => prospective.ActivationTriggers[key].Activation = activation);
+    }
+
+    public AppResult<ResolvedActivationTrigger> ResetTrigger(string key)
+    {
+        var stateResult = ReadCurrentActivationState();
+        if (!stateResult.Success)
+            return AppResult<ResolvedActivationTrigger>.Fail(stateResult.ErrorCode!, stateResult.Message!);
+
+        key = key.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "invalid_activation_trigger", "Activation trigger key is required.");
+
+        var state = stateResult.Payload!;
+        var trigger = state.Snapshot.ActivationTriggers.SingleOrDefault(item =>
+            string.Equals(item.Key, key, StringComparison.Ordinal));
+        if (trigger == null)
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "missing_activation_trigger", $"Activation trigger {key} not found.");
+        if (!trigger.IsActive)
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "activation_trigger_inactive", $"Activation trigger {key} is already inactive.");
+        if (trigger.RequirementsSatisfied)
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "activation_trigger_reset_blocked",
+                $"Activation trigger {key} cannot be reset while all current requirements are satisfied.");
+
+        return PersistTransition(state, key,
+            prospective => prospective.ActivationTriggers[key].Activation = null);
+    }
+
     public AppResult<ActivationTriggerRedefinitionPreview> PreviewRedefinition(
         string key,
         IReadOnlyList<ActivationRequirement> requirements)
@@ -274,37 +369,17 @@ public sealed class ActivationTriggerService
         string key,
         IReadOnlyList<ActivationRequirement> requirements)
     {
-        if (!projectRoot.Exists || projectRoot.Config == null)
-            return AppResult<RedefinitionEvaluation>.Fail(
-                "missing_project", "Project not found. Run pm init first.");
-
         key = key.Trim();
         if (string.IsNullOrWhiteSpace(key))
             return AppResult<RedefinitionEvaluation>.Fail(
                 "invalid_activation_trigger", "Activation trigger key is required.");
 
-        string originalYaml;
-        ProjectConfig config;
-        try
-        {
-            if (!persistence.Reload())
-                return AppResult<RedefinitionEvaluation>.Fail(
-                    "activation_trigger_config_reload_failed",
-                    "Activation trigger configuration could not be reloaded for impact evaluation.");
-            originalYaml = persistence.ReadText();
-            config = ProjectConfig.Deserialize(originalYaml);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                           InvalidDataException or YamlException)
-        {
-            return AppResult<RedefinitionEvaluation>.Fail(
-                "invalid_project", $"Project configuration could not be read: {exception.Message}");
-        }
-
-        if (config.RequiresMilestoneSchemaMigration)
-            return AppResult<RedefinitionEvaluation>.Fail(
-                "milestone_schema_migration_required",
-                "Legacy milestone configuration must be migrated with pm doctor --fix before project settings can be changed.");
+        var stateResult = ReadCurrentActivationState();
+        if (!stateResult.Success)
+            return AppResult<RedefinitionEvaluation>.Fail(stateResult.ErrorCode!, stateResult.Message!);
+        var state = stateResult.Payload!;
+        var originalYaml = state.OriginalYaml;
+        var config = state.Config;
         if (!config.ActivationTriggers.TryGetValue(key, out var trigger))
             return AppResult<RedefinitionEvaluation>.Fail(
                 "missing_activation_trigger", $"Activation trigger {key} not found.");
@@ -313,13 +388,8 @@ public sealed class ActivationTriggerService
                 "activation_trigger_inactive",
                 $"Activation trigger {key} is inactive. Use set-requirements to change its requirements.");
 
-        var tasksById = projectRoot.GetAllTasks()
-            .GroupBy(task => task.Id, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        var stateByTaskId = tasksById.Values.ToDictionary(
-            task => task.Id,
-            task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
-            StringComparer.Ordinal);
+        var tasksById = state.TasksById;
+        var stateByTaskId = state.StateByTaskId;
         var normalizedRequirements = CloneRequirements(requirements);
         var revision = BuildRedefinitionRevision(
             key,
@@ -327,7 +397,7 @@ public sealed class ActivationTriggerService
             originalYaml,
             tasksById,
             stateByTaskId);
-        var before = resolver.Resolve(config, tasksById, stateByTaskId);
+        var before = state.Snapshot;
 
         var prospective = ProjectConfig.Deserialize(originalYaml);
         var prospectiveTrigger = prospective.ActivationTriggers[key];
@@ -408,6 +478,108 @@ public sealed class ActivationTriggerService
             preview,
             prospective,
             originalYaml));
+    }
+
+    private AppResult<CurrentActivationState> ReadCurrentActivationState()
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<CurrentActivationState>.Fail(
+                "missing_project", "Project not found. Run pm init first.");
+
+        try
+        {
+            if (!persistence.Reload())
+                return AppResult<CurrentActivationState>.Fail(
+                    "activation_trigger_config_reload_failed",
+                    "Activation trigger configuration could not be reloaded.");
+
+            var originalYaml = persistence.ReadText();
+            var config = ProjectConfig.Deserialize(originalYaml);
+            if (config.RequiresMilestoneSchemaMigration)
+                return AppResult<CurrentActivationState>.Fail(
+                    "milestone_schema_migration_required",
+                    "Legacy milestone configuration must be migrated with pm doctor --fix before project settings can be changed.");
+
+            var tasksById = projectRoot.GetAllTasks()
+                .GroupBy(task => task.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var stateByTaskId = tasksById.Values.ToDictionary(
+                task => task.Id,
+                task => projectRoot.TryGetState(task, out var taskState) ? taskState : string.Empty,
+                StringComparer.Ordinal);
+            var snapshot = resolver.Resolve(config, tasksById, stateByTaskId);
+            return AppResult<CurrentActivationState>.Ok(new CurrentActivationState(
+                originalYaml,
+                config,
+                tasksById,
+                stateByTaskId,
+                snapshot));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                           InvalidDataException or YamlException)
+        {
+            return AppResult<CurrentActivationState>.Fail(
+                "invalid_project", $"Project configuration could not be read: {exception.Message}");
+        }
+    }
+
+    private AppResult<ResolvedActivationTrigger> PersistTransition(
+        CurrentActivationState state,
+        string key,
+        Action<ProjectConfig> mutation)
+    {
+        var prospective = ProjectConfig.Deserialize(state.OriginalYaml);
+        mutation(prospective);
+
+        if (FirstValidationError(validator.ValidateProspectiveConfig(prospective)) is { } validationError)
+            return AppResult<ResolvedActivationTrigger>.Fail(validationError.Code, validationError.Message);
+
+        try
+        {
+            persistence.WriteTextAtomic(YamlSerde.Serialize(prospective));
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "activation_trigger_transition_failed",
+                $"Activation trigger {key} could not be changed: {exception.Message}");
+        }
+
+        if (GlobalConfig.DryRun)
+        {
+            var snapshot = resolver.Resolve(prospective, state.TasksById, state.StateByTaskId);
+            return AppResult<ResolvedActivationTrigger>.Ok(snapshot.ActivationTriggers.Single(trigger =>
+                string.Equals(trigger.Key, key, StringComparison.Ordinal)));
+        }
+
+        try
+        {
+            if (persistence.Reload())
+            {
+                var refreshed = resolver.ResolveCurrentProject();
+                if (refreshed.Success)
+                {
+                    var refreshedTrigger = refreshed.Payload!.ActivationTriggers.SingleOrDefault(trigger =>
+                        string.Equals(trigger.Key, key, StringComparison.Ordinal));
+                    if (refreshedTrigger != null)
+                        return AppResult<ResolvedActivationTrigger>.Ok(refreshedTrigger);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                           InvalidDataException or YamlException)
+        {
+            // Restore the exact previous document below.
+        }
+
+        if (!TryRestoreConfig(state.OriginalYaml))
+            return AppResult<ResolvedActivationTrigger>.Fail(
+                "activation_trigger_transition_rollback_failed",
+                $"Activation trigger {key} could not be changed and the previous configuration could not be restored.");
+
+        return AppResult<ResolvedActivationTrigger>.Fail(
+            "activation_trigger_transition_failed",
+            $"Activation trigger {key} could not be changed; the previous activation provenance was restored.");
     }
 
     private AppResult<ProjectConfig> GetConfig()
@@ -546,4 +718,11 @@ public sealed class ActivationTriggerService
         ActivationTriggerRedefinitionPreview Preview,
         ProjectConfig ProspectiveConfig,
         string OriginalYaml);
+
+    private sealed record CurrentActivationState(
+        string OriginalYaml,
+        ProjectConfig Config,
+        IReadOnlyDictionary<string, TaskItem> TasksById,
+        IReadOnlyDictionary<string, string> StateByTaskId,
+        MilestoneActivationSnapshot Snapshot);
 }

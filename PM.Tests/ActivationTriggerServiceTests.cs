@@ -355,6 +355,227 @@ public class ActivationTriggerServiceTests
         Assert.Equal("activation_trigger_redefine_rollback_failed", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task ManualOnlyActivationAndResetReturnRefreshedTriggerState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["launch"] = new() { Title = "Launch authorized" },
+            }));
+        var now = DateTimeOffset.Parse("2026-08-06T14:15:16Z");
+        var service = CreateService(root, new FixedTimeProvider(now));
+
+        var reasonRejected = service.ActivateTrigger("launch", " ");
+        Assert.Equal("activation_reason_not_allowed", reasonRejected.ErrorCode);
+        Assert.Null(ProjectConfig.ReadConfig(root).ActivationTriggers["launch"].Activation);
+
+        var activated = service.ActivateTrigger("launch", null);
+
+        Assert.True(activated.Success);
+        Assert.True(activated.Payload!.IsActive);
+        Assert.Equal(ActivationMode.Manual, activated.Payload.Activation!.Mode);
+        Assert.Equal(now, activated.Payload.Activation.At);
+        Assert.Equal(0, activated.Payload.RequirementCount);
+        var stored = ProjectConfig.ReadConfig(root).ActivationTriggers["launch"].Activation;
+        Assert.NotNull(stored);
+        Assert.Equal(ActivationMode.Manual, stored.Mode);
+        Assert.Equal(now, stored.At);
+        Assert.Equal("activation_trigger_active", service.ActivateTrigger("launch", null).ErrorCode);
+
+        var reset = service.ResetTrigger("launch");
+
+        Assert.True(reset.Success);
+        Assert.False(reset.Payload!.IsActive);
+        Assert.Null(reset.Payload.Activation);
+        Assert.Null(ProjectConfig.ReadConfig(root).ActivationTriggers["launch"].Activation);
+        Assert.Equal("activation_trigger_inactive", service.ResetTrigger("launch").ErrorCode);
+    }
+
+    [Fact]
+    public async Task OverrideRequiresReasonAndSnapshotsOnlyCurrentlyUnsatisfiedRequirements()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await CreateOverrideProject(workspace);
+        var now = DateTimeOffset.Parse("2026-08-06T15:00:00Z");
+        var service = CreateService(root, new FixedTimeProvider(now));
+        var before = File.ReadAllText(root.ConfigPath);
+
+        Assert.Equal("override_reason_required", service.ActivateTrigger("beta-entry", null).ErrorCode);
+        Assert.Equal("override_reason_required", service.ActivateTrigger("beta-entry", " ").ErrorCode);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+
+        var activated = service.ActivateTrigger("beta-entry", "  Approved for beta hardening.  ");
+
+        Assert.True(activated.Success);
+        Assert.Equal(ActivationMode.Override, activated.Payload!.Activation!.Mode);
+        Assert.Equal(now, activated.Payload.Activation.At);
+        Assert.Equal("Approved for beta hardening.", activated.Payload.Activation.Reason);
+        Assert.Equal(2, activated.Payload.SatisfiedRequirementCount);
+        Assert.Collection(activated.Payload.Activation.WaivedRequirements,
+            requirement =>
+            {
+                Assert.Equal(ActivationRequirementKind.Task, requirement.Kind);
+                Assert.Equal("PM-0002", requirement.Source);
+            },
+            requirement =>
+            {
+                Assert.Equal(ActivationRequirementKind.Milestone, requirement.Kind);
+                Assert.Equal("pending", requirement.Source);
+            });
+
+        var stored = ProjectConfig.ReadConfig(root).ActivationTriggers["beta-entry"].Activation!;
+        Assert.Equal(ActivationMode.Override, stored.Mode);
+        Assert.Equal("Approved for beta hardening.", stored.Reason);
+        Assert.Equal(["PM-0002", "pending"], stored.WaivedRequirements.Select(item => item.Source));
+    }
+
+    [Fact]
+    public async Task SatisfiedInactiveTriggerRequiresReconciliationWithoutWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0001" },
+                    ],
+                },
+            }));
+        var task = TestData.Task("PM-0001", "Complete source");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "done");
+        var service = CreateService(root);
+        var before = File.ReadAllText(root.ConfigPath);
+
+        var result = service.ActivateTrigger("entry", "unnecessary override");
+
+        Assert.Equal("activation_reconciliation_required", result.ErrorCode);
+        Assert.Contains("pm trigger reconcile", result.Message);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+    }
+
+    [Fact]
+    public async Task ResetAllowsLatchedUnmetTriggerButRejectsCurrentlySatisfiedTrigger()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+        {
+            ["entry"] = new()
+            {
+                Title = "Entry",
+                Requirements =
+                [
+                    new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0001" },
+                ],
+                Activation = new ActivationRecord
+                {
+                    At = DateTimeOffset.Parse("2026-08-06T08:00:00Z"),
+                    Mode = ActivationMode.Automatic,
+                },
+            },
+        });
+        var root = await workspace.CreateProject(config);
+        var task = TestData.Task("PM-0001", "Source");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "done");
+        var service = CreateService(root);
+        var before = File.ReadAllText(root.ConfigPath);
+
+        var blocked = service.ResetTrigger("entry");
+
+        Assert.Equal("activation_trigger_reset_blocked", blocked.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+
+        root.UpdateTaskState(task, "todo");
+        var reset = service.ResetTrigger("entry");
+
+        Assert.True(reset.Success);
+        Assert.False(reset.Payload!.IsActive);
+        Assert.False(reset.Payload.RequirementsSatisfied);
+        Assert.Null(ProjectConfig.ReadConfig(root).ActivationTriggers["entry"].Activation);
+    }
+
+    [Fact]
+    public async Task OverrideProvenanceRemainsWhenRequirementsLaterBecomeSatisfied()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await CreateOverrideProject(workspace);
+        var now = DateTimeOffset.Parse("2026-08-06T15:00:00Z");
+        var service = CreateService(root, new FixedTimeProvider(now));
+        Assert.True(service.ActivateTrigger("beta-entry", "Accepted risk").Success);
+
+        var task = root.GetAllTasks().Single(item => item.Id == "PM-0002");
+        root.UpdateTaskState(task, "done");
+        var pendingTask = TestData.Task("PM-0004", "Pending milestone work", milestone: "pending");
+        root.WriteTask(pendingTask);
+        root.UpdateTaskState(pendingTask, "done");
+        root.Config!.Milestones["pending"].Delivery = new MilestoneDelivery
+        {
+            At = now.AddHours(1),
+            Mode = MilestoneDeliveryMode.Ordinary,
+        };
+        root.Config.WriteConfig(root);
+
+        var resolved = service.ListTriggers().Payload!.Single(trigger => trigger.Key == "beta-entry");
+
+        Assert.True(resolved.RequirementsSatisfied);
+        Assert.Equal(ActivationMode.Override, resolved.Activation!.Mode);
+        Assert.Equal(now, resolved.Activation.At);
+        Assert.Equal("Accepted risk", resolved.Activation.Reason);
+        Assert.Equal(["PM-0002", "pending"], resolved.Activation.WaivedRequirements.Select(item => item.Source));
+        var beforeReset = File.ReadAllText(root.ConfigPath);
+        Assert.Equal("activation_trigger_reset_blocked", service.ResetTrigger("beta-entry").ErrorCode);
+        Assert.Equal(beforeReset, File.ReadAllText(root.ConfigPath));
+    }
+
+    [Fact]
+    public async Task ActivationTransitionRestoresExactConfigurationWhenReloadFails()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["launch"] = new() { Title = "Launch" },
+            }));
+        var persistence = new FaultingProjectConfigPersistence(root) { ReloadFailuresAfterWrite = 1 };
+        var service = CreateService(root, persistence: persistence);
+        var before = File.ReadAllText(root.ConfigPath);
+
+        var result = service.ActivateTrigger("launch", null);
+
+        Assert.Equal("activation_trigger_transition_failed", result.ErrorCode);
+        Assert.Equal(2, persistence.WriteCount);
+        Assert.Equal(before, File.ReadAllText(root.ConfigPath));
+        Assert.Null(root.Config!.ActivationTriggers["launch"].Activation);
+    }
+
+    [Fact]
+    public async Task ActivationTransitionReportsRollbackFailureSeparately()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject(TestData.Config(
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["launch"] = new() { Title = "Launch" },
+            }));
+        var persistence = new FaultingProjectConfigPersistence(root)
+        {
+            ReloadFailuresAfterWrite = 1,
+            FailRestoreWrite = true,
+        };
+        var service = CreateService(root, persistence: persistence);
+
+        var result = service.ActivateTrigger("launch", null);
+
+        Assert.Equal("activation_trigger_transition_rollback_failed", result.ErrorCode);
+    }
+
     private static ActivationTriggerService CreateService(
         ProjectRoot root,
         TimeProvider? timeProvider = null,
@@ -397,6 +618,44 @@ public class ActivationTriggerServiceTests
         root.UpdateTaskState(newRequirement, newRequirementDone ? "done" : "todo");
         root.UpdateTaskState(eligibleTask, "todo");
         return (root, newRequirement, eligibleTask);
+    }
+
+    private static async Task<ProjectRoot> CreateOverrideProject(TempWorkingDirectory workspace)
+    {
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["approved"] = "Approved",
+                ["pending"] = "Pending",
+            },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["beta-entry"] = new()
+                {
+                    Title = "Beta entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0001" },
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Task, Source = "PM-0002" },
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Milestone, Source = "approved" },
+                        new ActivationRequirement { Kind = ActivationRequirementKind.Milestone, Source = "pending" },
+                    ],
+                },
+            });
+        config.Milestones["approved"].Delivery = new MilestoneDelivery
+        {
+            At = DateTimeOffset.Parse("2026-08-06T12:00:00Z"),
+            Mode = MilestoneDeliveryMode.Ordinary,
+        };
+        var root = await workspace.CreateProject(config);
+        var doneTask = TestData.Task("PM-0001", "Done source");
+        var pendingTask = TestData.Task("PM-0002", "Pending source");
+        var approvedTask = TestData.Task("PM-0003", "Approved work", milestone: "approved");
+        foreach (var task in new[] { doneTask, pendingTask, approvedTask }) root.WriteTask(task);
+        root.UpdateTaskState(doneTask, "done");
+        root.UpdateTaskState(pendingTask, "todo");
+        root.UpdateTaskState(approvedTask, "done");
+        return root;
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

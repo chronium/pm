@@ -159,6 +159,8 @@ app.Configure(config =>
             trigger.AddCommand<ActivationTriggerSetRequirementsCommand>(
                 GlobalConfig.TriggerSetRequirementsCommandName);
             trigger.AddCommand<ActivationTriggerRedefineCommand>(GlobalConfig.TriggerRedefineCommandName);
+            trigger.AddCommand<ActivationTriggerActivateCommand>(GlobalConfig.TriggerActivateCommandName);
+            trigger.AddCommand<ActivationTriggerResetCommand>(GlobalConfig.TriggerResetCommandName);
             trigger.AddCommand<ActivationTriggerAttachCommand>(GlobalConfig.TriggerAttachCommandName);
             trigger.AddCommand<ActivationTriggerDetachCommand>(GlobalConfig.TriggerDetachCommandName);
             trigger.AddCommand<ActivationTriggerListCommand>(GlobalConfig.TriggerListCommandName);
