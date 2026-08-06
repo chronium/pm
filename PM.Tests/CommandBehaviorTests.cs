@@ -28,7 +28,9 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
-        var command = new DoctorCommand(new ProjectValidationService(projectRoot));
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot),
+            new ProjectConfigService(projectRoot));
 
         var (exitCode, output) = await CaptureConsole(() =>
             command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
@@ -42,13 +44,99 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject();
-        var command = new DoctorCommand(new ProjectValidationService(projectRoot));
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot),
+            new ProjectConfigService(projectRoot));
 
         var (exitCode, output) = await CaptureConsole(() =>
             command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
 
         Assert.Equal(0, exitCode);
         Assert.Contains("Project validation passed.", output);
+    }
+
+    [Fact]
+    public async Task DoctorDiagnosesLegacyMilestonesWithoutWriting()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var initialRoot = await workspace.CreateProject();
+        const string legacy = """
+                              name: Legacy
+                              idWidth: 4
+                              idPrefix: PM
+                              taskStates:
+                                todo: Queued
+                                review: Review
+                                done: Done
+                              tracks:
+                                PM: Project
+                              milestones:
+                                beta: Public beta
+                              milestonePriorities:
+                                beta: high
+                              """;
+        File.WriteAllText(initialRoot.ConfigPath, legacy);
+        var projectRoot = new ProjectRoot();
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot),
+            new ProjectConfigService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("legacy_milestone_schema", output);
+        Assert.Contains("pm doctor --fix", output);
+        Assert.Equal(legacy, File.ReadAllText(projectRoot.ConfigPath));
+    }
+
+    [Fact]
+    public async Task DoctorFixMigratesLegacyMilestonesAndIsIdempotent()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var initialRoot = await workspace.CreateProject();
+        File.WriteAllText(initialRoot.ConfigPath, """
+                                                      name: Legacy
+                                                      idWidth: 4
+                                                      idPrefix: PM
+                                                      taskStates:
+                                                        todo: Queued
+                                                        review: Review
+                                                        done: Done
+                                                      tracks:
+                                                        PM: Project
+                                                      milestones:
+                                                        beta: Public beta
+                                                        launch: Launch
+                                                      milestonePriorities:
+                                                        beta: high
+                                                      """);
+        var projectRoot = new ProjectRoot();
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot),
+            new ProjectConfigService(projectRoot));
+
+        var (exitCode, output) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings { Fix = true }, CancellationToken.None));
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Migrated milestone configuration", output);
+        Assert.Contains("Project validation passed.", output);
+        var migrated = File.ReadAllText(projectRoot.ConfigPath);
+        Assert.DoesNotContain("milestonePriorities:", migrated);
+        Assert.Contains("description:", migrated);
+        Assert.Contains("requiredActivationTriggers:", migrated);
+        Assert.Contains("delivery:", migrated);
+        Assert.False(projectRoot.Config!.RequiresMilestoneSchemaMigration);
+        Assert.Equal(["beta", "launch"], projectRoot.Config.Milestones.Keys);
+        Assert.Equal("high", projectRoot.Config.Milestones["beta"].Priority);
+
+        var (secondExitCode, secondOutput) = await CaptureConsole(() =>
+            command.Execute(null!, new DoctorCommand.Settings { Fix = true }, CancellationToken.None));
+
+        Assert.Equal(0, secondExitCode);
+        Assert.Contains("already uses the structured schema", secondOutput);
+        Assert.Equal(migrated, File.ReadAllText(projectRoot.ConfigPath));
     }
 
     [Fact]
@@ -81,7 +169,9 @@ public class CommandBehaviorTests
                     RootPath = Path.Combine(workspace.Path, "registry"),
                 }),
                 new EmptyLinkedProjectSubmoduleInspector()));
-        var command = new DoctorCommand(new ProjectValidationService(projectRoot, linkedProjects, family));
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot, linkedProjects, family),
+            new ProjectConfigService(projectRoot));
 
         var (exitCode, output) = await CaptureConsole(() =>
             command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
@@ -306,7 +396,9 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Broken task", track: "missing<tr>");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new DoctorCommand(new ProjectValidationService(projectRoot));
+        var command = new DoctorCommand(
+            new ProjectValidationService(projectRoot),
+            new ProjectConfigService(projectRoot));
 
         var (exitCode, output) = await CaptureConsole(() =>
             command.Execute(null!, new DoctorCommand.Settings(), CancellationToken.None));
@@ -1513,7 +1605,7 @@ public class CommandBehaviorTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.Equal("Build Work", config.Tracks["BUILD"]);
-        Assert.Equal("Launch", config.Milestones["m1"]);
+        Assert.Equal("Launch", config.Milestones["m1"].Title);
     }
 
     [Fact]
@@ -1539,8 +1631,8 @@ public class CommandBehaviorTests
                 CancellationToken.None));
 
         var config = ProjectConfig.ReadConfig(projectRoot);
-        Assert.Equal("Milestone 1", config.Milestones["m1"]);
-        Assert.Equal("high", config.MilestonePriorities["m1"]);
+        Assert.Equal("Milestone 1", config.Milestones["m1"].Title);
+        Assert.Equal("high", config.Milestones["m1"].Priority);
         Assert.False(config.Milestones.ContainsKey("m2"));
     }
 
@@ -1559,7 +1651,7 @@ public class CommandBehaviorTests
             command.Execute(null!, new MilestonePriorityCommand.Settings { Key = "m1", Priority = "later" },
                 CancellationToken.None));
 
-        Assert.Equal("urgent", ProjectConfig.ReadConfig(projectRoot).MilestonePriorities["m1"]);
+        Assert.Equal("urgent", ProjectConfig.ReadConfig(projectRoot).Milestones["m1"].Priority);
     }
 
     [Fact]
@@ -1597,7 +1689,6 @@ public class CommandBehaviorTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.Milestones.ContainsKey("m2"));
-        Assert.False(config.MilestonePriorities.ContainsKey("m2"));
     }
 
     private static async Task<ProjectRoot> CreateLinkedProject(string repositoryPath, string projectId)

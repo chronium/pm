@@ -14,13 +14,45 @@ tracks:
   DISCOVERY: Product discovery
   LINK: Linked projects
 milestones:
-  mcp-smoke: MCP Smoke Test
-  angular-web: Angular Web UI Migration
-  agent-runs: Agent execution and remote runners
-  linked-project-foundation: Linked project foundation
-  agent-runner-evolution: Agent runner evolution
-  linked-project-workflows: Linked project workflows
-milestonePriorities:
-  angular-web: high
-  agent-runs: urgent
-  agent-runner-evolution: high
+  mcp-smoke:
+    title: MCP Smoke Test
+    description: ''
+    priority: none
+    requiredActivationTriggers: []
+    delivery: null
+  angular-web:
+    title: Angular Web UI Migration
+    description: ''
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null
+  agent-runs:
+    title: Agent execution and remote runners
+    description: ''
+    priority: urgent
+    requiredActivationTriggers: []
+    delivery: null
+  linked-project-foundation:
+    title: Linked project foundation
+    description: ''
+    priority: none
+    requiredActivationTriggers: []
+    delivery: null
+  agent-runner-evolution:
+    title: Agent runner evolution
+    description: ''
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null
+  linked-project-workflows:
+    title: Linked project workflows
+    description: ''
+    priority: none
+    requiredActivationTriggers: []
+    delivery: null
+  milestone-activation:
+    title: Milestone deliverables and activation
+    description: ''
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null

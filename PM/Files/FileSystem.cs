@@ -30,6 +30,27 @@ public static class FileSystem
         ActiveMutation.Value?.Record(path);
     }
 
+    public static void WriteAllTextAtomic(string path, string content)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"Written [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
+        if (GlobalConfig.DryRun) return;
+
+        var directory = Path.GetDirectoryName(path) ??
+                        throw new InvalidOperationException("File path does not have a parent directory.");
+        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temporaryPath, content);
+            File.Move(temporaryPath, path, true);
+            ActiveMutation.Value?.Record(path);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
+    }
+
     public static void CreateDirectory(string path)
     {
         AnsiConsole.MarkupLineInterpolated(

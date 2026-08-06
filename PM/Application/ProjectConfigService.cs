@@ -26,7 +26,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             config.Milestones
                 .Select(milestone => new BoardOption(
                     milestone.Key,
-                    milestone.Value,
+                    milestone.Value.Title,
                     PriorityLevel.Resolve(config, milestone.Key)))
                 .ToList()));
     }
@@ -35,6 +35,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         if (!ProjectAccent.TryNormalize(accent, out var normalized))
             return AppResult.Fail("invalid_accent",
@@ -50,6 +51,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         name = name.Trim();
@@ -70,6 +72,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         name = name.Trim();
@@ -89,6 +92,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         if (string.IsNullOrWhiteSpace(key))
@@ -133,6 +137,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         name = name.Trim();
@@ -152,6 +157,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         name = name.Trim();
@@ -171,6 +177,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         if (string.IsNullOrWhiteSpace(key))
@@ -195,6 +202,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         title = title.Trim();
@@ -205,7 +213,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         if (!config.Milestones.ContainsKey(key))
             return AppResult.Fail("missing_milestone", $"Milestone {key} not found.");
 
-        config.Milestones[key] = title;
+        config.Milestones[key].Title = title;
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
     }
@@ -214,6 +222,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         title = title.Trim();
@@ -228,11 +237,11 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         if (config.Milestones.ContainsKey(key))
             return AppResult.Fail("duplicate_milestone", $"Milestone {key} already exists.");
 
-        config.Milestones[key] = title;
-        if (normalizedPriority == PriorityLevel.None)
-            config.MilestonePriorities.Remove(key);
-        else
-            config.MilestonePriorities[key] = normalizedPriority;
+        config.Milestones[key] = new MilestoneDefinition
+        {
+            Title = title,
+            Priority = normalizedPriority,
+        };
 
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
@@ -242,6 +251,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         if (string.IsNullOrWhiteSpace(key))
@@ -255,10 +265,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         if (!config.Milestones.ContainsKey(key))
             return AppResult.Fail("missing_milestone", $"Milestone {key} not found.");
 
-        if (normalizedPriority == PriorityLevel.None)
-            config.MilestonePriorities.Remove(key);
-        else
-            config.MilestonePriorities[key] = normalizedPriority;
+        config.Milestones[key].Priority = normalizedPriority;
 
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
@@ -268,6 +275,7 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists)
             return AppResult.Fail("missing_project", "Project not found. Run pm init first.");
+        if (EnsureConfigMutationAllowed() is { } migrationError) return migrationError;
 
         key = key.Trim();
         if (string.IsNullOrWhiteSpace(key))
@@ -281,8 +289,59 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             return AppResult.Fail("milestone_in_use", $"Milestone {key} is referenced by one or more tasks.");
 
         config.Milestones.Remove(key);
-        config.MilestonePriorities.Remove(key);
         config.WriteConfig(projectRoot);
         return AppResult.Ok();
+    }
+
+    public AppResult<bool> MigrateMilestoneSchema()
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<bool>.Fail("missing_project", "Project not found. Run pm init first.");
+
+        var config = projectRoot.Config;
+        if (!config.RequiresMilestoneSchemaMigration)
+            return AppResult<bool>.Ok(false);
+
+        foreach (var milestone in config.LegacyMilestonePriorities.Keys)
+        {
+            if (!config.Milestones.ContainsKey(milestone))
+                return AppResult<bool>.Fail(
+                    "unknown_milestone_priority",
+                    $"Milestone priority references unknown milestone {milestone}.");
+        }
+
+        foreach (var (key, milestone) in config.Milestones)
+        {
+            if (!PriorityLevel.TryNormalize(milestone.Priority, out _))
+                return AppResult<bool>.Fail(
+                    "invalid_milestone_priority",
+                    $"Milestone {key} has invalid priority {milestone.Priority}.");
+        }
+
+        try
+        {
+            config.WriteMigratedConfig(projectRoot);
+            if (!projectRoot.TryReloadConfig())
+                return AppResult<bool>.Fail(
+                    "milestone_schema_migration_failed",
+                    "Milestone configuration was written but could not be reloaded.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return AppResult<bool>.Fail(
+                "milestone_schema_migration_failed",
+                $"Unable to migrate milestone configuration: {exception.Message}");
+        }
+
+        return AppResult<bool>.Ok(true);
+    }
+
+    private AppResult? EnsureConfigMutationAllowed()
+    {
+        return projectRoot.Config?.RequiresMilestoneSchemaMigration == true
+            ? AppResult.Fail(
+                "milestone_schema_migration_required",
+                "Legacy milestone configuration must be migrated with pm doctor --fix before project settings can be changed.")
+            : null;
     }
 }

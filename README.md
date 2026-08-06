@@ -65,6 +65,22 @@ Run tests:
 dotnet test PM.slnx -m:1 --no-restore
 ```
 
+## Milestone configuration
+
+Milestones are ordered deliverable definitions in `.pm/pm_config.yaml`. The canonical shape keeps every field explicit even before activation and delivery behavior is configured:
+
+```yaml
+milestones:
+  public-beta:
+    title: Public beta
+    description: Deliver an installable beta covering the complete local workflow.
+    priority: high
+    requiredActivationTriggers: []
+    delivery:
+```
+
+PM continues to read the earlier scalar `milestones` map and separate `milestonePriorities` map, but project-setting mutations are blocked until that legacy representation is migrated. `pm doctor` diagnoses the legacy schema without writing files; `pm doctor --fix` performs the explicit, idempotent migration and then validates the project.
+
 ## MCP Profiles
 
 `pm mcp` starts the normal MCP server and preserves the complete project-management tool surface for trusted local clients.

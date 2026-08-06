@@ -63,7 +63,10 @@ public sealed class ProjectCreationService(ProjectRoot projectRoot, INextIdServi
         if (!milestonesResult.Success)
             return AppResult<ProjectCreationResult>.Fail(milestonesResult.ErrorCode!, milestonesResult.Message!);
 
-        var milestones = milestonesResult.Payload!;
+        var milestoneTitles = milestonesResult.Payload!;
+        var milestones = milestoneTitles.ToDictionary(
+            milestone => milestone.Key,
+            milestone => new MilestoneDefinition { Title = milestone.Value });
         var config = new ProjectConfig
         {
             Name = name,
@@ -87,7 +90,7 @@ public sealed class ProjectCreationService(ProjectRoot projectRoot, INextIdServi
             projectRoot.RootPath,
             config.TaskStates,
             config.Tracks,
-            config.Milestones,
+            milestoneTitles,
             registration.ProjectId,
             registration.RecoveryKey));
     }

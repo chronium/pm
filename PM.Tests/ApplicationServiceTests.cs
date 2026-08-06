@@ -83,7 +83,7 @@ public class ApplicationServiceTests
         Assert.Equal("Closed", config.TaskStates["closed"]);
         Assert.True(Directory.Exists(Path.Combine(projectRoot.StatesPath, "new")));
         Assert.Equal("Ops", config.Tracks["OPS"]);
-        Assert.Equal("Version 1", config.Milestones["v1"]);
+        Assert.Equal("Version 1", config.Milestones["v1"].Title);
     }
 
     [Fact]
@@ -1243,18 +1243,17 @@ public class ApplicationServiceTests
         var service = new ProjectConfigService(projectRoot);
 
         Assert.True(service.AddMilestone("m1", "Milestone 1", "HIGH").Success);
-        Assert.Equal("high", ProjectConfig.ReadConfig(projectRoot).MilestonePriorities["m1"]);
+        Assert.Equal("high", ProjectConfig.ReadConfig(projectRoot).Milestones["m1"].Priority);
 
         Assert.True(service.SetMilestonePriority("m1", "urgent").Success);
-        Assert.Equal("urgent", ProjectConfig.ReadConfig(projectRoot).MilestonePriorities["m1"]);
+        Assert.Equal("urgent", ProjectConfig.ReadConfig(projectRoot).Milestones["m1"].Priority);
 
         Assert.True(service.SetMilestonePriority("m1", "none").Success);
-        Assert.False(ProjectConfig.ReadConfig(projectRoot).MilestonePriorities.ContainsKey("m1"));
+        Assert.Equal(PriorityLevel.None, ProjectConfig.ReadConfig(projectRoot).Milestones["m1"].Priority);
 
         Assert.True(service.RemoveMilestone("m1").Success);
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.Milestones.ContainsKey("m1"));
-        Assert.False(config.MilestonePriorities.ContainsKey("m1"));
     }
 
     [Fact]
@@ -1272,8 +1271,7 @@ public class ApplicationServiceTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.Milestones.ContainsKey("m2"));
-        Assert.Equal("low", config.MilestonePriorities["m1"]);
-        Assert.False(config.MilestonePriorities.ContainsKey("missing"));
+        Assert.Equal("low", config.Milestones["m1"].Priority);
     }
 
     [Fact]
@@ -1419,7 +1417,7 @@ public class ApplicationServiceTests
 
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.Equal("Build Work", config.Tracks["BUILD"]);
-        Assert.Equal("Launch", config.Milestones["m1"]);
+        Assert.Equal("Launch", config.Milestones["m1"].Title);
         Assert.Equal("missing_track", service.RenameTrack("missing", "Missing").ErrorCode);
         Assert.Equal("missing_milestone", service.RenameMilestone("missing", "Missing").ErrorCode);
     }
@@ -1447,7 +1445,6 @@ public class ApplicationServiceTests
         var config = ProjectConfig.ReadConfig(projectRoot);
         Assert.False(config.Tracks.ContainsKey("UI"));
         Assert.False(config.Milestones.ContainsKey("m2"));
-        Assert.False(config.MilestonePriorities.ContainsKey("m2"));
     }
 
     [Fact]
@@ -1708,9 +1705,24 @@ public class ApplicationServiceTests
         File.WriteAllText(Path.Combine(projectRoot.StatesPath, "todo", "PM-9999.ref"), "../../tasks/PM-9999.md");
         File.WriteAllText(Path.Combine(projectRoot.WikiPath, "bad.md"), "not markdown");
         projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", null), ["PM-9999"]);
-        projectRoot.Config!.MilestonePriorities["m1"] = "later";
-        projectRoot.Config.MilestonePriorities["missing"] = "urgent";
-        projectRoot.Config.WriteConfig(projectRoot);
+        File.WriteAllText(projectRoot.ConfigPath, """
+                                                  name: Test Project
+                                                  idWidth: 4
+                                                  idPrefix: PM
+                                                  nextIdServiceUrl: http://ids.example.test
+                                                  taskStates:
+                                                    todo: Queued
+                                                    review: Review
+                                                    done: Done
+                                                  tracks:
+                                                    PM: Project
+                                                  milestones:
+                                                    m1: Milestone 1
+                                                  milestonePriorities:
+                                                    m1: later
+                                                    missing: urgent
+                                                  """);
+        Assert.True(projectRoot.TryReloadConfig());
         var service = new ProjectValidationService(projectRoot);
 
         var result = service.ValidateProject();

@@ -118,21 +118,36 @@ public sealed class ProjectValidationService
 
     private void ValidateConfigMetadata(List<ProjectValidationIssue> issues)
     {
-        foreach (var (milestone, priority) in projectRoot.Config!.MilestonePriorities)
+        var config = projectRoot.Config!;
+        var configPath = projectRoot.RootPath == null
+            ? null
+            : Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile);
+
+        if (config.RequiresMilestoneSchemaMigration)
+            issues.Add(new ProjectValidationIssue(
+                "warning",
+                "legacy_milestone_schema",
+                "Milestones use the legacy scalar schema. Run pm doctor --fix to migrate them.",
+                configPath));
+
+        foreach (var (milestone, _) in config.LegacyMilestonePriorities)
         {
-            if (!projectRoot.Config.Milestones.ContainsKey(milestone))
+            if (!config.Milestones.ContainsKey(milestone))
                 issues.Add(new ProjectValidationIssue(
                     "error",
                     "unknown_milestone_priority",
                     $"Milestone priority references unknown milestone {milestone}.",
-                    projectRoot.RootPath == null ? null : Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile)));
+                    configPath));
+        }
 
-            if (!PriorityLevel.TryNormalize(priority, out _))
+        foreach (var (milestone, definition) in config.Milestones)
+        {
+            if (!PriorityLevel.TryNormalize(definition.Priority, out _))
                 issues.Add(new ProjectValidationIssue(
                     "error",
                     "invalid_milestone_priority",
-                    $"Milestone {milestone} has invalid priority {priority}.",
-                    projectRoot.RootPath == null ? null : Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile)));
+                    $"Milestone {milestone} has invalid priority {definition.Priority}.",
+                    configPath));
         }
     }
 

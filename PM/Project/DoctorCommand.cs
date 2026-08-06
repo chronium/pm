@@ -1,13 +1,31 @@
+using System.ComponentModel;
 using PM.Application;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace PM.Project;
 
-public class DoctorCommand(ProjectValidationService validationService) : Command<DoctorCommand.Settings>
+public class DoctorCommand(
+    ProjectValidationService validationService,
+    ProjectConfigService configService) : Command<DoctorCommand.Settings>
 {
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
+        if (settings.Fix)
+        {
+            var migration = configService.MigrateMilestoneSchema();
+            if (!migration.Success)
+            {
+                AnsiConsole.MarkupLineInterpolated(
+                    $"[red]{(migration.Message ?? "Project repair failed.").EscapeMarkup()}[/]");
+                return 1;
+            }
+
+            AnsiConsole.MarkupLine(migration.Payload
+                ? "Migrated milestone configuration to the structured schema."
+                : "Milestone configuration already uses the structured schema.");
+        }
+
         var result = validationService.ValidateProject();
         if (!result.Success)
         {
@@ -67,5 +85,8 @@ public class DoctorCommand(ProjectValidationService validationService) : Command
 
     public class Settings : CommandSettings
     {
+        [CommandOption("--fix")]
+        [Description("Apply supported project metadata repairs before validation")]
+        public bool Fix { get; init; }
     }
 }

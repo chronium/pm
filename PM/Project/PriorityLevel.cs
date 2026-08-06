@@ -61,8 +61,8 @@ public static class PriorityLevel
     public static string ResolveMilestoneDefault(ProjectConfig config, string? milestone)
     {
         if (string.IsNullOrWhiteSpace(milestone) ||
-            !config.MilestonePriorities.TryGetValue(milestone, out var configured) ||
-            !TryNormalize(configured, out var priority))
+            !config.Milestones.TryGetValue(milestone, out var definition) ||
+            !TryNormalize(definition.Priority, out var priority))
             return None;
 
         return priority;

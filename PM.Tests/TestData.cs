@@ -14,6 +14,15 @@ internal static class TestData
         Dictionary<string, string>? milestones = null,
         Dictionary<string, string>? milestonePriorities = null)
     {
+        var milestoneDefinitions = (milestones ?? new Dictionary<string, string>())
+            .ToDictionary(
+                milestone => milestone.Key,
+                milestone => new MilestoneDefinition
+                {
+                    Title = milestone.Value,
+                    Priority = milestonePriorities?.GetValueOrDefault(milestone.Key) ?? PriorityLevel.None,
+                });
+
         return new ProjectConfig
         {
             Name = name,
@@ -21,8 +30,7 @@ internal static class TestData
             IdPrefix = idPrefix,
             NextIdServiceUrl = nextIdServiceUrl,
             Tracks = tracks ?? new Dictionary<string, string> { [idPrefix] = idPrefix },
-            Milestones = milestones ?? new Dictionary<string, string>(),
-            MilestonePriorities = milestonePriorities ?? new Dictionary<string, string>(),
+            Milestones = milestoneDefinitions,
             TaskStates = new()
             {
                 ["todo"] = "Queued",

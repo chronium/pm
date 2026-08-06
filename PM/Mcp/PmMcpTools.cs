@@ -93,7 +93,7 @@ public sealed class PmMcpTools(
             projectRoot.RootPath,
             ToOptions(config.TaskStates),
             ToOptions(config.Tracks),
-            ToMilestones(config.Milestones, config.MilestonePriorities));
+            ToMilestones(config.Milestones));
 
         return McpToolResponse<ProjectPayload>.Ok($"Project {config.Name} loaded.", payload);
     }
@@ -1151,6 +1151,19 @@ public sealed class PmMcpTools(
                 milestone.Value,
                 priorities.TryGetValue(milestone.Key, out var configured) &&
                 PriorityLevel.TryNormalize(configured, out var priority)
+                    ? priority
+                    : PriorityLevel.None))
+            .ToList();
+    }
+
+    private static IReadOnlyList<MilestonePayload> ToMilestones(
+        IReadOnlyDictionary<string, MilestoneDefinition> milestones)
+    {
+        return milestones
+            .Select(milestone => new MilestonePayload(
+                milestone.Key,
+                milestone.Value.Title,
+                PriorityLevel.TryNormalize(milestone.Value.Priority, out var priority)
                     ? priority
                     : PriorityLevel.None))
             .ToList();

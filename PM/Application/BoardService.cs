@@ -120,7 +120,7 @@ public partial class BoardService(ProjectRoot projectRoot)
             config.Milestones
                 .Select(milestone => new BoardOption(
                     milestone.Key,
-                    milestone.Value,
+                    milestone.Value.Title,
                     PriorityLevel.Resolve(config, milestone.Key)))
                 .ToList(),
             stateOptions,
@@ -255,7 +255,9 @@ public partial class BoardService(ProjectRoot projectRoot)
     private string ResolveMilestoneTitle(string? milestone)
     {
         if (string.IsNullOrWhiteSpace(milestone)) return "Unassigned";
-        return projectRoot.Config!.Milestones.TryGetValue(milestone, out var title) ? title : milestone;
+        return projectRoot.Config!.Milestones.TryGetValue(milestone, out var definition)
+            ? definition.Title
+            : milestone;
     }
 
     private List<BoardTask> GetBoardTasks(
