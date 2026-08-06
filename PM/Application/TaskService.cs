@@ -51,8 +51,27 @@ public sealed record TaskSearchResult(
     int MatchCount,
     string Snippet);
 
-public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdService)
+public sealed class TaskService
 {
+    private readonly ProjectRoot projectRoot;
+    private readonly INextIdService nextIdService;
+    private readonly MilestoneActivationGraphService activationGraph;
+
+    public TaskService(ProjectRoot projectRoot, INextIdService nextIdService)
+        : this(projectRoot, nextIdService, new MilestoneActivationGraphService())
+    {
+    }
+
+    public TaskService(
+        ProjectRoot projectRoot,
+        INextIdService nextIdService,
+        MilestoneActivationGraphService activationGraph)
+    {
+        this.projectRoot = projectRoot;
+        this.nextIdService = nextIdService;
+        this.activationGraph = activationGraph;
+    }
+
     public ProjectRoot ProjectRoot => projectRoot;
     public INextIdService NextIdService => nextIdService;
 
@@ -378,6 +397,17 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             tasks.Add(task);
         }
 
+        var prospectiveTasks = tasks
+            .Where(task => !string.Equals(task.Milestone, milestone, StringComparison.Ordinal))
+            .Select(task => task with { Milestone = milestone })
+            .ToList();
+        if (prospectiveTasks.Count > 0)
+        {
+            var preflight = PreflightMilestonePlacements(prospectiveTasks);
+            if (!preflight.Success)
+                return AppResult<BulkMilestoneAssignmentResult>.Fail(preflight.ErrorCode!, preflight.Message!);
+        }
+
         var changed = 0;
         foreach (var task in tasks)
         {
@@ -444,6 +474,13 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
 
         var oldTask = TaskItem.Parse(projectRoot.TryReadTaskFile(taskId, out var oldContent) ? oldContent : string.Empty);
         var editedTask = TaskItem.Parse(editedContent);
+        if (oldTask != null && editedTask != null &&
+            !string.Equals(oldTask.Milestone, editedTask.Milestone, StringComparison.Ordinal))
+        {
+            var preflight = PreflightMilestonePlacements([editedTask]);
+            if (!preflight.Success) return preflight;
+        }
+
         if (oldTask != null && editedTask != null && projectRoot.TryGetState(oldTask, out var state))
             projectRoot.MoveTaskOrderScope(taskId,
                 new TaskOrderScope(projectRoot.ResolveTaskTrack(oldTask), state, oldTask.Milestone),
@@ -523,6 +560,13 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
 
         if (!changed)
             return AppResult<TaskMutationResult>.Ok(new TaskMutationResult(false, task));
+
+        if (!string.Equals(updated.Milestone, task.Milestone, StringComparison.Ordinal))
+        {
+            var preflight = PreflightMilestonePlacements([updated]);
+            if (!preflight.Success)
+                return AppResult<TaskMutationResult>.Fail(preflight.ErrorCode!, preflight.Message!);
+        }
 
         updated = updated with { ModifiedAt = DateTime.UtcNow };
         projectRoot.MoveTaskOrderScope(task.Id,
@@ -657,6 +701,13 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
             Description = description ?? string.Empty,
         };
 
+        if (!string.Equals(updated.Milestone, task.Milestone, StringComparison.Ordinal))
+        {
+            var preflight = PreflightMilestonePlacements([updated]);
+            if (!preflight.Success)
+                return AppResult<TaskItem>.Fail(preflight.ErrorCode!, preflight.Message!);
+        }
+
         try
         {
             projectRoot.MoveTaskOrderScope(task.Id,
@@ -683,6 +734,22 @@ public sealed class TaskService(ProjectRoot projectRoot, INextIdService nextIdSe
         {
             // Preserve the bounded create failure.
         }
+    }
+
+    private AppResult PreflightMilestonePlacements(IReadOnlyList<TaskItem> updatedTasks)
+    {
+        var tasksById = projectRoot.GetAllTasks()
+            .GroupBy(task => task.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        foreach (var task in updatedTasks)
+            tasksById[task.Id] = task;
+
+        var cycle = activationGraph.Build(projectRoot.Config!, tasksById).Cycles.FirstOrDefault();
+        return cycle == null
+            ? AppResult.Ok()
+            : AppResult.Fail(
+                "activation_cycle",
+                $"Task milestone placement would create an activation cycle: {string.Join(" -> ", cycle.Path)}.");
     }
 
     private void TryRestoreTask(TaskItem task, TaskItem updated, string state)
