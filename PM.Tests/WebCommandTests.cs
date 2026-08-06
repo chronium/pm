@@ -148,7 +148,7 @@ public class WebCommandTests
 
     private static WebCommand CreateWebCommand(ProjectRoot projectRoot) => new(
         projectRoot,
-        new BoardService(projectRoot),
+        TestBoardServices.Create(projectRoot),
         TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
         new ProjectConfigService(projectRoot),
         new WikiService(projectRoot),
@@ -204,7 +204,7 @@ public class WebCommandTests
         Action<string> onOpen,
         IAngularAssetStore? angularAssets = null) : WebCommand(
         projectRoot,
-        new BoardService(projectRoot),
+        TestBoardServices.Create(projectRoot),
         TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
         new ProjectConfigService(projectRoot),
         new WikiService(projectRoot),

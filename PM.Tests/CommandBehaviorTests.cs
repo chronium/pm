@@ -16,7 +16,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = new ProjectRoot();
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, _) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -454,7 +454,7 @@ public class CommandBehaviorTests
     {
         using var workspace = new TempWorkingDirectory();
         var projectRoot = await workspace.CreateProject(TestData.Config(idPrefix: "PM", idWidth: 4));
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -481,7 +481,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(newer);
         projectRoot.UpdateTaskState(older, "todo");
         projectRoot.UpdateTaskState(newer, "todo");
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -501,7 +501,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(review);
         projectRoot.UpdateTaskState(todo, "todo");
         projectRoot.UpdateTaskState(review, "review");
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
 
@@ -528,7 +528,7 @@ public class CommandBehaviorTests
             """);
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings { State = "todo" });
 
@@ -552,7 +552,7 @@ public class CommandBehaviorTests
         projectRoot.WriteTask(unassigned);
         projectRoot.UpdateTaskState(assigned, "review");
         projectRoot.UpdateTaskState(unassigned, "todo");
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command, new ListCommand.Settings());
 
@@ -582,7 +582,7 @@ public class CommandBehaviorTests
         projectRoot.UpdateTaskState(wrongTrack, "review");
         projectRoot.UpdateTaskState(wrongMilestone, "review");
         projectRoot.UpdateTaskState(wrongState, "todo");
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var (exitCode, output) = await ExecuteListCommand(command,
             new ListCommand.Settings { Track = "BUILD", Milestone = "m1", State = "review" });
@@ -815,16 +815,36 @@ public class CommandBehaviorTests
     public async Task TaskNextCommandDefaultsToReadyTasksAndSupportsScopesAndBlockedFallback()
     {
         using var workspace = new TempWorkingDirectory();
-        var projectRoot = await workspace.CreateProject(TestData.Config(
+        var config = TestData.Config(
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
-            milestones: new Dictionary<string, string> { ["m1"] = "First" }));
+            milestones: new Dictionary<string, string> { ["m1"] = "First", ["inactive"] = "Inactive" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-9998",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["inactive"].RequiredActivationTriggers = ["entry"];
+        var projectRoot = await workspace.CreateProject(config);
         var ready = TestData.Task("PM-0001", "Ready task", track: "PM");
         var blocked = TestData.Task("BUILD-0001", "Blocked task", track: "BUILD", milestone: "m1",
             dependsOn: ["BUILD-9999"]);
+        var inactive = TestData.Task("PM-0002", "Inactive ready", track: "PM", milestone: "inactive");
         projectRoot.WriteTask(ready);
         projectRoot.WriteTask(blocked);
+        projectRoot.WriteTask(inactive);
         projectRoot.UpdateTaskState(ready, "todo");
         projectRoot.UpdateTaskState(blocked, "todo");
+        projectRoot.UpdateTaskState(inactive, "todo");
         var command = new TaskNextCommand(CreateLinkedReads(projectRoot));
 
         var (readyExit, readyOutput) = await CaptureConsole(() =>
@@ -833,6 +853,9 @@ public class CommandBehaviorTests
             new TaskNextCommand.Settings { Track = "BUILD", Milestone = "m1" }, CancellationToken.None));
         var (blockedExit, blockedOutput) = await CaptureConsole(() => command.ExecuteAsync(null!,
             new TaskNextCommand.Settings { Track = "BUILD", Milestone = "m1", IncludeBlocked = true },
+            CancellationToken.None));
+        var (inactiveExit, inactiveOutput) = await CaptureConsole(() => command.ExecuteAsync(null!,
+            new TaskNextCommand.Settings { Milestone = "inactive", IncludeBlocked = true },
             CancellationToken.None));
 
         Assert.Equal(0, readyExit);
@@ -843,6 +866,9 @@ public class CommandBehaviorTests
         Assert.Equal(0, blockedExit);
         Assert.Contains("BUILD-0001", blockedOutput);
         Assert.Contains("missing BUILD-9999", blockedOutput);
+        Assert.Equal(0, inactiveExit);
+        Assert.DoesNotContain("PM-0002", inactiveOutput);
+        Assert.Contains("unmet activation triggers: entry", inactiveOutput);
     }
 
     [Fact]
@@ -1280,7 +1306,7 @@ public class CommandBehaviorTests
         var task = TestData.Task("PM-0001", "Selected task");
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
-        var command = new ListCommand(new BoardService(projectRoot), CreateLinkedReads(projectRoot));
+        var command = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
 
         var invalid = new ListCommand.Settings { Project = "current", Family = true }.Validate();
         var selected = await ExecuteListCommand(command, new ListCommand.Settings { Project = "current" });

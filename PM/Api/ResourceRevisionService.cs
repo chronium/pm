@@ -28,7 +28,15 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         if (!projectRoot.TryGetState(task, out var state))
             return AppResult<string>.Fail("missing_task_state", $"Task {id} has no state.");
 
-        return AppResult<string>.Ok(Hash("task", markdown, state));
+        var resolved = boardService.GetTask(id);
+        if (!resolved.Success)
+            return AppResult<string>.Fail(resolved.ErrorCode!, resolved.Message!);
+
+        return AppResult<string>.Ok(Hash(
+            "task",
+            markdown,
+            state,
+            JsonSerializer.Serialize(resolved.Payload!.Activation, CanonicalJsonOptions)));
     }
 
     public AppResult<string> GetWikiPageRevision(string path)
@@ -97,7 +105,8 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
                 group.States.Select(state => new BoardRevisionStateGroup(
                     state.Key,
                     state.Name,
-                    state.Tasks.Select(task => task.Task.Id).ToList())).ToList())).ToList());
+                    state.Tasks.Select(task => task.Task.Id).ToList())).ToList())).ToList(),
+            board.MilestoneActivation);
         var json = JsonSerializer.Serialize(canonical, CanonicalJsonOptions);
         return AppResult<string>.Ok(Hash("board", json));
     }
@@ -121,6 +130,7 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
             task.PrioritySource,
             task.State,
             task.Dependencies,
+            task.Activation,
             task.DescriptionPreview,
             task.Task.CreatedAt,
             task.Task.ModifiedAt,
@@ -151,7 +161,8 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         IReadOnlyList<BoardOption> Milestones,
         IReadOnlyList<BoardOption> States,
         IReadOnlyList<BoardRevisionTask> Tasks,
-        IReadOnlyList<BoardRevisionMilestoneGroup> MilestoneGroups);
+        IReadOnlyList<BoardRevisionMilestoneGroup> MilestoneGroups,
+        MilestoneActivationSnapshot MilestoneActivation);
 
     private sealed record BoardRevisionMilestoneGroup(
         string? Key,
@@ -172,6 +183,7 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         string PrioritySource,
         string State,
         DependencyStatus Dependencies,
+        TaskActivationEligibility Activation,
         string DescriptionPreview,
         DateTime CreatedAt,
         DateTime ModifiedAt,

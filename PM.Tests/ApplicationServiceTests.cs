@@ -565,7 +565,7 @@ public class ApplicationServiceTests
         Assert.Equal("invalid_priority", invalid.ErrorCode);
         Assert.Contains("priority: none", File.ReadAllText(projectRoot.GetTaskFilePath("PM-0001")));
 
-        var boardTask = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!.Tasks.Single();
+        var boardTask = TestBoardServices.Create(projectRoot).GetBoard(new BoardQuery()).Payload!.Tasks.Single();
         Assert.Equal("none", boardTask.Priority);
         Assert.Equal("task", boardTask.PrioritySource);
     }
@@ -634,7 +634,7 @@ public class ApplicationServiceTests
         var reordered = service.ReorderTasks("PM", "todo", ["PM-0002", "PM-0001", "PM-0003"]);
         var invalidDuplicate = service.ReorderTasks("PM", "todo", ["PM-0001", "PM-0001", "PM-0003"]);
         var invalidMissing = service.ReorderTasks("PM", "todo", ["PM-0001", "PM-0002"]);
-        var board = new BoardService(projectRoot).GetBoard(new BoardQuery("PM", null, "todo")).Payload!;
+        var board = TestBoardServices.Create(projectRoot).GetBoard(new BoardQuery("PM", null, "todo")).Payload!;
 
         Assert.True(reordered.Success);
         Assert.True(reordered.Payload!.Changed);
@@ -868,7 +868,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(todo, "todo");
         projectRoot.UpdateTaskState(review, "review");
         projectRoot.UpdateTaskState(build, "todo");
-        var service = new BoardService(projectRoot);
+        var service = TestBoardServices.Create(projectRoot);
 
         var next = service.GetNextTask(new NextTaskQuery()).Payload!;
         var filtered = service.GetNextTask(new NextTaskQuery("BUILD")).Payload!;
@@ -896,7 +896,7 @@ public class ApplicationServiceTests
             projectRoot.WriteTask(task);
             projectRoot.UpdateTaskState(task, "todo");
         }
-        var service = new BoardService(projectRoot);
+        var service = TestBoardServices.Create(projectRoot);
 
         var next = service.GetNextTask(new NextTaskQuery("BUILD", "m2", ReadyOnly: true));
         var invalid = service.GetNextTask(new NextTaskQuery(Milestone: "missing"));
@@ -929,7 +929,7 @@ public class ApplicationServiceTests
             projectRoot.UpdateTaskState(task, "todo");
         }
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.Equal("PM-0003", next.Task!.Task.Id);
         Assert.Equal("m2", next.Task.Milestone);
@@ -963,7 +963,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(todo, "todo");
         projectRoot.UpdateTaskState(review, "review");
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.Equal("PM-0002", next.Task!.Task.Id);
         Assert.Equal("urgent", next.Task.Priority);
@@ -994,9 +994,9 @@ public class ApplicationServiceTests
             projectRoot.UpdateTaskState(task, "todo");
         }
 
-        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var board = TestBoardServices.Create(projectRoot).GetBoard(new BoardQuery()).Payload!;
         var byId = board.Tasks.ToDictionary(task => task.Task.Id);
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.Equal("high", byId["PM-0001"].Priority);
         Assert.Equal("task", byId["PM-0001"].PrioritySource);
@@ -1022,7 +1022,7 @@ public class ApplicationServiceTests
             projectRoot.UpdateTaskState(task, "todo");
         }
 
-        var service = new BoardService(projectRoot);
+        var service = TestBoardServices.Create(projectRoot);
         var first = service.GetNextTask(new NextTaskQuery()).Payload!;
         var readyOnly = service.GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
         projectRoot.UpdateTaskState(dependency, "done");
@@ -1047,7 +1047,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(blocked);
         projectRoot.UpdateTaskState(blocked, "todo");
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.True(next.Found);
         Assert.Equal("PM-0001", next.Task!.Task.Id);
@@ -1064,7 +1064,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(blocked);
         projectRoot.UpdateTaskState(blocked, "todo");
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
 
         Assert.False(next.Found);
         Assert.Null(next.Task);
@@ -1084,7 +1084,7 @@ public class ApplicationServiceTests
         projectRoot.UpdateTaskState(projectReady, "todo");
         projectRoot.UpdateTaskState(buildBlocked, "todo");
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery("BUILD", ReadyOnly: true)).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery("BUILD", ReadyOnly: true)).Payload!;
 
         Assert.False(next.Found);
         Assert.Null(next.Task);
@@ -1099,7 +1099,7 @@ public class ApplicationServiceTests
             tracks: new Dictionary<string, string> { ["PM"] = "Project", ["BUILD"] = "Build" },
             milestones: new Dictionary<string, string> { ["m1"] = "First" }));
 
-        var next = new BoardService(projectRoot)
+        var next = TestBoardServices.Create(projectRoot)
             .GetNextTask(new NextTaskQuery("BUILD", "m1", ReadyOnly: true)).Payload!;
 
         Assert.Equal("No dependency-ready actionable task found for track BUILD and milestone m1.", next.Reason);
@@ -1119,7 +1119,7 @@ public class ApplicationServiceTests
             projectRoot.UpdateTaskState(task, "todo");
         }
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.Equal("PM-0002", next.Task!.Task.Id);
     }
@@ -1145,7 +1145,7 @@ public class ApplicationServiceTests
         }
         projectRoot.SetTaskOrder(new TaskOrderScope("PM", "todo", "m1"), ["PM-0001", "PM-0002"]);
 
-        var next = new BoardService(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var next = TestBoardServices.Create(projectRoot).GetNextTask(new NextTaskQuery()).Payload!;
 
         Assert.Equal("PM-0001", next.Task!.Task.Id);
     }
@@ -1167,7 +1167,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(newer);
         projectRoot.UpdateTaskState(older, "todo");
         projectRoot.UpdateTaskState(newer, "todo");
-        var service = new BoardService(projectRoot);
+        var service = TestBoardServices.Create(projectRoot);
 
         var newest = service.GetNextTask(new NextTaskQuery()).Payload!;
         projectRoot.WriteTask(older with { ModifiedAt = newer.ModifiedAt });
@@ -1182,8 +1182,8 @@ public class ApplicationServiceTests
     {
         using var emptyWorkspace = new TempWorkingDirectory();
         var emptyRoot = await emptyWorkspace.CreateProject();
-        var empty = new BoardService(emptyRoot).GetNextTask(new NextTaskQuery());
-        var emptyReadyOnly = new BoardService(emptyRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true));
+        var empty = TestBoardServices.Create(emptyRoot).GetNextTask(new NextTaskQuery());
+        var emptyReadyOnly = TestBoardServices.Create(emptyRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true));
 
         Assert.True(empty.Success);
         Assert.False(empty.Payload!.Found);
@@ -1198,8 +1198,8 @@ public class ApplicationServiceTests
         doneRoot.WriteTask(doneTask);
         doneRoot.UpdateTaskState(doneTask, "done");
 
-        var doneOnly = new BoardService(doneRoot).GetNextTask(new NextTaskQuery()).Payload!;
-        var doneOnlyReadyOnly = new BoardService(doneRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
+        var doneOnly = TestBoardServices.Create(doneRoot).GetNextTask(new NextTaskQuery()).Payload!;
+        var doneOnlyReadyOnly = TestBoardServices.Create(doneRoot).GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
 
         Assert.False(doneOnly.Found);
         Assert.Null(doneOnly.Task);
@@ -1473,7 +1473,7 @@ public class ApplicationServiceTests
         projectRoot.WriteTask(wrong);
         projectRoot.UpdateTaskState(match, "review");
         projectRoot.UpdateTaskState(wrong, "todo");
-        var service = new BoardService(projectRoot);
+        var service = TestBoardServices.Create(projectRoot);
 
         var board = service.GetBoard(new BoardQuery("BUILD", "m1", "review"),
             BoardService.CliDescriptionPreviewLength).Payload!;

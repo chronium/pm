@@ -89,7 +89,7 @@ public class AgentRunOrchestrationTests
         var runner = new FakeRunnerClient("runner-test");
         var cache = new AgentRunCache(root, TimeProvider.System,
             new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, "cache") });
-        var service = new AgentRunService(root, new BoardService(root), git, cache, runner, TimeProvider.System);
+        var service = new AgentRunService(root, TestBoardServices.Create(root), git, cache, runner, TimeProvider.System);
 
         var preflight = await service.Preflight(Selection("runner-test"));
 
@@ -126,7 +126,7 @@ public class AgentRunOrchestrationTests
             AgentRunLinkedContextRequirement.Required,
             [AgentRunLinkedContextScope.Wiki]);
         var resolver = new FakeLinkedContextResolver(linked);
-        var service = new AgentRunService(root, new BoardService(root), git,
+        var service = new AgentRunService(root, TestBoardServices.Create(root), git,
             new AgentRunCache(root, TimeProvider.System,
                 new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, "cache") }),
             runner, TimeProvider.System, resolver);
@@ -169,7 +169,7 @@ public class AgentRunOrchestrationTests
             new AgentRunRepository("git@github.com:chronium/engine.git", new string('c', 40)),
             AgentRunLinkedContextRequirement.Required,
             [AgentRunLinkedContextScope.Wiki]);
-        var service = new AgentRunService(root, new BoardService(root), new FakeGitInspector(),
+        var service = new AgentRunService(root, TestBoardServices.Create(root), new FakeGitInspector(),
             new AgentRunCache(root, TimeProvider.System,
                 new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, "cache") }),
             runner, TimeProvider.System, new FakeLinkedContextResolver(linked));
@@ -197,7 +197,7 @@ public class AgentRunOrchestrationTests
         var root = await Project(workspace);
         var git = new FakeGitInspector();
         var runner = new FakeRunnerClient("runner-test");
-        var service = new AgentRunService(root, new BoardService(root), git,
+        var service = new AgentRunService(root, TestBoardServices.Create(root), git,
             new AgentRunCache(root, TimeProvider.System,
                 new AgentRunCacheOptions { RootPath = Path.Combine(workspace.Path, "cache") }),
             runner, TimeProvider.System);
@@ -225,7 +225,7 @@ public class AgentRunOrchestrationTests
         var git = new FakeGitInspector { Ready = false };
         var runner = new FakeRunnerClient("runner-test");
         var cacheRoot = Path.Combine(workspace.Path, "cache");
-        var service = new AgentRunService(root, new BoardService(root), git,
+        var service = new AgentRunService(root, TestBoardServices.Create(root), git,
             new AgentRunCache(root, TimeProvider.System, new AgentRunCacheOptions { RootPath = cacheRoot }),
             runner, TimeProvider.System);
 
@@ -290,7 +290,7 @@ public class AgentRunOrchestrationTests
 
         var runner = new FakeRunnerClient("runner-test", patch);
         var cache = await CompletedRunCache(workspace, root, runner, remoteUrl, head);
-        var service = new AgentRunService(root, new BoardService(root), new FakeGitInspector(), cache,
+        var service = new AgentRunService(root, TestBoardServices.Create(root), new FakeGitInspector(), cache,
             runner, TimeProvider.System);
 
         var preflight = await service.PreflightPatchCollection("run-patch-test");
@@ -332,7 +332,7 @@ public class AgentRunOrchestrationTests
 
         var runner = new FakeRunnerClient("runner-test", patch);
         var cache = await CompletedRunCache(workspace, root, runner, remoteUrl, head);
-        var service = new AgentRunService(root, new BoardService(root), new FakeGitInspector(), cache,
+        var service = new AgentRunService(root, TestBoardServices.Create(root), new FakeGitInspector(), cache,
             runner, TimeProvider.System);
 
         var preflight = await service.PreflightPatchCollection("run-patch-test");
@@ -360,7 +360,7 @@ public class AgentRunOrchestrationTests
 
         var authorityRunner = new FakeRunnerClient("runner-test", patch);
         var authorityCache = await CompletedRunCache(workspace, root, authorityRunner, remoteUrl, head);
-        var authorityService = new AgentRunService(root, new BoardService(root), new FakeGitInspector(),
+        var authorityService = new AgentRunService(root, TestBoardServices.Create(root), new FakeGitInspector(),
             authorityCache, authorityRunner, TimeProvider.System);
         var authority = await authorityService.PreflightPatchCollection("run-patch-test");
 
@@ -374,7 +374,7 @@ public class AgentRunOrchestrationTests
         corrupt[^1] ^= 0x01;
         var corruptRunner = new FakeRunnerClient("runner-test", patch, corrupt);
         var corruptCache = await CompletedRunCache(workspace, root, corruptRunner, remoteUrl, head);
-        var corruptService = new AgentRunService(root, new BoardService(root), new FakeGitInspector(),
+        var corruptService = new AgentRunService(root, TestBoardServices.Create(root), new FakeGitInspector(),
             corruptCache, corruptRunner, TimeProvider.System);
         var corruptResult = await corruptService.PreflightPatchCollection("run-patch-test");
 

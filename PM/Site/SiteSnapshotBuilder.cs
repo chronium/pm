@@ -171,6 +171,9 @@ public sealed class SiteSnapshotBuilder(
     private static BoardNavigationOptionResponse ToNavigationOption(BoardNavigationOption option) =>
         new(option.Key, option.Name, option.RemainingCount);
 
+    private static BoardNavigationOptionResponse ToNavigationOption(BoardMilestoneNavigationOption option) =>
+        new(option.Key, option.Name, option.RemainingCount);
+
     private static AppResult<SiteSnapshot> Fail<T>(AppResult<T> result) =>
         AppResult<SiteSnapshot>.Fail(result.ErrorCode ?? "site_snapshot_failed",
             result.Message ?? "The project snapshot could not be built.");

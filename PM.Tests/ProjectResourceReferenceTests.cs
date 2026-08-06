@@ -150,7 +150,7 @@ public sealed class ProjectResourceReferenceTests
         var validation = await new ProjectValidationService(root).ValidateProjectAsync();
         Assert.DoesNotContain(validation.Payload!.Issues, issue => issue.Code == "missing_dependency");
 
-        var boardTask = new BoardService(root).GetTask("PM-0001").Payload!;
+        var boardTask = TestBoardServices.Create(root).GetTask("PM-0001").Payload!;
         Assert.False(boardTask.Dependencies.Ready);
         Assert.Equal(["pm://project/prj_other/task/OTHER-0001"], boardTask.Dependencies.Unavailable);
     }

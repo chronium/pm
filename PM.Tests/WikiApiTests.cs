@@ -340,7 +340,7 @@ public partial class ApiContractTests
     {
         using var workspace = new TempWorkingDirectory();
         var root = await workspace.CreateProject();
-        var revisions = new ResourceRevisionService(root, new Application.BoardService(root));
+        var revisions = new ResourceRevisionService(root, TestBoardServices.Create(root));
         Assert.Equal("invalid_wiki_path", revisions.GetWikiPageRevision("../escape").ErrorCode);
 
         var (app, client) = await CreateApiClient(root);

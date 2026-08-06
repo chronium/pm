@@ -49,7 +49,7 @@ public partial class ApiContractTests
     {
         using var workspace = new TempWorkingDirectory();
         var root = await workspace.CreateProject();
-        var revision = new ResourceRevisionService(root, new BoardService(root))
+        var revision = new ResourceRevisionService(root, TestBoardServices.Create(root))
             .GetProjectConfigRevision().Payload!;
         var (app, client) = await CreateApiClient(root);
         await using (app)
@@ -399,7 +399,7 @@ public partial class ApiContractTests
         WebCommand.ConfigureApiServices(builder.Services);
         var app = builder.Build();
         var configService = new ProjectConfigService(projectRoot);
-        var boardService = new BoardService(projectRoot);
+        var boardService = TestBoardServices.Create(projectRoot);
         var nextIds = nextIdService ?? new ApiNextIdService();
         var family = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
         var taskService = TestTaskServices.Create(projectRoot, nextIds);

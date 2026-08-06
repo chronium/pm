@@ -137,7 +137,7 @@ public class AgentRunApiTests
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
         WebCommand.ConfigureApiServices(builder.Services);
         var app = builder.Build();
-        var board = new BoardService(root);
+        var board = TestBoardServices.Create(root);
         app.MapApiV1(root, new ProjectConfigService(root), new ProjectValidationService(root), board,
             TestTaskServices.Create(root, new StubNextIdService()), new WikiService(root),
             new ResourceRevisionService(root, board), agentRunService: runs, agentRunnerClient: runners);

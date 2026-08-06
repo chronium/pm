@@ -150,6 +150,9 @@ public static class BoardApiEndpoints
     private static BoardNavigationOptionResponse ToNavigationOption(BoardNavigationOption option) =>
         new(option.Key, option.Name, option.RemainingCount);
 
+    private static BoardNavigationOptionResponse ToNavigationOption(BoardMilestoneNavigationOption option) =>
+        new(option.Key, option.Name, option.RemainingCount);
+
     internal static DateTime ToUtc(DateTime value) => value.Kind == DateTimeKind.Utc
         ? value
         : value.ToUniversalTime();

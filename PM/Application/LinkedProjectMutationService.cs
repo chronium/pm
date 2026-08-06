@@ -169,7 +169,7 @@ public sealed class LinkedProjectMutationService(
 
     private LinkedProjectMutationTarget CreateTarget(string projectId, ProjectRoot root, bool isCurrent)
     {
-        var board = new BoardService(root);
+        var board = new BoardService(root, new MilestoneActivationResolver(root));
         return new LinkedProjectMutationTarget(
             projectId,
             isCurrent,

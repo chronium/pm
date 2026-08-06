@@ -231,7 +231,7 @@ public class SiteExportTests
         new(
             projectRoot,
             new ProjectConfigService(projectRoot),
-            new BoardService(projectRoot),
+            TestBoardServices.Create(projectRoot),
             new WikiService(projectRoot),
             new LinkedProjectService(projectRoot),
             LinkedProjectFamilyService.CreateDefault(projectRoot));

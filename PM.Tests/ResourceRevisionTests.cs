@@ -107,8 +107,77 @@ public class ResourceRevisionTests
         Assert.NotEqual(ready, Revision(revisions.GetBoardRevision(query)));
     }
 
+    [Fact]
+    public async Task BoardAndTaskRevisionsTrackActivationAndDeliveryState()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                },
+                ["progress"] = new()
+                {
+                    Title = "Progress",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-0002",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["beta"].RequiredActivationTriggers = ["entry"];
+        var root = await workspace.CreateProject(config);
+        var task = TestData.Task("PM-0001", "Beta work", milestone: "beta");
+        root.WriteTask(task);
+        root.UpdateTaskState(task, "todo");
+        var requirement = TestData.Task("PM-0002", "Requirement progress");
+        root.WriteTask(requirement);
+        root.UpdateTaskState(requirement, "todo");
+        var revisions = CreateRevisions(root);
+
+        var inactiveBoard = Revision(revisions.GetBoardRevision(new BoardQuery()));
+        var inactiveTask = Revision(revisions.GetTaskRevision(task.Id));
+        root.UpdateTaskState(requirement, "done");
+        var requirementSatisfiedBoard = Revision(revisions.GetBoardRevision(new BoardQuery()));
+
+        root.Config!.ActivationTriggers["entry"].Activation = new ActivationRecord
+        {
+            At = new DateTimeOffset(2026, 8, 6, 8, 15, 0, TimeSpan.Zero),
+            Mode = ActivationMode.Manual,
+        };
+        root.Config.WriteConfig(root);
+        Assert.True(root.TryReloadConfig());
+        var activeBoard = Revision(revisions.GetBoardRevision(new BoardQuery()));
+        var activeTask = Revision(revisions.GetTaskRevision(task.Id));
+
+        root.Config!.Milestones["beta"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 6, 9, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with one open task.",
+            AcceptedTaskIds = [task.Id],
+        };
+        root.Config.WriteConfig(root);
+        Assert.True(root.TryReloadConfig());
+        var deliveredBoard = Revision(revisions.GetBoardRevision(new BoardQuery()));
+        var deliveredTask = Revision(revisions.GetTaskRevision(task.Id));
+
+        Assert.NotEqual(inactiveBoard, requirementSatisfiedBoard);
+        Assert.NotEqual(requirementSatisfiedBoard, activeBoard);
+        Assert.NotEqual(inactiveTask, activeTask);
+        Assert.NotEqual(activeBoard, deliveredBoard);
+        Assert.NotEqual(activeTask, deliveredTask);
+    }
+
     private static ResourceRevisionService CreateRevisions(ProjectRoot root) =>
-        new(root, new BoardService(root));
+        new(root, TestBoardServices.Create(root));
 
     private static string Revision(AppResult<string> result)
     {

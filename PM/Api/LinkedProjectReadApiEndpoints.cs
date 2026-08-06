@@ -562,7 +562,8 @@ public static class LinkedProjectReadApiEndpoints
             else mutationFailure = resolved;
         }
 
-        var board = mutationTarget?.Board ?? new BoardService(member.Project);
+        var board = mutationTarget?.Board ??
+                    new BoardService(member.Project, new MilestoneActivationResolver(member.Project));
         context.HttpContext.Items[ContextKey] = new LinkedProjectReadContext(
             member,
             member.Project,

@@ -116,7 +116,7 @@ public sealed class LinkedProjectReadService
             cancellationToken.ThrowIfCancellationRequested();
             if (request.Scope == LinkedProjectReadScope.Family && !Supports(member.Project!, query)) continue;
 
-            var result = new BoardService(member.Project!).GetBoard(query);
+            var result = CreateBoardService(member.Project!).GetBoard(query);
             if (!result.Success)
             {
                 if (!CanContinue(request, member))
@@ -211,7 +211,7 @@ public sealed class LinkedProjectReadService
 
         var member = targets.Payload!.Members.Single();
         cancellationToken.ThrowIfCancellationRequested();
-        var result = new BoardService(member.Project!).GetTask(taskId.Trim());
+        var result = CreateBoardService(member.Project!).GetTask(taskId.Trim());
         if (!result.Success) return Failure<BoardTask>(result.ErrorCode, result.Message);
         if (!member.Project!.TryReadTaskFile(taskId.Trim(), out var markdown))
             return Failure<BoardTask>("missing_task", $"Task {taskId.Trim()} not found.");
@@ -286,7 +286,7 @@ public sealed class LinkedProjectReadService
         if (request.Scope == LinkedProjectReadScope.Current &&
             !activeProject.TryReadProjectId(out _))
         {
-            var local = new BoardService(activeProject).GetNextTask(query, descriptionPreviewLength);
+            var local = CreateBoardService(activeProject).GetNextTask(query, descriptionPreviewLength);
             return local.Success
                 ? AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
                     local.Payload!.Found, local.Payload.Task, null, local.Payload.Reason, []))
@@ -311,6 +311,7 @@ public sealed class LinkedProjectReadService
 
         var warnings = new ReadWarningCollector(targets.Payload.Warnings);
         var candidates = new List<RecommendationCandidate>();
+        ResolvedMilestone? scopedCurrentMilestone = null;
         for (var projectIndex = 0; projectIndex < members.Count; projectIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -319,7 +320,7 @@ public sealed class LinkedProjectReadService
                 !Supports(member.Project!, new BoardQuery(query.Track, query.Milestone)))
                 continue;
 
-            var board = new BoardService(member.Project!).GetBoard(
+            var board = CreateBoardService(member.Project!).GetBoard(
                 new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength);
             if (!board.Success)
             {
@@ -329,9 +330,14 @@ public sealed class LinkedProjectReadService
                 continue;
             }
 
+            if (request.Scope == LinkedProjectReadScope.Current && query.Milestone != null)
+                scopedCurrentMilestone = board.Payload!.MilestoneActivation.Milestones.SingleOrDefault(
+                    milestone => string.Equals(milestone.Key, query.Milestone, StringComparison.Ordinal));
+
             var owner = await BuildOwnerAsync(member, cancellationToken);
             candidates.AddRange(board.Payload!.Tasks
                 .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+                .Where(task => request.Scope != LinkedProjectReadScope.Current || task.Activation.IsEligible)
                 .Select(task => new RecommendationCandidate(
                     member, owner, task, projectIndex,
                     GetStateIndex(member.Project!, task),
@@ -373,7 +379,8 @@ public sealed class LinkedProjectReadService
 
         if (selected == null)
             return AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
-                false, null, null, BuildNoRecommendationReason(request, query), warnings.Items));
+                false, null, null,
+                BuildNoRecommendationReason(request, query, scopedCurrentMilestone), warnings.Items));
 
         var reason = $"Selected {selected.Task.Priority} priority task in " +
                      $"{selected.Owner.ProjectName} ({selected.Owner.ProjectId}), state {selected.Task.State}; " +
@@ -704,9 +711,13 @@ public sealed class LinkedProjectReadService
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static BoardService CreateBoardService(ProjectRoot project) =>
+        new(project, new MilestoneActivationResolver(project));
+
     private static string BuildNoRecommendationReason(
         LinkedProjectReadRequest request,
-        NextTaskQuery query)
+        NextTaskQuery query,
+        ResolvedMilestone? scopedMilestone = null)
     {
         var scope = request.Scope switch
         {
@@ -718,6 +729,11 @@ public sealed class LinkedProjectReadService
         if (query.Track != null) filters.Add($"track {query.Track}");
         if (query.Milestone != null) filters.Add($"milestone {query.Milestone}");
         var filter = filters.Count == 0 ? string.Empty : $" for {string.Join(" and ", filters)}";
+        if (scopedMilestone?.Lifecycle == MilestoneLifecycle.Inactive)
+            return $"No activation-eligible task found{scope}{filter}; milestone {scopedMilestone.Key} is inactive; " +
+                   $"unmet activation triggers: {string.Join(", ", scopedMilestone.UnmetActivationTriggers)}.";
+        if (scopedMilestone?.Lifecycle == MilestoneLifecycle.Delivered)
+            return $"No activation-eligible task found{scope}{filter}; milestone {scopedMilestone.Key} is delivered.";
         return query.ReadyOnly
             ? $"No dependency-ready actionable task found{scope}{filter}."
             : $"No actionable task found{scope}{filter}.";

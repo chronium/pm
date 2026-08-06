@@ -13,17 +13,25 @@ public sealed record BoardData(
     IReadOnlyList<BoardOption> States,
     IReadOnlyList<BoardTask> Tasks,
     IReadOnlyList<BoardMilestoneGroup> MilestoneGroups,
-    BoardQuery Query);
+    BoardQuery Query,
+    MilestoneActivationSnapshot MilestoneActivation);
 
 public sealed record BoardOption(string Key, string Name, string Priority = PriorityLevel.None);
 
 public sealed record BoardNavigationData(
     int RemainingCount,
     IReadOnlyList<BoardNavigationOption> Tracks,
-    IReadOnlyList<BoardNavigationOption> Milestones,
+    IReadOnlyList<BoardMilestoneNavigationOption> Milestones,
     BoardData Board);
 
 public sealed record BoardNavigationOption(string Key, string Name, int RemainingCount);
+
+public sealed record BoardMilestoneNavigationOption(
+    string Key,
+    string Name,
+    int RemainingCount,
+    MilestoneLifecycle Lifecycle,
+    IReadOnlyList<string> UnmetActivationTriggers);
 
 public sealed record BoardMilestoneGroup(string? Key, string Name, IReadOnlyList<BoardStateGroup> States);
 
@@ -37,9 +45,17 @@ public sealed record BoardTask(
     string PrioritySource,
     string State,
     DependencyStatus Dependencies,
+    TaskActivationEligibility Activation,
     string DescriptionPreview,
     string FilePath,
     string? Markdown = null);
+
+public sealed record TaskActivationEligibility(
+    bool IsEligible,
+    MilestoneLifecycle? MilestoneLifecycle,
+    IReadOnlyList<string> RequiredActivationTriggers,
+    IReadOnlyList<string> UnmetActivationTriggers,
+    string Summary);
 
 public sealed record DependencyStatus(
     bool Ready,
@@ -55,7 +71,9 @@ public sealed record NextTaskQuery(string? Track = null, string? Milestone = nul
 
 public sealed record NextTaskResult(bool Found, BoardTask? Task, string Reason);
 
-public partial class BoardService(ProjectRoot projectRoot)
+public partial class BoardService(
+    ProjectRoot projectRoot,
+    MilestoneActivationResolver activationResolver)
 {
     public const int CliDescriptionPreviewLength = 48;
     public const int WebDescriptionPreviewLength = 96;
@@ -75,9 +93,9 @@ public partial class BoardService(ProjectRoot projectRoot)
         if (!string.IsNullOrWhiteSpace(query.Milestone) && !config.Milestones.ContainsKey(query.Milestone))
             return AppResult<BoardData>.Fail("invalid_milestone", $"Milestone {query.Milestone} not found.");
 
+        var readContext = ReadContext();
         var orderLookup = BuildOrderLookup(projectRoot.ReadTaskOrder());
-
-        var entries = GetBoardTasks(query, descriptionPreviewLength, orderLookup);
+        var entries = GetBoardTasks(query, descriptionPreviewLength, orderLookup, readContext);
 
         var milestoneKeys = entries
             .Select(entry => entry.Milestone)
@@ -126,7 +144,8 @@ public partial class BoardService(ProjectRoot projectRoot)
             stateOptions,
             entries,
             groups,
-            query));
+            query,
+            readContext.Activation));
     }
 
     public AppResult<BoardNavigationData> GetNavigation()
@@ -146,10 +165,17 @@ public partial class BoardService(ProjectRoot projectRoot)
                 track.Name,
                 remaining.Count(task => string.Equals(task.Track, track.Key, StringComparison.Ordinal))))
                 .ToList(),
-            board.Milestones.Select(milestone => new BoardNavigationOption(
-                milestone.Key,
-                milestone.Name,
-                remaining.Count(task => string.Equals(task.Milestone, milestone.Key, StringComparison.Ordinal))))
+            board.Milestones.Select(milestone =>
+            {
+                var resolved = board.MilestoneActivation.Milestones.Single(item =>
+                    string.Equals(item.Key, milestone.Key, StringComparison.Ordinal));
+                return new BoardMilestoneNavigationOption(
+                    milestone.Key,
+                    milestone.Name,
+                    remaining.Count(task => string.Equals(task.Milestone, milestone.Key, StringComparison.Ordinal)),
+                    resolved.Lifecycle,
+                    resolved.UnmetActivationTriggers);
+            })
                 .ToList(),
             board));
     }
@@ -159,19 +185,13 @@ public partial class BoardService(ProjectRoot projectRoot)
         if (!projectRoot.Exists || projectRoot.Config == null)
             return AppResult<BoardTask>.Fail("missing_project", "Project not found. Run pm init first.");
 
-        var tasks = projectRoot.GetAllTasks();
-        var task = tasks
-            .FirstOrDefault(item => string.Equals(item.Id, taskId, StringComparison.Ordinal));
+        var readContext = ReadContext();
+        var task = readContext.TasksById.GetValueOrDefault(taskId);
         if (task == null)
             return AppResult<BoardTask>.Fail("missing_task", $"Task with ID {taskId} not found.");
-        if (!projectRoot.TryGetState(task, out var state))
+        if (!readContext.StateById.TryGetValue(task.Id, out var state) || string.IsNullOrWhiteSpace(state))
             return AppResult<BoardTask>.Fail("missing_current_state", $"Task with ID {taskId} has no associated state.");
 
-        var tasksById = BuildTaskLookup(tasks);
-        var stateById = tasksById.Values.ToDictionary(
-            item => item.Id,
-            item => projectRoot.TryGetState(item, out var currentState) ? currentState : string.Empty,
-            StringComparer.Ordinal);
         var priority = PriorityLevel.Resolve(projectRoot.Config, task);
         return AppResult<BoardTask>.Ok(new BoardTask(
             task,
@@ -180,7 +200,8 @@ public partial class BoardService(ProjectRoot projectRoot)
             priority.Priority,
             priority.Source,
             state,
-            BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId()),
+            BuildDependencyStatus(task, readContext.TasksById, readContext.StateById, GetActiveProjectId()),
+            ResolveActivationEligibility(task, readContext.MilestonesByKey),
             GetDescriptionPreview(task.Description, descriptionPreviewLength),
             projectRoot.GetTaskFilePath(task.Id)));
     }
@@ -201,8 +222,11 @@ public partial class BoardService(ProjectRoot projectRoot)
         var orderLookup = BuildOrderLookup(projectRoot.ReadTaskOrder());
         var stateIndex = BuildStateIndex(config);
         var milestoneIndex = BuildMilestoneIndex(config);
-        var selected = GetBoardTasks(new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength, orderLookup)
+        var readContext = ReadContext();
+        var selected = GetBoardTasks(
+                new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength, orderLookup, readContext)
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+            .Where(task => task.Activation.IsEligible)
             .Where(task => !query.ReadyOnly || task.Dependencies.Ready)
             .OrderBy(task => task.Dependencies.Ready ? 0 : 1)
             .ThenByDescending(task => PriorityLevel.Rank(task.Priority))
@@ -222,7 +246,7 @@ public partial class BoardService(ProjectRoot projectRoot)
         return AppResult<NextTaskResult>.Ok(new NextTaskResult(
             false,
             null,
-            BuildNoNextTaskReason(query)));
+            BuildNoNextTaskReason(query, readContext.MilestonesByKey)));
     }
 
     public DependencyStatus GetDependencyStatus(TaskItem task)
@@ -263,20 +287,16 @@ public partial class BoardService(ProjectRoot projectRoot)
     private List<BoardTask> GetBoardTasks(
         BoardQuery query,
         int descriptionPreviewLength,
-        Dictionary<TaskOrderScope, Dictionary<string, int>> orderLookup)
+        Dictionary<TaskOrderScope, Dictionary<string, int>> orderLookup,
+        BoardReadContext readContext)
     {
-        var tasksById = BuildTaskLookup(projectRoot.GetAllTasks());
-        var stateById = tasksById.Values
-            .ToDictionary(
-                task => task.Id,
-                task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
-                StringComparer.Ordinal);
-
-        return tasksById.Values
+        return readContext.TasksById.Values
             .Select(task =>
             {
                 var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
-                var state = stateById.TryGetValue(task.Id, out var currentState) ? currentState : string.Empty;
+                var state = readContext.StateById.TryGetValue(task.Id, out var currentState)
+                    ? currentState
+                    : string.Empty;
                 return new BoardTask(
                     task,
                     projectRoot.ResolveTaskTrack(task),
@@ -284,7 +304,9 @@ public partial class BoardService(ProjectRoot projectRoot)
                     priority.Priority,
                     priority.Source,
                     state,
-                    BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId()),
+                    BuildDependencyStatus(
+                        task, readContext.TasksById, readContext.StateById, GetActiveProjectId()),
+                    ResolveActivationEligibility(task, readContext.MilestonesByKey),
                     GetDescriptionPreview(task.Description, descriptionPreviewLength),
                     projectRoot.GetTaskFilePath(task.Id));
             })
@@ -374,12 +396,24 @@ public partial class BoardService(ProjectRoot projectRoot)
         return $"Selected {task.Priority} priority task from {source} in state {task.State}, {milestone}; {task.Dependencies.Summary}.";
     }
 
-    private static string BuildNoNextTaskReason(NextTaskQuery query)
+    private static string BuildNoNextTaskReason(
+        NextTaskQuery query,
+        IReadOnlyDictionary<string, ResolvedMilestone> milestonesByKey)
     {
         var filters = new List<string>();
         if (!string.IsNullOrWhiteSpace(query.Track)) filters.Add($"track {query.Track}");
         if (!string.IsNullOrWhiteSpace(query.Milestone)) filters.Add($"milestone {query.Milestone}");
         var scope = filters.Count == 0 ? string.Empty : $" for {string.Join(" and ", filters)}";
+
+        if (!string.IsNullOrWhiteSpace(query.Milestone) &&
+            milestonesByKey.TryGetValue(query.Milestone, out var milestone))
+        {
+            if (milestone.Lifecycle == MilestoneLifecycle.Inactive)
+                return $"No activation-eligible task found{scope}; milestone {query.Milestone} is inactive; " +
+                       $"unmet activation triggers: {string.Join(", ", milestone.UnmetActivationTriggers)}.";
+            if (milestone.Lifecycle == MilestoneLifecycle.Delivered)
+                return $"No activation-eligible task found{scope}; milestone {query.Milestone} is delivered.";
+        }
 
         return query.ReadyOnly
             ? $"No dependency-ready actionable task found{scope}."
@@ -461,6 +495,58 @@ public partial class BoardService(ProjectRoot projectRoot)
             ? index
             : milestoneIndex.Count + 1;
     }
+
+    private BoardReadContext ReadContext()
+    {
+        var tasksById = BuildTaskLookup(projectRoot.GetAllTasks());
+        var stateById = tasksById.Values.ToDictionary(
+            task => task.Id,
+            task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
+            StringComparer.Ordinal);
+        var activation = activationResolver.Resolve(projectRoot.Config!, tasksById, stateById);
+        return new BoardReadContext(
+            tasksById,
+            stateById,
+            activation,
+            activation.Milestones.ToDictionary(milestone => milestone.Key, StringComparer.Ordinal));
+    }
+
+    private static TaskActivationEligibility ResolveActivationEligibility(
+        TaskItem task,
+        IReadOnlyDictionary<string, ResolvedMilestone> milestonesByKey)
+    {
+        if (string.IsNullOrWhiteSpace(task.Milestone))
+            return new TaskActivationEligibility(
+                true, null, [], [], "Eligible: task is not gated by a milestone.");
+
+        if (!milestonesByKey.TryGetValue(task.Milestone, out var milestone))
+            return new TaskActivationEligibility(
+                false, null, [], [], $"Ineligible: milestone {task.Milestone} is not configured.");
+
+        var isEligible = milestone.Lifecycle is MilestoneLifecycle.Active or MilestoneLifecycle.ReadyToDeliver;
+        var summary = milestone.Lifecycle switch
+        {
+            MilestoneLifecycle.Active => $"Eligible: milestone {task.Milestone} is active.",
+            MilestoneLifecycle.ReadyToDeliver => $"Eligible: milestone {task.Milestone} is ready to deliver.",
+            MilestoneLifecycle.Inactive =>
+                $"Ineligible: milestone {task.Milestone} is inactive; unmet activation triggers: " +
+                $"{string.Join(", ", milestone.UnmetActivationTriggers)}.",
+            MilestoneLifecycle.Delivered => $"Ineligible: milestone {task.Milestone} is delivered.",
+            _ => $"Ineligible: milestone {task.Milestone} has an unknown lifecycle.",
+        };
+        return new TaskActivationEligibility(
+            isEligible,
+            milestone.Lifecycle,
+            milestone.RequiredActivationTriggers,
+            milestone.UnmetActivationTriggers,
+            summary);
+    }
+
+    private sealed record BoardReadContext(
+        IReadOnlyDictionary<string, TaskItem> TasksById,
+        IReadOnlyDictionary<string, string> StateById,
+        MilestoneActivationSnapshot Activation,
+        IReadOnlyDictionary<string, ResolvedMilestone> MilestonesByKey);
 
     private static string StripMarkdownPrefix(string line)
     {

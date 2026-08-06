@@ -19,7 +19,7 @@ public class BoardServiceTests
         projectRoot.UpdateTaskState(assigned, "review");
         projectRoot.UpdateTaskState(unassigned, "todo");
 
-        var board = new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!;
+        var board = TestBoardServices.Create(projectRoot).GetBoard(new BoardQuery()).Payload!;
 
         var milestone = Assert.Single(board.MilestoneGroups, group => group.Key == "m1");
         Assert.Equal("Milestone 1", milestone.Name);
@@ -47,7 +47,7 @@ public class BoardServiceTests
         projectRoot.UpdateTaskState(wrongMilestone, "review");
         projectRoot.UpdateTaskState(wrongState, "todo");
 
-        var board = new BoardService(projectRoot).GetBoard(new BoardQuery("BUILD", "m1", "review")).Payload!;
+        var board = TestBoardServices.Create(projectRoot).GetBoard(new BoardQuery("BUILD", "m1", "review")).Payload!;
 
         Assert.Equal("Matching task", Assert.Single(board.Tasks).Task.Title);
     }
@@ -67,7 +67,7 @@ public class BoardServiceTests
         projectRoot.UpdateTaskState(done, "done");
         projectRoot.UpdateTaskState(unassigned, "review");
 
-        var navigation = new BoardService(projectRoot).GetNavigation().Payload!;
+        var navigation = TestBoardServices.Create(projectRoot).GetNavigation().Payload!;
 
         Assert.Equal(2, navigation.RemainingCount);
         Assert.Equal(new[] { "PM", "BUILD", "EMPTY" }, navigation.Tracks.Select(option => option.Key));
@@ -85,7 +85,7 @@ public class BoardServiceTests
         projectRoot.WriteTask(task);
         projectRoot.UpdateTaskState(task, "todo");
 
-        var boardTask = Assert.Single(new BoardService(projectRoot).GetBoard(new BoardQuery()).Payload!.Tasks);
+        var boardTask = Assert.Single(TestBoardServices.Create(projectRoot).GetBoard(new BoardQuery()).Payload!.Tasks);
 
         Assert.Equal("PM", boardTask.Track);
     }

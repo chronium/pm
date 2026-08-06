@@ -305,9 +305,9 @@ public sealed class LinkedProjectReadServiceTests
 
         var resolvedFamily = await family.ResolveAsync();
         var parentMember = resolvedFamily.Payload!.Members.Single(member => member.ProjectId == "prj_games");
-        var localBoard = new BoardService(child).GetBoard(new BoardQuery()).Payload!;
+        var localBoard = TestBoardServices.Create(child).GetBoard(new BoardQuery()).Payload!;
         var board = await service.EnrichCurrentBoardAsync(localBoard);
-        var detail = await service.EnrichCurrentTaskAsync(new BoardService(child).GetTask("GAME-0001").Payload!);
+        var detail = await service.EnrichCurrentTaskAsync(TestBoardServices.Create(child).GetTask("GAME-0001").Payload!);
         var next = await service.GetNextTaskAsync(
             new LinkedProjectReadRequest(), new NextTaskQuery(ReadyOnly: true));
 
@@ -325,7 +325,7 @@ public sealed class LinkedProjectReadServiceTests
 
         Assert.True(parent.TryGetById("PM-0001", out var parentTask));
         parent.UpdateTaskState(parentTask, "todo");
-        var waiting = await service.EnrichCurrentTaskAsync(new BoardService(child).GetTask("GAME-0001").Payload!);
+        var waiting = await service.EnrichCurrentTaskAsync(TestBoardServices.Create(child).GetTask("GAME-0001").Payload!);
         Assert.False(waiting.Payload!.Dependencies.Ready);
         Assert.Equal(["pm://project/prj_games/task/PM-0001"], waiting.Payload.Dependencies.WaitingOn);
     }
@@ -380,6 +380,54 @@ public sealed class LinkedProjectReadServiceTests
         Assert.Equal("prj_royale", family.Payload.Owner!.ProjectId);
         Assert.Equal("GAME-0001", selected.Payload!.Task!.Task.Id);
         Assert.Equal("PM-0001", tiedFamily.Payload!.Task!.Task.Id);
+    }
+
+    [Fact]
+    public async Task CurrentRecommendationFiltersActivationBeforeLinkedDependencyReadiness()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            name: "Active",
+            milestones: new Dictionary<string, string> { ["inactive"] = "Inactive" },
+            activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+            {
+                ["entry"] = new()
+                {
+                    Title = "Entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-9998",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["inactive"].RequiredActivationTriggers = ["entry"];
+        var active = await CreateProject(
+            Path.Combine(workspace.Path, "active"), "prj_active", "Active", config);
+        var ineligible = TestData.Task(
+            "PM-0001", "Inactive ready", milestone: "inactive", priority: "urgent");
+        var eligibleBlocked = TestData.Task(
+            "PM-0002", "Eligible blocked", priority: "low", dependsOn: ["PM-9999"]);
+        active.WriteTask(ineligible);
+        active.WriteTask(eligibleBlocked);
+        active.UpdateTaskState(ineligible, "todo");
+        active.UpdateTaskState(eligibleBlocked, "todo");
+        var service = Service(active, workspace);
+
+        var includeBlocked = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(), new NextTaskQuery(ReadyOnly: false));
+        var scoped = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(),
+            new NextTaskQuery(Milestone: "inactive", ReadyOnly: false));
+
+        Assert.Equal("PM-0002", includeBlocked.Payload!.Task!.Task.Id);
+        Assert.True(includeBlocked.Payload.Task.Activation.IsEligible);
+        Assert.False(includeBlocked.Payload.Task.Dependencies.Ready);
+        Assert.False(scoped.Payload!.Found);
+        Assert.Contains("unmet activation triggers: entry", scoped.Payload.Reason);
     }
 
     [Fact]
@@ -443,6 +491,7 @@ public sealed class LinkedProjectReadServiceTests
         using var host = McpServerHost.CreateBuilder([]).Build();
 
         Assert.NotNull(host.Services.GetRequiredService<LinkedProjectReadService>());
+        Assert.NotNull(host.Services.GetRequiredService<BoardService>());
     }
 
     private static LinkedProjectReadService Service(

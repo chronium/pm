@@ -29,7 +29,7 @@ public class AgentRunApiSmokeTests
             Required("PM_AGENT_RUN_API_SMOKE_PROVIDER"),
             Required("PM_AGENT_RUN_API_SMOKE_MODEL"),
             Required("PM_AGENT_RUN_API_SMOKE_EFFORT"));
-        var originalTask = new BoardService(projectRoot).GetTask(selection.TaskId);
+        var originalTask = TestBoardServices.Create(projectRoot).GetTask(selection.TaskId);
         Assert.True(originalTask.Success, originalTask.Message);
         string runId;
 
@@ -93,7 +93,7 @@ public class AgentRunApiSmokeTests
         }
         await second.App.StopAsync();
 
-        var currentTask = new BoardService(projectRoot).GetTask(selection.TaskId);
+        var currentTask = TestBoardServices.Create(projectRoot).GetTask(selection.TaskId);
         Assert.True(currentTask.Success, currentTask.Message);
         Assert.Equal(originalTask.Payload!.State, currentTask.Payload!.State);
     }
@@ -101,7 +101,7 @@ public class AgentRunApiSmokeTests
     private static async Task<(WebApplication App, Uri Endpoint)> StartApi(ProjectRoot projectRoot)
     {
         var runnerClient = new AgentRunnerClient(new AgentRunnerRegistrationStore(), new IdentityService());
-        var board = new BoardService(projectRoot);
+        var board = TestBoardServices.Create(projectRoot);
         var runService = new AgentRunService(projectRoot, board, new AgentRunGitInspector(),
             new AgentRunCache(projectRoot, TimeProvider.System), runnerClient, TimeProvider.System);
         var port = AvailablePort();
