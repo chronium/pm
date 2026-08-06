@@ -68,6 +68,7 @@ serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<MilestoneActivationResolver>();
 serviceProvider.AddSingleton<MilestoneActivationGraphService>();
 serviceProvider.AddSingleton<MilestoneActivationValidationService>();
+serviceProvider.AddSingleton<ActivationTriggerService>();
 serviceProvider.AddSingleton<ProjectValidationService>();
 serviceProvider.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
 serviceProvider.AddSingleton<IProjectCommandPrompts, ProjectCommandPrompts>();
@@ -144,6 +145,20 @@ app.Configure(config =>
             milestone.AddCommand<MilestoneRemoveCommand>(GlobalConfig.MilestoneRemoveCommandName);
             milestone.AddCommand<MilestonePriorityCommand>(GlobalConfig.MilestonePriorityCommandName);
             milestone.AddCommand<MilestoneListCommand>(GlobalConfig.MilestoneListCommandName);
+        });
+
+    config.AddBranch(GlobalConfig.TriggerBranchName,
+        trigger =>
+        {
+            trigger.SetDescription("Manage milestone activation triggers");
+            trigger.AddCommand<ActivationTriggerAddCommand>(GlobalConfig.TriggerAddCommandName);
+            trigger.AddCommand<ActivationTriggerRenameCommand>(GlobalConfig.TriggerRenameCommandName);
+            trigger.AddCommand<ActivationTriggerRemoveCommand>(GlobalConfig.TriggerRemoveCommandName);
+            trigger.AddCommand<ActivationTriggerSetRequirementsCommand>(
+                GlobalConfig.TriggerSetRequirementsCommandName);
+            trigger.AddCommand<ActivationTriggerAttachCommand>(GlobalConfig.TriggerAttachCommandName);
+            trigger.AddCommand<ActivationTriggerDetachCommand>(GlobalConfig.TriggerDetachCommandName);
+            trigger.AddCommand<ActivationTriggerListCommand>(GlobalConfig.TriggerListCommandName);
         });
 
     config.AddBranch(GlobalConfig.StatusBranchName,

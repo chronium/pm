@@ -52,6 +52,18 @@ public class ProjectConfig
         FileSystem.WriteAllText(configPath, YamlSerde.Serialize(this));
     }
 
+    internal void WriteConfigAtomic(ProjectRoot projectRoot)
+    {
+        if (!projectRoot.Exists || projectRoot.RootPath is null)
+            throw new InvalidOperationException("Project root does not exist.");
+        if (RequiresMilestoneSchemaMigration)
+            throw new InvalidOperationException(
+                "Legacy milestone configuration must be migrated with pm doctor --fix before it can be written.");
+
+        var configPath = Path.Combine(projectRoot.RootPath, GlobalConfig.PmConfigFile);
+        FileSystem.WriteAllTextAtomic(configPath, YamlSerde.Serialize(this));
+    }
+
     internal void WriteMigratedConfig(ProjectRoot projectRoot)
     {
         if (!projectRoot.Exists || projectRoot.RootPath is null)

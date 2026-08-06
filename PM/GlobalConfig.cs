@@ -55,6 +55,14 @@ public static class GlobalConfig
     public static string MilestoneRemoveCommandName => "remove";
     public static string MilestonePriorityCommandName => "priority";
     public static string MilestoneListCommandName => "list";
+    public static string TriggerBranchName => "trigger";
+    public static string TriggerAddCommandName => "add";
+    public static string TriggerRenameCommandName => "rename";
+    public static string TriggerRemoveCommandName => "remove";
+    public static string TriggerSetRequirementsCommandName => "set-requirements";
+    public static string TriggerAttachCommandName => "attach";
+    public static string TriggerDetachCommandName => "detach";
+    public static string TriggerListCommandName => "list";
     public static string StatusBranchName => "status";
     public static string StatusAddCommandName => "add";
     public static string StatusRenameCommandName => "rename";

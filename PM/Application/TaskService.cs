@@ -360,6 +360,18 @@ public sealed class TaskService
         if (!projectRoot.TryGetById(taskId, out var task))
             return AppResult.Fail("missing_task", $"Task with ID {taskId} not found.");
 
+        var requiringTriggers = projectRoot.Config!.ActivationTriggers
+            .Where(trigger => (trigger.Value.Requirements ?? []).Any(requirement =>
+                requirement.Kind == ActivationRequirementKind.Task &&
+                string.Equals(requirement.Source, task.Id, StringComparison.Ordinal)))
+            .Select(trigger => trigger.Key)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        if (requiringTriggers.Count > 0)
+            return AppResult.Fail(
+                "activation_requirement_in_use",
+                $"Task {task.Id} is required by activation trigger(s): {string.Join(", ", requiringTriggers)}.");
+
         projectRoot.DeleteTask(task);
         return AppResult.Ok();
     }

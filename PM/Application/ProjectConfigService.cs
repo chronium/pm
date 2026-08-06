@@ -288,6 +288,18 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
         if (projectRoot.GetAllTasks().Any(task => task.Milestone == key))
             return AppResult.Fail("milestone_in_use", $"Milestone {key} is referenced by one or more tasks.");
 
+        var requiringTriggers = config.ActivationTriggers
+            .Where(trigger => (trigger.Value.Requirements ?? []).Any(requirement =>
+                requirement.Kind == ActivationRequirementKind.Milestone &&
+                string.Equals(requirement.Source, key, StringComparison.Ordinal)))
+            .Select(trigger => trigger.Key)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        if (requiringTriggers.Count > 0)
+            return AppResult.Fail(
+                "activation_requirement_in_use",
+                $"Milestone {key} is required by activation trigger(s): {string.Join(", ", requiringTriggers)}.");
+
         config.Milestones.Remove(key);
         config.WriteConfig(projectRoot);
         return AppResult.Ok();

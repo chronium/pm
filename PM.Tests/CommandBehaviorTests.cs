@@ -1755,6 +1755,81 @@ public class CommandBehaviorTests
             new LinkedProjectGitInspector());
     }
 
+    [Fact]
+    public async Task ActivationTriggerCommandsParseRequirementsAndReportImpact()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            milestones: new Dictionary<string, string> { ["beta"] = "Beta" }));
+        var task = TestData.Task("PM-0001", "Foundation");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var service = new ActivationTriggerService(
+            projectRoot,
+            new MilestoneActivationResolver(projectRoot),
+            new MilestoneActivationValidationService(projectRoot));
+
+        var add = new ActivationTriggerAddCommand(service);
+        var (addCode, addOutput) = await CaptureConsole(() => add.Execute(null!,
+            new ActivationTriggerAddCommand.Settings
+            {
+                Key = "entry",
+                Title = "Entry <criteria>",
+                Requirements = " TASK:PM-0001 ",
+            }, CancellationToken.None));
+
+        Assert.Equal(0, addCode);
+        Assert.Contains("Affected milestones: none", addOutput);
+        var stored = Assert.Single(ProjectConfig.ReadConfig(projectRoot).ActivationTriggers["entry"].Requirements);
+        Assert.Equal(ActivationRequirementKind.Task, stored.Kind);
+        Assert.Equal("PM-0001", stored.Source);
+
+        var attach = new ActivationTriggerAttachCommand(service);
+        var (attachCode, attachOutput) = await CaptureConsole(() => attach.Execute(null!,
+            new ActivationTriggerAttachCommand.Settings { Key = "entry", Milestone = "beta" },
+            CancellationToken.None));
+        Assert.Equal(0, attachCode);
+        Assert.Contains("Affected milestones: beta", attachOutput);
+
+        var list = new ActivationTriggerListCommand(service);
+        var (listCode, listOutput) = await CaptureConsole(() =>
+            list.Execute(null!, new ActivationTriggerListCommand.Settings(), CancellationToken.None));
+        Assert.Equal(0, listCode);
+        Assert.Contains("Entry <criteria>", listOutput);
+        Assert.Contains("task:PM-0001", listOutput);
+        Assert.Contains("beta", listOutput);
+
+        var set = new ActivationTriggerSetRequirementsCommand(service);
+        Assert.Equal(0, set.Execute(null!,
+            new ActivationTriggerSetRequirementsCommand.Settings { Key = "entry", Clear = true },
+            CancellationToken.None));
+        Assert.Empty(ProjectConfig.ReadConfig(projectRoot).ActivationTriggers["entry"].Requirements);
+    }
+
+    [Fact]
+    public async Task ActivationTriggerCommandsRejectMalformedAndAmbiguousRequirementInput()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var service = new ActivationTriggerService(
+            projectRoot,
+            new MilestoneActivationResolver(projectRoot),
+            new MilestoneActivationValidationService(projectRoot));
+
+        var add = new ActivationTriggerAddCommand(service);
+        Assert.Equal(1, add.Execute(null!,
+            new ActivationTriggerAddCommand.Settings
+                { Key = "bad", Title = "Bad", Requirements = "project:PM-0001" },
+            CancellationToken.None));
+        Assert.Empty(projectRoot.Config!.ActivationTriggers);
+
+        var set = new ActivationTriggerSetRequirementsCommand(service);
+        Assert.Equal(1, set.Execute(null!,
+            new ActivationTriggerSetRequirementsCommand.Settings
+                { Key = "bad", Requirements = "task:PM-0001", Clear = true },
+            CancellationToken.None));
+    }
+
     private static async Task<(int ExitCode, string Output)> ExecuteListCommand(
         ListCommand command,
         ListCommand.Settings settings)
