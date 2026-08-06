@@ -12,7 +12,8 @@ internal static class TestData
         string nextIdServiceUrl = "http://ids.example.test",
         Dictionary<string, string>? tracks = null,
         Dictionary<string, string>? milestones = null,
-        Dictionary<string, string>? milestonePriorities = null)
+        Dictionary<string, string>? milestonePriorities = null,
+        Dictionary<string, ActivationTriggerDefinition>? activationTriggers = null)
     {
         var milestoneDefinitions = (milestones ?? new Dictionary<string, string>())
             .ToDictionary(
@@ -31,6 +32,7 @@ internal static class TestData
             NextIdServiceUrl = nextIdServiceUrl,
             Tracks = tracks ?? new Dictionary<string, string> { [idPrefix] = idPrefix },
             Milestones = milestoneDefinitions,
+            ActivationTriggers = activationTriggers ?? new Dictionary<string, ActivationTriggerDefinition>(),
             TaskStates = new()
             {
                 ["todo"] = "Queued",

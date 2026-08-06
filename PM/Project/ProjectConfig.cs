@@ -28,6 +28,7 @@ public class ProjectConfig
     }
 
     public Dictionary<string, MilestoneDefinition> Milestones { get; set; } = new();
+    public Dictionary<string, ActivationTriggerDefinition> ActivationTriggers { get; set; } = new();
 
     [YamlIgnore]
     public bool RequiresMilestoneSchemaMigration { get; private set; }

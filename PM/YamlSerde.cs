@@ -23,7 +23,9 @@ public static class YamlSerde
     {
         var yaml = Serializer.Serialize(obj);
         return obj is ProjectConfig
-            ? yaml.Replace("    delivery: \n", "    delivery: null\n", StringComparison.Ordinal)
+            ? yaml
+                .Replace("    delivery: \n", "    delivery: null\n", StringComparison.Ordinal)
+                .Replace("    activation: \n", "    activation: null\n", StringComparison.Ordinal)
             : yaml;
     }
 

@@ -56,3 +56,4 @@ milestones:
     priority: high
     requiredActivationTriggers: []
     delivery: null
+activationTriggers: {}
