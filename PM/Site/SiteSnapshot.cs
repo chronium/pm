@@ -9,6 +9,7 @@ public sealed record SiteSnapshot(
     IReadOnlyList<SiteLinkedProjectResponse> LinkedProjects,
     ProjectResponse Project,
     SettingsResponse Settings,
+    ActivationSwitchboardResponse Activation,
     BoardNavigationResponse Navigation,
     BoardResponse Board,
     IReadOnlyList<SiteTaskResponse> Tasks,

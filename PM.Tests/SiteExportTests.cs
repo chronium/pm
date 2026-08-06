@@ -41,7 +41,8 @@ public class SiteExportTests
         Assert.DoesNotContain("nextId", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret-next-id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(projectRoot.RootPath, json, StringComparison.Ordinal);
-        Assert.Equal(3, payload.SchemaVersion);
+        Assert.Equal(4, payload.SchemaVersion);
+        Assert.Equal("static-snapshot", payload.Activation.Revision);
         Assert.Null(payload.ProjectId);
         Assert.Empty(payload.LinkedProjects);
         Assert.Equal(json, SiteExportService.SerializeSnapshot(payload));
@@ -227,14 +228,19 @@ public class SiteExportTests
     private static SiteExportService CreateExportService(ProjectRoot projectRoot) =>
         new(projectRoot, CreateSnapshotBuilder(projectRoot));
 
-    private static SiteSnapshotBuilder CreateSnapshotBuilder(ProjectRoot projectRoot) =>
-        new(
+    private static SiteSnapshotBuilder CreateSnapshotBuilder(ProjectRoot projectRoot)
+    {
+        var activation = TestMilestoneActivationServices.Create(projectRoot);
+        return new(
             projectRoot,
             new ProjectConfigService(projectRoot),
             TestBoardServices.Create(projectRoot),
             new WikiService(projectRoot),
+            activation.Resolver,
+            activation.Validator,
             new LinkedProjectService(projectRoot),
             LinkedProjectFamilyService.CreateDefault(projectRoot));
+    }
 
     private static MemoryAssetStore ValidAssets() => new(new Dictionary<string, string>
     {

@@ -36,6 +36,10 @@ public static class ApiV1Endpoints
         TaskService taskService,
         WikiService wikiService,
         ResourceRevisionService revisions,
+        MilestoneActivationResolver milestoneActivationResolver,
+        MilestoneActivationValidationService milestoneActivationValidationService,
+        ActivationTriggerService activationTriggerService,
+        MilestoneDeliveryService milestoneDeliveryService,
         Action<RouteGroupBuilder>? configure = null,
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
@@ -85,6 +89,12 @@ public static class ApiV1Endpoints
         api.MapTaskApi(boardService, taskService, revisions, linkedProjectReadService);
         api.MapWikiApi(wikiService, revisions);
         api.MapSettingsApi(configService, revisions);
+        api.MapMilestoneActivationApi(
+            milestoneActivationResolver,
+            milestoneActivationValidationService,
+            activationTriggerService,
+            milestoneDeliveryService,
+            revisions);
         api.MapValidationApi(validationService);
         var linkedProjects = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
         var linkedRegistry = linkedProjectRegistry ?? new LinkedProjectRegistryStore();
@@ -265,7 +275,9 @@ public static class ApiResults
             "missing_run" or "artifact_not_found" or "artifact_unavailable")
             return StatusCodes.Status404NotFound;
         if (errorCode == "artifact_too_large") return StatusCodes.Status413PayloadTooLarge;
-        if (errorCode is "precondition_failed" or "stale_patch_preflight")
+        if (errorCode is "precondition_failed" or "stale_patch_preflight" or
+            "activation_trigger_redefine_stale" or "milestone_delivery_stale" or
+            "milestone_required_triggers_stale")
             return StatusCodes.Status412PreconditionFailed;
         if (errorCode.StartsWith("missing_", StringComparison.Ordinal)) return StatusCodes.Status404NotFound;
         if (errorCode.StartsWith("invalid_", StringComparison.Ordinal)) return StatusCodes.Status400BadRequest;
@@ -277,6 +289,17 @@ public static class ApiResults
                 "runner_tls_mismatch" or "artifact_corrupt" or "artifact_invalid" or
                 "patch_already_collected" or "patch_not_ready" or "patch_preflight_failed" or
                 "patch_apply_failed" or "linked_project_unavailable")
+            return StatusCodes.Status409Conflict;
+        if (errorCode.EndsWith("_confirmation_required", StringComparison.Ordinal))
+            return StatusCodes.Status409Conflict;
+        if (errorCode.EndsWith("_required", StringComparison.Ordinal) ||
+            errorCode.EndsWith("_not_allowed", StringComparison.Ordinal))
+            return StatusCodes.Status400BadRequest;
+        if (errorCode is "activation_trigger_active" or "activation_trigger_inactive" or
+            "activation_trigger_reset_blocked" or "activation_reconciliation_required" or
+            "activation_trigger_already_attached" or "activation_trigger_not_attached" or
+            "milestone_already_delivered" or "milestone_not_delivered" or
+            "milestone_delivery_inactive" or "empty_milestone_delivery")
             return StatusCodes.Status409Conflict;
 
         return StatusCodes.Status500InternalServerError;

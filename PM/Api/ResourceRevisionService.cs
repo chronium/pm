@@ -111,6 +111,18 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
         return AppResult<string>.Ok(Hash("board", json));
     }
 
+    public AppResult<string> GetMilestoneActivationRevision(MilestoneActivationSnapshot snapshot)
+    {
+        var configRevision = GetProjectConfigRevision();
+        if (!configRevision.Success)
+            return AppResult<string>.Fail(configRevision.ErrorCode!, configRevision.Message!);
+
+        return AppResult<string>.Ok(Hash(
+            "milestone-activation",
+            configRevision.Payload!,
+            JsonSerializer.Serialize(snapshot, CanonicalJsonOptions)));
+    }
+
     private static BoardQuery NormalizeQuery(BoardQuery query) => new(
         NormalizeFilter(query.Track),
         NormalizeFilter(query.Milestone),

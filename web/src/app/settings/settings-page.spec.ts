@@ -18,8 +18,11 @@ const settings: SettingsResponse = {
       key: 'long/milestone',
       title: 'A very long milestone title that wraps without obscuring its controls',
       priority: 'high',
+      description: '',
+      requiredActivationTriggers: [],
     },
   ],
+  activationTriggers: [],
   priorityOptions: ['none', 'medium', 'high'],
   revision: 'r1',
 };

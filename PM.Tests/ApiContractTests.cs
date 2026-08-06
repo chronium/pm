@@ -403,6 +403,17 @@ public partial class ApiContractTests
         var nextIds = nextIdService ?? new ApiNextIdService();
         var family = linkedProjectFamilyService ?? LinkedProjectFamilyService.CreateDefault(projectRoot);
         var taskService = TestTaskServices.Create(projectRoot, nextIds);
+        var activationResolver = new MilestoneActivationResolver(projectRoot);
+        var activationValidator = new MilestoneActivationValidationService(
+            projectRoot, new MilestoneActivationGraphService(), activationResolver);
+        var activationPersistence = new ProjectConfigPersistence(projectRoot);
+        var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
+        var activationTriggers = new ActivationTriggerService(
+            projectRoot, activationResolver, activationValidator, automaticActivations,
+            TimeProvider.System, activationPersistence);
+        var milestoneDeliveries = new MilestoneDeliveryService(
+            projectRoot, activationResolver, activationValidator, automaticActivations,
+            TimeProvider.System, activationPersistence);
         var linkedReads = new LinkedProjectReadService(
             projectRoot,
             family,
@@ -411,7 +422,8 @@ public partial class ApiContractTests
             new TaskServiceFactory(TimeProvider.System));
         app.MapApiV1(projectRoot, configService, new ProjectValidationService(projectRoot), boardService,
             taskService,
-            new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService), configure,
+            new WikiService(projectRoot), new ResourceRevisionService(projectRoot, boardService),
+            activationResolver, activationValidator, activationTriggers, milestoneDeliveries, configure,
             membershipService, linkedProjectFamilyService: family,
             linkedProjectMutationService: linkedProjectMutationService,
             linkedProjectRegistry: linkedProjectRegistry,

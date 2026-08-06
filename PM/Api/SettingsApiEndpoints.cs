@@ -8,13 +8,24 @@ using PM.Project;
 namespace PM.Api;
 
 public sealed record SettingsOptionResponse(string Key, string Name);
-public sealed record SettingsMilestoneResponse(string Key, string Title, string Priority);
+public sealed record SettingsActivationRequirementResponse(string Kind, string Source);
+public sealed record SettingsActivationTriggerResponse(
+    string Key,
+    string Title,
+    IReadOnlyList<SettingsActivationRequirementResponse> Requirements);
+public sealed record SettingsMilestoneResponse(
+    string Key,
+    string Title,
+    string Priority,
+    string Description,
+    IReadOnlyList<string> RequiredActivationTriggers);
 public sealed record SettingsResponse(
     string ProjectName,
     string Accent,
     IReadOnlyList<SettingsOptionResponse> Statuses,
     IReadOnlyList<SettingsOptionResponse> Tracks,
     IReadOnlyList<SettingsMilestoneResponse> Milestones,
+    IReadOnlyList<SettingsActivationTriggerResponse> ActivationTriggers,
     IReadOnlyList<string> PriorityOptions,
     string Revision);
 public sealed record CreateSettingsOptionRequest(
@@ -24,8 +35,10 @@ public sealed record RenameSettingsOptionRequest([property: JsonRequired] string
 public sealed record CreateMilestoneRequest(
     [property: JsonRequired] string Key,
     [property: JsonRequired] string Title,
-    string? Priority = null);
+    string? Priority = null,
+    string? Description = null);
 public sealed record RenameMilestoneRequest([property: JsonRequired] string Title);
+public sealed record SetMilestoneDescriptionRequest([property: JsonRequired] string Description);
 public sealed record SetMilestonePriorityRequest([property: JsonRequired] string Priority);
 public sealed record SetProjectAccentRequest([property: JsonRequired] string Accent);
 
@@ -65,7 +78,7 @@ public static class SettingsApiEndpoints
 
         MapCreateMutation<CreateMilestoneRequest>(api, "/settings/milestones",
             "CreateMilestone", "Create a milestone", configService, revisions,
-            (service, input) => service.AddMilestone(input.Key, input.Title, input.Priority));
+            (service, input) => service.AddMilestone(input.Key, input.Title, input.Priority, input.Description));
         MapItemMutation<RenameMilestoneRequest>(api, "/settings/milestones/{key}",
             "RenameMilestone", "Rename a milestone", configService, revisions,
             (service, input, key) => service.RenameMilestone(key, input.Title));
@@ -75,6 +88,10 @@ public static class SettingsApiEndpoints
             "/settings/milestones/{key}/priority", "SetMilestonePriority",
             "Set a milestone priority", configService, revisions,
             (service, input, key) => service.SetMilestonePriority(key, input.Priority));
+        MapItemMutation<SetMilestoneDescriptionRequest>(api,
+            "/settings/milestones/{key}/description", "SetMilestoneDescription",
+            "Set a milestone description", configService, revisions,
+            (service, input, key) => service.SetMilestoneDescription(key, input.Description));
     }
 
     private static void MapCreateMutation<TRequest>(RouteGroupBuilder api, string pattern,
@@ -185,7 +202,18 @@ public static class SettingsApiEndpoints
             value.Statuses.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             value.Tracks.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             value.Milestones.Select(option =>
-                new SettingsMilestoneResponse(option.Key, option.Name, option.Priority)).ToList(),
+                new SettingsMilestoneResponse(
+                    option.Key,
+                    option.Name,
+                    option.Priority,
+                    option.Description,
+                    option.RequiredActivationTriggers)).ToList(),
+            value.ActivationTriggers.Select(trigger => new SettingsActivationTriggerResponse(
+                trigger.Key,
+                trigger.Title,
+                trigger.Requirements.Select(requirement => new SettingsActivationRequirementResponse(
+                    requirement.Kind.ToString().ToLowerInvariant(),
+                    requirement.Source)).ToList())).ToList(),
             PriorityLevel.Values,
             revision.Payload!), null);
     }

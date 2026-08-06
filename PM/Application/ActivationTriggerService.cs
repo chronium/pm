@@ -34,6 +34,17 @@ public sealed record ActivationTriggerRedefinitionResult(
     DateTimeOffset? ActivatedAt,
     IReadOnlyList<string> AffectedMilestones);
 
+public sealed record MilestoneRequiredTriggersPreview(
+    string MilestoneKey,
+    string Revision,
+    IReadOnlyList<string> CurrentTriggerKeys,
+    IReadOnlyList<string> ProposedTriggerKeys,
+    MilestoneLifecycle Before,
+    MilestoneLifecycle After,
+    IReadOnlyList<string> CurrentlyEligibleTaskIds,
+    IReadOnlyList<string> TaskIdsLosingEligibility,
+    bool RequiresConfirmation);
+
 public sealed record ActivationReconciliationResult(
     bool DryRun,
     AutomaticActivationImpact ActivationImpact);
@@ -435,6 +446,139 @@ public sealed class ActivationTriggerService
             prospective => prospective.Milestones[milestoneKey].RequiredActivationTriggers.Remove(key));
     }
 
+    public AppResult<MilestoneRequiredTriggersPreview> PreviewMilestoneRequiredTriggers(
+        string milestoneKey,
+        IReadOnlyList<string> triggerKeys)
+    {
+        var evaluation = EvaluateMilestoneRequiredTriggers(milestoneKey, triggerKeys);
+        return evaluation.Success
+            ? AppResult<MilestoneRequiredTriggersPreview>.Ok(evaluation.Payload!.Preview)
+            : AppResult<MilestoneRequiredTriggersPreview>.Fail(evaluation.ErrorCode!, evaluation.Message!);
+    }
+
+    public AppResult<ActivationTriggerMutationResult> SetMilestoneRequiredTriggers(
+        string milestoneKey,
+        IReadOnlyList<string> triggerKeys,
+        string expectedRevision,
+        bool allowDeactivation)
+    {
+        if (string.IsNullOrWhiteSpace(expectedRevision))
+            return AppResult<ActivationTriggerMutationResult>.Fail(
+                "milestone_required_triggers_revision_required",
+                "Changing milestone activation triggers requires a preview revision.");
+
+        var evaluationResult = EvaluateMilestoneRequiredTriggers(milestoneKey, triggerKeys);
+        if (!evaluationResult.Success)
+            return AppResult<ActivationTriggerMutationResult>.Fail(
+                evaluationResult.ErrorCode!, evaluationResult.Message!);
+
+        var evaluation = evaluationResult.Payload!;
+        if (!string.Equals(expectedRevision, evaluation.Preview.Revision, StringComparison.Ordinal))
+            return AppResult<ActivationTriggerMutationResult>.Fail(
+                "milestone_required_triggers_stale",
+                "Milestone activation impact changed. Review a fresh preview before applying it.");
+        if (evaluation.Preview.RequiresConfirmation && !allowDeactivation)
+            return AppResult<ActivationTriggerMutationResult>.Fail(
+                "milestone_required_triggers_confirmation_required",
+                "Changing the milestone activation triggers would remove task eligibility and requires confirmation.");
+
+        try
+        {
+            persistence.WriteTextAtomic(YamlSerde.Serialize(evaluation.ProspectiveConfig));
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            return AppResult<ActivationTriggerMutationResult>.Fail(
+                "milestone_required_triggers_write_failed",
+                $"Milestone {evaluation.Preview.MilestoneKey} activation triggers could not be written: {exception.Message}");
+        }
+
+        if (!GlobalConfig.DryRun && !persistence.Reload())
+        {
+            if (!TryRestoreConfig(evaluation.OriginalYaml))
+                return AppResult<ActivationTriggerMutationResult>.Fail(
+                    "milestone_required_triggers_rollback_failed",
+                    $"Milestone {evaluation.Preview.MilestoneKey} activation triggers could not be changed and the previous configuration could not be restored.");
+
+            return AppResult<ActivationTriggerMutationResult>.Fail(
+                "milestone_required_triggers_write_failed",
+                $"Milestone {evaluation.Preview.MilestoneKey} activation triggers could not be verified; the previous configuration was restored.");
+        }
+
+        return AppResult<ActivationTriggerMutationResult>.Ok(new ActivationTriggerMutationResult(
+            evaluation.Preview.MilestoneKey,
+            [evaluation.Preview.MilestoneKey]));
+    }
+
+    private AppResult<MilestoneRequiredTriggersEvaluation> EvaluateMilestoneRequiredTriggers(
+        string milestoneKey,
+        IReadOnlyList<string> triggerKeys)
+    {
+        milestoneKey = milestoneKey.Trim();
+        if (string.IsNullOrWhiteSpace(milestoneKey))
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                "invalid_milestone", "Milestone key is required.");
+
+        var normalized = (triggerKeys ?? [])
+            .Select(key => key?.Trim() ?? string.Empty)
+            .ToList();
+        if (normalized.Any(string.IsNullOrWhiteSpace))
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                "invalid_activation_trigger", "Activation trigger keys cannot be empty.");
+        if (normalized.Count != normalized.Distinct(StringComparer.Ordinal).Count())
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                "duplicate_milestone_trigger", "A milestone cannot require the same activation trigger more than once.");
+
+        var stateResult = ReadCurrentActivationState();
+        if (!stateResult.Success)
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                stateResult.ErrorCode!, stateResult.Message!);
+        var state = stateResult.Payload!;
+        if (!state.Config.Milestones.TryGetValue(milestoneKey, out var current))
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                "missing_milestone", $"Milestone {milestoneKey} not found.");
+        var missingTrigger = normalized.FirstOrDefault(key => !state.Config.ActivationTriggers.ContainsKey(key));
+        if (missingTrigger != null)
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                "missing_activation_trigger", $"Activation trigger {missingTrigger} not found.");
+
+        var prospective = ProjectConfig.Deserialize(state.OriginalYaml);
+        prospective.Milestones[milestoneKey].RequiredActivationTriggers = normalized.ToList();
+        if (FirstValidationError(validator.ValidateProspectiveConfig(prospective)) is { } validationError)
+            return AppResult<MilestoneRequiredTriggersEvaluation>.Fail(
+                validationError.Code, validationError.Message);
+
+        var before = state.Snapshot.Milestones.Single(item => item.Key == milestoneKey);
+        var after = resolver.Resolve(prospective, state.TasksById, state.StateByTaskId)
+            .Milestones.Single(item => item.Key == milestoneKey);
+        var currentlyEligibleTaskIds = IsEligibleLifecycle(before.Lifecycle)
+            ? state.TasksById.Values
+                .Where(task => string.Equals(task.Milestone, milestoneKey, StringComparison.Ordinal))
+                .Where(task => !state.StateByTaskId.TryGetValue(task.Id, out var taskState) ||
+                               !string.Equals(taskState, "done", StringComparison.Ordinal))
+                .Select(task => task.Id)
+                .Order(StringComparer.Ordinal)
+                .ToList()
+            : [];
+        var losingEligibility = after.Lifecycle == MilestoneLifecycle.Inactive
+            ? currentlyEligibleTaskIds
+            : [];
+        var revision = BuildMilestoneRequiredTriggersRevision(
+            milestoneKey, normalized, state.OriginalYaml, state.TasksById, state.StateByTaskId);
+        var preview = new MilestoneRequiredTriggersPreview(
+            milestoneKey,
+            revision,
+            (current.RequiredActivationTriggers ?? []).ToList(),
+            normalized,
+            before.Lifecycle,
+            after.Lifecycle,
+            currentlyEligibleTaskIds,
+            losingEligibility,
+            losingEligibility.Count > 0);
+        return AppResult<MilestoneRequiredTriggersEvaluation>.Ok(new(
+            preview, prospective, state.OriginalYaml));
+    }
+
     private AppResult<RedefinitionEvaluation> EvaluateRedefinition(
         string key,
         IReadOnlyList<ActivationRequirement> requirements)
@@ -730,6 +874,28 @@ public sealed class ActivationTriggerService
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
 
+    private static string BuildMilestoneRequiredTriggersRevision(
+        string milestoneKey,
+        IReadOnlyList<string> triggerKeys,
+        string yaml,
+        IReadOnlyDictionary<string, TaskItem> tasksById,
+        IReadOnlyDictionary<string, string> stateByTaskId)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendHashValue(hash, "milestone-required-activation-triggers");
+        AppendHashValue(hash, milestoneKey);
+        foreach (var key in triggerKeys) AppendHashValue(hash, key);
+        AppendHashValue(hash, yaml);
+        foreach (var task in tasksById.Values.OrderBy(task => task.Id, StringComparer.Ordinal))
+        {
+            AppendHashValue(hash, task.Id);
+            AppendHashValue(hash, task.Milestone ?? string.Empty);
+            AppendHashValue(hash, stateByTaskId.GetValueOrDefault(task.Id, string.Empty));
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
     private static void AppendHashValue(IncrementalHash hash, string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
@@ -751,6 +917,11 @@ public sealed class ActivationTriggerService
 
     private sealed record RedefinitionEvaluation(
         ActivationTriggerRedefinitionPreview Preview,
+        ProjectConfig ProspectiveConfig,
+        string OriginalYaml);
+
+    private sealed record MilestoneRequiredTriggersEvaluation(
+        MilestoneRequiredTriggersPreview Preview,
         ProjectConfig ProspectiveConfig,
         string OriginalYaml);
 

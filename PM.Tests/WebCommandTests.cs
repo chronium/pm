@@ -1,8 +1,10 @@
 using System.Net;
 using PM.Application;
+using PM.Auth;
 using PM.Project;
 using PM.Tasks;
 using PM.Web;
+using PM.Worker;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -146,13 +148,24 @@ public class WebCommandTests
         Assert.Contains($"Serving API at http://127.0.0.1:{port}", output);
     }
 
-    private static WebCommand CreateWebCommand(ProjectRoot projectRoot) => new(
-        projectRoot,
-        TestBoardServices.Create(projectRoot),
-        TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
-        new ProjectConfigService(projectRoot),
-        new WikiService(projectRoot),
-        new ProjectValidationService(projectRoot));
+    private static WebCommand CreateWebCommand(ProjectRoot projectRoot)
+    {
+        var activation = TestMilestoneActivationServices.Create(projectRoot);
+        return new WebCommand(
+            projectRoot,
+            TestBoardServices.Create(projectRoot),
+            TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
+            new ProjectConfigService(projectRoot),
+            new WikiService(projectRoot),
+            new ProjectValidationService(projectRoot),
+            activation.Resolver,
+            activation.Validator,
+            activation.Triggers,
+            activation.Deliveries,
+            new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
+            null,
+            null);
+    }
 
     private static async Task<(int ExitCode, string Output)> ExecuteWebCommand(
         WebCommand command,
@@ -199,17 +212,42 @@ public class WebCommandTests
         }
     }
 
-    private sealed class RecordingOpenWebCommand(
-        ProjectRoot projectRoot,
-        Action<string> onOpen,
-        IAngularAssetStore? angularAssets = null) : WebCommand(
-        projectRoot,
-        TestBoardServices.Create(projectRoot),
-        TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
-        new ProjectConfigService(projectRoot),
-        new WikiService(projectRoot),
-        new ProjectValidationService(projectRoot))
+    private sealed class RecordingOpenWebCommand : WebCommand
     {
+        private readonly Action<string> onOpen;
+        private readonly IAngularAssetStore? angularAssets;
+
+        public RecordingOpenWebCommand(
+            ProjectRoot projectRoot,
+            Action<string> onOpen,
+            IAngularAssetStore? angularAssets = null)
+            : this(projectRoot, onOpen, angularAssets, TestMilestoneActivationServices.Create(projectRoot))
+        {
+        }
+
+        private RecordingOpenWebCommand(
+            ProjectRoot projectRoot,
+            Action<string> onOpen,
+            IAngularAssetStore? angularAssets,
+            TestMilestoneActivationServiceSet activation) : base(
+                projectRoot,
+                TestBoardServices.Create(projectRoot),
+                TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
+                new ProjectConfigService(projectRoot),
+                new WikiService(projectRoot),
+                new ProjectValidationService(projectRoot),
+                activation.Resolver,
+                activation.Validator,
+                activation.Triggers,
+                activation.Deliveries,
+                new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
+                null,
+                null)
+        {
+            this.onOpen = onOpen;
+            this.angularAssets = angularAssets;
+        }
+
         protected override void OpenBrowser(string url) => onOpen(url);
 
         protected override IAngularAssetStore CreateAngularAssetStore() =>

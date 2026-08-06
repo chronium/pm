@@ -9,10 +9,12 @@ public sealed class SiteSnapshotBuilder(
     ProjectConfigService configService,
     BoardService boardService,
     WikiService wikiService,
+    MilestoneActivationResolver milestoneActivationResolver,
+    MilestoneActivationValidationService validationService,
     LinkedProjectService linkedProjectService,
     LinkedProjectFamilyService linkedProjectFamilyService)
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
     private const string StaticRevision = "static-snapshot";
 
     public async Task<AppResult<SiteSnapshot>> BuildAsync(
@@ -80,6 +82,12 @@ public sealed class SiteSnapshotBuilder(
         }
 
         var settings = settingsResult.Payload!;
+        var activationResult = milestoneActivationResolver.ResolveCurrentProject();
+        if (!activationResult.Success)
+            return Fail(activationResult);
+        var validationResult = validationService.ValidateCurrentProject();
+        if (!validationResult.Success)
+            return Fail(validationResult);
         var linkedProjectsResult = await BuildLinkedProjectsAsync(cancellationToken);
         if (!linkedProjectsResult.Success)
             return Fail(linkedProjectsResult);
@@ -93,8 +101,22 @@ public sealed class SiteSnapshotBuilder(
             settings.Statuses.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             settings.Tracks.Select(option => new SettingsOptionResponse(option.Key, option.Name)).ToList(),
             settings.Milestones.Select(option =>
-                new SettingsMilestoneResponse(option.Key, option.Name, option.Priority)).ToList(),
+                new SettingsMilestoneResponse(
+                    option.Key, option.Name, option.Priority, option.Description,
+                    option.RequiredActivationTriggers)).ToList(),
+            settings.ActivationTriggers.Select(trigger => new SettingsActivationTriggerResponse(
+                trigger.Key,
+                trigger.Title,
+                trigger.Requirements.Select(requirement => new SettingsActivationRequirementResponse(
+                    requirement.Kind.ToString().ToLowerInvariant(), requirement.Source)).ToList())).ToList(),
             PriorityLevel.Values,
+            StaticRevision);
+        var activation = activationResult.Payload!;
+        var responseActivation = new ActivationSwitchboardResponse(
+            activation.ActivationTriggers.Select(ToActivationTrigger).ToList(),
+            activation.Milestones.Select(ToActivationMilestone).ToList(),
+            validationResult.Payload!.Select(issue => new ActivationIssueResponse(
+                issue.Severity, issue.Code, issue.Message)).ToList(),
             StaticRevision);
         var responseBoard = ToBoardResponse(board);
         var navigation = navigationResult.Payload;
@@ -112,6 +134,7 @@ public sealed class SiteSnapshotBuilder(
                 true,
                 StaticRevision),
             responseSettings,
+            responseActivation,
             new BoardNavigationResponse(
                 navigation.RemainingCount,
                 navigation.Tracks.Select(ToNavigationOption).ToList(),
@@ -122,6 +145,49 @@ public sealed class SiteSnapshotBuilder(
             wikiIndex,
             wikiPages));
     }
+
+    private static ActivationTriggerResponse ToActivationTrigger(ResolvedActivationTrigger trigger) => new(
+        trigger.Key,
+        trigger.Title,
+        trigger.IsActive,
+        trigger.Activation == null ? null : new ActivationProvenanceResponse(
+            trigger.Activation.At,
+            trigger.Activation.Mode.ToString().ToLowerInvariant(),
+            trigger.Activation.Reason,
+            trigger.Activation.WaivedRequirements.Select(requirement =>
+                new ActivationRequirementReferenceResponse(
+                    requirement.Kind.ToString().ToLowerInvariant(), requirement.Source)).ToList()),
+        trigger.SatisfiedRequirementCount,
+        trigger.RequirementCount,
+        trigger.RequirementsSatisfied,
+        trigger.IsLatchedDespiteUnmetRequirements,
+        trigger.Requirements.Select(requirement => new ActivationRequirementResponse(
+            requirement.Kind.ToString().ToLowerInvariant(), requirement.Source,
+            requirement.IsSatisfied, requirement.WasWaivedAtActivation)).ToList(),
+        trigger.ConsumingMilestones);
+
+    private static ActivationMilestoneResponse ToActivationMilestone(ResolvedMilestone milestone) => new(
+        milestone.Key,
+        milestone.Title,
+        milestone.Description,
+        milestone.Priority,
+        EnumValue(milestone.Lifecycle),
+        milestone.AssignedTaskCount,
+        milestone.DoneTaskCount,
+        milestone.RequiredActivationTriggers,
+        milestone.UnmetActivationTriggers,
+        milestone.Delivery == null ? null : new MilestoneDeliveryResponse(
+            milestone.Delivery.At,
+            milestone.Delivery.Mode.ToString().ToLowerInvariant(),
+            milestone.Delivery.Reason,
+            milestone.Delivery.AcceptedTaskIds,
+            milestone.Delivery.IsValid));
+
+    private static string EnumValue<T>(T value) where T : struct, Enum =>
+        string.Concat(value.ToString().Select((character, index) =>
+            char.IsUpper(character) && index > 0
+                ? $"_{char.ToLowerInvariant(character)}"
+                : char.ToLowerInvariant(character).ToString()));
 
     private async Task<AppResult<IReadOnlyList<SiteLinkedProjectResponse>>> BuildLinkedProjectsAsync(
         CancellationToken cancellationToken)

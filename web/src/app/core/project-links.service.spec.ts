@@ -12,7 +12,7 @@ import {
 } from './project-links.service';
 
 const snapshot = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   generatedAt: '2026-07-31T00:00:00Z',
   projectId: 'games',
   linkedProjects: [

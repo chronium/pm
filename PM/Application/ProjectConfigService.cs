@@ -8,7 +8,20 @@ public sealed record ProjectSettingsData(
     string Accent,
     IReadOnlyList<BoardOption> Statuses,
     IReadOnlyList<BoardOption> Tracks,
-    IReadOnlyList<BoardOption> Milestones);
+    IReadOnlyList<ProjectSettingsMilestoneData> Milestones,
+    IReadOnlyList<ProjectSettingsActivationTriggerData> ActivationTriggers);
+
+public sealed record ProjectSettingsMilestoneData(
+    string Key,
+    string Name,
+    string Priority,
+    string Description,
+    IReadOnlyList<string> RequiredActivationTriggers);
+
+public sealed record ProjectSettingsActivationTriggerData(
+    string Key,
+    string Title,
+    IReadOnlyList<ActivationRequirement> Requirements);
 
 public sealed class ProjectConfigService(ProjectRoot projectRoot)
 {
@@ -24,10 +37,22 @@ public sealed class ProjectConfigService(ProjectRoot projectRoot)
             config.TaskStates.Select(status => new BoardOption(status.Key, status.Value)).ToList(),
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
             config.Milestones
-                .Select(milestone => new BoardOption(
+                .Select(milestone => new ProjectSettingsMilestoneData(
                     milestone.Key,
                     milestone.Value.Title,
-                    PriorityLevel.Resolve(config, milestone.Key)))
+                    PriorityLevel.Resolve(config, milestone.Key),
+                    milestone.Value.Description,
+                    (milestone.Value.RequiredActivationTriggers ?? []).ToList()))
+                .ToList(),
+            config.ActivationTriggers
+                .Select(trigger => new ProjectSettingsActivationTriggerData(
+                    trigger.Key,
+                    trigger.Value.Title,
+                    (trigger.Value.Requirements ?? []).Select(requirement => new ActivationRequirement
+                    {
+                        Kind = requirement.Kind,
+                        Source = requirement.Source,
+                    }).ToList()))
                 .ToList()));
     }
 

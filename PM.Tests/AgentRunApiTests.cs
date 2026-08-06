@@ -138,9 +138,19 @@ public class AgentRunApiTests
         WebCommand.ConfigureApiServices(builder.Services);
         var app = builder.Build();
         var board = TestBoardServices.Create(root);
+        var activationResolver = new MilestoneActivationResolver(root);
+        var activationValidator = new MilestoneActivationValidationService(
+            root, new MilestoneActivationGraphService(), activationResolver);
+        var persistence = new ProjectConfigPersistence(root);
+        var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
         app.MapApiV1(root, new ProjectConfigService(root), new ProjectValidationService(root), board,
             TestTaskServices.Create(root, new StubNextIdService()), new WikiService(root),
-            new ResourceRevisionService(root, board), agentRunService: runs, agentRunnerClient: runners);
+            new ResourceRevisionService(root, board), activationResolver, activationValidator,
+            new ActivationTriggerService(root, activationResolver, activationValidator,
+                automaticActivations, TimeProvider.System, persistence),
+            new MilestoneDeliveryService(root, activationResolver, activationValidator,
+                automaticActivations, TimeProvider.System, persistence),
+            agentRunService: runs, agentRunnerClient: runners);
         app.MapOpenApi("/openapi/{documentName}.json");
         await app.StartAsync();
         return (app, new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") });

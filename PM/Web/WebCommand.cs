@@ -27,6 +27,10 @@ public class WebCommand(
     ProjectConfigService configService,
     WikiService wikiService,
     ProjectValidationService validationService,
+    MilestoneActivationResolver milestoneActivationResolver,
+    MilestoneActivationValidationService milestoneActivationValidationService,
+    ActivationTriggerService activationTriggerService,
+    MilestoneDeliveryService milestoneDeliveryService,
     IProjectMembershipService membershipService,
     IAgentRunService? agentRunService,
     IAgentRunnerClient? agentRunnerClient,
@@ -34,19 +38,6 @@ public class WebCommand(
     LinkedProjectRegistryStore? linkedProjectRegistry = null,
     LinkedProjectReadService? linkedProjectReads = null) : AsyncCommand<WebCommand.Settings>
 {
-    public WebCommand(
-        ProjectRoot projectRoot,
-        BoardService boardService,
-        TaskService taskService,
-        ProjectConfigService configService,
-        WikiService wikiService,
-        ProjectValidationService validationService)
-        : this(projectRoot, boardService, taskService, configService, wikiService, validationService,
-            new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
-            null, null, null, null)
-    {
-    }
-
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings,
         CancellationToken cancellationToken)
     {
@@ -84,6 +75,8 @@ public class WebCommand(
 
         var app = builder.Build();
         MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService,
+            milestoneActivationResolver, milestoneActivationValidationService,
+            activationTriggerService, milestoneDeliveryService,
             membershipService, agentRunService, agentRunnerClient, linkedProjectMutations, linkedProjectRegistry,
             linkedProjectReads);
         if (!settings.Api) app.MapAngularWeb(angularAssets!);
@@ -145,6 +138,10 @@ public class WebCommand(
         BoardService boardService,
         TaskService taskService,
         WikiService wikiService,
+        MilestoneActivationResolver milestoneActivationResolver,
+        MilestoneActivationValidationService milestoneActivationValidationService,
+        ActivationTriggerService activationTriggerService,
+        MilestoneDeliveryService milestoneDeliveryService,
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
         IAgentRunnerClient? agentRunnerClient = null,
@@ -154,6 +151,8 @@ public class WebCommand(
     {
         endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
             wikiService, new ResourceRevisionService(projectRoot, boardService),
+            milestoneActivationResolver, milestoneActivationValidationService,
+            activationTriggerService, milestoneDeliveryService,
             membershipService: membershipService,
             agentRunService: agentRunService,
             agentRunnerClient: agentRunnerClient,

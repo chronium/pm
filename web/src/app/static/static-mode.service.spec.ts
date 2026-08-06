@@ -5,7 +5,7 @@ import { adaptGet, validateSnapshot } from './static-snapshot.interceptor';
 import { isStaticDocument } from './static-mode.service';
 
 const snapshot: StaticSnapshot = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   generatedAt: '2026-07-27T12:30:00Z',
   projectId: 'static-pm',
   linkedProjects: [],
@@ -28,8 +28,36 @@ const snapshot: StaticSnapshot = {
       { key: 'PM', name: 'PM' },
       { key: 'WEB', name: 'Web' },
     ],
-    milestones: [{ key: 'launch', title: 'Launch', priority: 'high' }],
+    milestones: [
+      {
+        key: 'launch',
+        title: 'Launch',
+        priority: 'high',
+        description: 'Deliver the launch release.',
+        requiredActivationTriggers: [],
+      },
+    ],
+    activationTriggers: [],
     priorityOptions: ['none', 'low', 'medium', 'high', 'urgent'],
+    revision: 'static-snapshot',
+  },
+  activation: {
+    activationTriggers: [],
+    milestones: [
+      {
+        key: 'launch',
+        title: 'Launch',
+        description: 'Deliver the launch release.',
+        priority: 'high',
+        lifecycle: 'active',
+        assignedTaskCount: 3,
+        doneTaskCount: 1,
+        requiredActivationTriggers: [],
+        unmetActivationTriggers: [],
+        delivery: null,
+      },
+    ],
+    issues: [],
     revision: 'static-snapshot',
   },
   navigation: {
@@ -160,8 +188,8 @@ describe('static snapshot mode', () => {
   it('validates the supported schema and reports malformed or future snapshots', () => {
     expect(validateSnapshot(snapshot)).toBe(snapshot);
     expect(() => validateSnapshot({ ...snapshot, tasks: undefined })).toThrow(/collections/);
-    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 4 })).toThrow(
-      /Unsupported static snapshot schema version: 4/,
+    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 3 })).toThrow(
+      /Unsupported static snapshot schema version: 3/,
     );
     expect(() =>
       validateSnapshot({
@@ -182,6 +210,7 @@ describe('static snapshot mode', () => {
   it('adapts project, task, wiki, and display settings GET contracts', () => {
     expect(adaptGet(snapshot, get('/api/v1/project'))).toEqual(snapshot.project);
     expect(adaptGet(snapshot, get('/api/v1/settings'))).toEqual(snapshot.settings);
+    expect(adaptGet(snapshot, get('/api/v1/activation'))).toEqual(snapshot.activation);
     expect(adaptGet(snapshot, get('/api/v1/wiki/pages'))).toEqual(snapshot.wikiIndex);
     expect(adaptGet(snapshot, get('/api/v1/tasks/PM-0001'))).toMatchObject({
       id: 'PM-0001',

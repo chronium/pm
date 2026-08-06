@@ -9,7 +9,16 @@ const settings: SettingsResponse = {
   accent: 'teal',
   statuses: [{ key: 'todo', name: 'To do' }],
   tracks: [{ key: 'PM', name: 'Product' }],
-  milestones: [{ key: 'm one', title: 'First', priority: 'high' }],
+  milestones: [
+    {
+      key: 'm one',
+      title: 'First',
+      priority: 'high',
+      description: '',
+      requiredActivationTriggers: [],
+    },
+  ],
+  activationTriggers: [],
   priorityOptions: ['none', 'high'],
   revision: 'revision-1',
 };

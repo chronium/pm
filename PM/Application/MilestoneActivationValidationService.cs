@@ -27,6 +27,18 @@ public sealed class MilestoneActivationValidationService
         return CreateResult(Validate(config, tasksById));
     }
 
+    public AppResult<IReadOnlyList<ProjectValidationIssue>> ValidateCurrentProject()
+    {
+        if (!projectRoot.Exists || projectRoot.Config == null)
+            return AppResult<IReadOnlyList<ProjectValidationIssue>>.Fail(
+                "missing_project", "Project not found. Run pm init first.");
+
+        var tasksById = new Dictionary<string, TaskItem>(StringComparer.Ordinal);
+        foreach (var task in projectRoot.GetAllTasks()) tasksById.TryAdd(task.Id, task);
+        return AppResult<IReadOnlyList<ProjectValidationIssue>>.Ok(
+            Validate(projectRoot.Config, tasksById));
+    }
+
     public IReadOnlyList<ProjectValidationIssue> Validate(
         ProjectConfig config,
         IReadOnlyDictionary<string, TaskItem> tasksById)

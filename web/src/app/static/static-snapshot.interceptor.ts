@@ -21,6 +21,7 @@ type NavigationResponse =
   operations['GetBoardNavigation']['responses'][200]['content']['application/json'];
 type TaskResponse = components['schemas']['TaskResponse'];
 type SettingsResponse = components['schemas']['SettingsResponse'];
+type ActivationResponse = components['schemas']['ActivationSwitchboardResponse'];
 type WikiSummary = components['schemas']['WikiPageSummaryResponse'];
 type WikiPage = components['schemas']['WikiPageResponse'];
 
@@ -31,6 +32,7 @@ export interface StaticSnapshot {
   linkedProjects: StaticLinkedProject[];
   project: ProjectResponse;
   settings: SettingsResponse;
+  activation: ActivationResponse;
   navigation: NavigationResponse;
   board: BoardResponse;
   tasks: Omit<TaskResponse, 'localMetadata'>[];
@@ -85,7 +87,7 @@ export function staticSnapshotInterceptor(
 
 export function validateSnapshot(value: unknown): StaticSnapshot {
   if (!isRecord(value)) throw new Error('The static snapshot is malformed.');
-  if (value['schemaVersion'] !== 3)
+  if (value['schemaVersion'] !== 4)
     throw new Error(
       `Unsupported static snapshot schema version: ${String(value['schemaVersion'])}.`,
     );
@@ -95,6 +97,7 @@ export function validateSnapshot(value: unknown): StaticSnapshot {
     'linkedProjects',
     'project',
     'settings',
+    'activation',
     'navigation',
     'board',
     'tasks',
@@ -142,6 +145,7 @@ export function adaptGet(snapshot: StaticSnapshot, request: HttpRequest<unknown>
   const url = request.url;
   if (url === '/api/v1/project') return snapshot.project;
   if (url === '/api/v1/settings') return snapshot.settings;
+  if (url === '/api/v1/activation') return snapshot.activation;
   if (url === '/api/v1/board/navigation') return snapshot.navigation;
   if (url === '/api/v1/board') return filterBoard(snapshot.board, request);
   if (url === '/api/v1/tasks/search') return searchSnapshotTasks(snapshot, request);
