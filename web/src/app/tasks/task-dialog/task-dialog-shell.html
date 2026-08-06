@@ -1,7 +1,8 @@
 <dialog
   #dialog
   class="task-dialog pm-frosted-surface"
-  [attr.aria-labelledby]="headingId"
+  [attr.aria-labelledby]="chrome() ? headingId : null"
+  [attr.aria-label]="chrome() ? null : dialogTitle()"
   (cancel)="cancel($event)"
   (click)="backdropClick($event)"
 >

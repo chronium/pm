@@ -37,6 +37,28 @@ function storeStub() {
 }
 
 describe('MilestoneDeliverableEditor', () => {
+  it('closes a clean workspace when its backdrop is clicked', async () => {
+    TestBed.configureTestingModule({
+      imports: [MilestoneDeliverableEditor],
+      providers: [{ provide: SettingsStore, useFactory: storeStub }],
+    });
+    const fixture = TestBed.createComponent(MilestoneDeliverableEditor);
+    fixture.componentRef.setInput('open', true);
+    fixture.componentRef.setInput('milestone', milestone);
+    fixture.componentRef.setInput('activationTriggers', []);
+    fixture.componentRef.setInput('priorityOptions', ['none', 'high']);
+    const openChanges: boolean[] = [];
+    fixture.componentInstance.openChange.subscribe((open) => openChanges.push(open));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    (fixture.nativeElement.querySelector('dialog') as HTMLDialogElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+
+    expect(openChanges).toEqual([false]);
+  });
+
   it('keeps a dirty draft open until discard is explicitly confirmed', async () => {
     TestBed.configureTestingModule({
       imports: [MilestoneDeliverableEditor],
@@ -54,30 +76,34 @@ describe('MilestoneDeliverableEditor', () => {
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
 
+    (
+      element.querySelector('button[aria-label="Edit milestone title"]') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
     const title = element.querySelector('#deliverable-title') as HTMLInputElement;
     title.value = 'Public beta candidate';
     title.dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    [...element.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Close')!
-      .click();
+    (element.querySelector('dialog') as HTMLDialogElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
     fixture.detectChanges();
 
-    expect(element.textContent).toContain('Discard unsaved milestone changes?');
+    expect(element.textContent).toContain('Discard milestone changes?');
     expect(openChanges).toEqual([]);
-    [...element.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Keep editing')!
+    [...element.querySelectorAll<HTMLButtonElement>('pm-confirm-dialog button')]
+      .find((button) => button.textContent?.trim() === 'Cancel')!
       .click();
     fixture.detectChanges();
     expect((element.querySelector('#deliverable-title') as HTMLInputElement).value).toBe(
       'Public beta candidate',
     );
 
-    [...element.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Close')!
-      .click();
+    (element.querySelector('dialog') as HTMLDialogElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
     fixture.detectChanges();
-    [...element.querySelectorAll<HTMLButtonElement>('button')]
+    [...element.querySelectorAll<HTMLButtonElement>('pm-confirm-dialog button')]
       .find((button) => button.textContent?.trim() === 'Discard changes')!
       .click();
     expect(openChanges).toEqual([false]);
@@ -102,11 +128,15 @@ describe('MilestoneDeliverableEditor', () => {
     const element = fixture.nativeElement as HTMLElement;
 
     expect(element.textContent).toContain('This project is read-only.');
-    expect((element.querySelector('#deliverable-title') as HTMLInputElement).disabled).toBe(true);
+    expect(
+      (element.querySelector('button[aria-label="Edit milestone title"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(element.textContent).toContain('Deliver an installable beta.');
     expect((element.querySelector('.trigger-option input') as HTMLInputElement).disabled).toBe(
       true,
     );
-    expect(element.textContent).not.toContain('Save title');
-    expect(element.textContent).not.toContain('Review gate changes');
+    expect(element.textContent).not.toContain('Save description');
+    expect(element.textContent).not.toContain('Review changes');
   });
 });

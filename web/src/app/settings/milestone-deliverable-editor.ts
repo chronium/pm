@@ -1,18 +1,12 @@
-import {
-  Component,
-  computed,
-  effect,
-  ElementRef,
-  inject,
-  input,
-  output,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { disabled, FormField, form, required } from '@angular/forms/signals';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { cssClose, cssPen } from '@ng-icons/css.gg';
 
+import { MarkdownDisplay } from '../markdown/markdown-display';
 import { MarkdownEditor } from '../markdown/markdown-editor';
-import { PmFormField } from '../ui/form-field/form-field';
+import { TaskDialogShell } from '../tasks/task-dialog/task-dialog-shell';
+import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import type { SettingsActivationTrigger, SettingsMilestone } from './settings-api.service';
 import { SettingsStore, type MilestoneGatePreview } from './settings.store';
 
@@ -26,16 +20,13 @@ interface DeliverableBaseline {
 
 @Component({
   selector: 'pm-milestone-deliverable-editor',
-  imports: [FormField, MarkdownEditor, PmFormField],
+  imports: [FormField, MarkdownDisplay, MarkdownEditor, NgIcon, PmConfirmDialog, TaskDialogShell],
+  providers: [provideIcons({ cssClose, cssPen })],
   templateUrl: './milestone-deliverable-editor.html',
   styleUrl: './milestone-deliverable-editor.css',
 })
 export class MilestoneDeliverableEditor {
-  private static nextHeadingId = 0;
-
   protected readonly store = inject(SettingsStore);
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
-  private readonly titleInput = viewChild<ElementRef<HTMLInputElement>>('titleInput');
 
   readonly open = input(false);
   readonly milestone = input<SettingsMilestone | null>(null);
@@ -46,7 +37,6 @@ export class MilestoneDeliverableEditor {
   readonly openChange = output<boolean>();
   readonly dirtyChange = output<boolean>();
 
-  protected readonly headingId = `milestone-deliverable-heading-${MilestoneDeliverableEditor.nextHeadingId++}`;
   protected readonly baseline = signal<DeliverableBaseline | null>(null);
   protected readonly titleModel = signal({ value: '' });
   protected readonly priorityModel = signal({ value: '' });
@@ -55,6 +45,7 @@ export class MilestoneDeliverableEditor {
   protected readonly gatePreview = signal<MilestoneGatePreview | null>(null);
   protected readonly discardPrompt = signal(false);
   protected readonly conflictNotice = signal<string | null>(null);
+  protected readonly activeField = signal<'title' | 'priority' | 'description' | null>(null);
 
   protected readonly titleForm = form(this.titleModel, (item) => {
     required(item.value, { message: 'Title is required.' });
@@ -82,6 +73,7 @@ export class MilestoneDeliverableEditor {
   protected readonly dirty = computed(
     () => this.titleDirty() || this.priorityDirty() || this.descriptionDirty() || this.gatesDirty(),
   );
+  protected readonly selectedGateCount = computed(() => this.selectedTriggerKeys().length);
 
   constructor() {
     let activeKey: string | null = null;
@@ -93,18 +85,32 @@ export class MilestoneDeliverableEditor {
         this.resetFromMilestone(milestone);
       }
     });
-    effect(() => {
-      const dialog = this.dialog().nativeElement;
-      if (this.open() && !dialog.open) {
-        if (typeof dialog.showModal === 'function') dialog.showModal();
-        else dialog.setAttribute('open', '');
-        queueMicrotask(() => this.titleInput()?.nativeElement.focus());
-      } else if (!this.open() && dialog.open) {
-        if (typeof dialog.close === 'function') dialog.close();
-        else dialog.removeAttribute('open');
-      }
-    });
     effect(() => this.dirtyChange.emit(this.dirty()));
+  }
+
+  protected activate(field: 'title' | 'priority' | 'description'): void {
+    if (this.mutationsBlocked() || this.activeField() !== null) return;
+    this.store.clearOperationError();
+    this.activeField.set(field);
+  }
+
+  protected cancelEdit(): void {
+    const baseline = this.baseline();
+    if (!baseline) return;
+    if (this.activeField() === 'title') {
+      this.titleModel.set({ value: baseline.title });
+      this.titleForm().reset();
+    }
+    if (this.activeField() === 'priority') {
+      this.priorityModel.set({ value: baseline.priority });
+      this.priorityForm().reset();
+    }
+    if (this.activeField() === 'description') {
+      this.descriptionModel.set({ value: baseline.description });
+      this.descriptionForm().reset();
+    }
+    this.activeField.set(null);
+    this.store.clearOperationError();
   }
 
   protected formError(): string | null {
@@ -122,6 +128,7 @@ export class MilestoneDeliverableEditor {
       this.baseline.update((value) => (value ? { ...value, title } : value));
       this.titleModel.set({ value: title });
       this.titleForm().reset();
+      this.activeField.set(null);
       this.invalidatePreview();
     }
   }
@@ -134,6 +141,7 @@ export class MilestoneDeliverableEditor {
     if (await this.store.setMilestonePriority(baseline.key, { priority })) {
       this.baseline.update((value) => (value ? { ...value, priority } : value));
       this.priorityForm().reset();
+      this.activeField.set(null);
       this.invalidatePreview();
     }
   }
@@ -146,6 +154,7 @@ export class MilestoneDeliverableEditor {
     if (await this.store.setMilestoneDescription(baseline.key, { description })) {
       this.baseline.update((value) => (value ? { ...value, description } : value));
       this.descriptionForm().reset();
+      this.activeField.set(null);
       this.invalidatePreview();
     }
   }
@@ -272,6 +281,7 @@ export class MilestoneDeliverableEditor {
     this.gatePreview.set(null);
     this.discardPrompt.set(false);
     this.conflictNotice.set(null);
+    this.activeField.set(null);
     this.store.clearOperationError();
   }
 

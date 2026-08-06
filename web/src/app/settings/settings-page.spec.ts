@@ -230,8 +230,9 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(element.querySelector('.deliverable-dialog h2')?.textContent).toBe('Launch');
-    expect((element.querySelector('#deliverable-title') as HTMLInputElement).value).toBe('Launch');
+    const dialog = element.querySelector('.task-dialog') as HTMLDialogElement;
+    expect(dialog.getAttribute('aria-label')).toBe('Milestone deliverable');
+    expect(dialog.textContent).toContain('Launch');
   });
 
   it('opens the deliverable editor and saves title, priority, and description independently', async () => {
@@ -240,15 +241,22 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    const dialog = element.querySelector('.deliverable-dialog') as HTMLDialogElement;
+    const dialog = element.querySelector('.task-dialog') as HTMLDialogElement;
     expect(dialog.open || dialog.hasAttribute('open')).toBe(true);
-    expect(dialog.textContent).toContain('Outcome:');
-    expect(dialog.textContent).toContain('Evidence:');
+    expect(dialog.querySelector('.deliverable-key')?.textContent).toContain('long/milestone');
+    expect(dialog.querySelector('.title-value')?.textContent).toContain('A very long milestone');
 
+    (
+      dialog.querySelector('button[aria-label="Edit milestone title"]') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
     const title = dialog.querySelector('#deliverable-title') as HTMLInputElement;
     title.value = 'Launch';
     title.dispatchEvent(new Event('input'));
-    (title.closest('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Save')!
+      .click();
     await Promise.resolve();
     const titleRequest = http.expectOne('/api/v1/settings/milestones/long%2Fmilestone');
     expect(titleRequest.request.body).toEqual({ title: 'Launch' });
@@ -263,10 +271,17 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
+    (
+      dialog.querySelector('button[aria-label="Edit milestone priority"]') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
     const select = dialog.querySelector('#deliverable-priority') as HTMLSelectElement;
     select.value = 'medium';
     select.dispatchEvent(new Event('input'));
-    (select.closest('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    [...select.parentElement!.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Save')!
+      .click();
     await Promise.resolve();
     const priority = http.expectOne('/api/v1/settings/milestones/long%2Fmilestone/priority');
     expect(priority.request.body).toEqual({ priority: 'medium' });
@@ -282,6 +297,10 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
+    (
+      dialog.querySelector('button[aria-label="Edit deliverable description"]') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
     const markdown = fixture.debugElement.query(By.directive(MarkdownEditor))
       .componentInstance as MarkdownEditor;
     markdown.value.set('Outcome: ship the beta.\n\nEvidence: acceptance recording.');
@@ -320,12 +339,12 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    const dialog = element.querySelector('.deliverable-dialog') as HTMLDialogElement;
+    const dialog = element.querySelector('.task-dialog') as HTMLDialogElement;
     const gate = dialog.querySelector('.trigger-option input') as HTMLInputElement;
     gate.click();
     fixture.detectChanges();
     [...dialog.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.includes('Review gate changes'))!
+      .find((button) => button.textContent?.includes('Review changes'))!
       .click();
     await Promise.resolve();
     http.expectOne('/api/v1/activation').flush({
@@ -353,8 +372,8 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(dialog.textContent).toContain('PM-0001');
-    const apply = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent?.includes('make 1 task(s) ineligible'),
+    const apply = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Apply',
     )!;
     apply.click();
     await Promise.resolve();

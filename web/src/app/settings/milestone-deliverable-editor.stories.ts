@@ -116,11 +116,9 @@ export const EligibilityImpact: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByLabelText(/Beta entry criteria/));
-    await userEvent.click(canvas.getByRole('button', { name: 'Review gate changes' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
     await expect(await canvas.findByText(/PM-0092, PM-0093/)).toHaveTextContent('PM-0092, PM-0093');
-    await expect(
-      canvas.getByRole('button', { name: /Apply and make 2 task\(s\) ineligible/ }),
-    ).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Apply' })).toBeEnabled();
   },
 };
 
@@ -129,8 +127,10 @@ export const ReadOnly: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('status')).toHaveTextContent('read-only');
-    await expect(canvas.getByLabelText('Milestone title')).toBeDisabled();
-    await expect(canvas.queryByRole('button', { name: 'Save title' })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Edit milestone title' })).toBeDisabled();
+    await expect(
+      canvas.queryByRole('button', { name: 'Edit deliverable description' }),
+    ).not.toBeInTheDocument();
   },
 };
 

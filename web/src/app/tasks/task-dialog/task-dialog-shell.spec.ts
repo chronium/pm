@@ -42,4 +42,13 @@ describe('TaskDialogShell', () => {
 
     expect(closes).toBe(0);
   });
+
+  it('uses the supplied dialog title as an accessible label without chrome', () => {
+    const { fixture, dialog } = render(false);
+    fixture.componentRef.setInput('chrome', false);
+    fixture.detectChanges();
+
+    expect(dialog.getAttribute('aria-label')).toBe('Task workspace');
+    expect(dialog.hasAttribute('aria-labelledby')).toBe(false);
+  });
 });

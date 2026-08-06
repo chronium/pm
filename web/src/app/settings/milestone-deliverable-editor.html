@@ -1,262 +1,312 @@
-<dialog
-  #dialog
-  class="deliverable-dialog pm-frosted-surface pm-frosted-dialog"
-  [attr.aria-labelledby]="headingId"
-  (cancel)="handleCancel($event)"
->
-  @if (baseline(); as current) {
-    <header class="dialog-heading">
-      <div>
-        <span class="eyebrow">Milestone deliverable</span>
-        <h2 [id]="headingId">{{ current.title }}</h2>
-        <code>{{ current.key }}</code>
-      </div>
-      <button type="button" class="pm-button pm-button--ghost" (click)="requestClose()">
-        Close
-      </button>
-    </header>
-
-    @if (readOnly()) {
-      <p class="read-only-notice" role="status">
-        This project is read-only. Deliverable details and activation gates cannot be changed.
-      </p>
-    }
-    @if (store.pendingExternal()) {
-      <div class="conflict-notice" role="alert">
-        <div>
-          <strong>Project settings changed elsewhere.</strong>
-          <span>Review the latest revision before saving this draft.</span>
-        </div>
-        <div class="compact-actions">
-          <button type="button" class="pm-button pm-button--secondary" (click)="useLatest()">
-            Use latest
-          </button>
-          <button
-            type="button"
-            class="pm-button pm-button--primary"
-            (click)="preserveDraftAgainstLatest()"
-          >
-            Preserve draft
-          </button>
-        </div>
-      </div>
-    }
-    @if (conflictNotice()) {
-      <p class="saved-notice" role="status">{{ conflictNotice() }}</p>
-    }
-
-    <div class="dialog-content">
-      <section aria-labelledby="deliverable-title-heading">
-        <div class="section-heading">
+@if (open() && baseline(); as current) {
+  <pm-task-dialog-shell
+    dialogTitle="Milestone deliverable"
+    [chrome]="false"
+    [pending]="store.pending()"
+    [backdropDismissible]="true"
+    (closeIntent)="requestClose()"
+  >
+    <div class="deliverable-workspace">
+      @if (readOnly()) {
+        <p class="workspace-notice" role="status">
+          This project is read-only. Deliverable details and activation gates cannot be changed.
+        </p>
+      }
+      @if (store.pendingExternal()) {
+        <div class="conflict-notice" role="alert">
           <div>
-            <h3 id="deliverable-title-heading">Title</h3>
-            <p>Name the outcome people will recognize.</p>
+            <strong>Project settings changed elsewhere.</strong>
+            <span>Review the latest revision before saving this draft.</span>
+          </div>
+          <div class="compact-actions">
+            <button type="button" class="pm-button pm-button--secondary" (click)="useLatest()">
+              Use latest
+            </button>
+            <button
+              type="button"
+              class="pm-button pm-button--primary"
+              (click)="preserveDraftAgainstLatest()"
+            >
+              Preserve draft
+            </button>
           </div>
         </div>
-        <form class="compact-form" (submit)="saveTitle($event)" novalidate>
-          <pm-form-field>
-            <label for="deliverable-title">Milestone title</label>
-            <input #titleInput id="deliverable-title" pmControl [formField]="titleForm.value" />
-            @if (titleForm.value().touched() && formError()) {
-              <p pmFieldMessage class="field-error">{{ formError() }}</p>
+      }
+      @if (conflictNotice()) {
+        <p class="workspace-notice" role="status">{{ conflictNotice() }}</p>
+      }
+
+      <header class="workspace-header">
+        <div class="context-line">
+          <code class="deliverable-key">{{ current.key }}</code>
+          <span class="context-value">Milestone</span>
+          <div class="host-actions" aria-label="Milestone actions">
+            @if (activeField() === 'title') {
+              <button
+                type="button"
+                class="pm-button pm-button--primary"
+                [disabled]="mutationsBlocked() || !titleDirty() || !titleForm().valid()"
+                (click)="saveTitle($event)"
+              >
+                {{ pending('rename') ? 'Saving…' : 'Save' }}
+              </button>
+              <button
+                type="button"
+                class="pm-button pm-button--secondary"
+                [disabled]="store.pending()"
+                (click)="cancelEdit()"
+              >
+                Cancel
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="host-action-icon"
+                aria-label="Close milestone deliverable"
+                title="Close"
+                [disabled]="store.pending()"
+                (click)="requestClose()"
+              >
+                <ng-icon name="cssClose" aria-hidden="true" />
+              </button>
             }
-          </pm-form-field>
-          @if (!readOnly()) {
+          </div>
+        </div>
+
+        <div class="title-row">
+          @if (activeField() === 'title') {
+            <label class="visually-hidden" for="deliverable-title">Milestone title</label>
+            <input
+              id="deliverable-title"
+              class="title-input"
+              pmControl
+              [formField]="titleForm.value"
+              autocomplete="off"
+              autofocus
+            />
+            @if (titleForm.value().touched() && formError()) {
+              <p class="field-error">{{ formError() }}</p>
+            }
+          } @else {
             <button
-              type="submit"
-              class="pm-button pm-button--secondary"
-              [disabled]="mutationsBlocked() || !titleDirty() || !titleForm().valid()"
+              type="button"
+              class="inline-value title-value"
+              [disabled]="readOnly() || store.pending() || store.stale()"
+              aria-label="Edit milestone title"
+              (click)="activate('title')"
             >
-              {{ pending('rename') ? 'Saving…' : 'Save title' }}
+              {{ current.title }}
             </button>
           }
-        </form>
+        </div>
         @if (error('rename')) {
           <p class="operation-error" role="alert">{{ error('rename') }}</p>
         }
-      </section>
+      </header>
 
-      <section aria-labelledby="deliverable-priority-heading">
-        <div class="section-heading">
-          <div>
-            <h3 id="deliverable-priority-heading">Inherited task priority</h3>
-            <p>Tasks without their own priority inherit this value.</p>
-          </div>
-        </div>
-        <form class="compact-form" (submit)="savePriority($event)">
-          <pm-form-field>
-            <label for="deliverable-priority">Priority</label>
-            <select id="deliverable-priority" pmControl [formField]="priorityForm.value">
+      <div class="property-row">
+        <div class="property-field">
+          <span class="property-label">Priority</span>
+          @if (activeField() === 'priority') {
+            <label class="visually-hidden" for="deliverable-priority">Priority</label>
+            <select id="deliverable-priority" pmControl [formField]="priorityForm.value" autofocus>
               @for (priority of priorityOptions(); track priority) {
                 <option [value]="priority">{{ priority }}</option>
               }
             </select>
-          </pm-form-field>
-          @if (!readOnly()) {
             <button
-              type="submit"
-              class="pm-button pm-button--secondary"
+              type="button"
+              class="pm-button pm-button--primary compact-save"
               [disabled]="mutationsBlocked() || !priorityDirty()"
+              (click)="savePriority($event)"
             >
-              {{ pending('priority') ? 'Saving…' : 'Save priority' }}
+              {{ pending('priority') ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              type="button"
+              class="pm-button pm-button--ghost compact-save"
+              [disabled]="store.pending()"
+              (click)="cancelEdit()"
+            >
+              Cancel
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="inline-value"
+              [disabled]="readOnly() || store.pending() || store.stale()"
+              aria-label="Edit milestone priority"
+              (click)="activate('priority')"
+            >
+              {{ current.priority }}
             </button>
           }
-        </form>
-        @if (error('priority')) {
-          <p class="operation-error" role="alert">{{ error('priority') }}</p>
-        }
-      </section>
-
-      <section aria-labelledby="deliverable-description-heading">
-        <div class="section-heading description-heading">
-          <div>
-            <h3 id="deliverable-description-heading">Deliverable description</h3>
-            <p>Describe the result, not a duplicate task list.</p>
-          </div>
-          <ul aria-label="Description guidance">
-            <li><strong>Outcome:</strong> what becomes usable or accepted?</li>
-            <li><strong>Scope:</strong> what belongs in this delivery?</li>
-            <li><strong>Exclusions:</strong> what is intentionally deferred?</li>
-            <li><strong>Evidence:</strong> how will completion be demonstrated?</li>
-          </ul>
         </div>
-        <form (submit)="saveDescription($event)">
-          <pm-markdown-editor
-            [formField]="descriptionForm.value"
-            label="Milestone deliverable description"
-          />
-          @if (!readOnly()) {
-            <div class="section-actions">
+        <div class="property-field">
+          <span class="property-label">Activation gates</span>
+          <span class="context-value"> {{ selectedGateCount() }} required </span>
+        </div>
+      </div>
+      @if (error('priority')) {
+        <p class="operation-error" role="alert">{{ error('priority') }}</p>
+      }
+
+      <hr />
+
+      <div class="workspace-columns">
+        <section class="description-section pm-scroll-surface" aria-label="Deliverable description">
+          <div class="description-actions">
+            @if (activeField() === 'description') {
               <button
-                type="submit"
-                class="pm-button pm-button--secondary"
+                type="button"
+                class="pm-button pm-button--primary"
                 [disabled]="mutationsBlocked() || !descriptionDirty()"
+                (click)="saveDescription($event)"
               >
                 {{ pending('description') ? 'Saving…' : 'Save description' }}
               </button>
-            </div>
-          }
-        </form>
-        @if (error('description')) {
-          <p class="operation-error" role="alert">{{ error('description') }}</p>
-        }
-      </section>
-
-      <section aria-labelledby="deliverable-gates-heading">
-        <div class="section-heading">
-          <div>
-            <h3 id="deliverable-gates-heading">Required activation gates</h3>
-            <p>All selected triggers must be active before assigned work becomes eligible.</p>
-          </div>
-        </div>
-        <div class="trigger-list">
-          @for (trigger of activationTriggers(); track trigger.key) {
-            <label class="trigger-option">
-              <input
-                type="checkbox"
-                [checked]="triggerSelected(trigger.key)"
-                [disabled]="readOnly() || store.pending() || store.stale()"
-                (change)="toggleTrigger(trigger.key, $any($event.target).checked)"
-              />
-              <span>
-                <strong>{{ trigger.title }}</strong>
-                <small
-                  ><code>{{ trigger.key }}</code> · {{ triggerSummary(trigger) }}</small
-                >
-              </span>
-            </label>
-          } @empty {
-            <p class="empty-state">No activation triggers are configured.</p>
-          }
-        </div>
-
-        @if (!readOnly() && gatesDirty() && !gatePreview()) {
-          <div class="section-actions">
-            <button
-              type="button"
-              class="pm-button pm-button--secondary"
-              [disabled]="mutationsBlocked()"
-              (click)="reviewGateChanges()"
-            >
-              {{ pending('preview') ? 'Reviewing…' : 'Review gate changes' }}
-            </button>
-          </div>
-        }
-        @if (error('preview')) {
-          <p class="operation-error" role="alert">{{ error('preview') }}</p>
-        }
-
-        @if (gatePreview(); as preview) {
-          <div
-            class="impact-preview"
-            [class.impact-preview--warning]="preview.impact.requiresConfirmation"
-          >
-            <div>
-              <strong>Eligibility impact</strong>
-              <span>
-                {{ preview.impact.before }} → {{ preview.impact.after }} ·
-                {{ preview.impact.currentlyEligibleTaskIds.length }} currently eligible task(s)
-              </span>
-            </div>
-            @if (preview.impact.taskIdsLosingEligibility.length > 0) {
-              <p>
-                These tasks will lose eligibility:
-                <code>{{ preview.impact.taskIdsLosingEligibility.join(', ') }}</code>
-              </p>
-            } @else {
-              <p>No currently eligible tasks will lose eligibility.</p>
+              <button
+                type="button"
+                class="pm-button pm-button--secondary"
+                [disabled]="store.pending()"
+                (click)="cancelEdit()"
+              >
+                Cancel
+              </button>
+            } @else if (!readOnly()) {
+              <button
+                type="button"
+                class="icon-button"
+                aria-label="Edit deliverable description"
+                title="Edit description"
+                [disabled]="store.pending() || store.stale()"
+                (click)="activate('description')"
+              >
+                <ng-icon name="cssPen" aria-hidden="true" />
+              </button>
             }
-            <div class="compact-actions">
-              <button
-                type="button"
-                class="pm-button pm-button--ghost"
-                (click)="gatePreview.set(null)"
-              >
-                Edit selection
-              </button>
-              <button
-                type="button"
-                class="pm-button"
-                [class.pm-button--danger]="preview.impact.requiresConfirmation"
-                [class.pm-button--primary]="!preview.impact.requiresConfirmation"
-                [disabled]="mutationsBlocked()"
-                (click)="applyGateChanges()"
-              >
-                @if (pending('activation')) {
-                  Applying…
-                } @else if (preview.impact.requiresConfirmation) {
-                  Apply and make {{ preview.impact.taskIdsLosingEligibility.length }} task(s)
-                  ineligible
-                } @else {
-                  Apply gate changes
-                }
-              </button>
-            </div>
           </div>
-        }
-        @if (error('activation')) {
-          <p class="operation-error" role="alert">{{ error('activation') }}</p>
-        }
-      </section>
-    </div>
 
-    <footer class="dialog-footer">
-      @if (discardPrompt()) {
-        <span role="alert">Discard unsaved milestone changes?</span>
-        <div class="compact-actions">
-          <button type="button" class="pm-button pm-button--secondary" (click)="keepEditing()">
-            Keep editing
-          </button>
-          <button type="button" class="pm-button pm-button--danger" (click)="discardAndClose()">
-            Discard changes
-          </button>
-        </div>
-      } @else {
-        <span>{{ dirty() ? 'Unsaved changes' : 'All changes saved' }}</span>
-        <button type="button" class="pm-button pm-button--primary" (click)="requestClose()">
-          Done
-        </button>
-      }
-    </footer>
-  }
-</dialog>
+          @if (activeField() === 'description') {
+            <details class="description-guidance">
+              <summary>What should this deliverable cover?</summary>
+              <ul>
+                <li><strong>Outcome:</strong> what becomes usable or accepted?</li>
+                <li><strong>Scope:</strong> what belongs in this delivery?</li>
+                <li><strong>Exclusions:</strong> what is intentionally deferred?</li>
+                <li><strong>Evidence:</strong> how will completion be demonstrated?</li>
+              </ul>
+            </details>
+            <pm-markdown-editor
+              [formField]="descriptionForm.value"
+              label="Milestone deliverable description"
+            />
+          } @else {
+            <pm-markdown-display
+              [markdown]="current.description || '_No deliverable description provided._'"
+            />
+          }
+          @if (error('description')) {
+            <p class="operation-error" role="alert">{{ error('description') }}</p>
+          }
+        </section>
+
+        <aside class="activation-column" aria-labelledby="activation-gates-heading">
+          <section>
+            <h2 id="activation-gates-heading">Activation gates</h2>
+            <p class="column-intro">
+              Assigned work becomes eligible when every required gate is active.
+            </p>
+            <div class="trigger-list">
+              @for (trigger of activationTriggers(); track trigger.key) {
+                <label class="trigger-option">
+                  <input
+                    type="checkbox"
+                    [checked]="triggerSelected(trigger.key)"
+                    [disabled]="
+                      readOnly() || store.pending() || store.stale() || activeField() !== null
+                    "
+                    (change)="toggleTrigger(trigger.key, $any($event.target).checked)"
+                  />
+                  <span>
+                    <strong>{{ trigger.title }}</strong>
+                    <small
+                      ><code>{{ trigger.key }}</code> · {{ triggerSummary(trigger) }}</small
+                    >
+                  </span>
+                </label>
+              } @empty {
+                <p class="empty-state">No activation triggers are configured.</p>
+              }
+            </div>
+
+            @if (!readOnly() && gatesDirty() && !gatePreview()) {
+              <button
+                type="button"
+                class="pm-button pm-button--secondary gate-action"
+                [disabled]="mutationsBlocked()"
+                (click)="reviewGateChanges()"
+              >
+                {{ pending('preview') ? 'Reviewing…' : 'Review changes' }}
+              </button>
+            }
+            @if (error('preview')) {
+              <p class="operation-error" role="alert">{{ error('preview') }}</p>
+            }
+
+            @if (gatePreview(); as preview) {
+              <div
+                class="impact-preview"
+                [class.impact-preview--warning]="preview.impact.requiresConfirmation"
+              >
+                <strong>Eligibility impact</strong>
+                <span>{{ preview.impact.before }} → {{ preview.impact.after }}</span>
+                @if (preview.impact.taskIdsLosingEligibility.length > 0) {
+                  <p>
+                    Losing eligibility:
+                    <code>{{ preview.impact.taskIdsLosingEligibility.join(', ') }}</code>
+                  </p>
+                } @else {
+                  <p>No currently eligible tasks will lose eligibility.</p>
+                }
+                <div class="impact-actions">
+                  <button
+                    type="button"
+                    class="pm-button pm-button--ghost"
+                    (click)="gatePreview.set(null)"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="pm-button"
+                    [class.pm-button--danger]="preview.impact.requiresConfirmation"
+                    [class.pm-button--primary]="!preview.impact.requiresConfirmation"
+                    [disabled]="mutationsBlocked()"
+                    (click)="applyGateChanges()"
+                  >
+                    {{ pending('activation') ? 'Applying…' : 'Apply' }}
+                  </button>
+                </div>
+              </div>
+            }
+            @if (error('activation')) {
+              <p class="operation-error" role="alert">{{ error('activation') }}</p>
+            }
+          </section>
+        </aside>
+      </div>
+    </div>
+  </pm-task-dialog-shell>
+
+  <pm-confirm-dialog
+    [open]="discardPrompt()"
+    [pending]="store.pending()"
+    heading="Discard milestone changes?"
+    message="Your unsaved milestone changes will be lost."
+    confirmLabel="Discard changes"
+    (confirmed)="discardAndClose()"
+    (cancelled)="keepEditing()"
+    (openChange)="$event || keepEditing()"
+  />
+}

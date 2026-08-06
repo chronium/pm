@@ -125,6 +125,7 @@ export const Edit: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Milestones' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Edit deliverable' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Edit milestone title' }));
     await expect(canvas.getByLabelText('Milestone title')).toHaveValue(
       settings.milestones[0]!.title,
     );
