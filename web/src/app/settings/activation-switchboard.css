@@ -51,6 +51,7 @@
   border-top: 1px solid var(--pm-border-subtle);
 }
 .trigger-row {
+  border: 0;
   border-bottom: 1px solid var(--pm-border-subtle);
 }
 .trigger-row summary {
@@ -59,7 +60,7 @@
   align-items: center;
   gap: var(--pm-space-3);
   min-height: 54px;
-  padding: var(--pm-space-1) 0;
+  padding: var(--pm-space-2) var(--pm-space-3);
   list-style: none;
   cursor: pointer;
 }
