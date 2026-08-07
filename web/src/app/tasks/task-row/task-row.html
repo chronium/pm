@@ -18,7 +18,13 @@
       class="dependency-badge"
       [tone]="dependencyTone(task())"
       [title]="task().dependencies.summary"
-      >{{ task().dependencies.ready ? 'Ready' : 'Blocked' }}</pm-badge
+      >Dependencies: {{ task().dependencies.ready ? 'ready' : 'blocked' }}</pm-badge
+    >
+    <pm-badge
+      class="activation-badge"
+      [tone]="activationTone(task())"
+      [title]="task().activation.summary"
+      >{{ activationLabel(task()) }}</pm-badge
     >
   </span>
   @if (task().descriptionPreview) {

@@ -41,8 +41,12 @@ public class SiteExportTests
         Assert.DoesNotContain("nextId", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret-next-id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(projectRoot.RootPath, json, StringComparison.Ordinal);
-        Assert.Equal(4, payload.SchemaVersion);
+        Assert.Equal(5, payload.SchemaVersion);
         Assert.Equal("static-snapshot", payload.Activation.Revision);
+        Assert.Equal(1, payload.Navigation.ActivationEligibleCount);
+        var milestone = Assert.Single(payload.Board.MilestoneGroups, group => group.Key == "launch");
+        Assert.Equal("active", milestone.Lifecycle);
+        Assert.True(payload.Tasks.Single(item => item.Id == "PM-0002").Activation.IsEligible);
         Assert.Null(payload.ProjectId);
         Assert.Empty(payload.LinkedProjects);
         Assert.Equal(json, SiteExportService.SerializeSnapshot(payload));

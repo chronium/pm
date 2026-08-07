@@ -422,12 +422,19 @@ public sealed class LinkedProjectReadServiceTests
         var scoped = await service.GetNextTaskAsync(
             new LinkedProjectReadRequest(),
             new NextTaskQuery(Milestone: "inactive", ReadyOnly: false));
+        active.UpdateTaskState(eligibleBlocked, "done");
+        var activationExcluded = await service.GetNextTaskAsync(
+            new LinkedProjectReadRequest(), new NextTaskQuery(ReadyOnly: true));
 
         Assert.Equal("PM-0002", includeBlocked.Payload!.Task!.Task.Id);
         Assert.True(includeBlocked.Payload.Task.Activation.IsEligible);
         Assert.False(includeBlocked.Payload.Task.Dependencies.Ready);
         Assert.False(scoped.Payload!.Found);
         Assert.Contains("unmet activation triggers: entry", scoped.Payload.Reason);
+        Assert.False(activationExcluded.Payload!.Found);
+        Assert.Contains(
+            "1 remaining task is excluded by inactive or delivered milestones",
+            activationExcluded.Payload.Reason);
     }
 
     [Fact]

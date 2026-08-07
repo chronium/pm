@@ -303,10 +303,24 @@ h2 {
 }
 .dependencies p,
 .recommendation-context p,
+.activation-context p,
 .creation-context p {
   margin: var(--pm-space-1) 0 0;
   color: var(--pm-text-muted);
   overflow-wrap: anywhere;
+}
+.activation-context[data-eligible='false'] > p:first-of-type {
+  color: var(--pm-warning);
+}
+.activation-gates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pm-space-1) var(--pm-space-2);
+  font-size: var(--pm-font-size-sm);
+}
+.activation-gates span {
+  color: var(--pm-text-subtle);
 }
 .dependency-list {
   display: grid;

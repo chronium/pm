@@ -311,6 +311,8 @@ public sealed class LinkedProjectReadService
 
         var warnings = new ReadWarningCollector(targets.Payload.Warnings);
         var candidates = new List<RecommendationCandidate>();
+        var activationEligibleCount = 0;
+        var activationExcludedCount = 0;
         ResolvedMilestone? scopedMilestone = null;
         for (var projectIndex = 0; projectIndex < members.Count; projectIndex++)
         {
@@ -335,8 +337,12 @@ public sealed class LinkedProjectReadService
                     milestone => string.Equals(milestone.Key, query.Milestone, StringComparison.Ordinal));
 
             var owner = await BuildOwnerAsync(member, cancellationToken);
-            candidates.AddRange(board.Payload!.Tasks
+            var remaining = board.Payload!.Tasks
                 .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+                .ToList();
+            activationEligibleCount += remaining.Count(task => task.Activation.IsEligible);
+            activationExcludedCount += remaining.Count(task => !task.Activation.IsEligible);
+            candidates.AddRange(remaining
                 .Where(task => task.Activation.IsEligible)
                 .Select(task => new RecommendationCandidate(
                     member, owner, task, projectIndex,
@@ -380,7 +386,9 @@ public sealed class LinkedProjectReadService
         if (selected == null)
             return AppResult<LinkedProjectNextTaskResult>.Ok(new LinkedProjectNextTaskResult(
                 false, null, null,
-                BuildNoRecommendationReason(request, query, scopedMilestone), warnings.Items));
+                BuildNoRecommendationReason(
+                    request, query, scopedMilestone, activationEligibleCount, activationExcludedCount),
+                warnings.Items));
 
         var reason = $"Selected {selected.Task.Priority} priority task in " +
                      $"{selected.Owner.ProjectName} ({selected.Owner.ProjectId}), state {selected.Task.State}; " +
@@ -718,7 +726,9 @@ public sealed class LinkedProjectReadService
     private static string BuildNoRecommendationReason(
         LinkedProjectReadRequest request,
         NextTaskQuery query,
-        ResolvedMilestone? scopedMilestone = null)
+        ResolvedMilestone? scopedMilestone,
+        int activationEligibleCount,
+        int activationExcludedCount)
     {
         var scope = request.Scope switch
         {
@@ -735,6 +745,12 @@ public sealed class LinkedProjectReadService
                    $"unmet activation triggers: {string.Join(", ", scopedMilestone.UnmetActivationTriggers)}.";
         if (scopedMilestone?.Lifecycle == MilestoneLifecycle.Delivered)
             return $"No activation-eligible task found{scope}{filter}; milestone {scopedMilestone.Key} is delivered.";
+        if (activationEligibleCount == 0 && activationExcludedCount > 0)
+        {
+            var noun = activationExcludedCount == 1 ? "task is" : "tasks are";
+            return $"No activation-eligible task found{scope}{filter}; {activationExcludedCount} remaining " +
+                   $"{noun} excluded by inactive or delivered milestones.";
+        }
         return query.ReadyOnly
             ? $"No dependency-ready actionable task found{scope}{filter}."
             : $"No actionable task found{scope}{filter}.";

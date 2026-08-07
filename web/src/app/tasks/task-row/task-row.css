@@ -63,9 +63,6 @@ a:hover {
   justify-content: flex-end;
   gap: var(--pm-space-1);
 }
-.dependency-badge {
-  width: 64px;
-}
 .task-preview {
   grid-column: 1 / -1;
   overflow: hidden;
@@ -89,7 +86,7 @@ a:hover {
   :host a {
     grid-template-columns:
       var(--pm-task-selection-slot) 104px minmax(240px, 1fr) minmax(180px, 0.58fr)
-      180px;
+      max-content;
     gap: 0 var(--pm-space-3);
     min-height: 44px;
     padding: 0 var(--pm-space-3);
@@ -123,12 +120,13 @@ a:hover {
   :host .task-badges {
     grid-column: 5;
     display: grid;
-    grid-template-columns: 112px 64px;
+    grid-template-columns: repeat(3, max-content);
     gap: var(--pm-space-1);
   }
 
-  :host :is(.priority-badge, .dependency-badge) {
+  :host :is(.priority-badge, .dependency-badge, .activation-badge) {
     width: auto;
+    white-space: nowrap;
   }
 
   :host .task-preview {

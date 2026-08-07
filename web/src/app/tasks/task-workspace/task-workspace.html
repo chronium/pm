@@ -373,6 +373,22 @@
               <p>{{ recommendationReason }}</p>
             </section>
           }
+          <section
+            class="activation-context"
+            [attr.data-eligible]="task.activation.isEligible"
+            aria-labelledby="activation-heading"
+          >
+            <h2 id="activation-heading">Activation</h2>
+            <p>{{ task.activation.summary }}</p>
+            @if (task.activation.unmetActivationTriggers.length) {
+              <p class="activation-gates">
+                <span>Unmet gates</span>
+                @for (trigger of task.activation.unmetActivationTriggers; track trigger) {
+                  <code>{{ trigger }}</code>
+                }
+              </p>
+            }
+          </section>
           <section class="dependencies" aria-labelledby="dependencies-heading">
             <h2 id="dependencies-heading">Dependencies</h2>
             @if (task.dependencies.dependsOn.length) {

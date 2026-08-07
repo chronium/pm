@@ -22,6 +22,13 @@ const readyTask: BoardTask = {
     missing: [],
     summary: 'ready',
   },
+  activation: {
+    isEligible: true,
+    milestoneLifecycle: 'active',
+    requiredActivationTriggers: ['entry'],
+    unmetActivationTriggers: [],
+    summary: 'Eligible: milestone angular-web is active.',
+  },
   descriptionPreview: 'Keep a deliberately useful preview visible for dense scanning.',
   modifiedAt: '2026-07-15T07:48:04Z',
 };
@@ -37,11 +44,22 @@ const blockedTask: BoardTask = {
     missing: ['PM-9999'],
     summary: 'missing PM-9999',
   },
+  activation: {
+    isEligible: false,
+    milestoneLifecycle: 'inactive',
+    requiredActivationTriggers: ['entry'],
+    unmetActivationTriggers: ['entry'],
+    summary: 'Ineligible: milestone angular-web is inactive; unmet activation triggers: entry.',
+  },
 };
 const todoState: BoardStateGroup = { key: 'todo', name: 'To do', tasks: [readyTask, blockedTask] };
 const milestone: BoardMilestoneGroup = {
   key: 'angular-web',
   name: 'Angular web',
+  description: 'Deliver the **Angular board**.',
+  lifecycle: 'inactive',
+  requiredActivationTriggers: ['entry'],
+  unmetActivationTriggers: ['entry'],
   states: [todoState, { key: 'review', name: 'Review', tasks: [] }],
 };
 
@@ -71,9 +89,21 @@ describe('Task board components', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.milestone-summary')?.id).toBe('milestone-angular');
-    expect(fixture.nativeElement.querySelectorAll('details')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelectorAll('details.status-group')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).toContain('Inactive');
+    expect(fixture.nativeElement.textContent).toContain('Waiting on: entry');
+    const deliverable = fixture.nativeElement.querySelector(
+      'details.deliverable-description',
+    ) as HTMLDetailsElement;
+    expect(deliverable.open).toBe(false);
+    deliverable.open = true;
+    deliverable.dispatchEvent(new Event('toggle'));
+    fixture.detectChanges();
+    expect(deliverable.textContent).toContain('Angular board');
     expect(fixture.nativeElement.textContent).not.toContain('Review');
-    const details = fixture.nativeElement.querySelector('details') as HTMLDetailsElement;
+    const details = fixture.nativeElement.querySelector(
+      'details.status-group',
+    ) as HTMLDetailsElement;
     details.open = false;
     details.dispatchEvent(new Event('toggle'));
     expect(intents).toEqual([{ milestone, state: todoState, open: false }]);
@@ -105,7 +135,8 @@ describe('Task board components', () => {
     expect(link.textContent).toContain('PM-0055');
     expect(link.textContent).toContain('angular-web');
     expect(link.textContent).toContain('Priority: high');
-    expect(link.textContent).toContain('Ready');
+    expect(link.textContent).toContain('Dependencies: ready');
+    expect(link.textContent).toContain('Activation: eligible');
     expect(link.textContent).toContain('Keep a deliberately useful preview');
 
     const blockedFixture = TestBed.createComponent(TaskRow);
@@ -116,7 +147,9 @@ describe('Task board components', () => {
     expect(badges[0]?.querySelector('.badge--danger')).toBeTruthy();
     expect(badges[1]?.querySelector('.badge--danger')).toBeTruthy();
     expect(badges[1]?.getAttribute('title')).toBe('missing PM-9999');
-    expect(badges[1]?.textContent).toContain('Blocked');
+    expect(badges[1]?.textContent).toContain('Dependencies: blocked');
+    expect(badges[2]?.querySelector('.badge--warning')).toBeTruthy();
+    expect(badges[2]?.textContent).toContain('Activation: inactive');
     expect(blockedFixture.nativeElement.textContent).toContain('A very long blocked task title');
   });
 });

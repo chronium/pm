@@ -78,7 +78,7 @@ a.active {
 }
 
 .scope-count {
-  min-width: 2ch;
+  min-width: 4.5ch;
   margin-left: var(--pm-space-2);
   color: var(--pm-text-subtle);
   font-variant-numeric: tabular-nums;

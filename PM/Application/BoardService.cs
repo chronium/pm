@@ -20,20 +20,33 @@ public sealed record BoardOption(string Key, string Name, string Priority = Prio
 
 public sealed record BoardNavigationData(
     int RemainingCount,
+    int ActivationEligibleCount,
     IReadOnlyList<BoardNavigationOption> Tracks,
     IReadOnlyList<BoardMilestoneNavigationOption> Milestones,
     BoardData Board);
 
-public sealed record BoardNavigationOption(string Key, string Name, int RemainingCount);
+public sealed record BoardNavigationOption(
+    string Key,
+    string Name,
+    int RemainingCount,
+    int ActivationEligibleCount);
 
 public sealed record BoardMilestoneNavigationOption(
     string Key,
     string Name,
     int RemainingCount,
+    int ActivationEligibleCount,
     MilestoneLifecycle Lifecycle,
     IReadOnlyList<string> UnmetActivationTriggers);
 
-public sealed record BoardMilestoneGroup(string? Key, string Name, IReadOnlyList<BoardStateGroup> States);
+public sealed record BoardMilestoneGroup(
+    string? Key,
+    string Name,
+    string Description,
+    MilestoneLifecycle? Lifecycle,
+    IReadOnlyList<string> RequiredActivationTriggers,
+    IReadOnlyList<string> UnmetActivationTriggers,
+    IReadOnlyList<BoardStateGroup> States);
 
 public sealed record BoardStateGroup(string Key, string Name, IReadOnlyList<BoardTask> Tasks);
 
@@ -114,22 +127,32 @@ public partial class BoardService(
             .ToList();
 
         var groups = milestoneKeys
-            .Select(milestone => new BoardMilestoneGroup(
-                milestone,
-                ResolveMilestoneTitle(milestone),
-                stateOptions
-                    .Where(state => string.IsNullOrWhiteSpace(query.State) || state.Key == query.State)
-                    .Select(state => new BoardStateGroup(
-                        state.Key,
-                        state.Name,
-                        entries
-                            .Where(entry => string.Equals(entry.Milestone, milestone, StringComparison.Ordinal))
-                            .Where(entry => entry.State == state.Key)
-                            .OrderBy(entry => GetOrderIndex(entry, orderLookup))
-                            .ThenByDescending(entry => entry.Task.ModifiedAt)
-                            .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
-                            .ToList()))
-                    .ToList()))
+            .Select(milestone =>
+            {
+                var resolved = string.IsNullOrWhiteSpace(milestone)
+                    ? null
+                    : readContext.MilestonesByKey.GetValueOrDefault(milestone);
+                return new BoardMilestoneGroup(
+                    milestone,
+                    ResolveMilestoneTitle(milestone),
+                    resolved?.Description ?? string.Empty,
+                    resolved?.Lifecycle,
+                    resolved?.RequiredActivationTriggers ?? [],
+                    resolved?.UnmetActivationTriggers ?? [],
+                    stateOptions
+                        .Where(state => string.IsNullOrWhiteSpace(query.State) || state.Key == query.State)
+                        .Select(state => new BoardStateGroup(
+                            state.Key,
+                            state.Name,
+                            entries
+                                .Where(entry => string.Equals(entry.Milestone, milestone, StringComparison.Ordinal))
+                                .Where(entry => entry.State == state.Key)
+                                .OrderBy(entry => GetOrderIndex(entry, orderLookup))
+                                .ThenByDescending(entry => entry.Task.ModifiedAt)
+                                .ThenBy(entry => entry.Task.Id, StringComparer.Ordinal)
+                                .ToList()))
+                        .ToList());
+            })
             .ToList();
 
         return AppResult<BoardData>.Ok(new BoardData(
@@ -158,12 +181,17 @@ public partial class BoardService(
         var remaining = board.Tasks
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
             .ToList();
+        var activationEligible = remaining
+            .Where(task => task.Activation.IsEligible)
+            .ToList();
         return AppResult<BoardNavigationData>.Ok(new BoardNavigationData(
             remaining.Count,
+            activationEligible.Count,
             board.Tracks.Select(track => new BoardNavigationOption(
                 track.Key,
                 track.Name,
-                remaining.Count(task => string.Equals(task.Track, track.Key, StringComparison.Ordinal))))
+                remaining.Count(task => string.Equals(task.Track, track.Key, StringComparison.Ordinal)),
+                activationEligible.Count(task => string.Equals(task.Track, track.Key, StringComparison.Ordinal))))
                 .ToList(),
             board.Milestones.Select(milestone =>
             {
@@ -173,6 +201,8 @@ public partial class BoardService(
                     milestone.Key,
                     milestone.Name,
                     remaining.Count(task => string.Equals(task.Milestone, milestone.Key, StringComparison.Ordinal)),
+                    activationEligible.Count(task =>
+                        string.Equals(task.Milestone, milestone.Key, StringComparison.Ordinal)),
                     resolved.Lifecycle,
                     resolved.UnmetActivationTriggers);
             })
@@ -223,10 +253,14 @@ public partial class BoardService(
         var stateIndex = BuildStateIndex(config);
         var milestoneIndex = BuildMilestoneIndex(config);
         var readContext = ReadContext();
-        var selected = GetBoardTasks(
+        var actionable = GetBoardTasks(
                 new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength, orderLookup, readContext)
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
+            .ToList();
+        var activationEligible = actionable
             .Where(task => task.Activation.IsEligible)
+            .ToList();
+        var selected = activationEligible
             .Where(task => !query.ReadyOnly || task.Dependencies.Ready)
             .OrderBy(task => task.Dependencies.Ready ? 0 : 1)
             .ThenByDescending(task => PriorityLevel.Rank(task.Priority))
@@ -246,7 +280,7 @@ public partial class BoardService(
         return AppResult<NextTaskResult>.Ok(new NextTaskResult(
             false,
             null,
-            BuildNoNextTaskReason(query, readContext.MilestonesByKey)));
+            BuildNoNextTaskReason(query, readContext.MilestonesByKey, actionable, activationEligible)));
     }
 
     public DependencyStatus GetDependencyStatus(TaskItem task)
@@ -402,7 +436,9 @@ public partial class BoardService(
 
     private static string BuildNoNextTaskReason(
         NextTaskQuery query,
-        IReadOnlyDictionary<string, ResolvedMilestone> milestonesByKey)
+        IReadOnlyDictionary<string, ResolvedMilestone> milestonesByKey,
+        IReadOnlyList<BoardTask> actionable,
+        IReadOnlyList<BoardTask> activationEligible)
     {
         var filters = new List<string>();
         if (!string.IsNullOrWhiteSpace(query.Track)) filters.Add($"track {query.Track}");
@@ -417,6 +453,14 @@ public partial class BoardService(
                        $"unmet activation triggers: {string.Join(", ", milestone.UnmetActivationTriggers)}.";
             if (milestone.Lifecycle == MilestoneLifecycle.Delivered)
                 return $"No activation-eligible task found{scope}; milestone {query.Milestone} is delivered.";
+        }
+
+        var activationExcludedCount = actionable.Count - activationEligible.Count;
+        if (activationEligible.Count == 0 && activationExcludedCount > 0)
+        {
+            var noun = activationExcludedCount == 1 ? "task is" : "tasks are";
+            return $"No activation-eligible task found{scope}; {activationExcludedCount} remaining {noun} " +
+                   "excluded by inactive or delivered milestones.";
         }
 
         return query.ReadyOnly

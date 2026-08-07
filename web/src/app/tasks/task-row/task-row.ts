@@ -45,4 +45,26 @@ export class TaskRow {
     if (task.dependencies.missing.length > 0) return 'danger';
     return task.dependencies.ready ? 'success' : 'warning';
   }
+
+  protected activationTone(task: BoardTask): BadgeTone {
+    if (task.activation.isEligible) return 'success';
+    return task.activation.milestoneLifecycle === 'inactive' ? 'warning' : 'neutral';
+  }
+
+  protected activationLabel(task: BoardTask): string {
+    switch (task.activation.milestoneLifecycle) {
+      case null:
+        return 'Activation: ungated';
+      case 'active':
+        return 'Activation: eligible';
+      case 'ready_to_deliver':
+        return 'Activation: ready';
+      case 'inactive':
+        return 'Activation: inactive';
+      case 'delivered':
+        return 'Activation: delivered';
+      default:
+        return 'Activation: unavailable';
+    }
+  }
 }

@@ -11,23 +11,42 @@ class StoryRoute {}
 
 const realistic: BoardNavigationResponse = {
   remainingCount: 37,
+  activationEligibleCount: 25,
   milestones: [
-    { key: 'angular', name: 'Angular replacement client', remainingCount: 12 },
+    {
+      key: 'angular',
+      name: 'Angular replacement client',
+      remainingCount: 12,
+      activationEligibleCount: 12,
+      lifecycle: 'active',
+      unmetActivationTriggers: [],
+    },
     {
       key: 'release',
       name: 'Release readiness and embedded production verification',
       remainingCount: 0,
+      activationEligibleCount: 0,
+      lifecycle: 'delivered',
+      unmetActivationTriggers: [],
     },
     ...Array.from({ length: 10 }, (_, index) => ({
       key: `milestone-${index}`,
       name: `Milestone ${index + 1}`,
       remainingCount: index + 1,
+      activationEligibleCount: index % 3 === 0 ? 0 : index + 1,
+      lifecycle: index % 3 === 0 ? 'inactive' : 'active',
+      unmetActivationTriggers: index % 3 === 0 ? ['entry'] : [],
     })),
   ],
   tracks: [
-    { key: 'PM', name: 'Product management', remainingCount: 18 },
-    { key: 'BUILD', name: 'Build and release infrastructure', remainingCount: 0 },
-    { key: 'DOCS', name: 'Documentation', remainingCount: 4 },
+    { key: 'PM', name: 'Product management', remainingCount: 18, activationEligibleCount: 12 },
+    {
+      key: 'BUILD',
+      name: 'Build and release infrastructure',
+      remainingCount: 0,
+      activationEligibleCount: 0,
+    },
+    { key: 'DOCS', name: 'Documentation', remainingCount: 4, activationEligibleCount: 3 },
   ],
   revision: 'navigation-story',
 };
@@ -112,7 +131,13 @@ export const EmptyCollections: Story = {
       providers: [
         {
           provide: TaskSidebarStore,
-          useValue: storyStore({ ...realistic, remainingCount: 0, tracks: [], milestones: [] }),
+          useValue: storyStore({
+            ...realistic,
+            remainingCount: 0,
+            activationEligibleCount: 0,
+            tracks: [],
+            milestones: [],
+          }),
         },
       ],
     }),

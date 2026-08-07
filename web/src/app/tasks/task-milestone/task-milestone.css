@@ -7,7 +7,7 @@
 }
 .milestone-summary {
   display: grid;
-  grid-template-columns: var(--pm-task-selection-slot) minmax(0, 1fr) 3ch;
+  grid-template-columns: var(--pm-task-selection-slot) minmax(0, 1fr) auto 3ch;
   column-gap: var(--pm-space-3);
   align-items: center;
   min-height: 38px;
@@ -20,6 +20,27 @@
   font-weight: 680;
   cursor: pointer;
   list-style: none;
+}
+
+.milestone-heading {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.milestone-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.milestone-gates {
+  overflow: hidden;
+  color: var(--pm-warning);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .milestone-summary::-webkit-details-marker {
@@ -56,6 +77,7 @@
 }
 
 .milestone-count {
+  grid-column: -1;
   display: inline;
   justify-self: end;
   color: var(--pm-text-subtle);
@@ -63,4 +85,50 @@
   font-size: var(--pm-font-size-xs);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+}
+
+.deliverable-description {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--pm-border-subtle);
+  background: color-mix(in srgb, var(--pm-surface-raised) 28%, transparent);
+}
+
+.deliverable-description > summary {
+  min-height: 32px;
+  padding: var(--pm-space-2) calc(var(--pm-space-3) + var(--pm-task-selection-slot));
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.deliverable-description > summary:hover,
+.deliverable-description > summary:focus-visible {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+
+.deliverable-body {
+  padding: 0 var(--pm-space-4) var(--pm-space-3)
+    calc(var(--pm-space-3) + var(--pm-task-selection-slot));
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+
+@media (max-width: 560px) {
+  .milestone-summary {
+    grid-template-columns: var(--pm-task-selection-slot) minmax(0, 1fr) auto;
+    padding-block: var(--pm-space-1);
+  }
+
+  .milestone-summary pm-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .milestone-count {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
 }

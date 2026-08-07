@@ -14,7 +14,7 @@ public sealed class SiteSnapshotBuilder(
     LinkedProjectService linkedProjectService,
     LinkedProjectFamilyService linkedProjectFamilyService)
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
     private const string StaticRevision = "static-snapshot";
 
     public async Task<AppResult<SiteSnapshot>> BuildAsync(
@@ -48,6 +48,7 @@ public sealed class SiteSnapshotBuilder(
                 task.Task.Priority ?? "inherit",
                 task.State,
                 BoardApiEndpoints.ToDependencies(task.Dependencies),
+                BoardApiEndpoints.ToActivation(task.Activation),
                 BoardApiEndpoints.ToUtc(task.Task.CreatedAt),
                 BoardApiEndpoints.ToUtc(task.Task.ModifiedAt),
                 task.Task.Description,
@@ -137,6 +138,7 @@ public sealed class SiteSnapshotBuilder(
             responseActivation,
             new BoardNavigationResponse(
                 navigation.RemainingCount,
+                navigation.ActivationEligibleCount,
                 navigation.Tracks.Select(ToNavigationOption).ToList(),
                 navigation.Milestones.Select(ToNavigationOption).ToList(),
                 StaticRevision),
@@ -225,6 +227,10 @@ public sealed class SiteSnapshotBuilder(
         board.MilestoneGroups.Select(group => new BoardMilestoneGroupResponse(
             group.Key,
             group.Name,
+            group.Description,
+            group.Lifecycle == null ? null : BoardApiEndpoints.ToLifecycleValue(group.Lifecycle.Value),
+            group.RequiredActivationTriggers,
+            group.UnmetActivationTriggers,
             group.States.Select(state => new BoardStateGroupResponse(
                 state.Key,
                 state.Name,
@@ -235,10 +241,12 @@ public sealed class SiteSnapshotBuilder(
         new(option.Key, option.Name, option.Priority);
 
     private static BoardNavigationOptionResponse ToNavigationOption(BoardNavigationOption option) =>
-        new(option.Key, option.Name, option.RemainingCount);
+        new(option.Key, option.Name, option.RemainingCount, option.ActivationEligibleCount);
 
-    private static BoardNavigationOptionResponse ToNavigationOption(BoardMilestoneNavigationOption option) =>
-        new(option.Key, option.Name, option.RemainingCount);
+    private static BoardMilestoneNavigationOptionResponse ToNavigationOption(
+        BoardMilestoneNavigationOption option) =>
+        new(option.Key, option.Name, option.RemainingCount, option.ActivationEligibleCount,
+            BoardApiEndpoints.ToLifecycleValue(option.Lifecycle), option.UnmetActivationTriggers);
 
     private static AppResult<SiteSnapshot> Fail<T>(AppResult<T> result) =>
         AppResult<SiteSnapshot>.Fail(result.ErrorCode ?? "site_snapshot_failed",

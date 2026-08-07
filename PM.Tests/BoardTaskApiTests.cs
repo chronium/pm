@@ -35,11 +35,13 @@ public partial class ApiContractTests
     public async Task BoardReturnsNormalizedFiltersOptionsOrderedGroupsAndSummaries()
     {
         using var workspace = new TempWorkingDirectory();
-        var root = await workspace.CreateProject(TestData.Config(
+        var config = TestData.Config(
             name: "API Board",
             tracks: new() { ["PM"] = "Product", ["BUILD"] = "Build" },
             milestones: new() { ["m1"] = "First" },
-            milestonePriorities: new() { ["m1"] = "high" }));
+            milestonePriorities: new() { ["m1"] = "high" });
+        config.Milestones["m1"].Description = "Deliver the **first milestone**.";
+        var root = await workspace.CreateProject(config);
         var dependency = TestData.Task("BUILD-0001", "Dependency", track: "BUILD");
         var task = TestData.Task("PM-0001", "Main", "# Heading\n\nDetails", milestone: "m1",
             dependsOn: [dependency.Id]);
@@ -61,6 +63,10 @@ public partial class ApiContractTests
             Assert.Equal(2, body.GetProperty("tracks").GetArrayLength());
             var milestoneGroup = Assert.Single(body.GetProperty("milestoneGroups").EnumerateArray());
             Assert.Equal("m1", milestoneGroup.GetProperty("key").GetString());
+            Assert.Equal("Deliver the **first milestone**.", milestoneGroup.GetProperty("description").GetString());
+            Assert.Equal("active", milestoneGroup.GetProperty("lifecycle").GetString());
+            Assert.Empty(milestoneGroup.GetProperty("requiredActivationTriggers").EnumerateArray());
+            Assert.Empty(milestoneGroup.GetProperty("unmetActivationTriggers").EnumerateArray());
             var stateGroup = Assert.Single(milestoneGroup.GetProperty("states").EnumerateArray());
             Assert.Equal("review", stateGroup.GetProperty("key").GetString());
             var summary = Assert.Single(stateGroup.GetProperty("tasks").EnumerateArray());
@@ -68,6 +74,9 @@ public partial class ApiContractTests
             Assert.Equal("high", summary.GetProperty("priority").GetString());
             Assert.Equal("milestone", summary.GetProperty("prioritySource").GetString());
             Assert.True(summary.GetProperty("dependencies").GetProperty("ready").GetBoolean());
+            Assert.True(summary.GetProperty("activation").GetProperty("isEligible").GetBoolean());
+            Assert.Equal("active",
+                summary.GetProperty("activation").GetProperty("milestoneLifecycle").GetString());
             Assert.Equal("Heading", summary.GetProperty("descriptionPreview").GetString());
             Assert.False(summary.TryGetProperty("localMetadata", out _));
             Assert.False(summary.TryGetProperty("filePath", out _));
@@ -79,6 +88,11 @@ public partial class ApiContractTests
                 "/api/v1/board?track=PM&milestone=m1&state=review");
             conditional.Headers.TryAddWithoutValidation("If-None-Match", response.Headers.ETag?.Tag);
             Assert.Equal(HttpStatusCode.NotModified, (await client.SendAsync(conditional)).StatusCode);
+
+            var detail = await client.GetFromJsonAsync<TaskResponse>("/api/v1/tasks/PM-0001");
+            Assert.NotNull(detail);
+            Assert.True(detail.Activation.IsEligible);
+            Assert.Equal("active", detail.Activation.MilestoneLifecycle);
         }
     }
 
@@ -124,8 +138,14 @@ public partial class ApiContractTests
             var navigation = await response.Content.ReadFromJsonAsync<BoardNavigationResponse>();
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal(2, navigation!.RemainingCount);
+            Assert.Equal(2, navigation.ActivationEligibleCount);
             Assert.Equal(0, navigation.Tracks.Single(option => option.Key == "EMPTY").RemainingCount);
+            Assert.Equal(0,
+                navigation.Tracks.Single(option => option.Key == "EMPTY").ActivationEligibleCount);
             Assert.Equal(1, navigation.Milestones.Single(option => option.Key == "m1").RemainingCount);
+            var milestone = navigation.Milestones.Single(option => option.Key == "m1");
+            Assert.Equal(1, milestone.ActivationEligibleCount);
+            Assert.Equal("active", milestone.Lifecycle);
             Assert.Equal(0, navigation.Milestones.Single(option => option.Key == "empty").RemainingCount);
             Assert.Equal(ApiPreconditions.FormatETag(navigation.Revision), response.Headers.ETag?.Tag);
 
@@ -512,6 +532,16 @@ public partial class ApiContractTests
             var schemas = document.GetProperty("components").GetProperty("schemas");
             Assert.Contains("remainingCount", schemas.GetProperty("BoardNavigationResponse")
                 .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("activationEligibleCount", schemas.GetProperty("BoardNavigationResponse")
+                .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("activation", schemas.GetProperty("BoardTaskSummaryResponse")
+                .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("activation", schemas.GetProperty("TaskResponse")
+                .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+            var milestoneGroup = schemas.GetProperty("BoardMilestoneGroupResponse")
+                .GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray();
+            Assert.Contains("description", milestoneGroup);
+            Assert.Contains("lifecycle", milestoneGroup);
             Assert.Contains("title", schemas.GetProperty("CreateTaskRequest").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("priority", schemas.GetProperty("UpdateTaskRequest").GetProperty("required")

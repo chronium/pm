@@ -1,6 +1,7 @@
 import { provideRouter, withDisabledInitialNavigation } from '@angular/router';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { applicationConfig } from '@storybook/angular-vite';
+import { expect } from 'storybook/test';
 
 import type { BoardTask } from '../tasks-board.store';
 import { TaskRow } from './task-row';
@@ -20,6 +21,13 @@ const ready: BoardTask = {
     missing: [],
     summary: 'ready',
   },
+  activation: {
+    isEligible: true,
+    milestoneLifecycle: 'active',
+    requiredActivationTriggers: ['entry'],
+    unmetActivationTriggers: [],
+    summary: 'Eligible: milestone angular-web is active.',
+  },
   descriptionPreview: 'Extract meaningful regions without changing the established layout.',
   modifiedAt: '2026-07-15T07:48:04Z',
 };
@@ -34,6 +42,13 @@ const blocked: BoardTask = {
     waitingOn: [],
     missing: ['PM-9999'],
     summary: 'missing PM-9999',
+  },
+  activation: {
+    isEligible: false,
+    milestoneLifecycle: 'inactive',
+    requiredActivationTriggers: ['entry'],
+    unmetActivationTriggers: ['entry'],
+    summary: 'Ineligible: milestone angular-web is inactive; unmet activation triggers: entry.',
   },
 };
 const meta = {
@@ -51,7 +66,15 @@ const meta = {
 } satisfies Meta<TaskRow>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Ready: Story = { args: { task: ready, selected: false } };
+export const Ready: Story = {
+  args: { task: ready, selected: false },
+  play: async ({ canvasElement }) => {
+    const badges = [...canvasElement.querySelectorAll<HTMLElement>('.task-badges pm-badge')];
+    expect(badges).toHaveLength(3);
+    for (const badge of badges)
+      expect(badge.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+  },
+};
 export const BlockedSelected: Story = { args: { task: blocked, selected: true } };
 export const LongContentMobile: Story = {
   args: { task: blocked, selected: false },

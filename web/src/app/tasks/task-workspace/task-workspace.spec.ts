@@ -39,6 +39,14 @@ const task: TaskResponse = {
     missing: [],
     summary: 'Waiting on PM-0029',
   },
+  activation: {
+    isEligible: false,
+    milestoneLifecycle: 'inactive',
+    requiredActivationTriggers: ['beta-entry'],
+    unmetActivationTriggers: ['beta-entry'],
+    summary:
+      'Ineligible: milestone angular-web is inactive; unmet activation triggers: beta-entry.',
+  },
   createdAt: '2026-07-16T00:00:00Z',
   modifiedAt: '2026-07-18T00:00:00Z',
   description: 'Original description',
@@ -321,6 +329,17 @@ describe('TaskWorkspace', () => {
 
     expect(element.textContent).toContain('Recommendation');
     expect(element.textContent).toContain('Selected high priority ready task.');
+  });
+
+  it('presents activation eligibility separately from dependency readiness', async () => {
+    const { element } = await render('detail');
+    const activation = element.querySelector('.activation-context') as HTMLElement;
+
+    expect(activation.getAttribute('data-eligible')).toBe('false');
+    expect(activation.textContent).toContain('Activation');
+    expect(activation.textContent).toContain('milestone angular-web is inactive');
+    expect(activation.querySelector('code')?.textContent).toBe('beta-entry');
+    expect(element.querySelector('.dependencies')).not.toBeNull();
   });
 
   it('renders each dependency once with an explicit icon-backed state', async () => {

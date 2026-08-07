@@ -12,5 +12,4 @@ orders:
   state: todo
   milestone: milestone-activation
   taskIds:
-  - PM-0093
   - PM-0094

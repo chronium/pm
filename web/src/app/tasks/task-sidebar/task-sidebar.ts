@@ -69,6 +69,27 @@ export class TaskSidebar {
     );
   }
 
+  protected countLabel(eligible: number | string, remaining: number | string): string {
+    return `${Number(eligible)}/${Number(remaining)}`;
+  }
+
+  protected countAria(
+    eligible: number | string,
+    remaining: number | string,
+    lifecycle?: string,
+  ): string {
+    const lifecycleContext = lifecycle ? `; milestone is ${this.lifecycleLabel(lifecycle)}` : '';
+    return `${Number(eligible)} activation-eligible of ${Number(remaining)} remaining tasks${lifecycleContext}`;
+  }
+
+  protected milestoneTitle(name: string, lifecycle: string): string {
+    return `${name} — ${this.lifecycleLabel(lifecycle)}`;
+  }
+
+  private lifecycleLabel(lifecycle: string): string {
+    return lifecycle === 'ready_to_deliver' ? 'ready to deliver' : lifecycle.replaceAll('_', ' ');
+  }
+
   private path(): string {
     return `/${
       this.router

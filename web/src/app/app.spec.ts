@@ -78,13 +78,28 @@ describe('application shell', () => {
     for (const request of TestBed.inject(HttpTestingController).match('/api/v1/board/navigation')) {
       request.flush({
         remainingCount: 3,
+        activationEligibleCount: 2,
         tracks: [
-          { key: 'PM', name: 'Product', remainingCount: 2 },
-          { key: 'BUILD', name: 'Build', remainingCount: 1 },
+          { key: 'PM', name: 'Product', remainingCount: 2, activationEligibleCount: 2 },
+          { key: 'BUILD', name: 'Build', remainingCount: 1, activationEligibleCount: 0 },
         ],
         milestones: [
-          { key: 'm1', name: 'First milestone', remainingCount: 1 },
-          { key: 'empty', name: 'A very long empty milestone name', remainingCount: 0 },
+          {
+            key: 'm1',
+            name: 'First milestone',
+            remainingCount: 1,
+            activationEligibleCount: 1,
+            lifecycle: 'active',
+            unmetActivationTriggers: [],
+          },
+          {
+            key: 'empty',
+            name: 'A very long empty milestone name',
+            remainingCount: 0,
+            activationEligibleCount: 0,
+            lifecycle: 'inactive',
+            unmetActivationTriggers: ['entry'],
+          },
         ],
         revision: 'navigation-revision',
       });
@@ -109,6 +124,13 @@ describe('application shell', () => {
             waitingOn: [],
             missing: [],
             summary: 'ready',
+          },
+          activation: {
+            isEligible: true,
+            milestoneLifecycle: null,
+            requiredActivationTriggers: [],
+            unmetActivationTriggers: [],
+            summary: 'Eligible: task is not gated by a milestone.',
           },
           createdAt: '2026-07-15T00:00:00Z',
           modifiedAt: '2026-07-15T00:00:00Z',
@@ -356,7 +378,10 @@ describe('application shell', () => {
     );
     expect(product?.classList.contains('active')).toBe(true);
     expect(product?.getAttribute('aria-current')).toBe('page');
-    expect(product?.textContent.replace(/\s+/g, ' ').trim()).toBe('Product2');
+    expect(product?.textContent.replace(/\s+/g, ' ').trim()).toBe('Product2/2');
+    expect(product?.querySelector('.scope-count')?.getAttribute('aria-label')).toBe(
+      '2 activation-eligible of 2 remaining tasks',
+    );
     expect(fixture.nativeElement.querySelectorAll('aside .scope-count')).toHaveLength(5);
     const milestone = [...fixture.nativeElement.querySelectorAll('aside a')].find(
       (link: HTMLAnchorElement) => link.textContent?.includes('First milestone'),

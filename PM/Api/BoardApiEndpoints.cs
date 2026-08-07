@@ -7,17 +7,35 @@ namespace PM.Api;
 
 public sealed record BoardFilterResponse(string? Track, string? Milestone, string? State);
 public sealed record BoardOptionResponse(string Key, string Name, string Priority);
-public sealed record BoardNavigationOptionResponse(string Key, string Name, int RemainingCount);
+public sealed record BoardNavigationOptionResponse(
+    string Key,
+    string Name,
+    int RemainingCount,
+    int ActivationEligibleCount);
+public sealed record BoardMilestoneNavigationOptionResponse(
+    string Key,
+    string Name,
+    int RemainingCount,
+    int ActivationEligibleCount,
+    string Lifecycle,
+    IReadOnlyList<string> UnmetActivationTriggers);
 public sealed record BoardNavigationResponse(
     int RemainingCount,
+    int ActivationEligibleCount,
     IReadOnlyList<BoardNavigationOptionResponse> Tracks,
-    IReadOnlyList<BoardNavigationOptionResponse> Milestones,
+    IReadOnlyList<BoardMilestoneNavigationOptionResponse> Milestones,
     string Revision);
 public sealed record DependencyStatusResponse(
     bool Ready,
     IReadOnlyList<string> DependsOn,
     IReadOnlyList<string> WaitingOn,
     IReadOnlyList<string> Missing,
+    string Summary);
+public sealed record TaskActivationEligibilityResponse(
+    bool IsEligible,
+    string? MilestoneLifecycle,
+    IReadOnlyList<string> RequiredActivationTriggers,
+    IReadOnlyList<string> UnmetActivationTriggers,
     string Summary);
 public sealed record BoardTaskSummaryResponse(
     string Id,
@@ -28,10 +46,18 @@ public sealed record BoardTaskSummaryResponse(
     string PrioritySource,
     string State,
     DependencyStatusResponse Dependencies,
+    TaskActivationEligibilityResponse Activation,
     string DescriptionPreview,
     DateTime ModifiedAt);
 public sealed record BoardStateGroupResponse(string Key, string Name, IReadOnlyList<BoardTaskSummaryResponse> Tasks);
-public sealed record BoardMilestoneGroupResponse(string? Key, string Name, IReadOnlyList<BoardStateGroupResponse> States);
+public sealed record BoardMilestoneGroupResponse(
+    string? Key,
+    string Name,
+    string Description,
+    string? Lifecycle,
+    IReadOnlyList<string> RequiredActivationTriggers,
+    IReadOnlyList<string> UnmetActivationTriggers,
+    IReadOnlyList<BoardStateGroupResponse> States);
 public sealed record BoardResponse(
     string ProjectName,
     BoardFilterResponse Filters,
@@ -106,6 +132,7 @@ public static class BoardApiEndpoints
         BoardNavigationData navigation,
         string revision) => new(
         navigation.RemainingCount,
+        navigation.ActivationEligibleCount,
         navigation.Tracks.Select(ToNavigationOption).ToList(),
         navigation.Milestones.Select(ToNavigationOption).ToList(),
         revision);
@@ -119,6 +146,10 @@ public static class BoardApiEndpoints
         board.MilestoneGroups.Select(group => new BoardMilestoneGroupResponse(
             group.Key,
             group.Name,
+            group.Description,
+            group.Lifecycle == null ? null : ToLifecycleValue(group.Lifecycle.Value),
+            group.RequiredActivationTriggers,
+            group.UnmetActivationTriggers,
             group.States.Select(state => new BoardStateGroupResponse(
                 state.Key,
                 state.Name,
@@ -134,6 +165,7 @@ public static class BoardApiEndpoints
         task.PrioritySource,
         task.State,
         ToDependencies(task.Dependencies),
+        ToActivation(task.Activation),
         task.DescriptionPreview,
         ToUtc(task.Task.ModifiedAt));
 
@@ -144,14 +176,32 @@ public static class BoardApiEndpoints
         status.Missing.Concat(status.Unavailable).Concat(status.Invalid).ToList(),
         status.Summary);
 
+    internal static TaskActivationEligibilityResponse ToActivation(TaskActivationEligibility activation) => new(
+        activation.IsEligible,
+        activation.MilestoneLifecycle == null ? null : ToLifecycleValue(activation.MilestoneLifecycle.Value),
+        activation.RequiredActivationTriggers,
+        activation.UnmetActivationTriggers,
+        activation.Summary);
+
     private static BoardOptionResponse ToOption(BoardOption option) =>
         new(option.Key, option.Name, option.Priority);
 
     private static BoardNavigationOptionResponse ToNavigationOption(BoardNavigationOption option) =>
-        new(option.Key, option.Name, option.RemainingCount);
+        new(option.Key, option.Name, option.RemainingCount, option.ActivationEligibleCount);
 
-    private static BoardNavigationOptionResponse ToNavigationOption(BoardMilestoneNavigationOption option) =>
-        new(option.Key, option.Name, option.RemainingCount);
+    private static BoardMilestoneNavigationOptionResponse ToNavigationOption(
+        BoardMilestoneNavigationOption option) =>
+        new(option.Key, option.Name, option.RemainingCount, option.ActivationEligibleCount,
+            ToLifecycleValue(option.Lifecycle), option.UnmetActivationTriggers);
+
+    internal static string ToLifecycleValue(MilestoneLifecycle lifecycle) => lifecycle switch
+    {
+        MilestoneLifecycle.ReadyToDeliver => "ready_to_deliver",
+        MilestoneLifecycle.Delivered => "delivered",
+        MilestoneLifecycle.Inactive => "inactive",
+        MilestoneLifecycle.Active => "active",
+        _ => throw new ArgumentOutOfRangeException(nameof(lifecycle), lifecycle, null),
+    };
 
     internal static DateTime ToUtc(DateTime value) => value.Kind == DateTimeKind.Utc
         ? value

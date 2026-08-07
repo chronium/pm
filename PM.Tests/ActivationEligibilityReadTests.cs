@@ -10,6 +10,7 @@ public sealed class ActivationEligibilityReadTests
     {
         using var workspace = new TempWorkingDirectory();
         var config = ActivationConfig();
+        config.Milestones["inactive"].Description = "Deliver the inactive milestone after entry opens.";
         config.Milestones["delivered"].Delivery = ExceptionalDelivery("PM-0004");
         var root = await workspace.CreateProject(config);
         var inactive = AddTask(root, "PM-0001", "Inactive", "inactive", "todo");
@@ -28,6 +29,10 @@ public sealed class ActivationEligibilityReadTests
         Assert.Equal(MilestoneLifecycle.Active, Milestone(board, "active").Lifecycle);
         Assert.Equal(MilestoneLifecycle.ReadyToDeliver, Milestone(board, "ready").Lifecycle);
         Assert.Equal(MilestoneLifecycle.Delivered, Milestone(board, "delivered").Lifecycle);
+        var inactiveGroup = board.MilestoneGroups.Single(group => group.Key == "inactive");
+        Assert.Equal("Deliver the inactive milestone after entry opens.", inactiveGroup.Description);
+        Assert.Equal(MilestoneLifecycle.Inactive, inactiveGroup.Lifecycle);
+        Assert.Equal(["entry"], inactiveGroup.UnmetActivationTriggers);
         var entry = board.MilestoneActivation.ActivationTriggers.Single(trigger => trigger.Key == "entry");
         Assert.False(entry.IsActive);
         Assert.Equal(0, entry.SatisfiedRequirementCount);
@@ -42,11 +47,14 @@ public sealed class ActivationEligibilityReadTests
         Assert.Null(Task(board, "PM-0005").Activation.MilestoneLifecycle);
 
         Assert.Equal(4, navigation.RemainingCount);
+        Assert.Equal(2, navigation.ActivationEligibleCount);
         var deliveredNavigation = navigation.Milestones.Single(item => item.Key == "delivered");
         Assert.Equal(1, deliveredNavigation.RemainingCount);
+        Assert.Equal(0, deliveredNavigation.ActivationEligibleCount);
         Assert.Equal(MilestoneLifecycle.Delivered, deliveredNavigation.Lifecycle);
         var inactiveNavigation = navigation.Milestones.Single(item => item.Key == "inactive");
         Assert.Equal(["entry"], inactiveNavigation.UnmetActivationTriggers);
+        Assert.Equal(0, inactiveNavigation.ActivationEligibleCount);
 
         Assert.False(detail.Activation.IsEligible);
         Assert.Contains("unmet activation triggers: entry", detail.Activation.Summary);
@@ -101,6 +109,25 @@ public sealed class ActivationEligibilityReadTests
         Assert.Equal(
             "No activation-eligible task found for milestone delivered; milestone delivered is delivered.",
             delivered.Reason);
+    }
+
+    [Fact]
+    public async Task UnscopedNoResultExplainsWhenActivationExcludesAllRemainingWork()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = ActivationConfig();
+        config.Milestones["delivered"].Delivery = ExceptionalDelivery("PM-0002");
+        var root = await workspace.CreateProject(config);
+        AddTask(root, "PM-0001", "Inactive", "inactive", "todo");
+        AddTask(root, "PM-0002", "Delivered", "delivered", "todo");
+        var service = TestBoardServices.Create(root);
+
+        var result = service.GetNextTask(new NextTaskQuery(ReadyOnly: true)).Payload!;
+
+        Assert.False(result.Found);
+        Assert.Equal(
+            "No activation-eligible task found; 2 remaining tasks are excluded by inactive or delivered milestones.",
+            result.Reason);
     }
 
     private static ProjectConfig ActivationConfig()

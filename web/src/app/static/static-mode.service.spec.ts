@@ -5,7 +5,7 @@ import { adaptGet, validateSnapshot } from './static-snapshot.interceptor';
 import { isStaticDocument } from './static-mode.service';
 
 const snapshot: StaticSnapshot = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   generatedAt: '2026-07-27T12:30:00Z',
   projectId: 'static-pm',
   linkedProjects: [],
@@ -62,11 +62,21 @@ const snapshot: StaticSnapshot = {
   },
   navigation: {
     remainingCount: 2,
+    activationEligibleCount: 2,
     tracks: [
-      { key: 'PM', name: 'PM', remainingCount: 1 },
-      { key: 'WEB', name: 'Web', remainingCount: 1 },
+      { key: 'PM', name: 'PM', remainingCount: 1, activationEligibleCount: 1 },
+      { key: 'WEB', name: 'Web', remainingCount: 1, activationEligibleCount: 1 },
     ],
-    milestones: [{ key: 'launch', name: 'Launch', remainingCount: 2 }],
+    milestones: [
+      {
+        key: 'launch',
+        name: 'Launch',
+        remainingCount: 2,
+        activationEligibleCount: 2,
+        lifecycle: 'active',
+        unmetActivationTriggers: [],
+      },
+    ],
     revision: 'static-snapshot',
   },
   board: {
@@ -85,6 +95,10 @@ const snapshot: StaticSnapshot = {
       {
         key: 'launch',
         name: 'Launch',
+        description: 'Deliver the launch release.',
+        lifecycle: 'active',
+        requiredActivationTriggers: [],
+        unmetActivationTriggers: [],
         states: [
           {
             key: 'todo',
@@ -114,6 +128,7 @@ const snapshot: StaticSnapshot = {
         missing: [],
         summary: 'waiting on WEB-0001',
       },
+      activation: eligibleActivation(),
       createdAt: '2026-01-01T00:00:00Z',
       modifiedAt: '2026-01-02T00:00:00Z',
       description: 'Body contains release needle twice: needle.',
@@ -129,6 +144,7 @@ const snapshot: StaticSnapshot = {
       prioritySelection: 'inherit',
       state: 'done',
       dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+      activation: eligibleActivation(),
       createdAt: '2026-01-01T00:00:00Z',
       modifiedAt: '2026-01-03T00:00:00Z',
       description: 'Needle once.',
@@ -144,6 +160,7 @@ const snapshot: StaticSnapshot = {
       prioritySelection: 'inherit',
       state: 'todo',
       dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+      activation: eligibleActivation(),
       createdAt: '2026-01-01T00:00:00Z',
       modifiedAt: '2026-01-04T00:00:00Z',
       description: 'Needle in another track.',
@@ -305,7 +322,18 @@ function taskSummary(id: string, track: string, state = 'todo') {
     prioritySource: 'milestone',
     state,
     dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+    activation: eligibleActivation(),
     descriptionPreview: id,
     modifiedAt: '2026-01-02T00:00:00Z',
+  };
+}
+
+function eligibleActivation() {
+  return {
+    isEligible: true,
+    milestoneLifecycle: 'active',
+    requiredActivationTriggers: [],
+    unmetActivationTriggers: [],
+    summary: 'Eligible: milestone launch is active.',
   };
 }

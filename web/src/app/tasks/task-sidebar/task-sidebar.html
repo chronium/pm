@@ -11,8 +11,8 @@
     @if (store.navigation(); as navigation) {
       <span
         class="scope-count"
-        [attr.aria-label]="navigation.remainingCount + ' remaining tasks'"
-        >{{ navigation.remainingCount }}</span
+        [attr.aria-label]="countAria(navigation.activationEligibleCount, navigation.remainingCount)"
+        >{{ countLabel(navigation.activationEligibleCount, navigation.remainingCount) }}</span
       >
     }
   </a>
@@ -63,11 +63,22 @@
               [attr.aria-current]="activeMilestone() === milestone.key ? 'page' : null"
               (click)="select($event)"
             >
-              <span class="link-label" [title]="milestone.name">{{ milestone.name }}</span>
+              <span
+                class="link-label"
+                [title]="milestoneTitle(milestone.name, milestone.lifecycle)"
+              >
+                {{ milestone.name }}
+              </span>
               <span
                 class="scope-count"
-                [attr.aria-label]="milestone.remainingCount + ' remaining tasks'"
-                >{{ milestone.remainingCount }}</span
+                [attr.aria-label]="
+                  countAria(
+                    milestone.activationEligibleCount,
+                    milestone.remainingCount,
+                    milestone.lifecycle
+                  )
+                "
+                >{{ countLabel(milestone.activationEligibleCount, milestone.remainingCount) }}</span
               >
             </a>
           }
@@ -90,8 +101,8 @@
               <span class="link-label" [title]="track.name">{{ track.name }}</span>
               <span
                 class="scope-count"
-                [attr.aria-label]="track.remainingCount + ' remaining tasks'"
-                >{{ track.remainingCount }}</span
+                [attr.aria-label]="countAria(track.activationEligibleCount, track.remainingCount)"
+                >{{ countLabel(track.activationEligibleCount, track.remainingCount) }}</span
               >
             </a>
           }

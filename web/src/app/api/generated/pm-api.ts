@@ -1776,19 +1776,37 @@ export interface components {
         BoardMilestoneGroupResponse: {
             key: null | string;
             name: string;
+            description: string;
+            lifecycle: null | string;
+            requiredActivationTriggers: string[];
+            unmetActivationTriggers: string[];
             states: components["schemas"]["BoardStateGroupResponse"][];
+        };
+        BoardMilestoneNavigationOptionResponse: {
+            key: string;
+            name: string;
+            /** Format: int32 */
+            remainingCount: number | string;
+            /** Format: int32 */
+            activationEligibleCount: number | string;
+            lifecycle: string;
+            unmetActivationTriggers: string[];
         };
         BoardNavigationOptionResponse: {
             key: string;
             name: string;
             /** Format: int32 */
             remainingCount: number | string;
+            /** Format: int32 */
+            activationEligibleCount: number | string;
         };
         BoardNavigationResponse: {
             /** Format: int32 */
             remainingCount: number | string;
+            /** Format: int32 */
+            activationEligibleCount: number | string;
             tracks: components["schemas"]["BoardNavigationOptionResponse"][];
-            milestones: components["schemas"]["BoardNavigationOptionResponse"][];
+            milestones: components["schemas"]["BoardMilestoneNavigationOptionResponse"][];
             revision: string;
         };
         BoardOptionResponse: {
@@ -1819,6 +1837,7 @@ export interface components {
             prioritySource: string;
             state: string;
             dependencies: components["schemas"]["DependencyStatusResponse"];
+            activation: components["schemas"]["TaskActivationEligibilityResponse"];
             descriptionPreview: string;
             /** Format: date-time */
             modifiedAt: string;
@@ -2080,6 +2099,13 @@ export interface components {
             priorityOptions: string[];
             revision: string;
         };
+        TaskActivationEligibilityResponse: {
+            isEligible: boolean;
+            milestoneLifecycle: null | string;
+            requiredActivationTriggers: string[];
+            unmetActivationTriggers: string[];
+            summary: string;
+        };
         TaskLocalMetadataResponse: {
             filePath: string;
         };
@@ -2097,6 +2123,7 @@ export interface components {
             prioritySelection: string;
             state: string;
             dependencies: components["schemas"]["DependencyStatusResponse"];
+            activation: components["schemas"]["TaskActivationEligibilityResponse"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

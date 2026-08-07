@@ -87,7 +87,7 @@ export function staticSnapshotInterceptor(
 
 export function validateSnapshot(value: unknown): StaticSnapshot {
   if (!isRecord(value)) throw new Error('The static snapshot is malformed.');
-  if (value['schemaVersion'] !== 4)
+  if (value['schemaVersion'] !== 5)
     throw new Error(
       `Unsupported static snapshot schema version: ${String(value['schemaVersion'])}.`,
     );

@@ -2,6 +2,8 @@ import { Component, computed, input, output } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { cssChevronRight } from '@ng-icons/css.gg';
 
+import { MarkdownDisplay } from '../../markdown/markdown-display';
+import { PmBadge, type BadgeTone } from '../../ui/badge/badge';
 import { TaskStatusGroup } from '../task-status-group/task-status-group';
 import type {
   BoardMilestoneGroup,
@@ -12,7 +14,7 @@ import type {
 
 @Component({
   selector: 'details[pmTaskMilestone]',
-  imports: [NgIcon, TaskStatusGroup],
+  imports: [MarkdownDisplay, NgIcon, PmBadge, TaskStatusGroup],
   templateUrl: './task-milestone.html',
   styleUrl: './task-milestone.css',
   providers: [provideIcons({ cssChevronRight })],
@@ -39,6 +41,33 @@ export class TaskMilestone {
       this.taskCount() > 0 &&
       this.milestone().states.every((state) => state.tasks.length === 0 || state.key === 'done'),
   );
+
+  protected lifecycleLabel(): string {
+    switch (this.milestone().lifecycle) {
+      case 'active':
+        return 'Active';
+      case 'inactive':
+        return 'Inactive';
+      case 'ready_to_deliver':
+        return 'Ready to deliver';
+      case 'delivered':
+        return 'Delivered';
+      default:
+        return 'Ungated';
+    }
+  }
+
+  protected lifecycleTone(): BadgeTone {
+    switch (this.milestone().lifecycle) {
+      case 'active':
+      case 'ready_to_deliver':
+        return 'success';
+      case 'inactive':
+        return 'warning';
+      default:
+        return 'neutral';
+    }
+  }
 
   protected changed(state: BoardStateGroup, open: boolean): void {
     this.statusOpenChange.emit({ milestone: this.milestone(), state, open });

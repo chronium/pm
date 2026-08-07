@@ -33,6 +33,10 @@ const boardResponse: BoardResponse = {
     {
       key: 'second',
       name: 'Second milestone',
+      description: 'Deliver the **second milestone**.',
+      lifecycle: 'inactive',
+      requiredActivationTriggers: ['entry'],
+      unmetActivationTriggers: ['entry'],
       states: [
         {
           key: 'todo',
@@ -53,6 +57,14 @@ const boardResponse: BoardResponse = {
                 waitingOn: ['PM-0001'],
                 missing: [],
                 summary: 'waiting on PM-0001',
+              },
+              activation: {
+                isEligible: false,
+                milestoneLifecycle: 'inactive',
+                requiredActivationTriggers: ['entry'],
+                unmetActivationTriggers: ['entry'],
+                summary:
+                  'Ineligible: milestone second is inactive; unmet activation triggers: entry.',
               },
               descriptionPreview:
                 'A useful and intentionally long description preview for dense board scanning.',
@@ -80,6 +92,14 @@ const boardResponse: BoardResponse = {
                 missing: [],
                 summary: 'ready',
               },
+              activation: {
+                isEligible: false,
+                milestoneLifecycle: 'inactive',
+                requiredActivationTriggers: ['entry'],
+                unmetActivationTriggers: ['entry'],
+                summary:
+                  'Ineligible: milestone second is inactive; unmet activation triggers: entry.',
+              },
               descriptionPreview: '',
               modifiedAt: '2026-07-13T12:00:00Z',
             },
@@ -90,6 +110,10 @@ const boardResponse: BoardResponse = {
     {
       key: 'first',
       name: 'First milestone',
+      description: '',
+      lifecycle: 'active',
+      requiredActivationTriggers: [],
+      unmetActivationTriggers: [],
       states: [
         { key: 'todo', name: 'To do', tasks: [] },
         { key: 'review', name: 'Review', tasks: [] },
@@ -179,13 +203,28 @@ describe('TasksBoard', () => {
     const link = element.querySelector<HTMLAnchorElement>('a[href="/tasks/PM-0002"]');
     expect(link).toBeTruthy();
     expect(link?.textContent).toContain('Priority: high');
-    expect(link?.textContent).toContain('Blocked');
+    expect(link?.textContent).toContain('Dependencies: blocked');
+    expect(link?.textContent).toContain('Activation: inactive');
     expect(link?.textContent).not.toContain('waiting on PM-0001');
     expect(link?.textContent).toContain('A deliberately long task title');
     expect(link?.textContent).toContain('A useful and intentionally long description preview');
     link?.focus();
     expect(document.activeElement).toBe(link);
     expect(element.querySelector('form[aria-label="Board filters"]')).toBeNull();
+  });
+
+  it('shows milestone lifecycle, unmet gates, and a collapsed Markdown deliverable', async () => {
+    const { element } = await render();
+    const milestone = element.querySelector('.milestone-section') as HTMLDetailsElement;
+    expect(milestone.textContent).toContain('Inactive');
+    expect(milestone.textContent).toContain('Waiting on: entry');
+    const deliverable = milestone.querySelector(
+      'details.deliverable-description',
+    ) as HTMLDetailsElement;
+    expect(deliverable.open).toBe(false);
+    deliverable.open = true;
+    deliverable.dispatchEvent(new Event('toggle'));
+    expect(deliverable.textContent).toContain('second milestone');
   });
 
   it('shows one board-level empty state and offers clear filters', async () => {

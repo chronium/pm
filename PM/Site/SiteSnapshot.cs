@@ -33,6 +33,7 @@ public sealed record SiteTaskResponse(
     string PrioritySelection,
     string State,
     DependencyStatusResponse Dependencies,
+    TaskActivationEligibilityResponse Activation,
     DateTime CreatedAt,
     DateTime ModifiedAt,
     string Description,

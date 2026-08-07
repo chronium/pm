@@ -14,6 +14,13 @@ const task: BoardTask = {
   prioritySource: 'milestone',
   state: 'todo',
   dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+  activation: {
+    isEligible: true,
+    milestoneLifecycle: 'active',
+    requiredActivationTriggers: [],
+    unmetActivationTriggers: [],
+    summary: 'Eligible through active milestone Angular Web UI Migration.',
+  },
   descriptionPreview: 'A focused component story.',
   modifiedAt: '2026-07-15T07:48:04Z',
 };

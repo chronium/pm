@@ -143,6 +143,10 @@ describe('TasksBoardStore', () => {
     const milestone = {
       key: 'm1',
       name: 'Milestone One',
+      description: '',
+      lifecycle: 'active',
+      requiredActivationTriggers: [],
+      unmetActivationTriggers: [],
       states: [
         { key: 'todo', name: 'To do', tasks: [] },
         { key: 'done', name: 'Done', tasks: [] },

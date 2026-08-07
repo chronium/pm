@@ -50,6 +50,14 @@ const task: TaskResponse = {
     missing: [],
     summary: 'Waiting on PM-0029',
   },
+  activation: {
+    isEligible: false,
+    milestoneLifecycle: 'inactive',
+    requiredActivationTriggers: ['beta-entry'],
+    unmetActivationTriggers: ['beta-entry'],
+    summary:
+      'Ineligible: milestone angular-web is inactive; unmet activation triggers: beta-entry.',
+  },
   createdAt: '2026-07-16T17:02:06Z',
   modifiedAt: '2026-07-18T14:30:00Z',
   description:
