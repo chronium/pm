@@ -17,10 +17,6 @@ export type SetMilestoneDescriptionRequest =
   components['schemas']['SetMilestoneDescriptionRequest'];
 export type SetProjectAccentRequest = components['schemas']['SetProjectAccentRequest'];
 export type SettingsActivationTrigger = components['schemas']['SettingsActivationTriggerResponse'];
-export type ActivationSwitchboardResponse = components['schemas']['ActivationSwitchboardResponse'];
-export type MilestoneRequiredTriggersPreviewResponse =
-  components['schemas']['MilestoneRequiredTriggersPreviewResponse'];
-export type ActivationMutationResponse = components['schemas']['ActivationMutationResponse'];
 export type SettingsMutationResponse = HttpResponse<SettingsResponse>;
 
 export interface SettingsApiError {
@@ -116,34 +112,6 @@ export class SettingsApiService {
     return this.http.put<SettingsResponse>(
       `${this.milestoneUrl(key)}/description`,
       request,
-      this.options(revision),
-    );
-  }
-
-  readActivation() {
-    return this.http.get<ActivationSwitchboardResponse>('/api/v1/activation', {
-      observe: 'response',
-    });
-  }
-
-  previewMilestoneRequiredTriggers(key: string, triggerKeys: string[], revision: string) {
-    return this.http.post<MilestoneRequiredTriggersPreviewResponse>(
-      `/api/v1/activation/milestones/${encodeURIComponent(key)}/required-triggers-preview`,
-      { triggerKeys },
-      this.options(revision),
-    );
-  }
-
-  setMilestoneRequiredTriggers(
-    key: string,
-    triggerKeys: string[],
-    previewRevision: string,
-    allowDeactivation: boolean,
-    revision: string,
-  ) {
-    return this.http.put<ActivationMutationResponse>(
-      `/api/v1/activation/milestones/${encodeURIComponent(key)}/required-triggers`,
-      { triggerKeys, previewRevision, allowDeactivation },
       this.options(revision),
     );
   }

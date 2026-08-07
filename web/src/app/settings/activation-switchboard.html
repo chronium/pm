@@ -1,0 +1,255 @@
+<section class="activation-settings" aria-labelledby="activation-heading">
+  <div class="section-heading">
+    <div>
+      <h2 id="activation-heading">Activation</h2>
+      <p>Latched gates that determine when milestone work becomes eligible.</p>
+    </div>
+    @if (!readOnly() && reconciliationRequired()) {
+      <button
+        type="button"
+        class="pm-button pm-button--secondary"
+        [disabled]="store.pending()"
+        (click)="reviewReconciliation()"
+      >
+        {{ store.isPending('preview-reconcile', null) ? 'Reviewing…' : 'Reconcile' }}
+      </button>
+    }
+  </div>
+
+  @if (readOnly()) {
+    <p class="read-only-notice" role="status">
+      Activation state is available for inspection. Controls are hidden in this read-only project.
+    </p>
+  }
+  @if (store.statusMessage()) {
+    <p class="status-message" role="status">{{ store.statusMessage() }}</p>
+  }
+  @if (store.liveUpdateUnavailable()) {
+    <p class="live-update-status" role="status">Live updates unavailable; retrying</p>
+  }
+
+  @if (store.loading()) {
+    <pm-loading-state>Loading activation switchboard…</pm-loading-state>
+  } @else if (store.loadError() && !store.switchboard()) {
+    <pm-error-state>
+      <p>{{ store.loadError() }}</p>
+      <button type="button" class="pm-button pm-button--secondary" (click)="store.reload()">
+        Retry
+      </button>
+    </pm-error-state>
+  } @else if (store.switchboard(); as switchboard) {
+    @if (switchboard.issues.length) {
+      <div class="issue-list" aria-label="Activation notices">
+        @for (issue of switchboard.issues; track issue.code + issue.message) {
+          <p [class.issue-warning]="issue.severity === 'warning'" role="status">
+            <strong>
+              {{
+                issueRequiresReconciliation(issue.code)
+                  ? 'Reconciliation required.'
+                  : 'Activation notice.'
+              }}
+            </strong>
+            {{ issue.message }}
+          </p>
+        }
+      </div>
+    }
+
+    <div class="trigger-list">
+      @for (trigger of switchboard.activationTriggers; track trigger.key) {
+        <details class="trigger-row">
+          <summary>
+            <span
+              class="status-dot"
+              [attr.data-tone]="statusTone(trigger)"
+              aria-hidden="true"
+            ></span>
+            <span class="trigger-identity">
+              <strong>{{ trigger.title }}</strong
+              ><code>{{ trigger.key }}</code>
+            </span>
+            <span class="trigger-status" [attr.data-tone]="statusTone(trigger)">
+              {{ status(trigger) }}
+            </span>
+            <span class="requirement-count">
+              {{ trigger.satisfiedRequirementCount }} / {{ trigger.requirementCount }} requirements
+            </span>
+          </summary>
+          <div class="trigger-details">
+            <section aria-label="Requirements">
+              <h3>Requirements</h3>
+              <ul class="requirement-list">
+                @for (
+                  requirement of trigger.requirements;
+                  track requirement.kind + ':' + requirement.source
+                ) {
+                  <li>
+                    <span
+                      class="requirement-state"
+                      [class.satisfied]="requirement.isSatisfied"
+                      aria-hidden="true"
+                    >
+                      {{ requirement.isSatisfied ? '✓' : '○' }}
+                    </span>
+                    <a
+                      [routerLink]="requirementUrl(requirement.kind, requirement.source)"
+                      [queryParams]="requirementQuery(requirement.kind, requirement.source)"
+                    >
+                      <span>{{ requirement.kind }}</span> <code>{{ requirement.source }}</code>
+                    </a>
+                    @if (requirement.wasWaivedAtActivation) {
+                      <small>Waived at activation</small>
+                    }
+                  </li>
+                } @empty {
+                  <li class="empty-detail">Manual-only trigger; it has no factual requirements.</li>
+                }
+              </ul>
+            </section>
+            <section aria-label="Activation provenance">
+              <h3>Activation provenance</h3>
+              @if (trigger.activation; as activation) {
+                <dl>
+                  <div>
+                    <dt>Mode</dt>
+                    <dd>{{ activation.mode }}</dd>
+                  </div>
+                  <div>
+                    <dt>Activated</dt>
+                    <dd>{{ activation.at | date: 'medium' }}</dd>
+                  </div>
+                  @if (activation.reason) {
+                    <div>
+                      <dt>Reason</dt>
+                      <dd>{{ activation.reason }}</dd>
+                    </div>
+                  }
+                  @if (activation.waivedRequirements.length) {
+                    <div>
+                      <dt>Waived</dt>
+                      <dd>
+                        @for (
+                          requirement of activation.waivedRequirements;
+                          track requirement.kind + ':' + requirement.source
+                        ) {
+                          <span>
+                            {{ requirement.kind }} <code>{{ requirement.source }}</code>
+                          </span>
+                        }
+                      </dd>
+                    </div>
+                  }
+                </dl>
+              } @else {
+                <p class="empty-detail">No activation record.</p>
+              }
+            </section>
+            <section aria-label="Consuming milestones">
+              <h3>Milestones using this gate</h3>
+              <ul class="consumer-list">
+                @for (key of trigger.consumingMilestones; track key) {
+                  <li>
+                    <a routerLink="/tasks" [queryParams]="{ milestone: key }"
+                      ><code>{{ key }}</code></a
+                    >
+                  </li>
+                } @empty {
+                  <li class="empty-detail">No milestones consume this trigger.</li>
+                }
+              </ul>
+            </section>
+            @if (!readOnly()) {
+              <div class="trigger-actions">
+                @if (!trigger.isActive && +trigger.requirementCount === 0) {
+                  <button
+                    type="button"
+                    class="pm-button pm-button--primary"
+                    [disabled]="store.pending()"
+                    (click)="openAction('activate', trigger.key)"
+                  >
+                    Activate
+                  </button>
+                }
+                @if (
+                  !trigger.isActive &&
+                  +trigger.requirementCount > 0 &&
+                  !trigger.requirementsSatisfied
+                ) {
+                  <button
+                    type="button"
+                    class="pm-button pm-button--primary"
+                    [disabled]="store.pending()"
+                    (click)="openAction('override', trigger.key)"
+                  >
+                    Override…
+                  </button>
+                }
+                @if (canReset(trigger)) {
+                  <button
+                    type="button"
+                    class="pm-button pm-button--secondary"
+                    [disabled]="store.pending()"
+                    (click)="openAction('reset', trigger.key)"
+                  >
+                    Reset…
+                  </button>
+                }
+                @if (trigger.isActive) {
+                  <button
+                    type="button"
+                    class="pm-button pm-button--secondary"
+                    [disabled]="store.pending()"
+                    (click)="openRedefinition(trigger.key)"
+                  >
+                    Redefine…
+                  </button>
+                }
+              </div>
+            }
+            @if (store.errorFor(trigger.key)) {
+              <p class="operation-error" role="alert">{{ store.errorFor(trigger.key) }}</p>
+            }
+          </div>
+        </details>
+      } @empty {
+        <p class="empty-switchboard">
+          No activation triggers are configured. Milestones without required triggers continue to
+          behave normally.
+        </p>
+      }
+    </div>
+  }
+</section>
+
+<pm-activation-trigger-action-dialog
+  [open]="!!action()"
+  [action]="action()?.action ?? 'activate'"
+  [trigger]="selectedActionTrigger()"
+  [pending]="store.pending()"
+  [error]="action() ? store.errorFor(action()!.key) : null"
+  (confirmed)="confirmAction($event)"
+  (closed)="closeAction()"
+  (dirtyChange)="dirtyChange.emit($event)"
+/>
+<pm-activation-trigger-redefine-dialog
+  [open]="!!redefineKey()"
+  [trigger]="selectedRedefineTrigger()"
+  [preview]="redefinePreview()"
+  [pending]="store.pending()"
+  [error]="redefineKey() ? store.errorFor(redefineKey()) : null"
+  (review)="reviewRedefinition($event)"
+  (apply)="applyRedefinition($event)"
+  (changed)="invalidateRedefinitionPreview()"
+  (closed)="closeRedefinition()"
+  (dirtyChange)="dirtyChange.emit($event)"
+/>
+<pm-confirm-dialog
+  [open]="!!reconcilePreview()"
+  [pending]="store.pending()"
+  heading="Reconcile activation records?"
+  [message]="reconciliationMessage()"
+  confirmLabel="Reconcile"
+  (confirmed)="confirmReconciliation()"
+  (cancelled)="closeReconciliation()"
+  (openChange)="$event || closeReconciliation()"
+/>

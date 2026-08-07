@@ -16,8 +16,11 @@ import {
   type SettingsMutationResponse,
   type SettingsResponse,
   type ValidationResponse,
-  type MilestoneRequiredTriggersPreviewResponse,
 } from './settings-api.service';
+import {
+  ActivationApiService,
+  type MilestoneRequiredTriggersPreviewResponse,
+} from './activation-api.service';
 
 export type SettingsCollection = 'project' | 'status' | 'track' | 'milestone';
 export interface SettingsOperation {
@@ -42,6 +45,7 @@ export interface MilestoneGatePreview {
 @Injectable()
 export class SettingsStore {
   private readonly api = inject(SettingsApiService);
+  private readonly activationApi = inject(ActivationApiService);
   private readonly polling = inject(PollingCoordinator);
   private readonly retainedSettings = signal<SettingsResponse | undefined>(undefined);
   private readonly acceptedRevision = signal<string | null>(null);
@@ -175,10 +179,14 @@ export class SettingsStore {
   ): Promise<MilestoneGatePreview | null> {
     const operation: SettingsOperation = { kind: 'preview', collection: 'milestone', key };
     return this.runActivationOperation(operation, async () => {
-      const activation = await firstValueFrom(this.api.readActivation());
+      const activation = await firstValueFrom(this.activationApi.read());
       if (!activation.body) throw new Error('The activation switchboard returned no data.');
       const preview = await firstValueFrom(
-        this.api.previewMilestoneRequiredTriggers(key, triggerKeys, activation.body.revision),
+        this.activationApi.previewMilestoneRequiredTriggers(
+          key,
+          triggerKeys,
+          activation.body.revision,
+        ),
       );
       if (!preview.body) throw new Error('The activation preview returned no data.');
       return {
@@ -200,7 +208,7 @@ export class SettingsStore {
     let applied = false;
     try {
       await firstValueFrom(
-        this.api.setMilestoneRequiredTriggers(
+        this.activationApi.setMilestoneRequiredTriggers(
           key,
           triggerKeys,
           preview.impact.previewRevision,

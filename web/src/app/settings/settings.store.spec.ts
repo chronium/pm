@@ -133,8 +133,9 @@ describe('SettingsStore', () => {
     await Promise.resolve();
     http.expectOne('/api/v1/activation').flush({
       revision: 'activation-r1',
-      triggers: [],
+      activationTriggers: [],
       milestones: [],
+      issues: [],
     });
     await Promise.resolve();
     const previewRequest = http.expectOne(

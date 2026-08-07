@@ -24,6 +24,7 @@ import { AccentPicker } from '../shared/accent-picker/accent-picker';
 import { LinkedProjects } from './linked-projects';
 import { ProjectContextService } from '../core/project-context.service';
 import { MilestoneDeliverableEditor } from './milestone-deliverable-editor';
+import { ActivationSwitchboard } from './activation-switchboard';
 
 interface Editor {
   collection: 'status' | 'track';
@@ -43,7 +44,14 @@ interface SettingsDraft {
   edit: { value: string };
 }
 type SettingsSection =
-  'overview' | 'members' | 'linked-projects' | 'runners' | 'statuses' | 'milestones' | 'tracks';
+  | 'overview'
+  | 'members'
+  | 'linked-projects'
+  | 'runners'
+  | 'statuses'
+  | 'milestones'
+  | 'activation'
+  | 'tracks';
 
 @Component({
   selector: 'pm-settings-page',
@@ -61,6 +69,7 @@ type SettingsSection =
     AccentPicker,
     ExternalChangeBanner,
     MilestoneDeliverableEditor,
+    ActivationSwitchboard,
   ],
   providers: [SettingsStore, PollingCoordinator, provideIcons({ cssPen, cssTrash })],
   templateUrl: './settings-page.html',
@@ -82,6 +91,7 @@ export class SettingsPage implements DirtyRoute {
   protected readonly confirmDiscardOpen = signal(false);
   protected readonly selectedMilestoneKey = signal<string | null>(null);
   protected readonly milestoneEditorDirty = signal(false);
+  protected readonly activationEditorDirty = signal(false);
   protected readonly selectedMilestone = computed(() => {
     const key = this.selectedMilestoneKey();
     return key
@@ -362,7 +372,8 @@ export class SettingsPage implements DirtyRoute {
       this.optionCreateForm().dirty() ||
       this.milestoneCreateForm().dirty() ||
       this.editForm().dirty() ||
-      this.milestoneEditorDirty()
+      this.milestoneEditorDirty() ||
+      this.activationEditorDirty()
     );
   }
 

@@ -54,6 +54,19 @@ milestones:
     priority: none
     requiredActivationTriggers: []
     delivery: null
+activationTriggers:
+  manual-entry:
+    title: Manual entry
+    requirements: []
+    activation: null
+  beta-entry:
+    title: Beta entry criteria
+    requirements:
+      - kind: task
+        source: E2E-0001
+      - kind: task
+        source: E2E-0002
+    activation: null
 `,
   );
   await writeFile(join(pm, 'project_id.txt'), 'playwright-project\n');

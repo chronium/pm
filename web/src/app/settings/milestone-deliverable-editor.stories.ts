@@ -59,7 +59,7 @@ class DeliverableEditorStoryBackend extends HttpBackend {
         new HttpResponse({
           status: 200,
           headers: request.headers.set('ETag', '"activation-r1"'),
-          body: { revision: 'activation-r1', triggers: [], milestones: [] },
+          body: { revision: 'activation-r1', activationTriggers: [], milestones: [], issues: [] },
         }),
       );
     if (request.url.endsWith('/required-triggers-preview'))

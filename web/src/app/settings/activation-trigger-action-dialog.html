@@ -1,0 +1,81 @@
+<dialog
+  #dialog
+  class="activation-dialog pm-frosted-surface pm-frosted-dialog"
+  [attr.aria-labelledby]="headingId"
+  (cancel)="cancel($event)"
+  (click)="backdrop($event)"
+>
+  <div class="dialog-body" [attr.aria-busy]="pending()">
+    <div class="dialog-heading">
+      <div>
+        <span>Activation trigger</span>
+        <h2 [id]="headingId">{{ heading() }}</h2>
+        @if (trigger(); as current) {
+          <code>{{ current.key }}</code>
+        }
+      </div>
+      <button
+        type="button"
+        class="dialog-close"
+        aria-label="Close dialog"
+        [disabled]="pending()"
+        (click)="close()"
+      >
+        ×
+      </button>
+    </div>
+    <p>{{ message() }}</p>
+    @if (action() === 'override') {
+      <label for="activation-override-reason">Override reason</label>
+      <textarea
+        id="activation-override-reason"
+        rows="4"
+        [value]="reason()"
+        [disabled]="pending()"
+        autofocus
+        (input)="updateReason($event)"
+      ></textarea>
+      <small>The reason becomes public, commit-friendly activation provenance.</small>
+    }
+    @if (error()) {
+      <p class="dialog-error" role="alert">{{ error() }}</p>
+    }
+    @if (discardPrompt()) {
+      <div class="discard-notice" role="alert">
+        <span>Discard the unsaved override reason?</span>
+        <div>
+          <button
+            type="button"
+            class="pm-button pm-button--secondary"
+            (click)="discardPrompt.set(false)"
+          >
+            Keep editing
+          </button>
+          <button type="button" class="pm-button pm-button--danger" (click)="discard()">
+            Discard
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+  <div class="dialog-actions">
+    <button
+      type="button"
+      class="pm-button pm-button--secondary"
+      [disabled]="pending()"
+      (click)="close()"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="pm-button"
+      [class.pm-button--danger]="action() === 'reset'"
+      [class.pm-button--primary]="action() !== 'reset'"
+      [disabled]="pending() || discardPrompt() || (action() === 'override' && !reason().trim())"
+      (click)="confirm()"
+    >
+      {{ pending() ? 'Working…' : confirmLabel() }}
+    </button>
+  </div>
+</dialog>

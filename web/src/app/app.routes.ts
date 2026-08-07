@@ -225,7 +225,11 @@ export const staticRoutes: Routes = [
     component: TasksShell,
     data: { shell: AppShell.Tasks },
     children: [
-      { path: 'settings', redirectTo: '' },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./settings/static-activation-page').then((module) => module.StaticActivationPage),
+      },
       {
         path: '',
         component: TasksBoard,

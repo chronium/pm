@@ -76,42 +76,6 @@ describe('SettingsApiService', () => {
     }
   });
 
-  it('uses activation revisions for gate preview and apply operations', () => {
-    const api = TestBed.inject(SettingsApiService);
-    api.readSettings().subscribe();
-    api.readActivation().subscribe();
-    api.previewMilestoneRequiredTriggers('m/one', ['beta entry'], 'activation-r1').subscribe();
-    api
-      .setMilestoneRequiredTriggers('m/one', ['beta entry'], 'preview-r1', true, 'activation-r1')
-      .subscribe();
-
-    const http = TestBed.inject(HttpTestingController);
-    const settingsRequest = http.expectOne('/api/v1/settings');
-    expect(settingsRequest.request.headers.has('If-Match')).toBe(false);
-    settingsRequest.flush(settings);
-    const activationRequest = http.expectOne('/api/v1/activation');
-    expect(activationRequest.request.headers.has('If-Match')).toBe(false);
-    activationRequest.flush({ revision: 'activation-r1', triggers: [], milestones: [] });
-
-    const preview = http.expectOne(
-      '/api/v1/activation/milestones/m%2Fone/required-triggers-preview',
-    );
-    expect(preview.request.method).toBe('POST');
-    expect(preview.request.body).toEqual({ triggerKeys: ['beta entry'] });
-    expect(preview.request.headers.get('If-Match')).toBe('"activation-r1"');
-    preview.flush({});
-
-    const apply = http.expectOne('/api/v1/activation/milestones/m%2Fone/required-triggers');
-    expect(apply.request.method).toBe('PUT');
-    expect(apply.request.body).toEqual({
-      triggerKeys: ['beta entry'],
-      previewRevision: 'preview-r1',
-      allowDeactivation: true,
-    });
-    expect(apply.request.headers.get('If-Match')).toBe('"activation-r1"');
-    apply.flush({});
-  });
-
   it('maps structured service failures and stale conflicts', () => {
     const api = TestBed.inject(SettingsApiService);
     expect(

@@ -86,6 +86,14 @@
         </button>
         <button
           type="button"
+          [class.active]="activeSection() === 'activation'"
+          [attr.aria-current]="activeSection() === 'activation' ? 'page' : null"
+          (click)="selectSection('activation')"
+        >
+          Activation
+        </button>
+        <button
+          type="button"
           [class.active]="activeSection() === 'tracks'"
           [attr.aria-current]="activeSection() === 'tracks' ? 'page' : null"
           (click)="selectSection('tracks')"
@@ -286,6 +294,15 @@
             }
           </div>
         </section>
+
+        @if (activeSection() === 'activation') {
+          <div class="settings-panel">
+            <pm-activation-switchboard
+              [readOnly]="projectContext.readOnly()"
+              (dirtyChange)="activationEditorDirty.set($event)"
+            />
+          </div>
+        }
 
         <section
           class="settings-section"

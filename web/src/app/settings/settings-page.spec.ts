@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
 
 import { MarkdownEditor } from '../markdown/markdown-editor';
 import type { SettingsResponse, ValidationResponse } from './settings-api.service';
@@ -77,7 +78,7 @@ describe('SettingsPage', () => {
   beforeEach(async () =>
     TestBed.configureTestingModule({
       imports: [SettingsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents(),
   );
   afterEach(() => {
@@ -124,6 +125,47 @@ describe('SettingsPage', () => {
     expect(element.querySelector('.milestone-row button')?.textContent).toContain(
       'Edit deliverable',
     );
+  });
+
+  it('loads the activation switchboard only when its settings section is selected', async () => {
+    const { fixture, element, http } = await render();
+    http.expectNone('/api/v1/activation');
+
+    [...element.querySelectorAll<HTMLButtonElement>('.settings-navigation button')]
+      .find((button) => button.textContent?.trim() === 'Activation')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/v1/activation').flush({
+      revision: 'activation-r1',
+      activationTriggers: [
+        {
+          key: 'beta-entry',
+          title: 'Beta entry criteria',
+          isActive: false,
+          activation: null,
+          satisfiedRequirementCount: 0,
+          requirementCount: 1,
+          requirementsSatisfied: false,
+          isLatchedDespiteUnmetRequirements: false,
+          requirements: [
+            {
+              kind: 'task',
+              source: 'PM-0001',
+              isSatisfied: false,
+              wasWaivedAtActivation: false,
+            },
+          ],
+          consumingMilestones: ['public-beta'],
+        },
+      ],
+      milestones: [],
+      issues: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(element.querySelector('pm-activation-switchboard')).not.toBeNull();
+    expect(element.textContent).toContain('Pending — 0 / 1');
   });
 
   it('saves a project-wide accent from General settings', async () => {
@@ -349,8 +391,9 @@ describe('SettingsPage', () => {
     await Promise.resolve();
     http.expectOne('/api/v1/activation').flush({
       revision: 'activation-r1',
-      triggers: [],
+      activationTriggers: [],
       milestones: [],
+      issues: [],
     });
     await Promise.resolve();
     http

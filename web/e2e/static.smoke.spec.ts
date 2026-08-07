@@ -63,7 +63,7 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
     await expect(taskSearch).toBeVisible();
   }
   await expect(page.getByRole('link', { name: 'New task' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
+  await expect(page.locator('a.settings-link')).toHaveCount(1);
   await expect(page.locator('[pmTaskRow]')).toHaveCount(2);
 
   await taskSearch.fill('Fixture description for E2E-0003');
@@ -145,11 +145,17 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   );
 });
 
-test('mutation-only hash routes redirect to their read views', async ({ page }) => {
+test('mutation-only hash routes redirect while activation settings remain inspectable', async ({
+  page,
+}) => {
   await page.goto('/#/tasks/new');
   await expect(page).toHaveURL(/#\/tasks$/);
   await page.goto('/#/tasks/settings');
-  await expect(page).toHaveURL(/#\/tasks$/);
+  await expect(page).toHaveURL(/#\/tasks\/settings$/);
+  await expect(page.getByRole('heading', { name: 'Activation' })).toBeVisible();
+  await expect(page.getByText('Manual entry', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Controls are hidden/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Activate' })).toHaveCount(0);
   await page.goto('/#/wiki/edit/welcome');
   await expect(page).toHaveURL(/#\/wiki\/welcome$/);
   await expect(page.getByRole('heading', { name: 'Wiki page 1' })).toBeVisible();

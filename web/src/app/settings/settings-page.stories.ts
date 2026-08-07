@@ -12,6 +12,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { NEVER, of, throwError } from 'rxjs';
 
 import type { SettingsResponse } from './settings-api.service';
+import type { ActivationSwitchboardResponse } from './activation-api.service';
 import { SettingsPage } from './settings-page';
 
 const settings: SettingsResponse = {
@@ -51,6 +52,13 @@ const settings: SettingsResponse = {
   revision: 'story-r1',
 };
 
+const activation: ActivationSwitchboardResponse = {
+  revision: 'activation-story-r1',
+  activationTriggers: [],
+  milestones: [],
+  issues: [],
+};
+
 @Injectable()
 class SettingsStoryBackend extends HttpBackend {
   handle(request: HttpRequest<unknown>) {
@@ -58,6 +66,8 @@ class SettingsStoryBackend extends HttpBackend {
       return of(new HttpResponse({ status: 200, body: settings }));
     if (request.url === '/api/v1/validation')
       return of(new HttpResponse({ status: 200, body: { valid: true, issues: [] } }));
+    if (request.url === '/api/v1/activation')
+      return of(new HttpResponse({ status: 200, body: activation }));
     if (request.url === '/api/v1/project/identity')
       return of(new HttpResponse({ status: 200, body: localIdentity }));
     if (request.url === '/api/v1/project/members')

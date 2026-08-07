@@ -100,7 +100,7 @@
     }
   </div>
 
-  @if (!projectContext.readOnly()) {
+  @if (!projectContext.readOnly() || staticMode.enabled) {
     <a
       class="settings-link"
       routerLink="/tasks/settings"

@@ -469,6 +469,38 @@ test('shows settings validation and protects required configuration', async ({ p
   await expect(page.getByText('Review', { exact: true })).toBeVisible();
 });
 
+test('operates activation trigger lifecycles from the settings switchboard', async ({ page }) => {
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Activation', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Activation' })).toBeVisible();
+
+  const manual = page.locator('details').filter({ hasText: 'Manual entry' });
+  await manual.locator('summary').click();
+  await manual.getByRole('button', { name: 'Activate', exact: true }).click();
+  const activate = page.getByRole('dialog', { name: 'Activate Manual entry?' });
+  await expect(activate).toBeVisible();
+  await activate.getByRole('button', { name: 'Activate trigger' }).click();
+  await expect(manual.getByText('Active manually')).toBeVisible();
+
+  await manual.getByRole('button', { name: 'Redefine…' }).click();
+  const redefine = page.getByRole('dialog', { name: 'Redefine Manual entry' });
+  await redefine.getByRole('button', { name: 'Add requirement' }).click();
+  await redefine.getByPlaceholder('Task ID or milestone key').fill('E2E-0001');
+  await redefine.getByRole('button', { name: 'Review impact' }).click();
+  await expect(redefine.getByRole('heading', { name: 'Reviewed impact' })).toBeVisible();
+  await redefine.getByRole('button', { name: 'Apply redefinition' }).click();
+  await expect(manual.getByText('Pending — 0 / 1')).toBeVisible();
+
+  const beta = page.locator('details').filter({ hasText: 'Beta entry criteria' });
+  await beta.locator('summary').click();
+  await beta.getByRole('button', { name: 'Override…' }).click();
+  const override = page.getByRole('dialog', { name: 'Override Beta entry criteria?' });
+  await override.getByLabel('Override reason').fill('Proceed with the reviewed beta risk.');
+  await override.getByRole('button', { name: 'Apply override' }).click();
+  await expect(beta.getByText('Active by override — 0 / 2')).toBeVisible();
+  await expect(beta.getByText('Proceed with the reviewed beta risk.')).toBeVisible();
+});
+
 test('pairs a runner, starts one immutable task run, and supervises its durable output', async ({
   page,
 }, testInfo) => {
