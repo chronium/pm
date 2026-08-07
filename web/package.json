@@ -71,6 +71,15 @@
     "vite@7.3.5": "7.3.6",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@hono/node-server": "2.0.12",
-    "tar": "7.5.22"
+    "tar": "7.5.22",
+    "hono": "4.12.34",
+    "ip-address": "10.3.1",
+    "postcss": "8.5.26",
+    "jsdom": {
+      "undici": "7.29.0"
+    },
+    "node-gyp": {
+      "undici": "6.28.0"
+    }
   }
 }
