@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 
@@ -25,7 +26,7 @@ public static class McpToolCatalog
         "append_task_note",
     };
 
-    public static IReadOnlyList<McpServerTool> CreateRunWorkerTools()
+    public static IReadOnlyList<McpServerTool> CreateRunWorkerTools(JsonSerializerOptions serializerOptions)
     {
         var methods = typeof(PmMcpTools)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public)
@@ -44,7 +45,8 @@ public static class McpToolCatalog
 
         return methods
             .Select(item => McpServerTool.Create(item.Method,
-                request => request.Services!.GetRequiredService<PmMcpTools>()))
+                request => request.Services!.GetRequiredService<PmMcpTools>(),
+                new McpServerToolCreateOptions { SerializerOptions = serializerOptions }))
             .ToList();
     }
 }

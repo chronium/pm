@@ -1,7 +1,7 @@
 ---
 title: MCP Guide
 createdAt: 2026-07-27T06:14:45.2638910Z
-modifiedAt: 2026-08-07T17:59:48.7696930Z
+modifiedAt: 2026-08-07T18:14:29.7504410Z
 ---
 
 PM exposes a Model Context Protocol server over standard input/output. It gives coding agents structured access to the same services used by the CLI and web API.
@@ -73,6 +73,22 @@ Every change-producing activation or delivery mutation returns the selected proj
 These are normal-profile control-plane operations. A run-worker advertises `get_project`, `list_milestones`, and `get_activation_switchboard` for current-project context, but linked selectors return `mcp_project_scope_denied`. It does not advertise trigger definition, activation, override, reset, redefine, delivery, reopening, or reconciliation tools. The tool implementations retain the same denial guard as defense in depth.
 
 Rebuilds do not hot-reload an already running MCP process; restart the server before diagnosing changed code.
+
+### Selected-project operating sequence
+
+A trusted client can control one linked project without changing the MCP server working directory:
+
+1. Read `get_activation_switchboard` with `project: "starfall"` and retain the returned owner metadata.
+2. Use `preview_milestone_delivery` against any readable target, or `preview_activation_trigger_redefinition` after granting write trust.
+3. Apply the returned revision to the same project selector. Revisions are project-bound and stale after relevant project changes.
+4. Verify the mutation receipt contains that project's stable ID and only repository-relative `.pm/` paths.
+5. Compare the returned switchboard with an immediate selected-project reread when authoritative post-mutation state matters.
+
+A task mutation selected into another project runs automatic activation in that task's owning project. Identically named tasks, milestones, and triggers in other family members do not participate.
+
+If a merge or interrupted write leaves satisfied requirements without a latch, call `reconcile_activation_triggers` with `dryRun: true` and the target selector, review the impact, then apply it to the same target. Reconciliation writes only the missing activation records and never deactivates existing provenance.
+
+Target disappearance and local registry rebinding are fail-closed. Refresh `list_linked_projects`, repair or replace the local binding, and grant write trust again when the repository path intentionally changed.
 
 ## Safe wiki patching
 

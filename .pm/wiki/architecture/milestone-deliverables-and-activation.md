@@ -1,7 +1,7 @@
 ---
 title: Milestone Deliverables and Activation Triggers
 createdAt: 2026-08-06T05:36:38.7041500Z
-modifiedAt: 2026-08-07T08:52:57.5942640Z
+modifiedAt: 2026-08-07T18:14:29.7742930Z
 ---
 
 Milestones are first-class deliverables rather than organizational buckets. A milestone describes an outcome, the scope that belongs to that outcome, the activation gates that permit work to begin, and the explicit delivery decision that accepts the result.
@@ -427,6 +427,12 @@ The following are control-plane operations:
 They may be exposed through the CLI, hosted web application, API, and trusted MCP capability profile. They must not be exposed to isolated run workers.
 
 Task completion remains an authoritative PM mutation and may automatically create activation records as part of its lifecycle processing.
+
+### Linked-project control
+
+Project selection changes which repository receives a control-plane operation; it does not broaden requirement resolution. Tasks, milestones, triggers, activation provenance, delivery records, cycle validation, and recommendation eligibility are all evaluated within the selected owner project. A requirement that directly references work owned by another project remains deferred.
+
+Readable linked projects may expose their switchboard and delivery preview. Mutations require an explicit local write-trusted binding and fail if that binding no longer matches the family resolution used for the operation. Receipts identify the stable owner project and repository-relative changed paths. Restricted run workers remain limited to current-project switchboard reads and cannot invoke linked selection or activation control-plane tools.
 
 ## Read model
 

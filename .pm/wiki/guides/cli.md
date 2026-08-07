@@ -1,7 +1,7 @@
 ---
 title: CLI Guide
 createdAt: 2026-07-27T06:14:45.2598480Z
-modifiedAt: 2026-08-07T08:52:57.5309200Z
+modifiedAt: 2026-08-07T18:14:29.7601800Z
 ---
 
 The CLI is the direct terminal adapter over PM's application services. Run it from the project directory or any descendant.
@@ -90,6 +90,8 @@ pm milestone reopen public-beta
 ~~~
 
 Exceptional delivery records its public reason and accepted unfinished-task snapshot. Reopening removes the delivery record and re-evaluates current gates.
+
+CLI trigger, reconciliation, delivery, and reopening commands operate on the active checkout and do not accept a linked-project selector. Run them from the owning project's checkout. A normal trusted MCP client may instead select a readable or write-trusted family member explicitly; the restricted run-worker profile cannot perform those control-plane operations.
 
 ## Wiki
 

@@ -496,7 +496,7 @@ public sealed class LinkedProjectAdapterIntegrationTests
         {
             var data = dryRunDocument.RootElement.GetProperty("data");
             Assert.False(data.GetProperty("changed").GetBoolean());
-            Assert.False(data.TryGetProperty("mutation", out _));
+            Assert.Equal(JsonValueKind.Null, data.GetProperty("mutation").ValueKind);
             Assert.Contains("automatic-entry", data.GetProperty("impact")
                 .GetProperty("automaticActivation")
                 .GetProperty("activatedTriggers")
@@ -519,7 +519,7 @@ public sealed class LinkedProjectAdapterIntegrationTests
         {
             var data = latchedDocument.RootElement.GetProperty("data");
             Assert.False(data.GetProperty("changed").GetBoolean());
-            Assert.False(data.TryGetProperty("mutation", out _));
+            Assert.Equal(JsonValueKind.Null, data.GetProperty("mutation").ValueKind);
             var trigger = data.GetProperty("switchboard").GetProperty("activationTriggers")
                 .EnumerateArray()
                 .Single(item => item.GetProperty("key").GetString() == "automatic-entry");

@@ -1,7 +1,7 @@
 ---
 title: Linked Projects
 createdAt: 2026-07-31T15:55:14.2753290Z
-modifiedAt: 2026-08-01T04:44:14.8504550Z
+modifiedAt: 2026-08-07T18:14:29.7673770Z
 ---
 
 # Linked Projects
@@ -96,6 +96,16 @@ pm project untrust starfall
 ```
 
 Trust is local to the machine and project. It is not inherited through the family and does not coordinate multi-repository commits.
+
+## Milestone activation ownership
+
+Milestone and activation definitions always belong to exactly one repository. A trusted MCP client may select `current`, `parent`, a stable project ID, or a unique alias when reading or changing a switchboard, but every requirement is resolved against the selected project's own tasks and milestones. Duplicate task, milestone, or trigger keys in another family member are unrelated.
+
+Selected switchboard reads require only readability. Definition changes, trigger lifecycle operations, reconciliation, delivery, and reopening require local write trust, except that milestone delivery preview is readable. Successful mutations return the owning stable project ID and repository-relative changed paths; they never coordinate commits across repositories.
+
+Completing a task through a selected-project mutation evaluates and persists automatic activation in that task's owning repository. Family recommendations then evaluate each candidate against its owner's milestone lifecycle before federated ranking. PM does not expose a family-wide aggregate switchboard.
+
+If a target disappears after discovery or its trusted registry binding changes during an operation, PM rejects the operation before writing. Restore the checkout or repair the binding with `pm project bind --replace`, review `pm project links`, and grant write trust again.
 
 ## Clone and recovery
 

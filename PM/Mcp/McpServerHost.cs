@@ -1,6 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol;
 using PM.Application;
 using PM.Auth;
 using PM.Project;
@@ -11,6 +14,12 @@ namespace PM.Mcp;
 
 public static class McpServerHost
 {
+    private static JsonSerializerOptions CreateToolSerializerOptions() =>
+        new(McpJsonUtilities.DefaultOptions)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        };
+
     public static HostApplicationBuilder CreateBuilder(string[] args)
     {
         var parsed = McpServerStartupOptions.Parse(args);
@@ -75,11 +84,12 @@ public static class McpServerHost
         var mcpBuilder = builder.Services
             .AddMcpServer()
             .WithStdioServerTransport();
+        var toolSerializerOptions = CreateToolSerializerOptions();
 
         if (options.Profile == McpCapabilityProfile.RunWorker)
-            mcpBuilder.WithTools(McpToolCatalog.CreateRunWorkerTools());
+            mcpBuilder.WithTools(McpToolCatalog.CreateRunWorkerTools(toolSerializerOptions));
         else
-            mcpBuilder.WithToolsFromAssembly();
+            mcpBuilder.WithToolsFromAssembly(typeof(PmMcpTools).Assembly, toolSerializerOptions);
 
         return builder;
     }
