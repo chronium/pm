@@ -42,7 +42,11 @@ public sealed class MilestoneDeliveryServiceTests
         var stored = ProjectConfig.ReadConfig(root).Milestones["release"].Delivery!;
         Assert.Equal(now, stored.At);
         Assert.Equal(MilestoneDeliveryMode.Ordinary, stored.Mode);
-        Assert.DoesNotContain("actor:", File.ReadAllText(root.ConfigPath), StringComparison.OrdinalIgnoreCase);
+        var storedYaml = File.ReadAllText(root.ConfigPath);
+        Assert.DoesNotContain("reason:", storedYaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("actor:", storedYaml, StringComparison.OrdinalIgnoreCase);
+        Assert.All(storedYaml.Split('\n'), line =>
+            Assert.False(line.EndsWith(' '), $"Serialized config line has trailing whitespace: '{line}'"));
         Assert.Equal("milestone_already_delivered", service.PreviewDelivery("release", null).ErrorCode);
     }
 
@@ -86,6 +90,7 @@ public sealed class MilestoneDeliveryServiceTests
         Assert.Equal(["PM-0002", "PM-0003"], deliveredMilestone.Delivery.AcceptedTaskIds);
         var stored = ProjectConfig.ReadConfig(root).Milestones["beta"].Delivery!;
         Assert.Equal(["PM-0002", "PM-0003"], stored.AcceptedTaskIds);
+        Assert.Contains("reason: Accepted for hardening.", File.ReadAllText(root.ConfigPath));
     }
 
     [Fact]
