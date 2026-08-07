@@ -670,6 +670,11 @@ public class McpToolTests
         Assert.Equal("prj_child", target.Payload!.ProjectId);
         Assert.Equal("Child", target.Payload.Config.GetSettings().Payload!.ProjectName);
         Assert.True(target.Payload.ActivationTriggers.ListTriggers().Success);
+        var invalidReadableMutation = await mutations.ExecuteAsync(
+            "child",
+            selected => selected.MilestoneDeliveries.ReopenMilestone("missing"),
+            LinkedProjectTargetAccess.ReadableLinkedProjects);
+        Assert.Equal("invalid_mutation_access", invalidReadableMutation.ErrorCode);
         var tools = CreateTools(active, nextIds,
             linkedProjectFamily: family,
             linkedProjectMutations: mutations);
@@ -1197,15 +1202,15 @@ public class McpToolTests
         await AssertMutationRereads(reconciled.Data!);
         Assert.Equal("automatic", Assert.Single(reconciled.Data!.Switchboard.ActivationTriggers).Activation!.Mode);
 
-        var deliveryPreview = tools.PreviewMilestoneDelivery("beta");
+        var deliveryPreview = await tools.PreviewMilestoneDelivery("beta");
         Assert.True(deliveryPreview.Success);
         Assert.False(deliveryPreview.Data!.RequiresConfirmation);
-        var delivered = tools.DeliverMilestone("beta", deliveryPreview.Data.Revision);
+        var delivered = await tools.DeliverMilestone("beta", deliveryPreview.Data.Revision);
         Assert.True(delivered.Success);
         await AssertMutationRereads(delivered.Data!);
         Assert.Equal("delivered", Assert.Single(delivered.Data!.Switchboard.Milestones).Lifecycle);
 
-        var reopened = tools.ReopenMilestone("beta");
+        var reopened = await tools.ReopenMilestone("beta");
         Assert.True(reopened.Success);
         await AssertMutationRereads(reopened.Data!);
         Assert.Equal("ready_to_deliver", Assert.Single(reopened.Data!.Switchboard.Milestones).Lifecycle);
@@ -1271,9 +1276,9 @@ public class McpToolTests
             (await tools.ResetActivationTrigger("gate")).ErrorCode,
             (await tools.PreviewActivationTriggerRedefinition("gate", requirements)).ErrorCode,
             (await tools.RedefineActivationTrigger("gate", requirements, "revision")).ErrorCode,
-            tools.PreviewMilestoneDelivery("beta").ErrorCode,
-            tools.DeliverMilestone("beta", "revision").ErrorCode,
-            tools.ReopenMilestone("beta").ErrorCode,
+            (await tools.PreviewMilestoneDelivery("beta")).ErrorCode,
+            (await tools.DeliverMilestone("beta", "revision")).ErrorCode,
+            (await tools.ReopenMilestone("beta")).ErrorCode,
             (await tools.ReconcileActivationTriggers()).ErrorCode,
         };
 
@@ -1596,20 +1601,6 @@ public class McpToolTests
             new LinkedProjectGitInspector(),
             new TaskServiceFactory(TimeProvider.System));
         var taskService = TestTaskServices.Create(projectRoot, nextIdService);
-        var activationResolver = new MilestoneActivationResolver(projectRoot);
-        var activationValidator = new MilestoneActivationValidationService(
-            projectRoot,
-            new MilestoneActivationGraphService(),
-            activationResolver);
-        var persistence = new ProjectConfigPersistence(projectRoot);
-        var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
-        var milestoneDeliveries = new MilestoneDeliveryService(
-            projectRoot,
-            activationResolver,
-            activationValidator,
-            automaticActivations,
-            TimeProvider.System,
-            persistence);
         linkedProjectMutations ??= LinkedProjectMutationService.ForCurrent(taskService);
         return new PmMcpTools(
             projectRoot,
@@ -1622,7 +1613,6 @@ public class McpToolTests
             linkedProjectFamily,
             linkedProjectReads,
             linkedProjectMutations,
-            milestoneDeliveries,
             membershipService,
             capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal),
             linkedWikiContexts);

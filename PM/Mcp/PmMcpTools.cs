@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using PM.Application;
-using PM.Files;
 using PM.Project;
 using PM.Tasks;
 
@@ -19,7 +18,6 @@ public sealed class PmMcpTools(
     LinkedProjectFamilyService linkedProjectFamilyService,
     LinkedProjectReadService linkedProjectReadService,
     LinkedProjectMutationService linkedProjectMutations,
-    MilestoneDeliveryService milestoneDeliveries,
     IProjectMembershipService? membershipService,
     McpCapabilityContext capabilityContext,
     McpLinkedWikiContextStore? linkedWikiContexts = null)
@@ -1382,15 +1380,24 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "preview_milestone_delivery", ReadOnly = true, Destructive = false,
         OpenWorld = false, UseStructuredContent = true)]
-    [Description("Previews milestone delivery and returns the revision required to deliver it.")]
-    public McpToolResponse<MilestoneDeliveryPreviewPayload> PreviewMilestoneDelivery(
+    [Description("Previews milestone delivery in the selected readable project and returns the revision required to deliver it.")]
+    public async Task<McpToolResponse<MilestoneDeliveryPreviewPayload>> PreviewMilestoneDelivery(
         string key,
-        string? reason = null)
+        string? reason = null,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         var denied = ControlPlaneDenied<MilestoneDeliveryPreviewPayload>();
         if (denied != null) return denied;
 
-        var result = milestoneDeliveries.PreviewDelivery(key, reason);
+        var target = await linkedProjectMutations.ResolveTargetAsync(
+            project,
+            LinkedProjectTargetAccess.ReadableLinkedProjects,
+            cancellationToken);
+        if (!target.Success)
+            return McpToolResponse<MilestoneDeliveryPreviewPayload>.FromFailure(target);
+        var result = target.Payload!.MilestoneDeliveries.PreviewDelivery(key, reason);
         return result.Success
             ? McpToolResponse<MilestoneDeliveryPreviewPayload>.Ok(
                 $"Previewed milestone {key} delivery.", ToMilestoneDeliveryPreview(result.Payload!))
@@ -1400,24 +1407,36 @@ public sealed class PmMcpTools(
     [McpServerTool(Name = "deliver_milestone", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Delivers a milestone using a preview revision and explicit exceptional-delivery confirmation.")]
-    public McpToolResponse<ActivationMutationPayload> DeliverMilestone(
+    public Task<McpToolResponse<ActivationMutationPayload>> DeliverMilestone(
         string key,
         string expectedRevision,
         string? reason = null,
-        bool allowExceptional = false) =>
-        ExecuteControlPlaneMutation(
-            () => milestoneDeliveries.DeliverMilestone(key, reason, expectedRevision, allowExceptional),
+        bool allowExceptional = false,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteTargetActivationMutationAsync(
+            project,
+            target => target.MilestoneDeliveries.DeliverMilestone(
+                key, reason, expectedRevision, allowExceptional),
             _ => $"Delivered milestone {key}.",
             result => new ActivationMutationDetailsPayload(
-                AutomaticActivation: ToAutomaticActivationImpact(result.ActivationImpact)));
+                AutomaticActivation: ToAutomaticActivationImpact(result.ActivationImpact)),
+            cancellationToken);
 
     [McpServerTool(Name = "reopen_milestone", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Removes a milestone delivery record and re-evaluates its activation lifecycle.")]
-    public McpToolResponse<ActivationMutationPayload> ReopenMilestone(string key) =>
-        ExecuteControlPlaneMutation(
-            () => milestoneDeliveries.ReopenMilestone(key),
-            _ => $"Reopened milestone {key}.");
+    public Task<McpToolResponse<ActivationMutationPayload>> ReopenMilestone(
+        string key,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteTargetActivationMutationAsync(
+            project,
+            target => target.MilestoneDeliveries.ReopenMilestone(key),
+            _ => $"Reopened milestone {key}.",
+            cancellationToken: cancellationToken);
 
     [McpServerTool(Name = "validate_project", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -1835,41 +1854,6 @@ public sealed class PmMcpTools(
                 impact?.Invoke(value.Value)));
     }
 
-    private McpToolResponse<ActivationMutationPayload> ExecuteControlPlaneMutation<T>(
-        Func<AppResult<T>> operation,
-        Func<T, string> summary,
-        Func<T, ActivationMutationDetailsPayload?>? impact = null)
-    {
-        var denied = ControlPlaneDenied<ActivationMutationPayload>();
-        return denied ?? ExecuteTrustedControlPlaneMutation(operation, summary, impact);
-    }
-
-    private McpToolResponse<ActivationMutationPayload> ExecuteTrustedControlPlaneMutation<T>(
-        Func<AppResult<T>> operation,
-        Func<T, string> summary,
-        Func<T, ActivationMutationDetailsPayload?>? impact = null)
-    {
-        using var mutations = FileSystem.TrackMutations(projectRoot.RepositoryPath);
-        var result = operation();
-        if (!result.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(result);
-
-        var switchboard = ResolveActivationSwitchboard(projectRoot);
-        if (!switchboard.Success)
-            return McpToolResponse<ActivationMutationPayload>.FromFailure(switchboard);
-
-        var changedPaths = mutations.ChangedPaths;
-        var receipt = changedPaths.Count == 0
-            ? null
-            : new ProjectMutationReceiptPayload(ActiveProjectId ?? "current", changedPaths);
-        return McpToolResponse<ActivationMutationPayload>.Ok(
-            summary(result.Payload!),
-            new ActivationMutationPayload(
-                changedPaths.Count > 0,
-                receipt,
-                switchboard.Payload!,
-                impact?.Invoke(result.Payload!)));
-    }
-
     private static AppResult<IReadOnlyList<ActivationRequirement>> ToActivationRequirements(
         IReadOnlyList<ActivationRequirementInputPayload>? requirements)
     {
@@ -2019,10 +2003,10 @@ public sealed class PmMcpTools(
         _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
     };
 
-    private LinkedProjectMutationAccess MutationAccess =>
+    private LinkedProjectTargetAccess MutationAccess =>
         capabilityContext.Profile == McpCapabilityProfile.RunWorker
-            ? LinkedProjectMutationAccess.CurrentProjectOnly
-            : LinkedProjectMutationAccess.TrustedLinkedProjects;
+            ? LinkedProjectTargetAccess.CurrentProjectOnly
+            : LinkedProjectTargetAccess.WriteTrustedLinkedProjects;
 
     private string? ActiveProjectId =>
         projectRoot.TryReadProjectId(out var projectId) ? projectId : null;

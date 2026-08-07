@@ -139,6 +139,33 @@ public sealed class MilestoneDeliveryServiceTests
     }
 
     [Fact]
+    public async Task DeliveryRevisionIsBoundToTheOwningProject()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var first = await CreateDeliveryProjectWithIdentity(
+            Path.Combine(workspace.Path, "first"), "prj_first");
+        var second = await CreateDeliveryProjectWithIdentity(
+            Path.Combine(workspace.Path, "second"), "prj_second");
+        var firstService = CreateService(first);
+        var secondService = CreateService(second);
+
+        var firstPreview = firstService.PreviewDelivery("release", null);
+        var secondPreview = secondService.PreviewDelivery("release", null);
+
+        Assert.True(firstPreview.Success);
+        Assert.True(secondPreview.Success);
+        Assert.NotEqual(firstPreview.Payload!.Revision, secondPreview.Payload!.Revision);
+        var before = File.ReadAllText(second.ConfigPath);
+
+        var crossProject = secondService.DeliverMilestone(
+            "release", null, firstPreview.Payload.Revision, allowExceptional: false);
+
+        Assert.Equal("milestone_delivery_stale", crossProject.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(second.ConfigPath));
+        Assert.Null(ProjectConfig.ReadConfig(second).Milestones["release"].Delivery);
+    }
+
+    [Fact]
     public async Task DeliveredMilestoneDominatesResetGateUntilExplicitlyReopened()
     {
         using var workspace = new TempWorkingDirectory();
@@ -301,6 +328,29 @@ public sealed class MilestoneDeliveryServiceTests
     {
         root.WriteTask(task);
         root.UpdateTaskState(task, state);
+    }
+
+    private static async Task<ProjectRoot> CreateDeliveryProjectWithIdentity(
+        string repositoryPath,
+        string projectId)
+    {
+        Directory.CreateDirectory(repositoryPath);
+        var previous = Environment.CurrentDirectory;
+        Environment.CurrentDirectory = repositoryPath;
+        try
+        {
+            var root = new ProjectRoot();
+            await root.CreateProject(TestData.Config(
+                milestones: new Dictionary<string, string> { ["release"] = "Release" }));
+            await File.WriteAllTextAsync(
+                Path.Combine(root.RootPath, GlobalConfig.ProjectIdFile), $"{projectId}\n");
+            WriteTask(root, TestData.Task("PM-0001", "Complete", milestone: "release"), "done");
+            return root;
+        }
+        finally
+        {
+            Environment.CurrentDirectory = previous;
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

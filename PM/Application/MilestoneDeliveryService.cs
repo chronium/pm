@@ -293,7 +293,7 @@ public sealed class MilestoneDeliveryService
         validation.Issues.FirstOrDefault(issue =>
             string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase));
 
-    private static string BuildDeliveryRevision(
+    private string BuildDeliveryRevision(
         string milestoneKey,
         string reason,
         string yaml,
@@ -302,6 +302,7 @@ public sealed class MilestoneDeliveryService
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         AppendHashValue(hash, "milestone-delivery");
+        AppendHashValue(hash, GetRevisionProjectIdentity());
         AppendHashValue(hash, milestoneKey);
         AppendHashValue(hash, reason);
         AppendHashValue(hash, yaml);
@@ -314,6 +315,11 @@ public sealed class MilestoneDeliveryService
 
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
+
+    private string GetRevisionProjectIdentity() =>
+        projectRoot.TryReadProjectId(out var projectId)
+            ? projectId
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectRoot.RepositoryPath));
 
     private static void AppendHashValue(IncrementalHash hash, string value)
     {

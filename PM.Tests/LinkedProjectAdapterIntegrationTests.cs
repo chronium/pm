@@ -537,6 +537,250 @@ public sealed class LinkedProjectAdapterIntegrationTests
     }
 
     [Fact]
+    public async Task StdioMcpDeliversAndReopensMilestonesInSelectedLinkedProjects()
+    {
+        using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        fixture.Starfall.Config!.ActivationTriggers["starfall-delivered"] = new ActivationTriggerDefinition
+        {
+            Title = "Starfall delivered",
+            Requirements =
+            [
+                new ActivationRequirement
+                {
+                    Kind = ActivationRequirementKind.Milestone,
+                    Source = "m1",
+                },
+            ],
+        };
+        fixture.Starfall.Config.WriteConfig(fixture.Starfall);
+        var parentOpen = TestData.Task(
+            "PARENT-0002", "Parent release follow-up", track: "SHARED", milestone: "m1");
+        fixture.Games.WriteTask(parentOpen);
+        fixture.Games.UpdateTaskState(parentOpen, "todo");
+        var completedDuplicate = TestData.Task(
+            "STAR-0001", "Completed Royale duplicate", track: "ROYALE", milestone: "m1");
+        fixture.Royale.WriteTask(completedDuplicate);
+        fixture.Royale.UpdateTaskState(completedDuplicate, "done");
+        var independentRoyale = TestData.Task(
+            "ROYALE-LOCAL", "Independent Royale work", track: "ROYALE", milestone: "m1");
+        fixture.Royale.WriteTask(independentRoyale);
+        fixture.Royale.UpdateTaskState(independentRoyale, "todo");
+
+        var environment = StdioClientTransportOptions.GetDefaultEnvironmentVariables();
+        environment["PM_PROJECT_REGISTRY_PATH"] = fixture.RegistryPath;
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Name = "PM linked milestone delivery integration",
+            Command = "dotnet",
+            Arguments = [typeof(PmMcpTools).Assembly.Location, "mcp"],
+            WorkingDirectory = fixture.Royale.RepositoryPath,
+            InheritEnvironmentVariables = false,
+            EnvironmentVariables = environment,
+        });
+        await using var client = await McpClient.CreateAsync(transport);
+
+        var tools = await client.ListToolsAsync();
+        foreach (var tool in new[]
+                 {
+                     "preview_milestone_delivery",
+                     "deliver_milestone",
+                     "reopen_milestone",
+                 })
+            AssertSchemaProperty(tools, tool, "project");
+
+        Assert.NotEqual(true, (await Call(client, "list_linked_projects")).IsError);
+        var reason = "Accept the unfinished Starfall work for linked dogfood.";
+        var beforeUntrusted = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var preview = await Call(
+            client,
+            "preview_milestone_delivery",
+            ("key", "m1"),
+            ("reason", reason),
+            ("project", "starfall"));
+        Assert.NotEqual(true, preview.IsError);
+        string previewRevision;
+        using (var previewDocument = JsonDocument.Parse(Json(preview)))
+        {
+            var data = previewDocument.RootElement.GetProperty("data");
+            Assert.True(data.GetProperty("requiresConfirmation").GetBoolean());
+            Assert.Equal(["STAR-0001"], data.GetProperty("unfinishedTaskIds")
+                .EnumerateArray().Select(item => item.GetString()).ToList());
+            previewRevision = data.GetProperty("revision").GetString()!;
+        }
+
+        var denied = await Call(
+            client,
+            "deliver_milestone",
+            ("key", "m1"),
+            ("expectedRevision", previewRevision),
+            ("reason", reason),
+            ("allowExceptional", true),
+            ("project", "starfall"));
+        Assert.Contains("linked_project_write_untrusted", Json(denied));
+        Assert.Equal(beforeUntrusted, File.ReadAllText(fixture.Starfall.ConfigPath));
+        var unavailable = await Call(
+            client,
+            "preview_milestone_delivery",
+            ("key", "m1"),
+            ("reason", reason),
+            ("project", "missing"));
+        Assert.Contains("linked_project_unavailable", Json(unavailable));
+
+        var registry = fixture.Registry();
+        Assert.True(registry.GrantWriteTrust("prj_starfall").Success);
+        Assert.True(registry.GrantWriteTrust("prj_games").Success);
+        var parentBeforeCrossProject = File.ReadAllText(fixture.Games.ConfigPath);
+        var crossProject = await Call(
+            client,
+            "deliver_milestone",
+            ("key", "m1"),
+            ("expectedRevision", previewRevision),
+            ("reason", reason),
+            ("allowExceptional", true),
+            ("project", "parent"));
+        Assert.Contains("milestone_delivery_stale", Json(crossProject));
+        Assert.Equal(parentBeforeCrossProject, File.ReadAllText(fixture.Games.ConfigPath));
+
+        var beforeDeliveryRecommendation = await Call(
+            client,
+            "get_next_task",
+            ("project", "starfall"),
+            ("milestone", "m1"));
+        Assert.Contains("STAR-0001", Json(beforeDeliveryRecommendation));
+        var delivered = await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "deliver_milestone",
+            ("key", "m1"),
+            ("expectedRevision", previewRevision),
+            ("reason", reason),
+            ("allowExceptional", true),
+            ("project", "starfall")), "prj_starfall");
+        var deliveredMilestone = delivered.GetProperty("switchboard")
+            .GetProperty("milestones")
+            .EnumerateArray()
+            .Single(milestone => milestone.GetProperty("key").GetString() == "m1");
+        Assert.Equal("exceptional", deliveredMilestone.GetProperty("delivery").GetProperty("mode").GetString());
+        Assert.Equal(["STAR-0001"], deliveredMilestone.GetProperty("delivery")
+            .GetProperty("acceptedTaskIds").EnumerateArray().Select(item => item.GetString()).ToList());
+        Assert.Contains("starfall-delivered", delivered.GetProperty("impact")
+            .GetProperty("automaticActivation")
+            .GetProperty("activatedTriggers")
+            .EnumerateArray()
+            .Select(item => item.GetString()));
+        Assert.DoesNotContain(
+            "starfall-delivered",
+            ProjectConfig.ReadConfig(fixture.Games).ActivationTriggers.Keys);
+
+        var afterDeliveryRecommendation = await Call(
+            client,
+            "get_next_task",
+            ("project", "starfall"),
+            ("milestone", "m1"));
+        Assert.DoesNotContain("\"id\":\"STAR-0001\"", Json(afterDeliveryRecommendation));
+        Assert.Contains("ROYALE-LOCAL", Json(await Call(client, "get_next_task")));
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "reopen_milestone",
+            ("key", "m1"),
+            ("project", "prj_starfall")), "prj_starfall");
+        Assert.Contains("STAR-0001", Json(await Call(
+            client,
+            "get_next_task",
+            ("project", "starfall"),
+            ("milestone", "m1"))));
+
+        var stalePreview = await Call(
+            client,
+            "preview_milestone_delivery",
+            ("key", "m1"),
+            ("reason", reason),
+            ("project", "starfall"));
+        string staleRevision;
+        using (var staleDocument = JsonDocument.Parse(Json(stalePreview)))
+            staleRevision = staleDocument.RootElement.GetProperty("data").GetProperty("revision").GetString()!;
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "set_milestone_description",
+            ("key", "m1"),
+            ("description", "Updated after the delivery preview."),
+            ("project", "starfall")), "prj_starfall");
+        var beforeStaleApply = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var stale = await Call(
+            client,
+            "deliver_milestone",
+            ("key", "m1"),
+            ("expectedRevision", staleRevision),
+            ("reason", reason),
+            ("allowExceptional", true),
+            ("project", "starfall"));
+        Assert.Contains("milestone_delivery_stale", Json(stale));
+        Assert.Equal(beforeStaleApply, File.ReadAllText(fixture.Starfall.ConfigPath));
+
+        fixture.Games.UpdateTaskState(parentOpen, "done");
+        var parentPreview = await Call(
+            client,
+            "preview_milestone_delivery",
+            ("key", "m1"),
+            ("project", "parent"));
+        string parentRevision;
+        using (var parentPreviewDocument = JsonDocument.Parse(Json(parentPreview)))
+        {
+            var data = parentPreviewDocument.RootElement.GetProperty("data");
+            Assert.Equal("ordinary", data.GetProperty("mode").GetString());
+            parentRevision = data.GetProperty("revision").GetString()!;
+        }
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "deliver_milestone",
+            ("key", "m1"),
+            ("expectedRevision", parentRevision),
+            ("project", "parent")), "prj_games");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "reopen_milestone",
+            ("key", "m1"),
+            ("project", "parent")), "prj_games");
+
+        fixture.Games.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_royale",
+                    Alias = "royale",
+                    RepositoryUrl = "https://github.com/chronium/pm-link-fixture-royale.git",
+                    PathHint = "royale",
+                },
+                new LinkedProjectDeclaration
+                {
+                    ProjectId = "prj_starfall",
+                    Alias = "shared",
+                    RepositoryUrl = "https://github.com/chronium/pm-link-fixture-starfall.git",
+                    PathHint = "starfall",
+                },
+            ],
+        });
+        fixture.Royale.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = new LinkedProjectDeclaration
+            {
+                ProjectId = "prj_games",
+                Alias = "shared",
+                RepositoryUrl = "https://github.com/chronium/pm-link-fixture-games.git",
+                PathHint = "..",
+            },
+        });
+        var ambiguous = await Call(
+            client,
+            "preview_milestone_delivery",
+            ("key", "m1"),
+            ("project", "shared"));
+        Assert.Contains("ambiguous_linked_project", Json(ambiguous));
+    }
+
+    [Fact]
     public async Task CliAndStdioMcpApplyActivationEligibilityWithinTheOwningLinkedProject()
     {
         using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();

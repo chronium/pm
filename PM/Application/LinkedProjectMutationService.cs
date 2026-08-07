@@ -5,9 +5,10 @@ using PM.Tasks;
 
 namespace PM.Application;
 
-public enum LinkedProjectMutationAccess
+public enum LinkedProjectTargetAccess
 {
-    TrustedLinkedProjects,
+    WriteTrustedLinkedProjects,
+    ReadableLinkedProjects,
     CurrentProjectOnly,
 }
 
@@ -25,6 +26,7 @@ public sealed record LinkedProjectMutationTarget(
     ProjectRoot Root,
     ProjectConfigService Config,
     ActivationTriggerService ActivationTriggers,
+    MilestoneDeliveryService MilestoneDeliveries,
     TaskService Tasks,
     BoardService Board,
     WikiService Wiki,
@@ -86,7 +88,7 @@ public sealed class LinkedProjectMutationService(
 
     public async Task<AppResult<LinkedProjectMutationTarget>> ResolveTargetAsync(
         string? selector,
-        LinkedProjectMutationAccess access = LinkedProjectMutationAccess.TrustedLinkedProjects,
+        LinkedProjectTargetAccess access = LinkedProjectTargetAccess.WriteTrustedLinkedProjects,
         CancellationToken cancellationToken = default)
     {
         if (!activeProject.Exists || activeProject.Config == null)
@@ -102,7 +104,7 @@ public sealed class LinkedProjectMutationService(
             return AppResult<LinkedProjectMutationTarget>.Ok(CreateTarget(currentProjectId, activeProject, true));
         }
 
-        if (access == LinkedProjectMutationAccess.CurrentProjectOnly)
+        if (access == LinkedProjectTargetAccess.CurrentProjectOnly)
             return AppResult<LinkedProjectMutationTarget>.Fail(
                 "linked_project_write_denied",
                 "This execution profile may only mutate the active project.");
@@ -124,7 +126,10 @@ public sealed class LinkedProjectMutationService(
         if (!member.Readable || member.Project == null || member.RepositoryPath == null)
             return AppResult<LinkedProjectMutationTarget>.Fail(
                 "linked_project_unavailable",
-                $"Linked project {member.ProjectId} is unavailable and cannot be mutated.");
+                $"Linked project {member.ProjectId} is unavailable and cannot be accessed.");
+        if (access == LinkedProjectTargetAccess.ReadableLinkedProjects)
+            return AppResult<LinkedProjectMutationTarget>.Ok(
+                CreateTarget(member.ProjectId, member.Project, false));
         if (!member.WriteTrusted)
             return AppResult<LinkedProjectMutationTarget>.Fail(
                 "linked_project_write_untrusted",
@@ -148,9 +153,14 @@ public sealed class LinkedProjectMutationService(
     public async Task<AppResult<LinkedProjectMutationResult<T>>> ExecuteAsync<T>(
         string? selector,
         Func<LinkedProjectMutationTarget, CancellationToken, Task<AppResult<T>>> operation,
-        LinkedProjectMutationAccess access = LinkedProjectMutationAccess.TrustedLinkedProjects,
+        LinkedProjectTargetAccess access = LinkedProjectTargetAccess.WriteTrustedLinkedProjects,
         CancellationToken cancellationToken = default)
     {
+        if (access == LinkedProjectTargetAccess.ReadableLinkedProjects)
+            return AppResult<LinkedProjectMutationResult<T>>.Fail(
+                "invalid_mutation_access",
+                "Readable linked-project access cannot be used to execute mutations.");
+
         var target = await ResolveTargetAsync(selector, access, cancellationToken);
         if (!target.Success)
             return AppResult<LinkedProjectMutationResult<T>>.Fail(target.ErrorCode!, target.Message!);
@@ -168,7 +178,7 @@ public sealed class LinkedProjectMutationService(
     public Task<AppResult<LinkedProjectMutationResult<T>>> ExecuteAsync<T>(
         string? selector,
         Func<LinkedProjectMutationTarget, AppResult<T>> operation,
-        LinkedProjectMutationAccess access = LinkedProjectMutationAccess.TrustedLinkedProjects,
+        LinkedProjectTargetAccess access = LinkedProjectTargetAccess.WriteTrustedLinkedProjects,
         CancellationToken cancellationToken = default) =>
         ExecuteAsync(selector, (target, _) => Task.FromResult(operation(target)), access, cancellationToken);
 
@@ -188,6 +198,13 @@ public sealed class LinkedProjectMutationService(
             root,
             new ProjectConfigService(root),
             new ActivationTriggerService(
+                root,
+                resolver,
+                validator,
+                automaticActivations,
+                timeProvider,
+                persistence),
+            new MilestoneDeliveryService(
                 root,
                 resolver,
                 validator,
