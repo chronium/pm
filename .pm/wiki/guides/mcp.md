@@ -1,7 +1,7 @@
 ---
 title: MCP Guide
 createdAt: 2026-07-27T06:14:45.2638910Z
-modifiedAt: 2026-08-07T08:52:57.5396020Z
+modifiedAt: 2026-08-07T13:25:59.3549600Z
 ---
 
 PM exposes a Model Context Protocol server over standard input/output. It gives coding agents structured access to the same services used by the CLI and web API.
@@ -58,6 +58,8 @@ Without `readyOnly`, `get_next_task` may return the best blocked candidate when 
 
 `get_activation_switchboard` is the authoritative structured read for milestone deliverables and activation triggers. Activation provenance remains separate from current requirement satisfaction, so clients can distinguish pending, automatically active, latched-with-unmet-requirements, and overridden states.
 
+Trusted MCP clients may pass `project` to `get_project`, `list_milestones`, or `get_activation_switchboard`. The selector accepts `current`, `parent`, a stable project ID, or a unique linked-project alias. Each successful response preserves its established `data` shape and adds top-level `project` ownership metadata plus structured `warnings`; activation requirements are always resolved from the selected project's own tasks and milestones. These tools select one project rather than aggregating a family.
+
 Trigger requirements are typed `task` or `milestone` references combined with AND. Trusted definition tools add, rename, remove, attach, detach, or replace inactive requirements. Active requirements use a guarded workflow: call `preview_activation_trigger_redefinition`, then pass its revision to `redefine_activation_trigger` and explicitly allow eligibility loss when required.
 
 Manual-only triggers use `activate_activation_trigger`; unmet factual requirements use `override_activation_trigger` with a public reason. Reset is available only while current requirements are not all satisfied. `reconcile_activation_triggers` dry-run previews missing automatic latches and the normal call persists them without deactivating anything.
@@ -66,7 +68,7 @@ Milestone delivery also uses preview and apply: call `preview_milestone_delivery
 
 Every successful activation mutation returns a project mutation receipt and a refreshed switchboard. Clients should compare that switchboard with an immediate `get_activation_switchboard` reread when authoritative post-mutation state matters. Rebuilds do not hot-reload an already running MCP process; restart the server before diagnosing changed code.
 
-These are normal-profile control-plane operations. A run-worker advertises `get_activation_switchboard` for context but does not advertise trigger definition, activation, override, reset, redefine, delivery, reopening, or reconciliation tools. The tool implementations retain the same denial guard as defense in depth.
+These are normal-profile control-plane operations. A run-worker advertises `get_project`, `list_milestones`, and `get_activation_switchboard` for current-project context, but linked selectors return `mcp_project_scope_denied`. It does not advertise trigger definition, activation, override, reset, redefine, delivery, reopening, or reconciliation tools. The tool implementations retain the same denial guard as defense in depth.
 
 ## Safe wiki patching
 

@@ -235,6 +235,9 @@ public sealed class MilestoneActivationAdapterIntegrationTests
             Assert.DoesNotContain("deliver_milestone", names);
             Assert.DoesNotContain("reconcile_activation_triggers", names);
             Assert.NotEqual(true, (await Call(worker, "get_activation_switchboard")).IsError);
+            var deniedRead = await Call(
+                worker, "get_activation_switchboard", ("project", "parent"));
+            Assert.Contains("mcp_project_scope_denied", Json(deniedRead));
 
             var unadvertised = await Record.ExceptionAsync(async () =>
                 await Call(worker, "activate_activation_trigger", ("key", "beta-entry")));

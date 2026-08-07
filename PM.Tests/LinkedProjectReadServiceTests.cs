@@ -10,6 +10,97 @@ namespace PM.Tests;
 public sealed class LinkedProjectReadServiceTests
 {
     [Fact]
+    public async Task ProjectReadsResolveCurrentParentAliasAndStableIdWithOwnershipAndWarnings()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var child = await CreateProject(Path.Combine(workspace.Path, "games", "royale"), "prj_royale", "Royale");
+        LinkParentAndChildren(parent, [(child, "royale")]);
+        parent.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                Declaration("prj_royale", "royale", Path.GetRelativePath(parent.RepositoryPath, child.RepositoryPath)),
+                Declaration("prj_missing", "missing", "missing"),
+            ],
+        });
+        var service = Service(child, workspace, new FixedGitInspector("abc123", false));
+
+        var current = await service.GetProjectAsync();
+        var explicitCurrent = await service.GetProjectAsync("current");
+        var byParent = await service.GetProjectAsync("parent");
+        var byAlias = await service.GetProjectAsync("games");
+        var byId = await service.GetProjectAsync("prj_games");
+
+        Assert.Equal("Royale", Assert.Single(current.Payload!.Items).Resource.Config!.Name);
+        AssertOwner(Assert.Single(explicitCurrent.Payload!.Items).Owner,
+            "prj_royale", "Royale", "current", "abc123", false);
+        foreach (var result in new[] { byParent, byAlias, byId })
+        {
+            var item = Assert.Single(result.Payload!.Items);
+            Assert.Equal("Games", item.Resource.Config!.Name);
+            Assert.Equal("prj_games", item.Owner.ProjectId);
+            Assert.Equal(LinkedProjectRelationship.Parent, item.Owner.Relationship);
+            Assert.Contains(result.Payload.Warnings, warning =>
+                warning.Code == "linked_project_missing" && warning.TargetProjectId == "prj_missing");
+        }
+    }
+
+    [Fact]
+    public async Task CurrentProjectReadDoesNotRequireStableProjectId()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await CreateProject(Path.Combine(workspace.Path, "active"), "prj_active", "Legacy");
+        File.Delete(Path.Combine(active.RootPath!, GlobalConfig.ProjectIdFile));
+        var service = Service(active, workspace, new FixedGitInspector(null, null));
+
+        var current = await service.GetProjectAsync();
+        var linked = await service.GetProjectAsync("parent");
+
+        Assert.True(current.Success);
+        var item = Assert.Single(current.Payload!.Items);
+        Assert.Equal("current", item.Owner.ProjectId);
+        Assert.Equal("Legacy", item.Resource.Config!.Name);
+        Assert.False(linked.Success);
+        Assert.Equal("missing_project_id", linked.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ProjectReadsReturnEstablishedSelectorFailures()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var parent = await CreateProject(Path.Combine(workspace.Path, "games"), "prj_games", "Games");
+        var active = await CreateProject(Path.Combine(workspace.Path, "games", "active"), "prj_active", "Active");
+        var sibling = await CreateProject(Path.Combine(workspace.Path, "games", "sibling"), "prj_sibling", "Sibling");
+        parent.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children =
+            [
+                Declaration("prj_active", "active", "active"),
+                Declaration("prj_sibling", "shared", "sibling"),
+                Declaration("prj_missing", "missing", "missing"),
+            ],
+        });
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = Declaration("prj_games", "shared", ".."),
+        });
+        sibling.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Parent = Declaration("prj_games", "games", ".."),
+        });
+        var service = Service(active, workspace);
+
+        var ambiguous = await service.GetProjectAsync("shared");
+        var unavailable = await service.GetProjectAsync("missing");
+        var unknown = await service.GetProjectAsync("unknown");
+
+        Assert.Equal("ambiguous_linked_project", ambiguous.ErrorCode);
+        Assert.Equal("linked_project_unavailable", unavailable.ErrorCode);
+        Assert.Equal("unknown_linked_project", unknown.ErrorCode);
+    }
+
+    [Fact]
     public async Task CurrentReadsBypassInvalidLinkedManifestAndIncludeOwnership()
     {
         using var workspace = new TempWorkingDirectory();

@@ -164,24 +164,21 @@ public sealed class LinkedProjectAdapterIntegrationTests
         fixture.Starfall.Config!.ActivationTriggers["starfall-entry"] = new ActivationTriggerDefinition
         {
             Title = "Starfall entry",
-            Requirements = [],
+            Requirements =
+            [
+                new ActivationRequirement
+                {
+                    Kind = ActivationRequirementKind.Task,
+                    Source = "STAR-0001",
+                },
+            ],
         };
         fixture.Starfall.Config.Milestones["m1"].RequiredActivationTriggers = ["starfall-entry"];
         fixture.Starfall.Config.WriteConfig(fixture.Starfall);
-
-        var inactive = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
-        Assert.Equal(0, inactive.ExitCode);
-        Assert.DoesNotContain("STAR-0001", inactive.Output);
-
-        var activated = TestMilestoneActivationServices.Create(fixture.Starfall)
-            .Triggers.ActivateTrigger("starfall-entry", null);
-        Assert.True(activated.Success);
-
-        var eligible = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
-        Assert.Equal(0, eligible.ExitCode);
-        Assert.Contains("Publish", eligible.Output);
-        Assert.Contains("prj_starfall", eligible.Output);
-        Assert.Contains("Starfall", eligible.Output);
+        var duplicate = TestData.Task(
+            "STAR-0001", "Completed duplicate", track: "ROYALE", milestone: "m1");
+        fixture.Royale.WriteTask(duplicate);
+        fixture.Royale.UpdateTaskState(duplicate, "done");
 
         var environment = StdioClientTransportOptions.GetDefaultEnvironmentVariables();
         environment["PM_PROJECT_REGISTRY_PATH"] = fixture.RegistryPath;
@@ -196,12 +193,60 @@ public sealed class LinkedProjectAdapterIntegrationTests
         });
         await using var client = await McpClient.CreateAsync(transport);
 
+        var tools = await client.ListToolsAsync();
+        AssertSchemaProperty(tools, "get_project", "project");
+        AssertSchemaProperty(tools, "list_milestones", "project");
+        AssertSchemaProperty(tools, "get_activation_switchboard", "project");
+
+        var parent = await Call(client, "get_project", ("project", "parent"));
+        var siblingById = await Call(client, "get_project", ("project", "prj_starfall"));
+        var milestones = await Call(client, "list_milestones", ("project", "starfall"));
+        var inactiveSwitchboard = await Call(
+            client, "get_activation_switchboard", ("project", "starfall"));
+        var unavailable = await Call(client, "get_project", ("project", "missing"));
+
+        AssertProject(parent, "prj_games", "parent");
+        AssertProject(siblingById, "prj_starfall", "sibling");
+        AssertProject(milestones, "prj_starfall", "sibling");
+        using (var document = JsonDocument.Parse(Json(milestones)))
+            Assert.Equal(JsonValueKind.Array, document.RootElement.GetProperty("data").ValueKind);
+        using (var document = JsonDocument.Parse(Json(inactiveSwitchboard)))
+        {
+            var root = document.RootElement;
+            Assert.Equal("prj_starfall", root.GetProperty("project").GetProperty("projectId").GetString());
+            var trigger = Assert.Single(root.GetProperty("data").GetProperty("activationTriggers").EnumerateArray());
+            Assert.False(trigger.GetProperty("requirementsSatisfied").GetBoolean());
+            Assert.False(trigger.GetProperty("isActive").GetBoolean());
+            Assert.Equal("inactive", Assert.Single(root.GetProperty("data").GetProperty("milestones")
+                .EnumerateArray()).GetProperty("lifecycle").GetString());
+            Assert.Contains(root.GetProperty("warnings").EnumerateArray(), warning =>
+                warning.GetProperty("targetProjectId").GetString() == "prj_missing");
+        }
+        Assert.Contains("linked_project_unavailable", Json(unavailable));
+
+        var inactive = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
+        Assert.Equal(0, inactive.ExitCode);
+        Assert.DoesNotContain("STAR-0001", inactive.Output);
+
+        var activated = TestMilestoneActivationServices.Create(fixture.Starfall)
+            .Triggers.ActivateTrigger("starfall-entry", "Proceed with family integration validation.");
+        Assert.True(activated.Success);
+
+        var eligible = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
+        Assert.Equal(0, eligible.ExitCode);
+        Assert.Contains("Publish", eligible.Output);
+        Assert.Contains("prj_starfall", eligible.Output);
+        Assert.Contains("Starfall", eligible.Output);
+
         var recommendation = await Call(client, "get_next_task", ("family", true));
+        var activeSwitchboard = await Call(
+            client, "get_activation_switchboard", ("project", "starfall"));
 
         Assert.NotEqual(true, recommendation.IsError);
         Assert.Contains("STAR-0001", Json(recommendation));
         Assert.Contains("prj_starfall", Json(recommendation));
         Assert.Contains("prj_missing", Json(recommendation));
+        Assert.Contains("\"mode\":\"override\"", Json(activeSwitchboard));
     }
 
     private static async Task<ProcessResult> RunCli(
@@ -258,6 +303,17 @@ public sealed class LinkedProjectAdapterIntegrationTests
             ["pm://project/prj_games/task/SHARED-0001"],
             task.GetProperty("completedDependencies").EnumerateArray().Select(item => item.GetString()).ToList());
         Assert.Empty(task.GetProperty("unavailableDependencies").EnumerateArray());
+    }
+
+    private static void AssertProject(CallToolResult result, string projectId, string relationship)
+    {
+        Assert.NotEqual(true, result.IsError);
+        using var document = JsonDocument.Parse(Json(result));
+        var project = document.RootElement.GetProperty("project");
+        Assert.Equal(projectId, project.GetProperty("projectId").GetString());
+        Assert.Equal(relationship, project.GetProperty("relationship").GetString());
+        Assert.True(project.TryGetProperty("revision", out _));
+        Assert.True(project.TryGetProperty("dirty", out _));
     }
 
     private static string ReadTaskMarkdown(PM.Project.ProjectRoot root, string taskId) =>

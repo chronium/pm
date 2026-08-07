@@ -99,6 +99,25 @@ public sealed class LinkedProjectReadService
         this.maximumListResultCount = Math.Clamp(maximumListResultCount, 1, MaximumListResultCount);
     }
 
+    public async Task<AppResult<LinkedProjectReadResult<ProjectRoot>>> GetProjectAsync(
+        string? projectSelector = null,
+        CancellationToken cancellationToken = default)
+    {
+        var request = string.IsNullOrWhiteSpace(projectSelector) ||
+                      string.Equals(projectSelector.Trim(), "current", StringComparison.OrdinalIgnoreCase)
+            ? new LinkedProjectReadRequest()
+            : new LinkedProjectReadRequest(LinkedProjectReadScope.Project, projectSelector.Trim());
+        var targets = await ResolveTargetsAsync(request, cancellationToken);
+        if (!targets.Success) return Failure<ProjectRoot>(targets);
+
+        var member = targets.Payload!.Members.Single();
+        var owner = await BuildOwnerAsync(member, cancellationToken);
+        return AppResult<LinkedProjectReadResult<ProjectRoot>>.Ok(
+            new LinkedProjectReadResult<ProjectRoot>(
+                [new LinkedProjectResource<ProjectRoot>(owner, member.Project!)],
+                targets.Payload.Warnings));
+    }
+
     public async Task<AppResult<LinkedProjectReadResult<BoardTask>>> ListTasksAsync(
         LinkedProjectReadRequest request,
         BoardQuery? query = null,
@@ -552,9 +571,8 @@ public sealed class LinkedProjectReadService
         if (!activeProject.Exists || activeProject.Config == null)
             return AppResult<ResolvedTargets>.Fail(
                 "missing_project", "Project not found. Run pm init first.");
-        if (!activeProject.TryReadProjectId(out var activeProjectId))
-            return AppResult<ResolvedTargets>.Fail(
-                "missing_project_id", "The active project has no valid stable project ID.");
+        var hasActiveProjectId = activeProject.TryReadProjectId(out var activeProjectId);
+        activeProjectId ??= "current";
 
         var selectsCurrent = !string.IsNullOrWhiteSpace(request.ProjectSelector) &&
                              string.Equals(request.ProjectSelector.Trim(), "current",
@@ -579,6 +597,10 @@ public sealed class LinkedProjectReadService
         if (request.Scope == LinkedProjectReadScope.Family && !string.IsNullOrWhiteSpace(request.ProjectSelector))
             return AppResult<ResolvedTargets>.Fail(
                 "invalid_project_selector", "Family scope does not accept a project selector.");
+
+        if (!hasActiveProjectId)
+            return AppResult<ResolvedTargets>.Fail(
+                "missing_project_id", "The active project has no valid stable project ID.");
 
         cancellationToken.ThrowIfCancellationRequested();
         var family = await familyService.ResolveAsync(cancellationToken);

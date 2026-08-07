@@ -13,12 +13,12 @@ namespace PM.Tests;
 public class McpToolTests
 {
     [Fact]
-    public void MissingProjectReturnsStructuredFailure()
+    public async Task MissingProjectReturnsStructuredFailure()
     {
         using var workspace = new TempWorkingDirectory();
         var tools = CreateTools(new ProjectRoot());
 
-        var result = tools.GetProject();
+        var result = await tools.GetProject();
 
         Assert.False(result.Success);
         Assert.Equal("missing_project", result.ErrorCode);
@@ -36,7 +36,7 @@ public class McpToolTests
             milestonePriorities: new Dictionary<string, string> { ["m1"] = "high" }));
         var tools = CreateTools(projectRoot);
 
-        var result = tools.GetProject();
+        var result = await tools.GetProject();
 
         Assert.True(result.Success);
         Assert.Equal("MCP Test", result.Data!.Name);
@@ -45,6 +45,37 @@ public class McpToolTests
         Assert.Contains(result.Data.Milestones,
             milestone => milestone.Key == "m1" && milestone.Priority == "high");
         Assert.Contains(result.Data.States, state => state.Key == "todo" && state.Name == "Queued");
+        Assert.NotNull(result.Project);
+        Assert.Equal("current", result.Project.Alias);
+        Assert.Equal("current", result.Project.Relationship);
+        Assert.NotNull(result.Warnings);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public async Task CurrentProjectScopedReadsPreserveEmptyDataAndWorkWithoutStableId()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject(TestData.Config(
+            name: "Legacy project",
+            milestones: new Dictionary<string, string>()));
+        var projectIdPath = Path.Combine(projectRoot.RootPath!, GlobalConfig.ProjectIdFile);
+        if (File.Exists(projectIdPath)) File.Delete(projectIdPath);
+        var tools = CreateTools(projectRoot);
+
+        var project = await tools.GetProject();
+        var milestones = await tools.ListMilestones();
+        var switchboard = await tools.GetActivationSwitchboard();
+
+        Assert.True(project.Success);
+        Assert.Equal("Legacy project", project.Data!.Name);
+        Assert.Equal("current", project.Project!.ProjectId);
+        Assert.True(milestones.Success);
+        Assert.Empty(milestones.Data!);
+        Assert.Equal("current", milestones.Project!.ProjectId);
+        Assert.True(switchboard.Success);
+        Assert.Empty(switchboard.Data!.Milestones);
+        Assert.Equal("current", switchboard.Project!.ProjectId);
     }
 
     [Fact]
@@ -1102,7 +1133,7 @@ public class McpToolTests
         var addedMilestone = tools.AddMilestone(
             "beta", "Public beta", "high", "Deliver the complete local beta workflow.");
         Assert.True(addedMilestone.Success);
-        AssertMutationRereads(addedMilestone.Data!);
+        await AssertMutationRereads(addedMilestone.Data!);
         Assert.Equal("Deliver the complete local beta workflow.",
             addedMilestone.Data!.Switchboard.Milestones.Single(item => item.Key == "beta").Description);
 
@@ -1114,17 +1145,17 @@ public class McpToolTests
             "Beta entry criteria",
             [new ActivationRequirementInputPayload(ActivationRequirementInputKind.Task, gateTask.Id)]);
         Assert.True(addedTrigger.Success);
-        AssertMutationRereads(addedTrigger.Data!);
+        await AssertMutationRereads(addedTrigger.Data!);
 
         var attached = tools.AttachActivationTriggerToMilestone("beta-entry", "beta");
         Assert.True(attached.Success);
-        AssertMutationRereads(attached.Data!);
+        await AssertMutationRereads(attached.Data!);
         Assert.Equal("inactive", attached.Data!.Switchboard.Milestones.Single(item => item.Key == "beta").Lifecycle);
 
         var overridden = tools.OverrideActivationTrigger("beta-entry", "Beta hardening can finish the capability.");
 
         Assert.True(overridden.Success);
-        AssertMutationRereads(overridden.Data!);
+        await AssertMutationRereads(overridden.Data!);
         var overriddenTrigger = overridden.Data!.Switchboard.ActivationTriggers.Single();
         Assert.Equal("override", overriddenTrigger.Activation!.Mode);
         Assert.Equal(0, overriddenTrigger.SatisfiedRequirementCount);
@@ -1133,7 +1164,7 @@ public class McpToolTests
             overridden.Data.Switchboard.Milestones.Single(item => item.Key == "beta").Lifecycle);
 
         projectRoot.UpdateTaskState(gateTask, "done");
-        var satisfiedOverride = tools.GetActivationSwitchboard();
+        var satisfiedOverride = await tools.GetActivationSwitchboard();
         Assert.True(satisfiedOverride.Success);
         Assert.Equal("override", Assert.Single(satisfiedOverride.Data!.ActivationTriggers).Activation!.Mode);
         Assert.True(Assert.Single(satisfiedOverride.Data.ActivationTriggers).RequirementsSatisfied);
@@ -1142,7 +1173,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(gateTask, "todo");
         var reset = tools.ResetActivationTrigger("beta-entry");
         Assert.True(reset.Success);
-        AssertMutationRereads(reset.Data!);
+        await AssertMutationRereads(reset.Data!);
         Assert.Null(Assert.Single(reset.Data!.Switchboard.ActivationTriggers).Activation);
 
         projectRoot.UpdateTaskState(gateTask, "done");
@@ -1155,7 +1186,7 @@ public class McpToolTests
 
         var reconciled = tools.ReconcileActivationTriggers();
         Assert.True(reconciled.Success);
-        AssertMutationRereads(reconciled.Data!);
+        await AssertMutationRereads(reconciled.Data!);
         Assert.Equal("automatic", Assert.Single(reconciled.Data!.Switchboard.ActivationTriggers).Activation!.Mode);
 
         var deliveryPreview = tools.PreviewMilestoneDelivery("beta");
@@ -1163,20 +1194,20 @@ public class McpToolTests
         Assert.False(deliveryPreview.Data!.RequiresConfirmation);
         var delivered = tools.DeliverMilestone("beta", deliveryPreview.Data.Revision);
         Assert.True(delivered.Success);
-        AssertMutationRereads(delivered.Data!);
+        await AssertMutationRereads(delivered.Data!);
         Assert.Equal("delivered", Assert.Single(delivered.Data!.Switchboard.Milestones).Lifecycle);
 
         var reopened = tools.ReopenMilestone("beta");
         Assert.True(reopened.Success);
-        AssertMutationRereads(reopened.Data!);
+        await AssertMutationRereads(reopened.Data!);
         Assert.Equal("ready_to_deliver", Assert.Single(reopened.Data!.Switchboard.Milestones).Lifecycle);
 
-        void AssertMutationRereads(ActivationMutationPayload mutation)
+        async Task AssertMutationRereads(ActivationMutationPayload mutation)
         {
             Assert.True(mutation.Changed);
             var receipt = Assert.IsType<ProjectMutationReceiptPayload>(mutation.Mutation);
             Assert.Contains($".pm/{GlobalConfig.PmConfigFile}", receipt.ChangedPaths);
-            var reread = tools.GetActivationSwitchboard();
+            var reread = await tools.GetActivationSwitchboard();
             Assert.True(reread.Success);
             Assert.Equal(
                 JsonSerializer.Serialize(reread.Data),
@@ -1195,7 +1226,7 @@ public class McpToolTests
                 ["unused"] = new() { Title = "Unused", Requirements = [] },
             }));
 
-        var result = CreateTools(projectRoot).GetActivationSwitchboard();
+        var result = await CreateTools(projectRoot).GetActivationSwitchboard();
 
         Assert.True(result.Success);
         Assert.True(result.Data!.Valid);
@@ -1234,7 +1265,13 @@ public class McpToolTests
         };
 
         Assert.All(failures, code => Assert.Equal("mcp_control_plane_denied", code));
-        Assert.True(tools.GetActivationSwitchboard().Success);
+        Assert.True((await tools.GetActivationSwitchboard()).Success);
+        Assert.True((await tools.GetProject("current")).Success);
+        Assert.True((await tools.ListMilestones()).Success);
+        Assert.Equal("mcp_project_scope_denied", (await tools.GetProject("parent")).ErrorCode);
+        Assert.Equal("mcp_project_scope_denied", (await tools.ListMilestones("parent")).ErrorCode);
+        Assert.Equal("mcp_project_scope_denied",
+            (await tools.GetActivationSwitchboard("parent")).ErrorCode);
     }
 
     [Fact]
@@ -1253,7 +1290,7 @@ public class McpToolTests
         Assert.Equal("invalid_milestone", tools.AddMilestone("m2", " ").ErrorCode);
         Assert.Equal("invalid_priority", tools.AddMilestone("m2", "Milestone 2", "later").ErrorCode);
 
-        var project = tools.GetProject();
+        var project = await tools.GetProject();
         Assert.Contains(project.Data!.Milestones,
             milestone => milestone.Key == "m1" && milestone.Priority == "high");
     }
@@ -1274,7 +1311,7 @@ public class McpToolTests
         Assert.Equal("invalid_priority", invalid.ErrorCode);
         Assert.Equal("missing_milestone", missing.ErrorCode);
 
-        var milestone = Assert.Single(tools.ListMilestones().Data!);
+        var milestone = Assert.Single((await tools.ListMilestones()).Data!);
         Assert.Equal("urgent", milestone.Priority);
     }
 
@@ -1298,7 +1335,7 @@ public class McpToolTests
         Assert.False(Directory.Exists(Path.Combine(projectRoot.StatesPath, "blocked")));
         Assert.Equal("missing_status", tools.RemoveStatus("missing").ErrorCode);
 
-        var project = tools.GetProject();
+        var project = await tools.GetProject();
         Assert.Contains(project.Data!.States, state => state.Key == "todo" && state.Name == "Ready");
         Assert.DoesNotContain(project.Data.States, state => state.Key == "blocked");
     }
@@ -1318,7 +1355,7 @@ public class McpToolTests
         Assert.Equal("missing_track", tools.RenameTrack("missing", "Missing").ErrorCode);
         Assert.Equal("missing_milestone", tools.RenameMilestone("missing", "Missing").ErrorCode);
 
-        var project = tools.GetProject();
+        var project = await tools.GetProject();
         Assert.Contains(project.Data!.Tracks, track => track.Key == "BUILD" && track.Name == "Build Work");
         Assert.Contains(project.Data.Milestones, milestone => milestone.Key == "m1" && milestone.Name == "Launch");
     }
@@ -1339,7 +1376,7 @@ public class McpToolTests
         Assert.True(tools.RemoveTrack("UI").Success);
         Assert.True(tools.RemoveMilestone("m2").Success);
 
-        var project = tools.GetProject();
+        var project = await tools.GetProject();
         Assert.DoesNotContain(project.Data!.Tracks, track => track.Key == "UI");
         Assert.DoesNotContain(project.Data.Milestones, milestone => milestone.Key == "m2");
     }
@@ -1578,8 +1615,6 @@ public class McpToolTests
             linkedProjectFamily,
             linkedProjectReads,
             linkedProjectMutations,
-            activationResolver,
-            activationValidator,
             activationTriggers,
             milestoneDeliveries,
             membershipService,

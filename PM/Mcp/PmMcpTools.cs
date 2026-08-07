@@ -19,8 +19,6 @@ public sealed class PmMcpTools(
     LinkedProjectFamilyService linkedProjectFamilyService,
     LinkedProjectReadService linkedProjectReadService,
     LinkedProjectMutationService linkedProjectMutations,
-    MilestoneActivationResolver activationResolver,
-    MilestoneActivationValidationService activationValidator,
     ActivationTriggerService activationTriggers,
     MilestoneDeliveryService milestoneDeliveries,
     IProjectMembershipService? membershipService,
@@ -66,21 +64,23 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "get_project", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Returns project name, root path, states, tracks, and milestones.")]
-    public McpToolResponse<ProjectPayload> GetProject()
+    [Description("Returns project name, root path, states, tracks, milestones, and owning-project metadata. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
+    public async Task<ProjectScopedMcpToolResponse<ProjectPayload>> GetProject(
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        if (!projectRoot.Exists || projectRoot.Config == null || projectRoot.RootPath == null)
-            return McpToolResponse<ProjectPayload>.Fail("missing_project", "Project not found. Run pm init first.");
-
-        var config = projectRoot.Config;
-        var payload = new ProjectPayload(
-            config.Name,
-            projectRoot.RootPath,
-            ToOptions(config.TaskStates),
-            ToOptions(config.Tracks),
-            ToMilestones(config.Milestones));
-
-        return McpToolResponse<ProjectPayload>.Ok($"Project {config.Name} loaded.", payload);
+        var denied = ProjectScopedLinkedReadDenied<ProjectPayload>(project);
+        if (denied != null) return denied;
+        var result = await linkedProjectReadService.GetProjectAsync(project, cancellationToken);
+        if (!result.Success) return ProjectScopedMcpToolResponse<ProjectPayload>.FromFailure(result);
+        var item = result.Payload!.Items.Single();
+        var projectPayload = ToProjectPayload(item.Resource);
+        if (!projectPayload.Success)
+            return ProjectScopedMcpToolResponse<ProjectPayload>.FromFailure(projectPayload);
+        var payload = projectPayload.Payload!;
+        return ProjectScopedMcpToolResponse<ProjectPayload>.Ok(
+            $"Project {payload.Name} loaded.", payload, ToOwner(item.Owner), ToWarnings(result.Payload.Warnings));
     }
 
     [McpServerTool(Name = "list_linked_projects", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -387,37 +387,58 @@ public sealed class PmMcpTools(
     [Description("Lists configured tracks.")]
     public McpToolResponse<IReadOnlyList<OptionPayload>> ListTracks()
     {
-        var project = GetProject();
+        var project = ToProjectPayload(projectRoot);
         return project.Success
             ? McpToolResponse<IReadOnlyList<OptionPayload>>.Ok(
-                $"Returned {project.Data!.Tracks.Count} track(s).", project.Data.Tracks)
-            : McpToolResponse<IReadOnlyList<OptionPayload>>.Fail(project.ErrorCode!, project.Message!);
+                $"Returned {project.Payload!.Tracks.Count} track(s).", project.Payload.Tracks)
+            : McpToolResponse<IReadOnlyList<OptionPayload>>.FromFailure(project);
     }
 
     [McpServerTool(Name = "list_milestones", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Lists configured milestones.")]
-    public McpToolResponse<IReadOnlyList<MilestonePayload>> ListMilestones()
+    [Description("Lists configured milestones and owning-project metadata. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
+    public async Task<ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>> ListMilestones(
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var project = GetProject();
-        return project.Success
-            ? McpToolResponse<IReadOnlyList<MilestonePayload>>.Ok(
-                $"Returned {project.Data!.Milestones.Count} milestone(s).", project.Data.Milestones)
-            : McpToolResponse<IReadOnlyList<MilestonePayload>>.Fail(project.ErrorCode!, project.Message!);
+        var denied = ProjectScopedLinkedReadDenied<IReadOnlyList<MilestonePayload>>(project);
+        if (denied != null) return denied;
+        var result = await linkedProjectReadService.GetProjectAsync(project, cancellationToken);
+        if (!result.Success)
+            return ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>.FromFailure(result);
+        var item = result.Payload!.Items.Single();
+        var milestones = ToMilestones(item.Resource.Config!.Milestones);
+        return ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>.Ok(
+            $"Returned {milestones.Count} milestone(s).",
+            milestones,
+            ToOwner(item.Owner),
+            ToWarnings(result.Payload.Warnings));
     }
 
     [McpServerTool(Name = "get_activation_switchboard", ReadOnly = true, Destructive = false,
         OpenWorld = false, UseStructuredContent = true)]
-    [Description("Returns structured milestone deliverables, resolved activation triggers, provenance, current requirement status, and validation issues for the active project.")]
-    public McpToolResponse<ActivationSwitchboardPayload> GetActivationSwitchboard()
+    [Description("Returns structured milestone deliverables, resolved activation triggers, provenance, current requirement status, validation issues, and owning-project metadata. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
+    public async Task<ProjectScopedMcpToolResponse<ActivationSwitchboardPayload>> GetActivationSwitchboard(
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = ResolveActivationSwitchboard();
+        var denied = ProjectScopedLinkedReadDenied<ActivationSwitchboardPayload>(project);
+        if (denied != null) return denied;
+        var selected = await linkedProjectReadService.GetProjectAsync(project, cancellationToken);
+        if (!selected.Success)
+            return ProjectScopedMcpToolResponse<ActivationSwitchboardPayload>.FromFailure(selected);
+        var item = selected.Payload!.Items.Single();
+        var result = ResolveActivationSwitchboard(item.Resource);
         return result.Success
-            ? McpToolResponse<ActivationSwitchboardPayload>.Ok(
+            ? ProjectScopedMcpToolResponse<ActivationSwitchboardPayload>.Ok(
                 $"Returned {result.Payload!.Milestones.Count} milestone(s) and " +
                 $"{result.Payload.ActivationTriggers.Count} activation trigger(s).",
-                result.Payload)
-            : McpToolResponse<ActivationSwitchboardPayload>.FromFailure(result);
+                result.Payload,
+                ToOwner(item.Owner),
+                ToWarnings(selected.Payload.Warnings))
+            : ProjectScopedMcpToolResponse<ActivationSwitchboardPayload>.FromFailure(result);
     }
 
     [McpServerTool(Name = "list_states", ReadOnly = true, Destructive = false, OpenWorld = false,
@@ -425,11 +446,11 @@ public sealed class PmMcpTools(
     [Description("Lists configured task states.")]
     public McpToolResponse<IReadOnlyList<OptionPayload>> ListStates()
     {
-        var project = GetProject();
+        var project = ToProjectPayload(projectRoot);
         return project.Success
             ? McpToolResponse<IReadOnlyList<OptionPayload>>.Ok(
-                $"Returned {project.Data!.States.Count} state(s).", project.Data.States)
-            : McpToolResponse<IReadOnlyList<OptionPayload>>.Fail(project.ErrorCode!, project.Message!);
+                $"Returned {project.Payload!.States.Count} state(s).", project.Payload.States)
+            : McpToolResponse<IReadOnlyList<OptionPayload>>.FromFailure(project);
     }
 
     [McpServerTool(Name = "create_task", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
@@ -1562,6 +1583,15 @@ public sealed class PmMcpTools(
                 "The run-worker MCP profile may only read tasks from the current project.");
     }
 
+    private ProjectScopedMcpToolResponse<T>? ProjectScopedLinkedReadDenied<T>(string? project)
+    {
+        return capabilityContext.CanReadLinkedProjects(project, false)
+            ? null
+            : ProjectScopedMcpToolResponse<T>.Fail(
+                "mcp_project_scope_denied",
+                "The run-worker MCP profile may only read project and activation data from the current project.");
+    }
+
     private McpToolResponse<T>? LinkedWikiReadDenied<T>(string? project, bool family)
     {
         return capabilityContext.CanReadLinkedWikiProjects(project, family)
@@ -1609,16 +1639,35 @@ public sealed class PmMcpTools(
         };
     }
 
-    private AppResult<ActivationSwitchboardPayload> ResolveActivationSwitchboard()
+    private static AppResult<ProjectPayload> ToProjectPayload(ProjectRoot root)
     {
-        var snapshot = activationResolver.ResolveCurrentProject();
+        if (!root.Exists || root.Config == null || root.RootPath == null)
+            return AppResult<ProjectPayload>.Fail(
+                "missing_project", "Project not found. Run pm init first.");
+
+        return AppResult<ProjectPayload>.Ok(new ProjectPayload(
+            root.Config.Name,
+            root.RootPath,
+            ToOptions(root.Config.TaskStates),
+            ToOptions(root.Config.Tracks),
+            ToMilestones(root.Config.Milestones)));
+    }
+
+    private static AppResult<ActivationSwitchboardPayload> ResolveActivationSwitchboard(ProjectRoot root)
+    {
+        var resolver = new MilestoneActivationResolver(root);
+        var snapshot = resolver.ResolveCurrentProject();
         if (!snapshot.Success)
             return AppResult<ActivationSwitchboardPayload>.Fail(snapshot.ErrorCode!, snapshot.Message!);
 
         var tasksById = new Dictionary<string, TaskItem>(StringComparer.Ordinal);
-        foreach (var task in projectRoot.GetAllTasks())
+        foreach (var task in root.GetAllTasks())
             tasksById.TryAdd(task.Id, task);
-        var issues = activationValidator.Validate(projectRoot.Config!, tasksById);
+        var validator = new MilestoneActivationValidationService(
+            root,
+            new MilestoneActivationGraphService(),
+            resolver);
+        var issues = validator.Validate(root.Config!, tasksById);
 
         return AppResult<ActivationSwitchboardPayload>.Ok(new ActivationSwitchboardPayload(
             issues.All(issue => !string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)),
@@ -1652,7 +1701,7 @@ public sealed class PmMcpTools(
         var result = operation();
         if (!result.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(result);
 
-        var switchboard = ResolveActivationSwitchboard();
+        var switchboard = ResolveActivationSwitchboard(projectRoot);
         if (!switchboard.Success)
             return McpToolResponse<ActivationMutationPayload>.FromFailure(switchboard);
 

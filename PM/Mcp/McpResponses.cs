@@ -1,4 +1,5 @@
 using PM.Application;
+using System.Text.Json.Serialization;
 
 namespace PM.Mcp;
 
@@ -18,6 +19,32 @@ public sealed record McpToolResponse<T>(
         Fail(result.ErrorCode ?? "unknown_error", result.Message ?? "Operation failed.");
 
     public static McpToolResponse<T> FromFailure<TPayload>(AppResult<TPayload> result) =>
+        Fail(result.ErrorCode ?? "unknown_error", result.Message ?? "Operation failed.");
+}
+
+public sealed record ProjectScopedMcpToolResponse<T>(
+    bool Success,
+    string Summary,
+    string? ErrorCode = null,
+    string? Message = null,
+    T? Data = default,
+    LinkedProjectOwnerPayload? Project = null,
+    IReadOnlyList<LinkedProjectWarningPayload>? Warnings = null)
+{
+    public static ProjectScopedMcpToolResponse<T> Ok(
+        string summary,
+        T data,
+        LinkedProjectOwnerPayload project,
+        IReadOnlyList<LinkedProjectWarningPayload> warnings) =>
+        new(true, summary, Data: data, Project: project, Warnings: warnings);
+
+    public static ProjectScopedMcpToolResponse<T> Fail(string errorCode, string message) =>
+        new(false, message, errorCode, message);
+
+    public static ProjectScopedMcpToolResponse<T> FromFailure(AppResult result) =>
+        Fail(result.ErrorCode ?? "unknown_error", result.Message ?? "Operation failed.");
+
+    public static ProjectScopedMcpToolResponse<T> FromFailure<TPayload>(AppResult<TPayload> result) =>
         Fail(result.ErrorCode ?? "unknown_error", result.Message ?? "Operation failed.");
 }
 
@@ -396,8 +423,8 @@ public sealed record LinkedProjectOwnerPayload(
     string Name,
     string? Alias,
     string Relationship,
-    string? Revision,
-    bool? Dirty);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Revision,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? Dirty);
 
 public sealed record LinkedProjectFamilyPayload(
     string ActiveProjectId,
