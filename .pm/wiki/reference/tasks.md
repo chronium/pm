@@ -1,7 +1,7 @@
 ---
 title: Tasks, Priority, and Dependencies
 createdAt: 2026-07-27T06:14:45.2793910Z
-modifiedAt: 2026-07-27T06:16:55.9525110Z
+modifiedAt: 2026-08-07T08:52:57.5225510Z
 ---
 
 A task combines structured frontmatter with a Markdown description.
@@ -32,7 +32,9 @@ Status is intentionally not stored in task frontmatter. The task's `.ref` file u
 
 ## Milestones
 
-A milestone groups tasks across tracks. Milestone order contributes to board grouping and next-task ranking. A task may be unassigned.
+A milestone is a deliverable rather than a task bucket. Its description states the outcome, scope, exclusions, and expected evidence; assigned tasks describe the work used to produce it. Milestone order still contributes to board grouping and recommendation ranking, and a task may remain unassigned.
+
+A milestone with no required activation triggers is active by default. Otherwise all referenced triggers must have persisted activation records before its tasks become recommendation-eligible. Completing every assigned task makes a non-empty milestone ready to deliver; delivery is a separate explicit decision. Delivered milestones remain visible but their remaining tasks are not recommended.
 
 ## Priority
 
@@ -48,13 +50,17 @@ The UI and MCP responses expose both the resolved priority and its source.
 
 ## Dependencies
 
-`dependsOn` accepts task IDs without track or milestone restrictions. Dependencies are advisory: they influence readiness and recommendation ranking but do not prevent status changes.
+`dependsOn` accepts task IDs without track or milestone restrictions. Dependencies are advisory readiness signals: they influence recommendation ranking but do not prevent status changes.
 
 A dependency is ready when its referenced task is in the `done` status. Missing dependency IDs are reported separately from existing unfinished dependencies.
 
+Dependencies do not activate milestones. Activation is evaluated first through the owning project's milestone triggers; dependency readiness is evaluated only for work that is already activation-eligible.
+
 ## Next-task ranking
 
-`get_next_task` excludes completed tasks, then ranks candidates by:
+`get_next_task` first removes completed work and tasks assigned to inactive or delivered milestones. Unassigned tasks and tasks in active or ready-to-deliver milestones remain eligible.
+
+PM then ranks eligible candidates by:
 
 1. dependency-ready before blocked
 2. resolved priority
@@ -64,7 +70,7 @@ A dependency is ready when its referenced task is in the `done` status. Missing 
 6. most recently modified
 7. task ID as a deterministic tie-breaker
 
-Use `readyOnly: true` when an agent should receive no result rather than a blocked fallback.
+Use `readyOnly: true` when an agent should receive no result rather than a dependency-blocked fallback. Include-blocked may relax dependency readiness, but it never returns activation-ineligible work. Family recommendations evaluate activation through each task's owning project before federated ranking.
 
 ## Linking
 

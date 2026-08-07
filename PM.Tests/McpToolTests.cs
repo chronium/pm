@@ -1216,6 +1216,12 @@ public class McpToolTests
 
         var failures = new[]
         {
+            tools.AddActivationTrigger("gate", "Gate", requirements).ErrorCode,
+            tools.RenameActivationTrigger("gate", "Renamed gate").ErrorCode,
+            tools.RemoveActivationTrigger("gate").ErrorCode,
+            tools.SetActivationTriggerRequirements("gate", requirements).ErrorCode,
+            tools.AttachActivationTriggerToMilestone("gate", "beta").ErrorCode,
+            tools.DetachActivationTriggerFromMilestone("gate", "beta").ErrorCode,
             tools.ActivateActivationTrigger("gate").ErrorCode,
             tools.OverrideActivationTrigger("gate", "reason").ErrorCode,
             tools.ResetActivationTrigger("gate").ErrorCode,

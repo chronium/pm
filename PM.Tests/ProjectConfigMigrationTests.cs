@@ -6,6 +6,44 @@ namespace PM.Tests;
 public class ProjectConfigMigrationTests
 {
     [Fact]
+    public async Task LegacyFixtureMigratesToActiveStructuredDeliverablesAndRemainsIdempotent()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var initialRoot = await workspace.CreateProject();
+        var fixture = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "legacy-milestones",
+            "pm_config.yaml");
+        File.Copy(fixture, initialRoot.ConfigPath, overwrite: true);
+        var root = new ProjectRoot();
+
+        var migration = new ProjectConfigService(root).MigrateMilestoneSchema();
+
+        Assert.True(migration.Success);
+        var migrated = ProjectConfig.ReadConfig(root);
+        Assert.False(migrated.RequiresMilestoneSchemaMigration);
+        Assert.Empty(migrated.ActivationTriggers);
+        Assert.Equal(["foundation", "public-beta"], migrated.Milestones.Keys);
+        Assert.All(migrated.Milestones.Values, milestone =>
+        {
+            Assert.Equal(string.Empty, milestone.Description);
+            Assert.Empty(milestone.RequiredActivationTriggers);
+            Assert.Null(milestone.Delivery);
+        });
+        var resolved = new MilestoneActivationResolver(root).ResolveCurrentProject();
+        Assert.True(resolved.Success);
+        Assert.All(resolved.Payload!.Milestones, milestone =>
+            Assert.Equal(MilestoneLifecycle.Active, milestone.Lifecycle));
+
+        var firstWrite = File.ReadAllText(root.ConfigPath);
+        var repeated = new ProjectConfigService(root).MigrateMilestoneSchema();
+        Assert.True(repeated.Success);
+        Assert.False(repeated.Payload);
+        Assert.Equal(firstWrite, File.ReadAllText(root.ConfigPath));
+    }
+
+    [Fact]
     public async Task LegacySchemaBlocksEveryProjectConfigMutationUntilMigration()
     {
         using var workspace = new TempWorkingDirectory();

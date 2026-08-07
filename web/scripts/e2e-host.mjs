@@ -15,6 +15,8 @@ const apiPort = mode === 'static' ? 0 : requiredPort('PM_E2E_API_PORT');
 const uiPort = requiredPort('PM_E2E_UI_PORT');
 const children = new Set();
 let stopping = false;
+const childProcessEnvironment = { ...process.env };
+delete childProcessEnvironment.PM_E2E_MODE;
 
 await rm(e2eRoot, { recursive: true, force: true });
 await mkdir(e2eRoot, { recursive: true });
@@ -28,7 +30,7 @@ if (mode === 'static') {
   const siteRoot = join(e2eRoot, 'site');
   const build = spawnSync('dotnet', [dll, 'site', 'build', '--output', siteRoot], {
     cwd: projectRoot,
-    env: process.env,
+    env: childProcessEnvironment,
     stdio: 'inherit',
   });
   if (build.error) throw build.error;
@@ -108,7 +110,7 @@ await new Promise((resolveReady, reject) => {
 });
 
 const env = {
-  ...process.env,
+  ...childProcessEnvironment,
   CI: process.env.CI ?? 'true',
   XDG_CONFIG_HOME: configRoot,
   HOME: configRoot,

@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export const e2eRoot = process.env.PM_E2E_ROOT;
@@ -28,47 +28,7 @@ export async function resetFixture(size = 'small') {
     mkdir(configRoot, { recursive: true }),
   ]);
 
-  await writeFile(
-    join(pm, 'pm_config.yaml'),
-    `name: Playwright Project
-idWidth: 4
-idPrefix: E2E
-nextIdServiceUrl: http://127.0.0.1:${idPort}
-taskStates:
-  todo: To Do
-  in-progress: In Progress
-  done: Done
-tracks:
-  E2E: Product
-  OPS: Operations
-milestones:
-  current:
-    title: Current Release
-    description: ''
-    priority: high
-    requiredActivationTriggers: []
-    delivery: null
-  later:
-    title: Later
-    description: ''
-    priority: none
-    requiredActivationTriggers: []
-    delivery: null
-activationTriggers:
-  manual-entry:
-    title: Manual entry
-    requirements: []
-    activation: null
-  beta-entry:
-    title: Beta entry criteria
-    requirements:
-      - kind: task
-        source: E2E-0001
-      - kind: task
-        source: E2E-0002
-    activation: null
-`,
-  );
+  await writeFile(join(pm, 'pm_config.yaml'), projectConfig(false, size));
   await writeFile(join(pm, 'project_id.txt'), 'playwright-project\n');
   if (process.env.PM_E2E_MODE === 'dev') await createLinkedFixtures(pm);
   if (process.env.PM_E2E_MODE === 'static') {
@@ -95,7 +55,13 @@ children:
     const state =
       size === 'large' && number <= 120 ? 'done' : number % 5 === 0 ? 'in-progress' : 'todo';
     const track = number % 3 === 0 ? 'OPS' : 'E2E';
-    const milestone = number % 4 === 0 ? 'later' : 'current';
+    const milestone =
+      process.env.PM_E2E_MODE === 'static' && number === 5
+        ? null
+        : number % 4 === 0
+          ? 'later'
+          : 'current';
+    const milestoneMetadata = milestone ? `milestone: ${milestone}\n` : '';
     const dependency =
       number > 1 && number % 6 === 0
         ? `dependsOn:\n- ${
@@ -117,8 +83,7 @@ children:
 id: ${id}
 title: ${size === 'large' ? 'Large fixture task' : 'Fixture task'} ${number}
 track: ${track}
-milestone: ${milestone}
-${dependency}createdAt: ${timestamp}
+${milestoneMetadata}${dependency}createdAt: ${timestamp}
 modifiedAt: ${timestamp}
 ---
 
@@ -152,6 +117,142 @@ Local fixture content.${
 `,
     );
   }
+}
+
+export async function seedPartialActivationStory() {
+  await writeFile(join(projectRoot, '.pm', 'pm_config.yaml'), projectConfig(true));
+}
+
+export async function seedActivationReconciliationStory() {
+  await seedPartialActivationStory();
+  for (const id of ['E2E-0001', 'E2E-0002']) {
+    await rename(
+      join(projectRoot, '.pm', 'states', 'todo', `${id}.ref`),
+      join(projectRoot, '.pm', 'states', 'done', `${id}.ref`),
+    );
+  }
+}
+
+function projectConfig(partialActivation = false, size = 'small') {
+  if (process.env.PM_E2E_MODE === 'static') return staticProjectConfig(size);
+  return `name: Playwright Project
+idWidth: 4
+idPrefix: E2E
+nextIdServiceUrl: http://127.0.0.1:${idPort}
+taskStates:
+  todo: To Do
+  in-progress: In Progress
+  done: Done
+tracks:
+  E2E: Product
+  OPS: Operations
+milestones:
+  current:
+    title: Current Release
+    description: ''
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null
+  later:
+    title: Later
+    description: ''
+    priority: none
+    requiredActivationTriggers:${partialActivation ? '\n      - beta-entry\n      - risk-entry' : ' []'}
+    delivery: null
+activationTriggers:
+  manual-entry:
+    title: Manual entry
+    requirements: []
+    activation: null
+  beta-entry:
+    title: Beta entry criteria
+    requirements:
+      - kind: task
+        source: E2E-0001
+      - kind: task
+        source: E2E-0002
+    activation: null
+${
+  partialActivation
+    ? `  risk-entry:
+    title: Reviewed beta risk
+    requirements:
+      - kind: task
+        source: E2E-0003
+    activation: null
+`
+    : ''
+}`;
+}
+
+function staticProjectConfig(size) {
+  return `name: Playwright Project
+idWidth: 4
+idPrefix: E2E
+nextIdServiceUrl: http://127.0.0.1:${idPort}
+taskStates:
+  todo: To Do
+  in-progress: In Progress
+  done: Done
+tracks:
+  E2E: Product
+  OPS: Operations
+milestones:
+  current:
+    title: Current Release
+    description: Deliver the current local workflow.
+    priority: high
+    requiredActivationTriggers:
+      - foundation-ready
+    delivery: null
+  later:
+    title: Later
+    description: Deliver the accepted beta snapshot.
+    priority: none
+    requiredActivationTriggers:
+      - beta-entry
+    delivery:${
+      size === 'large'
+        ? ' null'
+        : `
+      at: 2026-01-01T01:00:00.0000000Z
+      mode: exceptional
+      reason: Remaining validation is accepted for the static fixture.
+      acceptedTaskIds:
+        - E2E-0004`
+    }
+activationTriggers:
+  manual-entry:
+    title: Manual entry
+    requirements: []
+    activation:
+      at: 2026-01-01T00:15:00.0000000Z
+      mode: manual
+  beta-entry:
+    title: Beta entry criteria
+    requirements:
+      - kind: task
+        source: E2E-0001
+      - kind: task
+        source: E2E-0002
+    activation:
+      at: 2026-01-01T00:30:00.0000000Z
+      mode: override
+      reason: The beta risk was accepted for publication.
+      waivedRequirements:
+        - kind: task
+          source: E2E-0001
+        - kind: task
+          source: E2E-0002
+  foundation-ready:
+    title: Foundation ready
+    requirements:
+      - kind: task
+        source: E2E-0005
+    activation:
+      at: 2026-01-01T00:45:00.0000000Z
+      mode: automatic
+`;
 }
 
 async function createLinkedFixtures(pm) {

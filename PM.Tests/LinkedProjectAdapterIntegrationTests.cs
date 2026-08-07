@@ -4,6 +4,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using PM.Application;
 using PM.Mcp;
+using PM.Project;
 
 namespace PM.Tests;
 
@@ -154,6 +155,53 @@ public sealed class LinkedProjectAdapterIntegrationTests
         AssertResolvedSharedDependency(reread);
         Assert.Contains("MCP integration note", ReadTaskMarkdown(fixture.Starfall, "STAR-0001"));
         Assert.DoesNotContain(errors, line => line.Contains("fail", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task CliAndStdioMcpApplyActivationEligibilityWithinTheOwningLinkedProject()
+    {
+        using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        fixture.Starfall.Config!.ActivationTriggers["starfall-entry"] = new ActivationTriggerDefinition
+        {
+            Title = "Starfall entry",
+            Requirements = [],
+        };
+        fixture.Starfall.Config.Milestones["m1"].RequiredActivationTriggers = ["starfall-entry"];
+        fixture.Starfall.Config.WriteConfig(fixture.Starfall);
+
+        var inactive = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
+        Assert.Equal(0, inactive.ExitCode);
+        Assert.DoesNotContain("STAR-0001", inactive.Output);
+
+        var activated = TestMilestoneActivationServices.Create(fixture.Starfall)
+            .Triggers.ActivateTrigger("starfall-entry", null);
+        Assert.True(activated.Success);
+
+        var eligible = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
+        Assert.Equal(0, eligible.ExitCode);
+        Assert.Contains("Publish", eligible.Output);
+        Assert.Contains("prj_starfall", eligible.Output);
+        Assert.Contains("Starfall", eligible.Output);
+
+        var environment = StdioClientTransportOptions.GetDefaultEnvironmentVariables();
+        environment["PM_PROJECT_REGISTRY_PATH"] = fixture.RegistryPath;
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Name = "PM linked activation integration",
+            Command = "dotnet",
+            Arguments = [typeof(PmMcpTools).Assembly.Location, "mcp"],
+            WorkingDirectory = fixture.Royale.RepositoryPath,
+            InheritEnvironmentVariables = false,
+            EnvironmentVariables = environment,
+        });
+        await using var client = await McpClient.CreateAsync(transport);
+
+        var recommendation = await Call(client, "get_next_task", ("family", true));
+
+        Assert.NotEqual(true, recommendation.IsError);
+        Assert.Contains("STAR-0001", Json(recommendation));
+        Assert.Contains("prj_starfall", Json(recommendation));
+        Assert.Contains("prj_missing", Json(recommendation));
     }
 
     private static async Task<ProcessResult> RunCli(

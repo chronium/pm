@@ -1,7 +1,7 @@
 ---
 title: Milestone Deliverables and Activation Triggers
 createdAt: 2026-08-06T05:36:38.7041500Z
-modifiedAt: 2026-08-06T16:33:56.0331770Z
+modifiedAt: 2026-08-07T08:52:57.5942640Z
 ---
 
 Milestones are first-class deliverables rather than organizational buckets. A milestone describes an outcome, the scope that belongs to that outcome, the activation gates that permit work to begin, and the explicit delivery decision that accepts the result.
@@ -473,16 +473,17 @@ Milestone presentation shows its title, deliverable description, lifecycle state
 
 ## Compatibility and migration
 
-Existing milestone configuration stores titles and priorities separately. Migration converts each milestone into one structured definition:
+Existing projects may store milestone titles and priorities in separate scalar maps. This is a demonstrated persisted-data compatibility need, so migration converts each entry into one structured definition:
 
-- The existing key remains stable.
-- The existing title becomes title.
-- Existing milestone priority is folded into priority.
-- Description starts empty.
-- requiredActivationTriggers starts empty, so the milestone remains active.
-- delivery starts null.
+- The existing key and title remain stable.
+- Existing milestone priority is folded into `priority`.
+- `description` starts empty.
+- `requiredActivationTriggers` starts empty, keeping the milestone active.
+- `delivery` starts null.
 
-Legacy configuration remains readable. `pm doctor` reports the legacy schema without writing, while `pm doctor --fix` performs the explicit migration. Until migration succeeds, project-config mutations fail with `milestone_schema_migration_required`; this prevents an unrelated settings change from silently rewriting the schema.
+`pm doctor` reports the legacy schema without writing, while `pm doctor --fix` performs the explicit idempotent migration. Until migration succeeds, project-config mutations fail with `milestone_schema_migration_required`; an unrelated setting change cannot silently rewrite the schema.
+
+The compatibility path is owned by `ProjectConfigService` and its milestone-schema migration. Its removal condition is an explicit incompatible project-format boundary at which pre-structured projects are no longer supported and users have been given a supported migration/export path. Until that condition is met, the reader serves real on-disk data. This exception does not justify obsolete constructors, duplicate application workflows, or internal adapter shims; those callers must move to the approved services and the old code must be removed.
 
 ## Deferred extensions
 
@@ -496,7 +497,9 @@ The first version intentionally excludes:
 - Append-only activation/reset event history.
 - Mixing ordinary task dependencies into the hard activation graph.
 
-These can be added later as explicit requirement or provenance features without changing the core separation:
+The functional web switchboard and deliverable editor intentionally shipped before their dedicated visual refinement passes; PM-0095 and PM-0096 own those refinements. PM-0099 owns guarded milestone delivery and reopening controls in Angular. CLI, trusted MCP, and the revisioned API remain the supported delivery surfaces until that task is complete.
+
+These extensions can be added explicitly without changing the core separation:
 
 - Requirements are factual conditions used to produce activation events.
 - Triggers are reusable, latched gates with explicit activation provenance.

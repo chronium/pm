@@ -1,7 +1,7 @@
 ---
 title: Project Layout
 createdAt: 2026-07-27T06:14:45.2754500Z
-modifiedAt: 2026-07-27T06:14:45.2754500Z
+modifiedAt: 2026-08-07T08:52:57.4891600Z
 ---
 
 A PM project is represented by a `.pm/` directory discovered from the current working directory or one of its parents.
@@ -28,15 +28,16 @@ A PM project is represented by a `.pm/` directory discovered from the current wo
 
 `pm_config.yaml` contains:
 
-- project name and ID width
-- default ID prefix
-- next-ID service URL
-- status key/display-name pairs
-- track key/display-name pairs
-- milestone key/title pairs
-- optional milestone priorities
+- project name, ID width, default ID prefix, and next-ID service URL
+- status and track key/display-name pairs
+- structured milestone deliverables
+- reusable activation trigger definitions
 
-Keys are stable machine identifiers. Renaming a track, milestone, or status changes its display title without rewriting the key.
+A milestone definition keeps its title, Markdown deliverable description, inherited priority, required activation-trigger keys, and optional delivery record together. An activation trigger keeps its typed task or milestone requirements and optional latched activation provenance together.
+
+Keys are stable machine identifiers. Renaming a track, milestone, status, or trigger changes presentation without rewriting the key.
+
+Projects using the earlier scalar milestone map and separate `milestonePriorities` map remain readable for migration. `pm doctor` reports that representation without writing; `pm doctor --fix` converts it to structured deliverables. Project-setting mutations remain blocked until migration succeeds so an unrelated change cannot silently rewrite the schema.
 
 ## Tasks and state references
 

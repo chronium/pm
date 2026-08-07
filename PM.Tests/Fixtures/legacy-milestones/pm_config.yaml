@@ -1,0 +1,15 @@
+name: Legacy Activation Project
+idWidth: 4
+idPrefix: PM
+taskStates:
+  todo: Queued
+  review: Review
+  done: Done
+tracks:
+  PM: Project
+milestones:
+  foundation: Foundation
+  public-beta: Public beta
+milestonePriorities:
+  foundation: high
+  public-beta: medium

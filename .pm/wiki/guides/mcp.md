@@ -1,7 +1,7 @@
 ---
 title: MCP Guide
 createdAt: 2026-07-27T06:14:45.2638910Z
-modifiedAt: 2026-08-06T18:00:25.0001360Z
+modifiedAt: 2026-08-07T08:52:57.5396020Z
 ---
 
 PM exposes a Model Context Protocol server over standard input/output. It gives coding agents structured access to the same services used by the CLI and web API.
@@ -56,15 +56,17 @@ Without `readyOnly`, `get_next_task` may return the best blocked candidate when 
 
 ## Milestone activation
 
-`get_activation_switchboard` is the authoritative structured read for milestone deliverables and activation triggers. Trigger activation provenance is separate from current requirement satisfaction, so clients can distinguish a pending trigger, an automatic activation that remains latched after a requirement reopens, and an override whose requirements were later satisfied. The same payload includes milestone descriptions, lifecycle state, required and unmet triggers, delivery provenance, and coded validation issues.
+`get_activation_switchboard` is the authoritative structured read for milestone deliverables and activation triggers. Activation provenance remains separate from current requirement satisfaction, so clients can distinguish pending, automatically active, latched-with-unmet-requirements, and overridden states.
 
-Trigger requirements are typed objects with `kind` set to `task` or `milestone` and a local source ID or key. Definition tools add, rename, remove, attach, detach, or replace inactive requirements. Active requirements use the guarded workflow: call `preview_activation_trigger_redefinition`, then pass its revision to `redefine_activation_trigger` and explicitly allow deactivation when the preview requires confirmation.
+Trigger requirements are typed `task` or `milestone` references combined with AND. Trusted definition tools add, rename, remove, attach, detach, or replace inactive requirements. Active requirements use a guarded workflow: call `preview_activation_trigger_redefinition`, then pass its revision to `redefine_activation_trigger` and explicitly allow eligibility loss when required.
 
-Manual-only triggers use `activate_activation_trigger`; triggers with unmet requirements use `override_activation_trigger` with a reason. Reset is available only while the current requirements are not all satisfied. `reconcile_activation_triggers` persists missing automatic activation records, while its dry-run mode reports the prospective impact without writing.
+Manual-only triggers use `activate_activation_trigger`; unmet factual requirements use `override_activation_trigger` with a public reason. Reset is available only while current requirements are not all satisfied. `reconcile_activation_triggers` dry-run previews missing automatic latches and the normal call persists them without deactivating anything.
 
-Milestone delivery follows the same guarded pattern: call `preview_milestone_delivery`, then pass its revision to `deliver_milestone`. Exceptional delivery requires a reason and explicit confirmation. `reopen_milestone` removes the delivery record and re-evaluates the milestone's activation state.
+Milestone delivery also uses preview and apply: call `preview_milestone_delivery`, then `deliver_milestone` with the returned revision. Exceptional delivery requires a reason and explicit confirmation. `reopen_milestone` removes delivery provenance and re-evaluates the milestone's gates.
 
-These definition and lifecycle mutations are control-plane operations available only in the normal trusted MCP profile. Isolated run workers may read the switchboard but cannot preview or invoke activation, override, reset, redefine, delivery, reopening, or reconciliation operations.
+Every successful activation mutation returns a project mutation receipt and a refreshed switchboard. Clients should compare that switchboard with an immediate `get_activation_switchboard` reread when authoritative post-mutation state matters. Rebuilds do not hot-reload an already running MCP process; restart the server before diagnosing changed code.
+
+These are normal-profile control-plane operations. A run-worker advertises `get_activation_switchboard` for context but does not advertise trigger definition, activation, override, reset, redefine, delivery, reopening, or reconciliation tools. The tool implementations retain the same denial guard as defense in depth.
 
 ## Safe wiki patching
 

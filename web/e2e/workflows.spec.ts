@@ -1,8 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { projectRoot, resetFixture } from '../scripts/e2e-fixture.mjs';
+import {
+  projectRoot,
+  resetFixture,
+  seedActivationReconciliationStory,
+  seedPartialActivationStory,
+} from '../scripts/e2e-fixture.mjs';
 import {
   acceptedRun,
   readyPreflight,
@@ -16,6 +21,14 @@ import {
 test.beforeEach(async () => {
   await resetFixture('small');
 });
+
+async function setTaskState(page: Page, taskId: string, state: string, label: string) {
+  await page.goto(`/tasks/${taskId}`);
+  await page.getByRole('button', { name: 'Edit task status' }).click();
+  await page.locator('#workspace-status').selectOption(state);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit task status' })).toContainText(label);
+}
 
 test('routes, filters, deep-link fallback, and theme persistence', async ({ page }) => {
   await page.goto('/');
@@ -545,6 +558,70 @@ test('creates activation trigger definitions with searched requirements', async 
   const deliverable = page.getByRole('dialog', { name: 'Milestone deliverable' });
   await expect(deliverable.getByText('Dogfood entry', { exact: true })).toBeVisible();
   await expect(deliverable.getByText('dogfood-entry', { exact: true })).toBeVisible();
+});
+
+test('opens partial milestone work, preserves the latch, and enforces reset semantics', async ({
+  page,
+}) => {
+  await seedPartialActivationStory();
+  await page.goto('/tasks?milestone=later');
+  await expect(page.getByText('Activation: inactive', { exact: true })).toBeVisible();
+
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Activation', exact: true }).click();
+  const risk = page.locator('details').filter({ hasText: 'Reviewed beta risk' });
+  await risk.locator('summary').click();
+  await risk.getByRole('button', { name: 'Override…' }).click();
+  const override = page.getByRole('dialog', { name: 'Override Reviewed beta risk?' });
+  await override.getByLabel('Override reason').fill('Proceed with the reviewed dogfood risk.');
+  await override.getByRole('button', { name: 'Apply override' }).click();
+  await expect(risk.getByText('Active by override — 0 / 1')).toBeVisible();
+
+  await setTaskState(page, 'E2E-0001', 'done', 'Done');
+  await setTaskState(page, 'E2E-0002', 'done', 'Done');
+  await page.goto('/tasks?milestone=later');
+  await expect(page.getByText('Activation: eligible', { exact: true })).toBeVisible();
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('button', { name: 'Next task' }).click();
+  await expect(page.getByText('E2E-0004', { exact: true }).first()).toBeVisible();
+
+  await setTaskState(page, 'E2E-0001', 'todo', 'To Do');
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Activation', exact: true }).click();
+  const beta = page.locator('details').filter({ hasText: 'Beta entry criteria' });
+  await expect(beta.getByText('Active automatically — latched')).toBeVisible();
+  await beta.locator('summary').click();
+  await beta.getByRole('button', { name: 'Reset…' }).click();
+  const reset = page.getByRole('dialog', { name: 'Reset Beta entry criteria?' });
+  await reset.getByRole('button', { name: 'Reset trigger' }).click();
+  await expect(beta.getByText('Pending — 1 / 2')).toBeVisible();
+
+  await page.goto('/tasks?milestone=later');
+  await expect(page.getByText('Activation: inactive', { exact: true })).toBeVisible();
+  await setTaskState(page, 'E2E-0001', 'done', 'Done');
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Activation', exact: true }).click();
+  const relatched = page.locator('details').filter({ hasText: 'Beta entry criteria' });
+  await expect(relatched.getByText('Active automatically', { exact: true })).toBeVisible();
+  await relatched.locator('summary').click();
+  await expect(relatched.getByRole('button', { name: 'Reset…' })).toHaveCount(0);
+});
+
+test('reconciles satisfied repository state through the activation switchboard', async ({
+  page,
+}) => {
+  await seedActivationReconciliationStory();
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Activation', exact: true }).click();
+  await expect(page.getByText('Reconciliation required.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reconcile', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Reconcile activation records?' });
+  await expect(dialog).toContainText('beta-entry');
+  await dialog.getByRole('button', { name: 'Reconcile', exact: true }).click();
+  const beta = page.locator('details').filter({ hasText: 'Beta entry criteria' });
+  await expect(beta.getByText('Active automatically', { exact: true })).toBeVisible();
+  await expect(page.getByText('Reconciliation required.', { exact: true })).toHaveCount(0);
 });
 
 test('pairs a runner, starts one immutable task run, and supervises its durable output', async ({

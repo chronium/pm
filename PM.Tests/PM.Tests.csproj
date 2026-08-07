@@ -27,6 +27,8 @@
     <None Include="../contracts/agent-runs/v1/*.json"
           Link="AgentRunContracts/v1/%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/**/*.yaml"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

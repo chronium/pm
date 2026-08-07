@@ -172,6 +172,203 @@ public partial class ApiContractTests
         }
     }
 
+    [Fact]
+    public async Task ActivationTransitionEndpointsPreserveProvenanceGuardsAndAuthoritativeRereads()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new() { ["public-beta"] = "Public beta" },
+            activationTriggers: new()
+            {
+                ["manual-entry"] = new ActivationTriggerDefinition
+                {
+                    Title = "Manual entry",
+                    Requirements = [],
+                },
+                ["beta-entry"] = new ActivationTriggerDefinition
+                {
+                    Title = "Beta entry",
+                    Requirements =
+                    [
+                        new ActivationRequirement
+                        {
+                            Kind = ActivationRequirementKind.Task,
+                            Source = "PM-0001",
+                        },
+                    ],
+                },
+            });
+        config.Milestones["public-beta"].RequiredActivationTriggers = ["beta-entry"];
+        var root = await workspace.CreateProject(config);
+        var prerequisite = TestData.Task("PM-0001", "Foundation capability");
+        root.WriteTask(prerequisite);
+        root.UpdateTaskState(prerequisite, "todo");
+        var beta = TestData.Task("PM-0002", "Beta validation", milestone: "public-beta");
+        root.WriteTask(beta);
+        root.UpdateTaskState(beta, "todo");
+
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var manual = await SendActivationMutation(
+                client,
+                HttpMethod.Post,
+                "/api/v1/activation/triggers/manual-entry/activate",
+                new { });
+            Assert.Equal(HttpStatusCode.OK, manual.StatusCode);
+            Assert.Equal("manual", Trigger(manual.Body, "manual-entry")
+                .GetProperty("activation").GetProperty("mode").GetString());
+            await AssertApiMutationMatchesReread(client, manual.Body);
+
+            var manualReset = await SendActivationMutation(
+                client,
+                HttpMethod.Delete,
+                "/api/v1/activation/triggers/manual-entry/activation");
+            Assert.Equal(HttpStatusCode.OK, manualReset.StatusCode);
+            Assert.Equal(JsonValueKind.Null, Trigger(manualReset.Body, "manual-entry")
+                .GetProperty("activation").ValueKind);
+
+            var overridden = await SendActivationMutation(
+                client,
+                HttpMethod.Post,
+                "/api/v1/activation/triggers/beta-entry/override",
+                new { reason = "Proceed with the reviewed beta risk." });
+            Assert.Equal(HttpStatusCode.OK, overridden.StatusCode);
+            var overrideTrigger = Trigger(overridden.Body, "beta-entry");
+            Assert.Equal("override", overrideTrigger.GetProperty("activation").GetProperty("mode").GetString());
+            Assert.Equal("PM-0001", Assert.Single(overrideTrigger.GetProperty("activation")
+                .GetProperty("waivedRequirements").EnumerateArray()).GetProperty("source").GetString());
+            Assert.Equal("active", Milestone(overridden.Body, "public-beta")
+                .GetProperty("lifecycle").GetString());
+            await AssertApiMutationMatchesReread(client, overridden.Body);
+
+            var overrideReset = await SendActivationMutation(
+                client,
+                HttpMethod.Delete,
+                "/api/v1/activation/triggers/beta-entry/activation");
+            Assert.Equal(HttpStatusCode.OK, overrideReset.StatusCode);
+            Assert.Equal("inactive", Milestone(overrideReset.Body, "public-beta")
+                .GetProperty("lifecycle").GetString());
+
+            root.UpdateTaskState(prerequisite, "done");
+            var reconciled = await SendActivationMutation(
+                client,
+                HttpMethod.Post,
+                "/api/v1/activation/reconcile",
+                new { dryRun = false });
+            Assert.Equal(HttpStatusCode.OK, reconciled.StatusCode);
+            Assert.Equal("automatic", Trigger(reconciled.Body, "beta-entry")
+                .GetProperty("activation").GetProperty("mode").GetString());
+
+            var blocked = await SendActivationMutation(
+                client,
+                HttpMethod.Delete,
+                "/api/v1/activation/triggers/beta-entry/activation");
+            Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+            Assert.Equal("activation_trigger_reset_blocked",
+                blocked.Body.GetProperty("errorCode").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task RedefinitionAndExceptionalDeliveryEndpointsUsePreviewRevisions()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new() { ["public-beta"] = "Public beta" },
+            activationTriggers: new()
+            {
+                ["beta-entry"] = new ActivationTriggerDefinition
+                {
+                    Title = "Beta entry",
+                    Requirements = [],
+                    Activation = new ActivationRecord
+                    {
+                        At = DateTimeOffset.Parse("2026-08-07T08:00:00Z"),
+                        Mode = ActivationMode.Manual,
+                    },
+                },
+            });
+        config.Milestones["public-beta"].RequiredActivationTriggers = ["beta-entry"];
+        var root = await workspace.CreateProject(config);
+        var replacement = TestData.Task("PM-0001", "Replacement requirement");
+        root.WriteTask(replacement);
+        root.UpdateTaskState(replacement, "todo");
+        var beta = TestData.Task("PM-0002", "Beta validation", milestone: "public-beta");
+        root.WriteTask(beta);
+        root.UpdateTaskState(beta, "todo");
+
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var requirements = new[] { new { kind = "task", source = "PM-0001" } };
+            var preview = await SendActivationMutation(
+                client,
+                HttpMethod.Post,
+                "/api/v1/activation/triggers/beta-entry/redefinition-preview",
+                new { requirements });
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            Assert.True(preview.Body.GetProperty("requiresConfirmation").GetBoolean());
+            var previewRevision = preview.Body.GetProperty("previewRevision").GetString()!;
+
+            var redefine = await SendActivationMutation(
+                client,
+                HttpMethod.Put,
+                "/api/v1/activation/triggers/beta-entry/redefinition",
+                new { requirements, previewRevision, allowDeactivation = true });
+            Assert.Equal(HttpStatusCode.OK, redefine.StatusCode);
+            Assert.Equal("inactive", Milestone(redefine.Body, "public-beta")
+                .GetProperty("lifecycle").GetString());
+
+            var overridden = await SendActivationMutation(
+                client,
+                HttpMethod.Post,
+                "/api/v1/activation/triggers/beta-entry/override",
+                new { reason = "Accept the reviewed beta entry risk." });
+            Assert.Equal(HttpStatusCode.OK, overridden.StatusCode);
+
+            var deliveryPreview = await SendActivationMutation(
+                client,
+                HttpMethod.Post,
+                "/api/v1/activation/milestones/public-beta/delivery-preview",
+                new { reason = "Ship the remaining validation as dogfood follow-up." });
+            Assert.Equal(HttpStatusCode.OK, deliveryPreview.StatusCode);
+            Assert.True(deliveryPreview.Body.GetProperty("requiresConfirmation").GetBoolean());
+            Assert.Equal("PM-0002", Assert.Single(deliveryPreview.Body
+                .GetProperty("unfinishedTaskIds").EnumerateArray()).GetString());
+            var deliveryRevision = deliveryPreview.Body.GetProperty("previewRevision").GetString()!;
+
+            var delivered = await SendActivationMutation(
+                client,
+                HttpMethod.Put,
+                "/api/v1/activation/milestones/public-beta/delivery",
+                new
+                {
+                    reason = "Ship the remaining validation as dogfood follow-up.",
+                    previewRevision = deliveryRevision,
+                    allowExceptional = true,
+                });
+            Assert.Equal(HttpStatusCode.OK, delivered.StatusCode);
+            var delivery = Milestone(delivered.Body, "public-beta").GetProperty("delivery");
+            Assert.Equal("exceptional", delivery.GetProperty("mode").GetString());
+            Assert.Equal("PM-0002", Assert.Single(delivery.GetProperty("acceptedTaskIds")
+                .EnumerateArray()).GetString());
+            await AssertApiMutationMatchesReread(client, delivered.Body);
+
+            var reopened = await SendActivationMutation(
+                client,
+                HttpMethod.Delete,
+                "/api/v1/activation/milestones/public-beta/delivery");
+            Assert.Equal(HttpStatusCode.OK, reopened.StatusCode);
+            Assert.Equal(JsonValueKind.Null, Milestone(reopened.Body, "public-beta")
+                .GetProperty("delivery").ValueKind);
+            Assert.Equal("active", Milestone(reopened.Body, "public-beta")
+                .GetProperty("lifecycle").GetString());
+        }
+    }
+
     private static HttpRequestMessage ActivationRequest(
         HttpMethod method,
         string path,
@@ -183,4 +380,41 @@ public partial class ApiContractTests
         request.Headers.TryAddWithoutValidation("If-Match", $"\"{revision}\"");
         return request;
     }
+
+    private static async Task<ActivationHttpResult> SendActivationMutation(
+        HttpClient client,
+        HttpMethod method,
+        string path,
+        object? body = null)
+    {
+        var read = await client.GetFromJsonAsync<JsonElement>("/api/v1/activation");
+        using var request = new HttpRequestMessage(method, path);
+        if (body != null) request.Content = JsonContent.Create(body);
+        request.Headers.Add(ApiV1Endpoints.ClientHeader, "activation-api-test");
+        request.Headers.TryAddWithoutValidation(
+            "If-Match",
+            $"\"{read.GetProperty("revision").GetString()}\"");
+        using var response = await client.SendAsync(request);
+        var responseBody = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.Clone();
+        return new ActivationHttpResult(response.StatusCode, responseBody);
+    }
+
+    private static async Task AssertApiMutationMatchesReread(HttpClient client, JsonElement mutation)
+    {
+        var reread = await client.GetFromJsonAsync<JsonElement>("/api/v1/activation");
+        Assert.Equal(
+            reread.GetRawText(),
+            mutation.GetProperty("switchboard").GetRawText());
+    }
+
+    private static JsonElement Trigger(JsonElement mutation, string key) =>
+        Assert.Single(mutation.GetProperty("switchboard").GetProperty("activationTriggers")
+            .EnumerateArray(), trigger => trigger.GetProperty("key").GetString() == key);
+
+    private static JsonElement Milestone(JsonElement mutation, string key) =>
+        Assert.Single(mutation.GetProperty("switchboard").GetProperty("milestones")
+            .EnumerateArray(), milestone => milestone.GetProperty("key").GetString() == key);
+
+    private sealed record ActivationHttpResult(HttpStatusCode StatusCode, JsonElement Body);
 }
