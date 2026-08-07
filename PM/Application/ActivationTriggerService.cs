@@ -848,7 +848,7 @@ public sealed class ActivationTriggerService
     private static bool IsEligibleLifecycle(MilestoneLifecycle lifecycle) =>
         lifecycle is MilestoneLifecycle.Active or MilestoneLifecycle.ReadyToDeliver;
 
-    private static string BuildRedefinitionRevision(
+    private string BuildRedefinitionRevision(
         string triggerKey,
         IReadOnlyList<ActivationRequirement> requirements,
         string yaml,
@@ -857,6 +857,7 @@ public sealed class ActivationTriggerService
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         AppendHashValue(hash, "activation-trigger-redefinition");
+        AppendHashValue(hash, GetRevisionProjectIdentity());
         AppendHashValue(hash, triggerKey);
         foreach (var requirement in requirements)
         {
@@ -873,6 +874,11 @@ public sealed class ActivationTriggerService
 
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
+
+    private string GetRevisionProjectIdentity() =>
+        projectRoot.TryReadProjectId(out var projectId)
+            ? projectId
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(projectRoot.RepositoryPath));
 
     private static string BuildMilestoneRequiredTriggersRevision(
         string milestoneKey,

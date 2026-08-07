@@ -1,7 +1,7 @@
 ---
 title: MCP Guide
 createdAt: 2026-07-27T06:14:45.2638910Z
-modifiedAt: 2026-08-07T14:01:20.3485380Z
+modifiedAt: 2026-08-07T14:23:18.7853600Z
 ---
 
 PM exposes a Model Context Protocol server over standard input/output. It gives coding agents structured access to the same services used by the CLI and web API.
@@ -60,17 +60,19 @@ Without `readyOnly`, `get_next_task` may return the best blocked candidate when 
 
 Trusted MCP clients may pass `project` to `get_project`, `list_milestones`, or `get_activation_switchboard`. The selector accepts `current`, `parent`, a stable project ID, or a unique linked-project alias. Each successful response preserves its established `data` shape and adds top-level `project` ownership metadata plus structured `warnings`; activation requirements are always resolved from the selected project's own tasks and milestones. These tools select one project rather than aggregating a family.
 
-Trigger requirements are typed `task` or `milestone` references combined with AND. Trusted definition tools add, rename, remove, attach, detach, or replace inactive requirements. Active requirements use a guarded workflow: call `preview_activation_trigger_redefinition`, then pass its revision to `redefine_activation_trigger` and explicitly allow eligibility loss when required.
+Trigger requirements are typed `task` or `milestone` references combined with AND. Milestone definition tools (`add_milestone`, `rename_milestone`, `remove_milestone`, `set_milestone_priority`, and `set_milestone_description`) and inactive trigger definition tools (`add_activation_trigger`, `rename_activation_trigger`, `remove_activation_trigger`, `set_activation_trigger_requirements`, `attach_activation_trigger_to_milestone`, and `detach_activation_trigger_from_milestone`) accept the same `project` selector.
 
-Manual-only triggers use `activate_activation_trigger`; unmet factual requirements use `override_activation_trigger` with a public reason. Reset is available only while current requirements are not all satisfied. `reconcile_activation_triggers` dry-run previews missing automatic latches and the normal call persists them without deactivating anything.
+Trigger lifecycle tools also accept `project`: `activate_activation_trigger`, `override_activation_trigger`, `reset_activation_trigger`, `reconcile_activation_triggers`, `preview_activation_trigger_redefinition`, and `redefine_activation_trigger`. A linked target must be locally write-trusted for both previews and mutations. Manual-only triggers use activation; unmet factual requirements use override with a public reason and a target-local waived-requirement snapshot. Reset is available only while current requirements are not all satisfied. Reconciliation dry-run previews missing automatic latches without writing; the normal call persists them and never deactivates an existing latch.
 
-Milestone delivery also uses preview and apply: call `preview_milestone_delivery`, then `deliver_milestone` with the returned revision. Exceptional delivery requires a reason and explicit confirmation. `reopen_milestone` removes delivery provenance and re-evaluates the milestone's gates.
+Active requirement changes use a guarded workflow: preview the selected project's trigger, then apply the returned revision to that same project and explicitly allow eligibility loss when required. Redefinition revisions are bound to the stable project ID, or to the canonical repository path for legacy current projects without an ID, so a preview from one project cannot authorize another.
 
-Every successful activation mutation returns a project mutation receipt and a refreshed switchboard. Clients should compare that switchboard with an immediate `get_activation_switchboard` reread when authoritative post-mutation state matters. Rebuilds do not hot-reload an already running MCP process; restart the server before diagnosing changed code.
+Every change-producing activation mutation returns the selected project ID and repository-relative paths in its mutation receipt, plus a switchboard reread resolved from that same project. A no-op or reconciliation dry-run returns `changed: false` without a receipt. Clients may compare the returned switchboard with an immediate `get_activation_switchboard` reread when authoritative post-mutation state matters.
+
+Milestone delivery also uses preview and apply: call `preview_milestone_delivery`, then `deliver_milestone` with the returned revision. Exceptional delivery requires a reason and explicit confirmation. `reopen_milestone` removes delivery provenance and re-evaluates the milestone's gates. Delivery and reopening remain current-project operations until their dedicated cross-project support is implemented.
 
 These are normal-profile control-plane operations. A run-worker advertises `get_project`, `list_milestones`, and `get_activation_switchboard` for current-project context, but linked selectors return `mcp_project_scope_denied`. It does not advertise trigger definition, activation, override, reset, redefine, delivery, reopening, or reconciliation tools. The tool implementations retain the same denial guard as defense in depth.
 
-Milestone definition tools (`add_milestone`, `rename_milestone`, `remove_milestone`, `set_milestone_priority`, and `set_milestone_description`) and inactive trigger definition tools (`add_activation_trigger`, `rename_activation_trigger`, `remove_activation_trigger`, `set_activation_trigger_requirements`, `attach_activation_trigger_to_milestone`, and `detach_activation_trigger_from_milestone`) also accept `project`. A linked target must be locally write-trusted before mutation. Successful responses carry the selected project ID and repository-relative paths in their mutation receipt, plus a switchboard reread resolved from that same project. Trigger transitions, active-trigger redefinition, reconciliation, delivery, and reopening remain current-project operations until their dedicated cross-project support is implemented.
+Rebuilds do not hot-reload an already running MCP process; restart the server before diagnosing changed code.
 
 ## Safe wiki patching
 

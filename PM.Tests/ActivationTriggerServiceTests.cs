@@ -291,6 +291,32 @@ public class ActivationTriggerServiceTests
     }
 
     [Fact]
+    public async Task RedefinitionRevisionIsBoundToTheOwningProject()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var first = await CreateProjectWithIdentity(
+            Path.Combine(workspace.Path, "first"), "prj_first", CreateActiveManualTriggerConfig());
+        var second = await CreateProjectWithIdentity(
+            Path.Combine(workspace.Path, "second"), "prj_second", CreateActiveManualTriggerConfig());
+        var firstService = CreateService(first);
+        var secondService = CreateService(second);
+
+        var firstPreview = firstService.PreviewRedefinition("entry", []);
+        var secondPreview = secondService.PreviewRedefinition("entry", []);
+
+        Assert.True(firstPreview.Success);
+        Assert.True(secondPreview.Success);
+        Assert.NotEqual(firstPreview.Payload!.Revision, secondPreview.Payload!.Revision);
+        var before = File.ReadAllText(second.ConfigPath);
+
+        var crossProject = secondService.RedefineTrigger(
+            "entry", [], firstPreview.Payload.Revision, allowDeactivation: false);
+
+        Assert.Equal("activation_trigger_redefine_stale", crossProject.ErrorCode);
+        Assert.Equal(before, File.ReadAllText(second.ConfigPath));
+    }
+
+    [Fact]
     public async Task RedefinitionValidatesReferencesAndActivationCyclesBeforePreview()
     {
         using var workspace = new TempWorkingDirectory();
@@ -658,6 +684,42 @@ public class ActivationTriggerServiceTests
         root.UpdateTaskState(pendingTask, "todo");
         root.UpdateTaskState(approvedTask, "done");
         return root;
+    }
+
+    private static ProjectConfig CreateActiveManualTriggerConfig() => TestData.Config(
+        activationTriggers: new Dictionary<string, ActivationTriggerDefinition>
+        {
+            ["entry"] = new()
+            {
+                Title = "Entry",
+                Activation = new ActivationRecord
+                {
+                    At = DateTimeOffset.Parse("2026-08-06T08:00:00Z"),
+                    Mode = ActivationMode.Manual,
+                },
+            },
+        });
+
+    private static async Task<ProjectRoot> CreateProjectWithIdentity(
+        string repositoryPath,
+        string projectId,
+        ProjectConfig config)
+    {
+        Directory.CreateDirectory(repositoryPath);
+        var previous = Environment.CurrentDirectory;
+        Environment.CurrentDirectory = repositoryPath;
+        try
+        {
+            var root = new ProjectRoot();
+            await root.CreateProject(config);
+            await File.WriteAllTextAsync(
+                Path.Combine(root.RootPath, GlobalConfig.ProjectIdFile), $"{projectId}\n");
+            return root;
+        }
+        finally
+        {
+            Environment.CurrentDirectory = previous;
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

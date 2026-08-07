@@ -291,6 +291,252 @@ public sealed class LinkedProjectAdapterIntegrationTests
     }
 
     [Fact]
+    public async Task StdioMcpControlsActivationLifecyclesInSelectedWriteTrustedProjects()
+    {
+        using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        fixture.Starfall.Config!.ActivationTriggers["manual-entry"] = new ActivationTriggerDefinition
+        {
+            Title = "Manual entry",
+        };
+        fixture.Starfall.Config.ActivationTriggers["override-entry"] = new ActivationTriggerDefinition
+        {
+            Title = "Override entry",
+            Requirements =
+            [
+                new ActivationRequirement
+                {
+                    Kind = ActivationRequirementKind.Task,
+                    Source = "GATE-0001",
+                },
+            ],
+        };
+        fixture.Starfall.Config.ActivationTriggers["redefine-entry"] = new ActivationTriggerDefinition
+        {
+            Title = "Redefine entry",
+            Activation = new ActivationRecord
+            {
+                At = DateTimeOffset.Parse("2026-08-07T08:00:00Z"),
+                Mode = ActivationMode.Manual,
+            },
+        };
+        fixture.Starfall.Config.ActivationTriggers["automatic-entry"] = new ActivationTriggerDefinition
+        {
+            Title = "Automatic entry",
+            Requirements =
+            [
+                new ActivationRequirement
+                {
+                    Kind = ActivationRequirementKind.Task,
+                    Source = "AUTO-0001",
+                },
+            ],
+        };
+        fixture.Starfall.Config.WriteConfig(fixture.Starfall);
+        var gate = TestData.Task("GATE-0001", "Starfall gate", track: "STAR", milestone: null);
+        fixture.Starfall.WriteTask(gate);
+        fixture.Starfall.UpdateTaskState(gate, "todo");
+        var automatic = TestData.Task("AUTO-0001", "Automatic gate", track: "STAR", milestone: null);
+        fixture.Starfall.WriteTask(automatic);
+        fixture.Starfall.UpdateTaskState(automatic, "done");
+        var completedDuplicate = TestData.Task(
+            "GATE-0001", "Completed Royale duplicate", track: "ROYALE", milestone: null);
+        fixture.Royale.WriteTask(completedDuplicate);
+        fixture.Royale.UpdateTaskState(completedDuplicate, "done");
+        fixture.Games.Config!.ActivationTriggers["parent-entry"] = new ActivationTriggerDefinition
+        {
+            Title = "Parent entry",
+        };
+        fixture.Games.Config.WriteConfig(fixture.Games);
+        var untouchedRoyaleConfig = File.ReadAllText(fixture.Royale.ConfigPath);
+
+        var environment = StdioClientTransportOptions.GetDefaultEnvironmentVariables();
+        environment["PM_PROJECT_REGISTRY_PATH"] = fixture.RegistryPath;
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Name = "PM linked activation lifecycle integration",
+            Command = "dotnet",
+            Arguments = [typeof(PmMcpTools).Assembly.Location, "mcp"],
+            WorkingDirectory = fixture.Royale.RepositoryPath,
+            InheritEnvironmentVariables = false,
+            EnvironmentVariables = environment,
+        });
+        await using var client = await McpClient.CreateAsync(transport);
+
+        var tools = await client.ListToolsAsync();
+        foreach (var tool in new[]
+                 {
+                     "activate_activation_trigger",
+                     "override_activation_trigger",
+                     "reset_activation_trigger",
+                     "reconcile_activation_triggers",
+                     "preview_activation_trigger_redefinition",
+                     "redefine_activation_trigger",
+                 })
+            AssertSchemaProperty(tools, tool, "project");
+
+        Assert.NotEqual(true, (await Call(client, "list_linked_projects")).IsError);
+        var beforeDenied = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var denied = await Call(
+            client,
+            "activate_activation_trigger",
+            ("key", "manual-entry"),
+            ("project", "starfall"));
+        Assert.Contains("linked_project_write_untrusted", Json(denied));
+        var deniedPreview = await Call(
+            client,
+            "preview_activation_trigger_redefinition",
+            ("key", "redefine-entry"),
+            ("requirements", Array.Empty<object>()),
+            ("project", "starfall"));
+        Assert.Contains("linked_project_write_untrusted", Json(deniedPreview));
+        Assert.Equal(beforeDenied, File.ReadAllText(fixture.Starfall.ConfigPath));
+
+        var unavailable = await Call(
+            client,
+            "activate_activation_trigger",
+            ("key", "manual-entry"),
+            ("project", "missing"));
+        Assert.Contains("linked_project_unavailable", Json(unavailable));
+        Assert.Equal(beforeDenied, File.ReadAllText(fixture.Starfall.ConfigPath));
+
+        var registry = fixture.Registry();
+        Assert.True(registry.GrantWriteTrust("prj_starfall").Success);
+        Assert.True(registry.GrantWriteTrust("prj_games").Success);
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "activate_activation_trigger",
+            ("key", "manual-entry"),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "reset_activation_trigger",
+            ("key", "manual-entry"),
+            ("project", "prj_starfall")), "prj_starfall");
+
+        var overridden = await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "override_activation_trigger",
+            ("key", "override-entry"),
+            ("reason", "Proceed while Starfall finishes its local gate."),
+            ("project", "starfall")), "prj_starfall");
+        var overriddenTrigger = overridden.GetProperty("switchboard")
+            .GetProperty("activationTriggers")
+            .EnumerateArray()
+            .Single(trigger => trigger.GetProperty("key").GetString() == "override-entry");
+        Assert.Equal("override", overriddenTrigger.GetProperty("activation").GetProperty("mode").GetString());
+        Assert.False(overriddenTrigger.GetProperty("requirementsSatisfied").GetBoolean());
+        var waived = Assert.Single(overriddenTrigger.GetProperty("activation")
+            .GetProperty("waivedRequirements").EnumerateArray());
+        Assert.Equal("GATE-0001", waived.GetProperty("source").GetString());
+
+        var redefineRequirements = new[] { new { kind = "task", source = "GATE-0001" } };
+        var preview = await Call(
+            client,
+            "preview_activation_trigger_redefinition",
+            ("key", "redefine-entry"),
+            ("requirements", redefineRequirements),
+            ("project", "starfall"));
+        Assert.NotEqual(true, preview.IsError);
+        string revision;
+        using (var previewDocument = JsonDocument.Parse(Json(preview)))
+            revision = previewDocument.RootElement.GetProperty("data").GetProperty("revision").GetString()!;
+        var redefined = await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "redefine_activation_trigger",
+            ("key", "redefine-entry"),
+            ("requirements", redefineRequirements),
+            ("expectedRevision", revision),
+            ("project", "prj_starfall")), "prj_starfall");
+        var redefinedTrigger = redefined.GetProperty("switchboard")
+            .GetProperty("activationTriggers")
+            .EnumerateArray()
+            .Single(trigger => trigger.GetProperty("key").GetString() == "redefine-entry");
+        Assert.False(redefinedTrigger.GetProperty("isActive").GetBoolean());
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "override_activation_trigger",
+            ("key", "redefine-entry"),
+            ("reason", "Exercise stale linked-project preview handling."),
+            ("project", "starfall")), "prj_starfall");
+        var stalePreview = await Call(
+            client,
+            "preview_activation_trigger_redefinition",
+            ("key", "redefine-entry"),
+            ("requirements", Array.Empty<object>()),
+            ("project", "starfall"));
+        string staleRevision;
+        using (var stalePreviewDocument = JsonDocument.Parse(Json(stalePreview)))
+            staleRevision = stalePreviewDocument.RootElement.GetProperty("data").GetProperty("revision").GetString()!;
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "activate_activation_trigger",
+            ("key", "manual-entry"),
+            ("project", "starfall")), "prj_starfall");
+        var beforeStaleApply = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var staleApply = await Call(
+            client,
+            "redefine_activation_trigger",
+            ("key", "redefine-entry"),
+            ("requirements", Array.Empty<object>()),
+            ("expectedRevision", staleRevision),
+            ("project", "starfall"));
+        Assert.Contains("activation_trigger_redefine_stale", Json(staleApply));
+        Assert.Equal(beforeStaleApply, File.ReadAllText(fixture.Starfall.ConfigPath));
+
+        var dryRunBefore = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var dryRun = await Call(
+            client,
+            "reconcile_activation_triggers",
+            ("dryRun", true),
+            ("project", "starfall"));
+        Assert.NotEqual(true, dryRun.IsError);
+        using (var dryRunDocument = JsonDocument.Parse(Json(dryRun)))
+        {
+            var data = dryRunDocument.RootElement.GetProperty("data");
+            Assert.False(data.GetProperty("changed").GetBoolean());
+            Assert.False(data.TryGetProperty("mutation", out _));
+            Assert.Contains("automatic-entry", data.GetProperty("impact")
+                .GetProperty("automaticActivation")
+                .GetProperty("activatedTriggers")
+                .EnumerateArray()
+                .Select(item => item.GetString()));
+        }
+        Assert.Equal(dryRunBefore, File.ReadAllText(fixture.Starfall.ConfigPath));
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "reconcile_activation_triggers",
+            ("project", "prj_starfall")), "prj_starfall");
+        fixture.Starfall.UpdateTaskState(automatic, "todo");
+        var latched = await Call(
+            client,
+            "reconcile_activation_triggers",
+            ("project", "starfall"));
+        Assert.NotEqual(true, latched.IsError);
+        using (var latchedDocument = JsonDocument.Parse(Json(latched)))
+        {
+            var data = latchedDocument.RootElement.GetProperty("data");
+            Assert.False(data.GetProperty("changed").GetBoolean());
+            Assert.False(data.TryGetProperty("mutation", out _));
+            var trigger = data.GetProperty("switchboard").GetProperty("activationTriggers")
+                .EnumerateArray()
+                .Single(item => item.GetProperty("key").GetString() == "automatic-entry");
+            Assert.True(trigger.GetProperty("isActive").GetBoolean());
+            Assert.False(trigger.GetProperty("requirementsSatisfied").GetBoolean());
+            Assert.Equal("automatic", trigger.GetProperty("activation").GetProperty("mode").GetString());
+        }
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "activate_activation_trigger",
+            ("key", "parent-entry"),
+            ("project", "parent")), "prj_games");
+        Assert.Equal(untouchedRoyaleConfig, File.ReadAllText(fixture.Royale.ConfigPath));
+    }
+
+    [Fact]
     public async Task CliAndStdioMcpApplyActivationEligibilityWithinTheOwningLinkedProject()
     {
         using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();

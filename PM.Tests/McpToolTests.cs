@@ -1157,7 +1157,8 @@ public class McpToolTests
         await AssertMutationRereads(attached.Data!);
         Assert.Equal("inactive", attached.Data!.Switchboard.Milestones.Single(item => item.Key == "beta").Lifecycle);
 
-        var overridden = tools.OverrideActivationTrigger("beta-entry", "Beta hardening can finish the capability.");
+        var overridden = await tools.OverrideActivationTrigger(
+            "beta-entry", "Beta hardening can finish the capability.");
 
         Assert.True(overridden.Success);
         await AssertMutationRereads(overridden.Data!);
@@ -1173,23 +1174,25 @@ public class McpToolTests
         Assert.True(satisfiedOverride.Success);
         Assert.Equal("override", Assert.Single(satisfiedOverride.Data!.ActivationTriggers).Activation!.Mode);
         Assert.True(Assert.Single(satisfiedOverride.Data.ActivationTriggers).RequirementsSatisfied);
-        Assert.Equal("activation_trigger_reset_blocked", tools.ResetActivationTrigger("beta-entry").ErrorCode);
+        Assert.Equal(
+            "activation_trigger_reset_blocked",
+            (await tools.ResetActivationTrigger("beta-entry")).ErrorCode);
 
         projectRoot.UpdateTaskState(gateTask, "todo");
-        var reset = tools.ResetActivationTrigger("beta-entry");
+        var reset = await tools.ResetActivationTrigger("beta-entry");
         Assert.True(reset.Success);
         await AssertMutationRereads(reset.Data!);
         Assert.Null(Assert.Single(reset.Data!.Switchboard.ActivationTriggers).Activation);
 
         projectRoot.UpdateTaskState(gateTask, "done");
-        var dryRun = tools.ReconcileActivationTriggers(dryRun: true);
+        var dryRun = await tools.ReconcileActivationTriggers(dryRun: true);
         Assert.True(dryRun.Success);
         Assert.False(dryRun.Data!.Changed);
         Assert.Null(dryRun.Data.Mutation);
         Assert.Equal(["beta-entry"], dryRun.Data.Impact!.AutomaticActivation!.ActivatedTriggers);
         Assert.Null(Assert.Single(dryRun.Data.Switchboard.ActivationTriggers).Activation);
 
-        var reconciled = tools.ReconcileActivationTriggers();
+        var reconciled = await tools.ReconcileActivationTriggers();
         Assert.True(reconciled.Success);
         await AssertMutationRereads(reconciled.Data!);
         Assert.Equal("automatic", Assert.Single(reconciled.Data!.Switchboard.ActivationTriggers).Activation!.Mode);
@@ -1263,15 +1266,15 @@ public class McpToolTests
             (await tools.SetActivationTriggerRequirements("gate", requirements)).ErrorCode,
             (await tools.AttachActivationTriggerToMilestone("gate", "beta")).ErrorCode,
             (await tools.DetachActivationTriggerFromMilestone("gate", "beta")).ErrorCode,
-            tools.ActivateActivationTrigger("gate").ErrorCode,
-            tools.OverrideActivationTrigger("gate", "reason").ErrorCode,
-            tools.ResetActivationTrigger("gate").ErrorCode,
-            tools.PreviewActivationTriggerRedefinition("gate", requirements).ErrorCode,
-            tools.RedefineActivationTrigger("gate", requirements, "revision").ErrorCode,
+            (await tools.ActivateActivationTrigger("gate")).ErrorCode,
+            (await tools.OverrideActivationTrigger("gate", "reason")).ErrorCode,
+            (await tools.ResetActivationTrigger("gate")).ErrorCode,
+            (await tools.PreviewActivationTriggerRedefinition("gate", requirements)).ErrorCode,
+            (await tools.RedefineActivationTrigger("gate", requirements, "revision")).ErrorCode,
             tools.PreviewMilestoneDelivery("beta").ErrorCode,
             tools.DeliverMilestone("beta", "revision").ErrorCode,
             tools.ReopenMilestone("beta").ErrorCode,
-            tools.ReconcileActivationTriggers().ErrorCode,
+            (await tools.ReconcileActivationTriggers()).ErrorCode,
         };
 
         Assert.All(failures, code => Assert.Equal("mcp_control_plane_denied", code));
@@ -1600,13 +1603,6 @@ public class McpToolTests
             activationResolver);
         var persistence = new ProjectConfigPersistence(projectRoot);
         var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
-        var activationTriggers = new ActivationTriggerService(
-            projectRoot,
-            activationResolver,
-            activationValidator,
-            automaticActivations,
-            TimeProvider.System,
-            persistence);
         var milestoneDeliveries = new MilestoneDeliveryService(
             projectRoot,
             activationResolver,
@@ -1626,7 +1622,6 @@ public class McpToolTests
             linkedProjectFamily,
             linkedProjectReads,
             linkedProjectMutations,
-            activationTriggers,
             milestoneDeliveries,
             membershipService,
             capabilityContext ?? new McpCapabilityContext(McpCapabilityProfile.Normal),

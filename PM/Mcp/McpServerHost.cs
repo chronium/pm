@@ -68,7 +68,6 @@ public static class McpServerHost
         builder.Services.AddSingleton<MilestoneActivationValidationService>();
         builder.Services.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
         builder.Services.AddSingleton<AutomaticActivationService>();
-        builder.Services.AddSingleton<ActivationTriggerService>();
         builder.Services.AddSingleton<MilestoneDeliveryService>();
         builder.Services.AddSingleton<BoardService>();
         builder.Services.AddSingleton<WikiService>();
