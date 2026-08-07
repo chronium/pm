@@ -86,12 +86,12 @@ describe('ActivationSwitchboard', () => {
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  async function render(readOnly = false) {
+  async function render(readOnly = false, value = response) {
     const fixture = TestBed.createComponent(ActivationSwitchboard);
     fixture.componentRef.setInput('readOnly', readOnly);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/v1/activation').flush(response);
+    http.expectOne('/api/v1/activation').flush(value);
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement, http };
@@ -214,6 +214,142 @@ describe('ActivationSwitchboard', () => {
     fixture.detectChanges();
     expect(element.textContent).toContain('Launch authorized');
     expect(changed).toBe(1);
+  });
+
+  it('renames a trigger and refreshes settings-level definitions', async () => {
+    const { fixture, element, http } = await render();
+    let changed = 0;
+    fixture.componentInstance.definitionChanged.subscribe(() => (changed += 1));
+    const manual = element.querySelector('details') as HTMLDetailsElement;
+    manual.open = true;
+    fixture.detectChanges();
+    [...manual.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Rename'))!
+      .click();
+    fixture.detectChanges();
+    const dialog = element.querySelector('.rename-dialog') as HTMLDialogElement;
+    const input = dialog.querySelector('input') as HTMLInputElement;
+    input.value = 'Owner approval';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Save title'))!
+      .click();
+    await Promise.resolve();
+    const request = http.expectOne('/api/v1/activation/triggers/manual-entry/title');
+    expect(request.request.body).toEqual({ title: 'Owner approval' });
+    request.flush({
+      changed: true,
+      switchboard: {
+        ...response,
+        revision: 'r2',
+        activationTriggers: [
+          { ...response.activationTriggers[0]!, title: 'Owner approval' },
+          response.activationTriggers[1]!,
+        ],
+      },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Owner approval');
+    expect(changed).toBe(1);
+  });
+
+  it('edits inactive requirements directly and guards removal while consumed', async () => {
+    const { fixture, element, http } = await render();
+    let changed = 0;
+    fixture.componentInstance.definitionChanged.subscribe(() => (changed += 1));
+    const manual = element.querySelector('details') as HTMLDetailsElement;
+    manual.open = true;
+    fixture.detectChanges();
+    const remove = [...manual.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Remove'),
+    )!;
+    expect(remove.disabled).toBe(true);
+    expect(manual.textContent).toContain('Detach from beta before removing.');
+
+    [...manual.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Edit requirements'))!
+      .click();
+    fixture.detectChanges();
+    const dialog = element.querySelector('.requirements-dialog') as HTMLDialogElement;
+    const kind = dialog.querySelector('select') as HTMLSelectElement;
+    kind.value = 'milestone';
+    kind.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const search = dialog.querySelector('input[type="search"]') as HTMLInputElement;
+    search.focus();
+    search.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    (dialog.querySelector('[role="option"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Save requirements'))!
+      .click();
+    await Promise.resolve();
+    const request = http.expectOne('/api/v1/activation/triggers/manual-entry/requirements');
+    expect(request.request.body).toEqual({
+      requirements: [{ kind: 'milestone', source: 'current' }],
+    });
+    request.flush({ changed: true, switchboard: { ...response, revision: 'r2' } });
+    await fixture.whenStable();
+    expect(changed).toBe(1);
+  });
+
+  it('warns before removing active provenance and keeps service guard errors in the dialog', async () => {
+    const unconsumed = {
+      ...response,
+      activationTriggers: [
+        response.activationTriggers[0]!,
+        { ...response.activationTriggers[1]!, consumingMilestones: [] },
+      ],
+    };
+    const { fixture, element, http } = await render(false, unconsumed);
+    let changed = 0;
+    fixture.componentInstance.definitionChanged.subscribe(() => (changed += 1));
+    const beta = element.querySelectorAll('details')[1] as HTMLDetailsElement;
+    beta.open = true;
+    fixture.detectChanges();
+    [...beta.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Remove'))!
+      .click();
+    fixture.detectChanges();
+    const dialog = [
+      ...element.querySelectorAll<HTMLDialogElement>('pm-confirm-dialog dialog'),
+    ].find((candidate) => candidate.textContent?.includes('Remove Beta entry?'))!;
+    expect(dialog.textContent).toContain('activation provenance');
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Remove trigger'))!
+      .click();
+    await Promise.resolve();
+    http.expectOne('/api/v1/activation/triggers/beta-entry').flush(
+      {
+        title: 'Trigger in use',
+        detail: 'Activation trigger beta-entry is required by milestone(s): beta.',
+        errorCode: 'activation_trigger_in_use',
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dialog.open || dialog.hasAttribute('open')).toBe(true);
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('required by milestone');
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Remove trigger'))!
+      .click();
+    await Promise.resolve();
+    http.expectOne('/api/v1/activation/triggers/beta-entry').flush({
+      changed: true,
+      switchboard: {
+        ...unconsumed,
+        revision: 'r2',
+        activationTriggers: [unconsumed.activationTriggers[0]!],
+      },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(changed).toBe(1);
+    expect(element.textContent).not.toContain('Beta entry');
   });
 
   it('keeps inspection but hides every lifecycle control when read-only', async () => {

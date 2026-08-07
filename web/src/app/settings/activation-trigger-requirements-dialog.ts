@@ -1,4 +1,13 @@
-import { Component, effect, ElementRef, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 
 import type {
   ActivationRedefinitionPreview,
@@ -11,12 +20,12 @@ import {
 } from './activation-requirement-editor';
 
 @Component({
-  selector: 'pm-activation-trigger-redefine-dialog',
+  selector: 'pm-activation-trigger-requirements-dialog',
   imports: [ActivationRequirementEditor],
-  templateUrl: './activation-trigger-redefine-dialog.html',
-  styleUrl: './activation-trigger-redefine-dialog.css',
+  templateUrl: './activation-trigger-requirements-dialog.html',
+  styleUrl: './activation-trigger-requirements-dialog.css',
 })
-export class ActivationTriggerRedefineDialog {
+export class ActivationTriggerRequirementsDialog {
   readonly open = input(false);
   readonly trigger = input<ActivationTrigger | null>(null);
   readonly milestones = input<readonly ActivationRequirementMilestone[]>([]);
@@ -26,6 +35,7 @@ export class ActivationTriggerRedefineDialog {
 
   readonly review = output<ActivationRequirementRequest[]>();
   readonly apply = output<ActivationRequirementRequest[]>();
+  readonly save = output<ActivationRequirementRequest[]>();
   readonly changed = output<void>();
   readonly closed = output<void>();
   readonly dirtyChange = output<boolean>();
@@ -33,7 +43,22 @@ export class ActivationTriggerRedefineDialog {
   protected readonly requirements = signal<ActivationRequirementRequest[]>([]);
   protected readonly dirty = signal(false);
   protected readonly discardPrompt = signal(false);
-  protected readonly headingId = `activation-redefine-heading-${crypto.randomUUID()}`;
+  protected readonly active = computed(() => !!this.trigger()?.isActive);
+  protected readonly requirementsChanged = computed(() => {
+    const baseline = (this.trigger()?.requirements ?? []).map(({ kind, source }) => ({
+      kind,
+      source,
+    }));
+    const current = this.requirements();
+    return (
+      baseline.length !== current.length ||
+      baseline.some((item, index) => {
+        const candidate = current[index];
+        return candidate?.kind !== item.kind || candidate.source !== item.source;
+      })
+    );
+  });
+  protected readonly headingId = `activation-requirements-heading-${crypto.randomUUID()}`;
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   constructor() {
@@ -68,9 +93,14 @@ export class ActivationTriggerRedefineDialog {
     if (!this.pending() && this.preview()) this.apply.emit(this.normalizedRequirements());
   }
 
+  protected requestSave(): void {
+    if (!this.pending() && !this.active() && this.requirementsChanged())
+      this.save.emit(this.normalizedRequirements());
+  }
+
   protected close(): void {
     if (this.pending()) return;
-    if (this.dirty()) {
+    if (this.dirty() && this.requirementsChanged()) {
       this.discardPrompt.set(true);
       return;
     }

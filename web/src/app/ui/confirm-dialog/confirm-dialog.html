@@ -3,10 +3,14 @@
   class="dialog pm-frosted-surface pm-frosted-dialog"
   [attr.aria-labelledby]="headingId"
   (cancel)="handleNativeCancel($event)"
+  (click)="backdrop($event)"
 >
   <div class="dialog-body">
     <h2 [id]="headingId">{{ heading() }}</h2>
     <p>{{ message() }}</p>
+    @if (error()) {
+      <p class="dialog-error" role="alert">{{ error() }}</p>
+    }
   </div>
   <div class="dialog-actions">
     <button

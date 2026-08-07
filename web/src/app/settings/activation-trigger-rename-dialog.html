@@ -1,0 +1,76 @@
+<dialog
+  #dialog
+  class="rename-dialog pm-frosted-surface pm-frosted-dialog"
+  [attr.aria-labelledby]="headingId"
+  (cancel)="cancel($event)"
+  (click)="backdrop($event)"
+>
+  <form [attr.aria-busy]="pending()" (submit)="submit($event)">
+    <header>
+      <div>
+        <span>Activation trigger</span>
+        <h2 [id]="headingId">Rename trigger</h2>
+        <code>{{ trigger()?.key }}</code>
+      </div>
+      <button
+        type="button"
+        class="dialog-close"
+        aria-label="Close dialog"
+        [disabled]="pending()"
+        (click)="close()"
+      >
+        ×
+      </button>
+    </header>
+    <div class="dialog-content">
+      <label>
+        <span>Title</span>
+        <input
+          autofocus
+          autocomplete="off"
+          [value]="title()"
+          [disabled]="pending()"
+          (input)="updateTitle($event)"
+        />
+      </label>
+      <small>The trigger key is permanent.</small>
+      @if (error()) {
+        <p class="dialog-error" role="alert">{{ error() }}</p>
+      }
+      @if (discardPrompt()) {
+        <div class="discard-notice" role="alert">
+          <span>Discard the unsaved title?</span>
+          <div>
+            <button
+              type="button"
+              class="pm-button pm-button--secondary"
+              (click)="discardPrompt.set(false)"
+            >
+              Keep editing
+            </button>
+            <button type="button" class="pm-button pm-button--danger" (click)="discard()">
+              Discard
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+    <footer>
+      <button
+        type="button"
+        class="pm-button pm-button--secondary"
+        [disabled]="pending()"
+        (click)="close()"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        class="pm-button pm-button--primary"
+        [disabled]="pending() || discardPrompt() || !title().trim() || !changed()"
+      >
+        {{ pending() ? 'Saving…' : 'Save title' }}
+      </button>
+    </footer>
+  </form>
+</dialog>

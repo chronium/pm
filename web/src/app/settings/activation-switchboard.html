@@ -206,15 +206,50 @@
                     Reset…
                   </button>
                 }
+                <button
+                  type="button"
+                  class="pm-button pm-button--secondary"
+                  [disabled]="store.pending()"
+                  (click)="openRename(trigger.key)"
+                >
+                  Rename…
+                </button>
                 @if (trigger.isActive) {
                   <button
                     type="button"
                     class="pm-button pm-button--secondary"
                     [disabled]="store.pending()"
-                    (click)="openRedefinition(trigger.key)"
+                    (click)="openRequirements(trigger.key)"
                   >
                     Redefine…
                   </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="pm-button pm-button--secondary"
+                    [disabled]="store.pending()"
+                    (click)="openRequirements(trigger.key)"
+                  >
+                    Edit requirements…
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="pm-button pm-button--danger"
+                  [disabled]="store.pending() || trigger.consumingMilestones.length > 0"
+                  [title]="
+                    trigger.consumingMilestones.length
+                      ? 'Detach this trigger from every milestone before removing it.'
+                      : 'Remove this activation trigger'
+                  "
+                  (click)="openRemoval(trigger)"
+                >
+                  Remove…
+                </button>
+                @if (trigger.consumingMilestones.length) {
+                  <small class="remove-guard">
+                    Detach from {{ trigger.consumingMilestones.join(', ') }} before removing.
+                  </small>
                 }
               </div>
             }
@@ -252,18 +287,39 @@
   (closed)="closeAction()"
   (dirtyChange)="dirtyChange.emit($event)"
 />
-<pm-activation-trigger-redefine-dialog
-  [open]="!!redefineKey()"
-  [trigger]="selectedRedefineTrigger()"
+<pm-activation-trigger-rename-dialog
+  [open]="!!renameKey()"
+  [trigger]="selectedRenameTrigger()"
+  [pending]="store.operation()?.kind === 'rename'"
+  [error]="renameKey() ? store.errorFor(renameKey()) : null"
+  (renamed)="renameTrigger($event)"
+  (closed)="closeRename()"
+  (dirtyChange)="dirtyChange.emit($event)"
+/>
+<pm-activation-trigger-requirements-dialog
+  [open]="!!requirementsKey()"
+  [trigger]="selectedRequirementsTrigger()"
   [milestones]="store.switchboard()?.milestones ?? []"
-  [preview]="redefinePreview()"
+  [preview]="requirementsPreview()"
   [pending]="store.pending()"
-  [error]="redefineKey() ? store.errorFor(redefineKey()) : null"
+  [error]="requirementsKey() ? store.errorFor(requirementsKey()) : null"
+  (save)="saveRequirements($event)"
   (review)="reviewRedefinition($event)"
   (apply)="applyRedefinition($event)"
-  (changed)="invalidateRedefinitionPreview()"
-  (closed)="closeRedefinition()"
+  (changed)="invalidateRequirementsPreview()"
+  (closed)="closeRequirements()"
   (dirtyChange)="dirtyChange.emit($event)"
+/>
+<pm-confirm-dialog
+  [open]="!!removeKey()"
+  [pending]="store.operation()?.kind === 'remove'"
+  [heading]="'Remove ' + (selectedRemoveTrigger()?.title ?? 'activation trigger') + '?'"
+  [message]="removalMessage()"
+  [error]="removeError()"
+  confirmLabel="Remove trigger"
+  (confirmed)="confirmRemoval()"
+  (cancelled)="closeRemoval()"
+  (openChange)="$event || closeRemoval()"
 />
 <pm-confirm-dialog
   [open]="!!reconcilePreview()"

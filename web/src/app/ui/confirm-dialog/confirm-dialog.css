@@ -26,6 +26,11 @@ p {
   color: var(--pm-text-muted);
 }
 
+.dialog-error {
+  margin-top: var(--pm-space-2);
+  color: var(--pm-danger);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

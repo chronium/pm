@@ -1,6 +1,6 @@
 <dialog
   #dialog
-  class="redefine-dialog pm-frosted-surface pm-frosted-dialog"
+  class="requirements-dialog pm-frosted-surface pm-frosted-dialog"
   [attr.aria-labelledby]="headingId"
   (cancel)="cancel($event)"
   (click)="backdrop($event)"
@@ -9,7 +9,9 @@
     <header>
       <div>
         <span>Activation trigger</span>
-        <h2 [id]="headingId">Redefine {{ trigger()?.title }}</h2>
+        <h2 [id]="headingId">
+          {{ active() ? 'Redefine' : 'Edit requirements for' }} {{ trigger()?.title }}
+        </h2>
         <code>{{ trigger()?.key }}</code>
       </div>
       <button
@@ -24,8 +26,13 @@
     </header>
     <div class="dialog-content">
       <p class="intro">
-        Replacing requirements clears the current activation and evaluates the new definition
-        deliberately.
+        @if (active()) {
+          Replacing requirements clears the current activation and evaluates the new definition
+          deliberately.
+        } @else {
+          Replace the factual conditions that can activate this trigger. An empty list makes it
+          manual-only.
+        }
       </p>
       <pm-activation-requirement-editor
         [requirements]="requirements()"
@@ -53,7 +60,7 @@
           </div>
         </div>
       }
-      @if (preview(); as impact) {
+      @if (active() && preview(); as impact) {
         <section
           class="impact"
           [class.impact--warning]="impact.requiresConfirmation"
@@ -95,13 +102,22 @@
       >
         Cancel
       </button>
-      @if (preview()) {
+      @if (!active()) {
+        <button
+          type="button"
+          class="pm-button pm-button--primary"
+          [disabled]="pending() || discardPrompt() || !requirementsChanged()"
+          (click)="requestSave()"
+        >
+          {{ pending() ? 'Saving…' : 'Save requirements' }}
+        </button>
+      } @else if (preview()) {
         <button
           type="button"
           class="pm-button"
           [class.pm-button--danger]="preview()!.requiresConfirmation"
           [class.pm-button--primary]="!preview()!.requiresConfirmation"
-          [disabled]="pending() || discardPrompt()"
+          [disabled]="pending() || discardPrompt() || !requirementsChanged()"
           (click)="requestApply()"
         >
           {{ pending() ? 'Applying…' : 'Apply redefinition' }}
@@ -110,7 +126,7 @@
         <button
           type="button"
           class="pm-button pm-button--primary"
-          [disabled]="pending() || discardPrompt()"
+          [disabled]="pending() || discardPrompt() || !requirementsChanged()"
           (click)="requestReview()"
         >
           {{ pending() ? 'Reviewing…' : 'Review impact' }}

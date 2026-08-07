@@ -15,6 +15,9 @@ import {
 
 export type ActivationOperationKind =
   | 'create'
+  | 'rename'
+  | 'set-requirements'
+  | 'remove'
   | 'activate'
   | 'override'
   | 'reset'
@@ -117,6 +120,33 @@ export class ActivationSwitchboardStore {
       'The activation trigger could not be created.',
       (revision) => this.api.create(request, revision),
       'Activation trigger created.',
+    );
+  }
+
+  rename(key: string, title: string): Promise<boolean> {
+    return this.mutate(
+      { kind: 'rename', key },
+      'The activation trigger could not be renamed.',
+      (revision) => this.api.rename(key, { title }, revision),
+      'Activation trigger renamed.',
+    );
+  }
+
+  setRequirements(key: string, requirements: ActivationRequirementRequest[]): Promise<boolean> {
+    return this.mutate(
+      { kind: 'set-requirements', key },
+      'The trigger requirements could not be updated.',
+      (revision) => this.api.setRequirements(key, requirements, revision),
+      'Trigger requirements updated.',
+    );
+  }
+
+  remove(key: string): Promise<boolean> {
+    return this.mutate(
+      { kind: 'remove', key },
+      'The activation trigger could not be removed.',
+      (revision) => this.api.remove(key, revision),
+      'Activation trigger removed.',
     );
   }
 

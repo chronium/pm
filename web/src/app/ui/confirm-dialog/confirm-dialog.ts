@@ -14,6 +14,7 @@ export class PmConfirmDialog {
   readonly message = input('This action cannot be undone.');
   readonly confirmLabel = input('Remove');
   readonly cancelLabel = input('Cancel');
+  readonly error = input<string | null>(null);
 
   readonly openChange = output<boolean>();
   readonly confirmed = output<void>();
@@ -58,5 +59,9 @@ export class PmConfirmDialog {
   protected handleNativeCancel(event: Event): void {
     event.preventDefault();
     this.cancel();
+  }
+
+  protected backdrop(event: MouseEvent): void {
+    if (event.target === this.dialog().nativeElement) this.cancel();
   }
 }

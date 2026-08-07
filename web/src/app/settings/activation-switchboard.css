@@ -203,6 +203,11 @@ dd {
   padding-top: var(--pm-space-2);
   border-top: 1px solid var(--pm-border-subtle);
 }
+.remove-guard {
+  align-self: center;
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+}
 .operation-error {
   grid-column: 1 / -1;
   margin: 0;

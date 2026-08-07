@@ -1,7 +1,7 @@
 :host {
   display: contents;
 }
-.redefine-dialog {
+.requirements-dialog {
   width: min(760px, calc(100vw - 32px));
   max-height: calc(100dvh - 48px);
   padding: 0;
@@ -12,7 +12,7 @@
   box-shadow: var(--pm-overlay-elevation);
   backdrop-filter: blur(var(--pm-frosted-dialog-blur));
 }
-.redefine-dialog::backdrop {
+.requirements-dialog::backdrop {
   background: var(--pm-overlay-backdrop);
   backdrop-filter: blur(2px);
 }

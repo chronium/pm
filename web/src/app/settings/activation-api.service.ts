@@ -9,6 +9,8 @@ export type ActivationRequirement = components['schemas']['ActivationRequirement
 export type ActivationRequirementRequest = components['schemas']['ActivationRequirementRequest'];
 export type CreateActivationTriggerRequest =
   components['schemas']['CreateActivationTriggerRequest'];
+export type RenameActivationTriggerRequest =
+  components['schemas']['RenameActivationTriggerRequest'];
 export type ActivationMutationResponse = components['schemas']['ActivationMutationResponse'];
 export type ActivationRedefinitionPreview =
   components['schemas']['ActivationTriggerRedefinitionPreviewResponse'];
@@ -36,6 +38,29 @@ export class ActivationApiService {
     return this.http.post<ActivationMutationResponse>(
       '/api/v1/activation/triggers',
       request,
+      this.options(revision),
+    );
+  }
+
+  rename(key: string, request: RenameActivationTriggerRequest, revision: string) {
+    return this.http.put<ActivationMutationResponse>(
+      `${this.triggerUrl(key)}/title`,
+      request,
+      this.options(revision),
+    );
+  }
+
+  setRequirements(key: string, requirements: ActivationRequirementRequest[], revision: string) {
+    return this.http.put<ActivationMutationResponse>(
+      `${this.triggerUrl(key)}/requirements`,
+      { requirements },
+      this.options(revision),
+    );
+  }
+
+  remove(key: string, revision: string) {
+    return this.http.delete<ActivationMutationResponse>(
+      this.triggerUrl(key),
       this.options(revision),
     );
   }

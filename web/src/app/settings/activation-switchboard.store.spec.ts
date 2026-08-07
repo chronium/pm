@@ -125,6 +125,38 @@ describe('ActivationSwitchboardStore', () => {
     http.expectNone('/api/v1/activation');
   });
 
+  it('renames, edits inactive requirements, and removes definitions atomically', async () => {
+    const { store, http } = await load();
+    const renamed = store.rename('manual-entry', 'Owner approval');
+    await Promise.resolve();
+    const rename = http.expectOne('/api/v1/activation/triggers/manual-entry/title');
+    expect(rename.request.body).toEqual({ title: 'Owner approval' });
+    rename.flush({ changed: true, switchboard: { ...switchboard, revision: 'r2' } });
+    expect(await renamed).toBe(true);
+
+    const requirements = [{ kind: 'task', source: 'PM-0001' }];
+    const edited = store.setRequirements('manual-entry', requirements);
+    await Promise.resolve();
+    const edit = http.expectOne('/api/v1/activation/triggers/manual-entry/requirements');
+    expect(edit.request.body).toEqual({ requirements });
+    expect(edit.request.headers.get('If-Match')).toBe('"r2"');
+    edit.flush({ changed: true, switchboard: { ...switchboard, revision: 'r3' } });
+    expect(await edited).toBe(true);
+
+    const removed = store.remove('manual-entry');
+    await Promise.resolve();
+    const remove = http.expectOne('/api/v1/activation/triggers/manual-entry');
+    expect(remove.request.method).toBe('DELETE');
+    expect(remove.request.headers.get('If-Match')).toBe('"r3"');
+    remove.flush({
+      changed: true,
+      switchboard: { ...switchboard, revision: 'r4', activationTriggers: [] },
+    });
+    expect(await removed).toBe(true);
+    expect(store.switchboard()?.activationTriggers).toEqual([]);
+    http.expectNone('/api/v1/activation');
+  });
+
   it('reviews a redefinition before applying the preview revision', async () => {
     const { store, http } = await load();
     const requirements = [{ kind: 'task', source: 'PM-0001' }];

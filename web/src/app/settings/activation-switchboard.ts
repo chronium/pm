@@ -16,7 +16,8 @@ import {
   ActivationTriggerActionDialog,
   type ActivationTriggerAction,
 } from './activation-trigger-action-dialog';
-import { ActivationTriggerRedefineDialog } from './activation-trigger-redefine-dialog';
+import { ActivationTriggerRenameDialog } from './activation-trigger-rename-dialog';
+import { ActivationTriggerRequirementsDialog } from './activation-trigger-requirements-dialog';
 import { ActivationSwitchboardStore } from './activation-switchboard.store';
 
 interface ActionSelection {
@@ -29,7 +30,8 @@ interface ActionSelection {
   imports: [
     ActivationTriggerActionDialog,
     ActivationTriggerCreateDialog,
-    ActivationTriggerRedefineDialog,
+    ActivationTriggerRenameDialog,
+    ActivationTriggerRequirementsDialog,
     DatePipe,
     PmConfirmDialog,
     PmErrorState,
@@ -47,19 +49,28 @@ export class ActivationSwitchboard {
 
   protected readonly createOpen = signal(false);
   protected readonly action = signal<ActionSelection | null>(null);
-  protected readonly redefineKey = signal<string | null>(null);
-  protected readonly redefinePreview = signal<ActivationRedefinitionPreview | null>(null);
+  protected readonly renameKey = signal<string | null>(null);
+  protected readonly requirementsKey = signal<string | null>(null);
+  protected readonly requirementsPreview = signal<ActivationRedefinitionPreview | null>(null);
+  protected readonly removeKey = signal<string | null>(null);
   protected readonly reconcilePreview = signal<{
     triggerKeys: string[];
     milestoneKeys: string[];
   } | null>(null);
   protected readonly selectedActionTrigger = computed(() => this.findTrigger(this.action()?.key));
-  protected readonly selectedRedefineTrigger = computed(() => this.findTrigger(this.redefineKey()));
+  protected readonly selectedRenameTrigger = computed(() => this.findTrigger(this.renameKey()));
+  protected readonly selectedRequirementsTrigger = computed(() =>
+    this.findTrigger(this.requirementsKey()),
+  );
+  protected readonly selectedRemoveTrigger = computed(() => this.findTrigger(this.removeKey()));
   protected readonly reconciliationRequired = computed(() =>
     this.store.switchboard()?.issues.some((issue) => this.issueRequiresReconciliation(issue.code)),
   );
   protected readonly createError = computed(() =>
     this.store.failure()?.operation.kind === 'create' ? this.store.failure()!.error.message : null,
+  );
+  protected readonly removeError = computed(() =>
+    this.store.failure()?.operation.kind === 'remove' ? this.store.failure()!.error.message : null,
   );
 
   constructor(protected readonly store: ActivationSwitchboardStore) {}
@@ -132,35 +143,100 @@ export class ActivationSwitchboard {
     if (success) this.closeAction();
   }
 
-  protected openRedefinition(key: string): void {
+  protected openRename(key: string): void {
     this.store.clearFailure();
-    this.redefinePreview.set(null);
-    this.redefineKey.set(key);
+    this.renameKey.set(key);
     this.store.suspendLiveUpdates();
   }
 
-  protected closeRedefinition(): void {
-    this.redefineKey.set(null);
-    this.redefinePreview.set(null);
+  protected closeRename(): void {
+    this.renameKey.set(null);
     this.dirtyChange.emit(false);
     this.store.resumeLiveUpdates();
   }
 
-  protected async reviewRedefinition(requirements: ActivationRequirementRequest[]): Promise<void> {
-    const key = this.redefineKey();
-    if (key) this.redefinePreview.set(await this.store.previewRedefinition(key, requirements));
+  protected async renameTrigger(title: string): Promise<void> {
+    const key = this.renameKey();
+    if (key && (await this.store.rename(key, title))) {
+      this.definitionChanged.emit();
+      this.closeRename();
+    }
   }
 
-  protected invalidateRedefinitionPreview(): void {
-    this.redefinePreview.set(null);
+  protected openRequirements(key: string): void {
+    this.store.clearFailure();
+    this.requirementsPreview.set(null);
+    this.requirementsKey.set(key);
+    this.store.suspendLiveUpdates();
+  }
+
+  protected closeRequirements(): void {
+    this.requirementsKey.set(null);
+    this.requirementsPreview.set(null);
+    this.dirtyChange.emit(false);
+    this.store.resumeLiveUpdates();
+  }
+
+  protected async saveRequirements(requirements: ActivationRequirementRequest[]): Promise<void> {
+    const key = this.requirementsKey();
+    if (!key) return;
+    if (this.findTrigger(key)?.isActive) {
+      this.requirementsPreview.set(await this.store.previewRedefinition(key, requirements));
+      return;
+    }
+    if (await this.store.setRequirements(key, requirements)) {
+      this.definitionChanged.emit();
+      this.closeRequirements();
+    }
+  }
+
+  protected async reviewRedefinition(requirements: ActivationRequirementRequest[]): Promise<void> {
+    const key = this.requirementsKey();
+    if (key) this.requirementsPreview.set(await this.store.previewRedefinition(key, requirements));
+  }
+
+  protected invalidateRequirementsPreview(): void {
+    this.requirementsPreview.set(null);
   }
 
   protected async applyRedefinition(requirements: ActivationRequirementRequest[]): Promise<void> {
-    const key = this.redefineKey();
-    const preview = this.redefinePreview();
-    if (key && preview && (await this.store.redefine(key, requirements, preview)))
-      this.closeRedefinition();
-    else if (this.store.failure()?.error.conflict) this.redefinePreview.set(null);
+    const key = this.requirementsKey();
+    const preview = this.requirementsPreview();
+    if (key && preview && (await this.store.redefine(key, requirements, preview))) {
+      this.definitionChanged.emit();
+      this.closeRequirements();
+    } else if (this.store.failure()?.error.conflict) this.requirementsPreview.set(null);
+  }
+
+  protected openRemoval(trigger: ActivationTrigger): void {
+    if (trigger.consumingMilestones.length) return;
+    this.store.clearFailure();
+    this.removeKey.set(trigger.key);
+    this.store.suspendLiveUpdates();
+  }
+
+  protected closeRemoval(): void {
+    this.removeKey.set(null);
+    this.store.resumeLiveUpdates();
+  }
+
+  protected async confirmRemoval(): Promise<void> {
+    const key = this.removeKey();
+    if (!key) return;
+    if (await this.store.remove(key)) {
+      this.definitionChanged.emit();
+      this.closeRemoval();
+    } else if (this.store.failure()?.error.conflict && !this.findTrigger(key)) {
+      this.closeRemoval();
+    }
+  }
+
+  protected removalMessage(): string {
+    const trigger = this.selectedRemoveTrigger();
+    if (!trigger) return '';
+    return trigger.isActive
+      ? `This active trigger and its activation provenance will be deleted permanently.`
+      : 'This trigger definition will be deleted permanently.';
   }
 
   protected async reviewReconciliation(): Promise<void> {

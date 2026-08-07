@@ -35,6 +35,7 @@ class PrimitiveHost {
       [pending]="pending"
       [heading]="heading"
       [message]="message"
+      [error]="error"
       (confirmed)="confirmations = confirmations + 1"
       (cancelled)="cancellations = cancellations + 1"
     />
@@ -45,6 +46,7 @@ class DialogHost {
   pending = false;
   heading = 'Remove task?';
   message = '<img src=x onerror=alert(1)>';
+  error = 'Removal is blocked.';
   confirmations = 0;
   cancellations = 0;
 }
@@ -89,6 +91,7 @@ describe('presentation primitives', () => {
       expect(dialog.querySelector('button[autofocus]')).toBeTruthy();
       expect(dialog.querySelector('.dialog-body img')).toBeNull();
       expect(dialog.querySelector('.dialog-body p')?.textContent).toContain('<img');
+      expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('blocked');
       dialog.querySelectorAll('button')[1].click();
       expect(fixture.componentInstance.confirmations).toBe(1);
     });

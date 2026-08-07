@@ -25,6 +25,11 @@ describe('ActivationApiService', () => {
         'r1',
       )
       .subscribe();
+    api.rename('beta/entry', { title: 'Beta readiness' }, 'r1').subscribe();
+    api
+      .setRequirements('beta/entry', [{ kind: 'milestone', source: 'foundation' }], 'r1')
+      .subscribe();
+    api.remove('beta/entry', 'r1').subscribe();
     api.activate('beta/entry', 'r1').subscribe();
     api.override('beta/entry', 'Accept the risk.', 'r1').subscribe();
     api.reset('beta/entry', 'r1').subscribe();
@@ -49,6 +54,13 @@ describe('ActivationApiService', () => {
           requirements: [{ kind: 'task', source: 'PM-1' }],
         },
       ],
+      ['PUT', '/api/v1/activation/triggers/beta%2Fentry/title', { title: 'Beta readiness' }],
+      [
+        'PUT',
+        '/api/v1/activation/triggers/beta%2Fentry/requirements',
+        { requirements: [{ kind: 'milestone', source: 'foundation' }] },
+      ],
+      ['DELETE', '/api/v1/activation/triggers/beta%2Fentry', null],
       ['POST', '/api/v1/activation/triggers/beta%2Fentry/activate', {}],
       ['POST', '/api/v1/activation/triggers/beta%2Fentry/override', { reason: 'Accept the risk.' }],
       ['DELETE', '/api/v1/activation/triggers/beta%2Fentry/activation', null],

@@ -1,5 +1,5 @@
 import { HttpBackend, HttpRequest, HttpResponse, provideHttpClient } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Component, Injectable } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { applicationConfig } from '@storybook/angular-vite';
@@ -9,6 +9,9 @@ import { of } from 'rxjs';
 import { PollingCoordinator } from '../core/polling-coordinator';
 import type { ActivationSwitchboardResponse } from './activation-api.service';
 import { ActivationSwitchboard } from './activation-switchboard';
+
+@Component({ template: '' })
+class ActivationStoryRoute {}
 
 const switchboard: ActivationSwitchboardResponse = {
   revision: 'story-r1',
@@ -143,7 +146,7 @@ const meta = {
       providers: [
         PollingCoordinator,
         provideHttpClient(),
-        provideRouter([]),
+        provideRouter([{ path: '**', component: ActivationStoryRoute }]),
         { provide: HttpBackend, useClass: ActivationStoryBackend },
       ],
     }),
@@ -186,6 +189,23 @@ export const CreateManualOnly: Story = {
     await expect(
       within(dialog).getByRole('button', { name: 'Create manual-only trigger' }),
     ).toBeEnabled();
+  },
+};
+
+export const DefinitionActions: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const title = await canvas.findByText('Beta entry criteria');
+    await userEvent.click(title.closest('summary')!);
+    const row = within(title.closest('details')!);
+    await expect(row.getByRole('button', { name: 'Rename…' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Edit requirements…' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Remove…' })).toBeDisabled();
+    await expect(row.getByText(/Detach from public-beta before removing/)).toBeVisible();
+    await userEvent.click(row.getByRole('button', { name: 'Rename…' }));
+    const dialog = canvas.getByRole('dialog', { name: 'Rename trigger' });
+    await expect(within(dialog).getByText('beta-entry')).toBeInTheDocument();
+    await expect(within(dialog).getByRole('button', { name: 'Save title' })).toBeDisabled();
   },
 };
 

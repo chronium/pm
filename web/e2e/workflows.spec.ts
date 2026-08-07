@@ -474,16 +474,24 @@ test('operates activation trigger lifecycles from the settings switchboard', asy
   await page.getByRole('button', { name: 'Activation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Activation' })).toBeVisible();
 
-  const manual = page.locator('details').filter({ hasText: 'Manual entry' });
+  const manual = page
+    .locator('details')
+    .filter({ has: page.getByText('manual-entry', { exact: true }) });
   await manual.locator('summary').click();
+  await manual.getByRole('button', { name: 'Rename…' }).click();
+  const rename = page.getByRole('dialog', { name: 'Rename trigger' });
+  await rename.getByLabel('Title').fill('Owner approval');
+  await rename.getByRole('button', { name: 'Save title' }).click();
+  await expect(manual.getByText('Owner approval', { exact: true })).toBeVisible();
+
   await manual.getByRole('button', { name: 'Activate', exact: true }).click();
-  const activate = page.getByRole('dialog', { name: 'Activate Manual entry?' });
+  const activate = page.getByRole('dialog', { name: 'Activate Owner approval?' });
   await expect(activate).toBeVisible();
   await activate.getByRole('button', { name: 'Activate trigger' }).click();
   await expect(manual.getByText('Active manually')).toBeVisible();
 
   await manual.getByRole('button', { name: 'Redefine…' }).click();
-  const redefine = page.getByRole('dialog', { name: 'Redefine Manual entry' });
+  const redefine = page.getByRole('dialog', { name: 'Redefine Owner approval' });
   await redefine.getByRole('combobox', { name: 'Find a task requirement' }).fill('E2E-0001');
   await redefine.getByRole('option').filter({ hasText: 'E2E-0001' }).click();
   await redefine.getByRole('button', { name: 'Review impact' }).click();
@@ -493,12 +501,25 @@ test('operates activation trigger lifecycles from the settings switchboard', asy
 
   const beta = page.locator('details').filter({ hasText: 'Beta entry criteria' });
   await beta.locator('summary').click();
+  await beta.getByRole('button', { name: 'Edit requirements…' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit requirements for Beta entry criteria' });
+  await edit.getByLabel('Requirement type').selectOption('milestone');
+  await edit.getByRole('combobox', { name: 'Find a milestone requirement' }).fill('Later');
+  await edit.getByRole('option').filter({ hasText: 'Later' }).click();
+  await edit.getByRole('button', { name: 'Save requirements' }).click();
+  await expect(beta.getByText('Pending — 0 / 3')).toBeVisible();
+
   await beta.getByRole('button', { name: 'Override…' }).click();
   const override = page.getByRole('dialog', { name: 'Override Beta entry criteria?' });
   await override.getByLabel('Override reason').fill('Proceed with the reviewed beta risk.');
   await override.getByRole('button', { name: 'Apply override' }).click();
-  await expect(beta.getByText('Active by override — 0 / 2')).toBeVisible();
+  await expect(beta.getByText('Active by override — 0 / 3')).toBeVisible();
   await expect(beta.getByText('Proceed with the reviewed beta risk.')).toBeVisible();
+  await beta.getByRole('button', { name: 'Remove…' }).click();
+  const remove = page.getByRole('dialog', { name: 'Remove Beta entry criteria?' });
+  await expect(remove).toContainText('activation provenance');
+  await remove.getByRole('button', { name: 'Remove trigger' }).click();
+  await expect(beta).toHaveCount(0);
 });
 
 test('creates activation trigger definitions with searched requirements', async ({ page }) => {
