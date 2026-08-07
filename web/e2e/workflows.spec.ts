@@ -484,8 +484,8 @@ test('operates activation trigger lifecycles from the settings switchboard', asy
 
   await manual.getByRole('button', { name: 'Redefine…' }).click();
   const redefine = page.getByRole('dialog', { name: 'Redefine Manual entry' });
-  await redefine.getByRole('button', { name: 'Add requirement' }).click();
-  await redefine.getByPlaceholder('Task ID or milestone key').fill('E2E-0001');
+  await redefine.getByRole('combobox', { name: 'Find a task requirement' }).fill('E2E-0001');
+  await redefine.getByRole('option').filter({ hasText: 'E2E-0001' }).click();
   await redefine.getByRole('button', { name: 'Review impact' }).click();
   await expect(redefine.getByRole('heading', { name: 'Reviewed impact' })).toBeVisible();
   await redefine.getByRole('button', { name: 'Apply redefinition' }).click();
@@ -499,6 +499,31 @@ test('operates activation trigger lifecycles from the settings switchboard', asy
   await override.getByRole('button', { name: 'Apply override' }).click();
   await expect(beta.getByText('Active by override — 0 / 2')).toBeVisible();
   await expect(beta.getByText('Proceed with the reviewed beta risk.')).toBeVisible();
+});
+
+test('creates activation trigger definitions with searched requirements', async ({ page }) => {
+  await page.goto('/tasks/settings');
+  await page.getByRole('button', { name: 'Activation', exact: true }).click();
+  await page.getByRole('button', { name: 'Add trigger' }).click();
+  const create = page.getByRole('dialog', { name: 'Create trigger' });
+  const identity = create.locator('.identity-fields input');
+  await identity.nth(0).fill('dogfood-entry');
+  await identity.nth(1).fill('Dogfood entry');
+
+  await create.getByRole('combobox', { name: 'Find a task requirement' }).fill('E2E-0003');
+  await create.getByRole('option').filter({ hasText: 'E2E-0003' }).click();
+  await create.getByLabel('Requirement type').selectOption('milestone');
+  await create.getByRole('combobox', { name: 'Find a milestone requirement' }).fill('Later');
+  await create.getByRole('option').filter({ hasText: 'Later' }).click();
+  await create.getByRole('button', { name: 'Create trigger', exact: true }).click();
+
+  await expect(page.locator('details').filter({ hasText: 'Dogfood entry' })).toBeVisible();
+  await page.getByRole('button', { name: 'Milestones', exact: true }).click();
+  const current = page.locator('.milestone-row').filter({ hasText: 'Current Release' });
+  await current.getByRole('button', { name: 'Edit deliverable' }).click();
+  const deliverable = page.getByRole('dialog', { name: 'Milestone deliverable' });
+  await expect(deliverable.getByText('Dogfood entry', { exact: true })).toBeVisible();
+  await expect(deliverable.getByText('dogfood-entry', { exact: true })).toBeVisible();
 });
 
 test('pairs a runner, starts one immutable task run, and supervises its durable output', async ({

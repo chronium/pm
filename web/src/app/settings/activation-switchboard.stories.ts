@@ -19,7 +19,20 @@ const switchboard: ActivationSwitchboardResponse = {
       message: 'architecture-ready has satisfied requirements but no activation record.',
     },
   ],
-  milestones: [],
+  milestones: [
+    {
+      key: 'public-beta',
+      title: 'Public beta',
+      description: 'Ship the complete local workflow to beta users.',
+      priority: 'high',
+      lifecycle: 'inactive',
+      assignedTaskCount: 8,
+      doneTaskCount: 3,
+      requiredActivationTriggers: ['beta-entry'],
+      unmetActivationTriggers: ['beta-entry'],
+      delivery: null,
+    },
+  ],
   activationTriggers: [
     {
       key: 'beta-entry',
@@ -158,6 +171,21 @@ export const ReadOnly: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText(/Controls are hidden/)).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Override…' })).not.toBeInTheDocument();
+  },
+};
+
+export const CreateManualOnly: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Add trigger' }));
+    const dialog = canvas.getByRole('dialog', { name: 'Create trigger' });
+    await expect(within(dialog).getByText(/Manual-only trigger/)).toBeInTheDocument();
+    const inputs = within(dialog).getAllByRole('textbox');
+    await userEvent.type(inputs[0]!, 'launch-authorized');
+    await userEvent.type(inputs[1]!, 'Launch authorized');
+    await expect(
+      within(dialog).getByRole('button', { name: 'Create manual-only trigger' }),
+    ).toBeEnabled();
   },
 };
 

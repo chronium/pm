@@ -7,6 +7,8 @@ export type ActivationSwitchboardResponse = components['schemas']['ActivationSwi
 export type ActivationTrigger = components['schemas']['ActivationTriggerResponse'];
 export type ActivationRequirement = components['schemas']['ActivationRequirementResponse'];
 export type ActivationRequirementRequest = components['schemas']['ActivationRequirementRequest'];
+export type CreateActivationTriggerRequest =
+  components['schemas']['CreateActivationTriggerRequest'];
 export type ActivationMutationResponse = components['schemas']['ActivationMutationResponse'];
 export type ActivationRedefinitionPreview =
   components['schemas']['ActivationTriggerRedefinitionPreviewResponse'];
@@ -28,6 +30,14 @@ export class ActivationApiService {
     return this.http.get<ActivationSwitchboardResponse>('/api/v1/activation', {
       observe: 'response',
     });
+  }
+
+  create(request: CreateActivationTriggerRequest, revision: string) {
+    return this.http.post<ActivationMutationResponse>(
+      '/api/v1/activation/triggers',
+      request,
+      this.options(revision),
+    );
   }
 
   activate(key: string, revision: string) {

@@ -7,6 +7,19 @@
   width: min(42vw, 560px, calc(100vw - 548px));
   transform: translate(-50%, -50%);
 }
+:host(.embedded) {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 100%;
+  transform: none;
+}
+:host(.embedded) .search {
+  width: 100%;
+}
+:host(.embedded) .mobile-search-button {
+  display: none;
+}
 
 .search {
   position: relative;
@@ -184,5 +197,20 @@ input:focus {
     top: calc(100% + 1px);
     right: var(--pm-space-2);
     left: var(--pm-space-2);
+  }
+  :host(.embedded) {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    margin-left: 0;
+    transform: none;
+  }
+  :host(.embedded) .search {
+    display: block;
+    width: 100%;
+  }
+  :host(.embedded) .mobile-search-button {
+    display: none;
   }
 }

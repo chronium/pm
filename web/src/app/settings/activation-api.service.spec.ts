@@ -15,6 +15,16 @@ describe('ActivationApiService', () => {
   it('uses encoded routes and exact strong revisions for every lifecycle mutation', () => {
     const api = TestBed.inject(ActivationApiService);
     api.read().subscribe();
+    api
+      .create(
+        {
+          key: 'beta/entry',
+          title: 'Beta entry',
+          requirements: [{ kind: 'task', source: 'PM-1' }],
+        },
+        'r1',
+      )
+      .subscribe();
     api.activate('beta/entry', 'r1').subscribe();
     api.override('beta/entry', 'Accept the risk.', 'r1').subscribe();
     api.reset('beta/entry', 'r1').subscribe();
@@ -30,6 +40,15 @@ describe('ActivationApiService', () => {
     read.flush({ activationTriggers: [], milestones: [], issues: [], revision: 'r1' });
 
     const expected = [
+      [
+        'POST',
+        '/api/v1/activation/triggers',
+        {
+          key: 'beta/entry',
+          title: 'Beta entry',
+          requirements: [{ kind: 'task', source: 'PM-1' }],
+        },
+      ],
       ['POST', '/api/v1/activation/triggers/beta%2Fentry/activate', {}],
       ['POST', '/api/v1/activation/triggers/beta%2Fentry/override', { reason: 'Accept the risk.' }],
       ['DELETE', '/api/v1/activation/triggers/beta%2Fentry/activation', null],

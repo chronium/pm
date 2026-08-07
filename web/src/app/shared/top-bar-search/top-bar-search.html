@@ -1,6 +1,7 @@
 <button
   class="mobile-search-button"
   type="button"
+  [disabled]="disabled()"
   [attr.aria-label]="ariaLabel()"
   (click)="expandMobile()"
 >
@@ -22,6 +23,7 @@
       [value]="query()"
       [placeholder]="placeholder()"
       autocomplete="off"
+      [disabled]="disabled()"
       (focus)="onFocus()"
       (blur)="onBlur()"
       (input)="onInput($event)"
@@ -32,6 +34,7 @@
     <button
       class="close-search"
       type="button"
+      [disabled]="disabled()"
       [attr.aria-label]="'Close ' + ariaLabel().toLowerCase()"
       (click)="close()"
     >

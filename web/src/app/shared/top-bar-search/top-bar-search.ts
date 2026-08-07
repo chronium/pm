@@ -25,6 +25,7 @@ export interface TopBarSearchOption {
   selector: 'pm-top-bar-search',
   imports: [NgIcon],
   providers: [provideIcons({ cssClose, cssSearch })],
+  host: { '[class.embedded]': 'embedded()' },
   templateUrl: './top-bar-search.html',
   styleUrl: './top-bar-search.css',
 })
@@ -44,6 +45,8 @@ export class TopBarSearch {
   readonly placeholder = input.required<string>();
   readonly emptyMessage = input.required<string>();
   readonly openForQuery = input(true);
+  readonly embedded = input(false);
+  readonly disabled = input(false);
   readonly queryEdited = output<string>();
   readonly optionSelected = output<TopBarSearchOption>();
 
@@ -54,6 +57,7 @@ export class TopBarSearch {
   protected readonly popupOpen = computed(
     () =>
       this.focused() &&
+      !this.disabled() &&
       (this.options().length > 0 ||
         this.loading() ||
         !!this.error() ||
@@ -68,6 +72,7 @@ export class TopBarSearch {
   }
 
   expandMobile(): void {
+    if (this.disabled()) return;
     this.mobileExpanded.set(true);
     setTimeout(() => this.inputElement()?.nativeElement.focus());
   }
@@ -84,11 +89,13 @@ export class TopBarSearch {
 
   focusAt(caret: number): void {
     const element = this.inputElement()?.nativeElement;
+    if (element && !this.disabled()) this.focused.set(true);
     element?.focus();
     element?.setSelectionRange(caret, caret);
   }
 
   protected onFocus(): void {
+    if (this.disabled()) return;
     this.focused.set(true);
   }
 

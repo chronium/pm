@@ -300,6 +300,7 @@
             <pm-activation-switchboard
               [readOnly]="projectContext.readOnly()"
               (dirtyChange)="activationEditorDirty.set($event)"
+              (definitionChanged)="activationDefinitionsChanged()"
             />
           </div>
         }

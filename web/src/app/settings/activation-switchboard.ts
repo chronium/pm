@@ -9,7 +9,9 @@ import type {
   ActivationRedefinitionPreview,
   ActivationRequirementRequest,
   ActivationTrigger,
+  CreateActivationTriggerRequest,
 } from './activation-api.service';
+import { ActivationTriggerCreateDialog } from './activation-trigger-create-dialog';
 import {
   ActivationTriggerActionDialog,
   type ActivationTriggerAction,
@@ -26,6 +28,7 @@ interface ActionSelection {
   selector: 'pm-activation-switchboard',
   imports: [
     ActivationTriggerActionDialog,
+    ActivationTriggerCreateDialog,
     ActivationTriggerRedefineDialog,
     DatePipe,
     PmConfirmDialog,
@@ -40,7 +43,9 @@ interface ActionSelection {
 export class ActivationSwitchboard {
   readonly readOnly = input(false);
   readonly dirtyChange = output<boolean>();
+  readonly definitionChanged = output<void>();
 
+  protected readonly createOpen = signal(false);
   protected readonly action = signal<ActionSelection | null>(null);
   protected readonly redefineKey = signal<string | null>(null);
   protected readonly redefinePreview = signal<ActivationRedefinitionPreview | null>(null);
@@ -53,8 +58,30 @@ export class ActivationSwitchboard {
   protected readonly reconciliationRequired = computed(() =>
     this.store.switchboard()?.issues.some((issue) => this.issueRequiresReconciliation(issue.code)),
   );
+  protected readonly createError = computed(() =>
+    this.store.failure()?.operation.kind === 'create' ? this.store.failure()!.error.message : null,
+  );
 
   constructor(protected readonly store: ActivationSwitchboardStore) {}
+
+  protected openCreate(): void {
+    this.store.clearFailure();
+    this.createOpen.set(true);
+    this.store.suspendLiveUpdates();
+  }
+
+  protected closeCreate(): void {
+    this.createOpen.set(false);
+    this.dirtyChange.emit(false);
+    this.store.resumeLiveUpdates();
+  }
+
+  protected async createTrigger(request: CreateActivationTriggerRequest): Promise<void> {
+    if (await this.store.create(request)) {
+      this.definitionChanged.emit();
+      this.closeCreate();
+    }
+  }
 
   protected status(trigger: ActivationTrigger): string {
     if (!trigger.isActive) {

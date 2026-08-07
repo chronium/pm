@@ -10,9 +10,11 @@ import {
   type ActivationRedefinitionPreview,
   type ActivationRequirementRequest,
   type ActivationSwitchboardResponse,
+  type CreateActivationTriggerRequest,
 } from './activation-api.service';
 
 export type ActivationOperationKind =
+  | 'create'
   | 'activate'
   | 'override'
   | 'reset'
@@ -107,6 +109,15 @@ export class ActivationSwitchboardStore {
 
   errorFor(key: string | null): string | null {
     return this.failure()?.operation.key === key ? this.failure()!.error.message : null;
+  }
+
+  create(request: CreateActivationTriggerRequest): Promise<boolean> {
+    return this.mutate(
+      { kind: 'create', key: request.key },
+      'The activation trigger could not be created.',
+      (revision) => this.api.create(request, revision),
+      'Activation trigger created.',
+    );
   }
 
   activate(key: string): Promise<boolean> {

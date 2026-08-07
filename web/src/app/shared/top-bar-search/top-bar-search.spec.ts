@@ -15,6 +15,8 @@ import { TopBarSearch, type TopBarSearchOption } from './top-bar-search';
       [options]="options()"
       [loading]="loading()"
       [error]="error()"
+      [embedded]="embedded()"
+      [disabled]="disabled()"
       (optionSelected)="selected.set($event.id)"
     />
   `,
@@ -24,6 +26,8 @@ class Host {
   readonly options = signal<TopBarSearchOption[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly embedded = signal(false);
+  readonly disabled = signal(false);
   readonly selected = signal('');
 }
 
@@ -94,5 +98,17 @@ describe('TopBarSearch', () => {
     await new Promise((resolve) => setTimeout(resolve));
     fixture.detectChanges();
     expect(input.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('supports embedded layout and a disabled interaction state', () => {
+    host.embedded.set(true);
+    host.disabled.set(true);
+    fixture.detectChanges();
+    const search = element.querySelector('pm-top-bar-search')!;
+    expect(search.classList).toContain('embedded');
+    expect((element.querySelector('input') as HTMLInputElement).disabled).toBe(true);
+    expect((element.querySelector('.mobile-search-button') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 });

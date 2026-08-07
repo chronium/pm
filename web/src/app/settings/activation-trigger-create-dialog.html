@@ -1,0 +1,102 @@
+<dialog
+  #dialog
+  class="create-dialog pm-frosted-surface pm-frosted-dialog"
+  [attr.aria-labelledby]="headingId"
+  (cancel)="cancel($event)"
+  (click)="backdrop($event)"
+>
+  <form class="dialog-frame" [attr.aria-busy]="pending()" (submit)="submit($event)">
+    <header>
+      <div>
+        <span>Activation trigger</span>
+        <h2 [id]="headingId">Create trigger</h2>
+      </div>
+      <button
+        type="button"
+        class="dialog-close"
+        aria-label="Close dialog"
+        [disabled]="pending()"
+        (click)="close()"
+      >
+        ×
+      </button>
+    </header>
+    <div class="dialog-content">
+      <p class="intro">
+        Create a reusable gate that milestones can require before work becomes eligible.
+      </p>
+      <div class="identity-fields">
+        <label>
+          <span>Key</span>
+          <input
+            autofocus
+            autocomplete="off"
+            [value]="key()"
+            [disabled]="pending()"
+            aria-describedby="activation-key-help"
+            (input)="updateKey($event)"
+          />
+          <small id="activation-key-help">The key is permanent after creation.</small>
+        </label>
+        <label>
+          <span>Title</span>
+          <input
+            autocomplete="off"
+            [value]="title()"
+            [disabled]="pending()"
+            (input)="updateTitle($event)"
+          />
+        </label>
+      </div>
+      <pm-activation-requirement-editor
+        [requirements]="requirements()"
+        [milestones]="milestones()"
+        [disabled]="pending()"
+        (requirementsChange)="updateRequirements($event)"
+      />
+      @if (error()) {
+        <p class="dialog-error" role="alert">{{ error() }}</p>
+      }
+      @if (discardPrompt()) {
+        <div class="discard-notice" role="alert">
+          <span>Discard this unsaved activation trigger?</span>
+          <div>
+            <button
+              type="button"
+              class="pm-button pm-button--secondary"
+              (click)="discardPrompt.set(false)"
+            >
+              Keep editing
+            </button>
+            <button type="button" class="pm-button pm-button--danger" (click)="discard()">
+              Discard
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+    <footer>
+      <button
+        type="button"
+        class="pm-button pm-button--secondary"
+        [disabled]="pending()"
+        (click)="close()"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        class="pm-button pm-button--primary"
+        [disabled]="pending() || discardPrompt() || !key().trim() || !title().trim()"
+      >
+        {{
+          pending()
+            ? 'Creating…'
+            : requirements().length
+              ? 'Create trigger'
+              : 'Create manual-only trigger'
+        }}
+      </button>
+    </footer>
+  </form>
+</dialog>

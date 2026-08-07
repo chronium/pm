@@ -15,7 +15,32 @@ const response: ActivationSwitchboardResponse = {
       message: 'automatic-entry has satisfied requirements but no activation record.',
     },
   ],
-  milestones: [],
+  milestones: [
+    {
+      key: 'current',
+      title: 'Current release',
+      description: '',
+      priority: 'high',
+      lifecycle: 'active',
+      assignedTaskCount: 1,
+      doneTaskCount: 0,
+      requiredActivationTriggers: [],
+      unmetActivationTriggers: [],
+      delivery: null,
+    },
+    {
+      key: 'later',
+      title: 'Later',
+      description: '',
+      priority: 'none',
+      lifecycle: 'active',
+      assignedTaskCount: 1,
+      doneTaskCount: 0,
+      requiredActivationTriggers: [],
+      unmetActivationTriggers: [],
+      delivery: null,
+    },
+  ],
   activationTriggers: [
     {
       key: 'manual-entry',
@@ -124,6 +149,71 @@ describe('ActivationSwitchboard', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(element.textContent).toContain('Active manually');
+  });
+
+  it('creates a manual-only definition and reports the settings-level change', async () => {
+    const { fixture, element, http } = await render();
+    let changed = 0;
+    fixture.componentInstance.definitionChanged.subscribe(() => (changed += 1));
+    [...element.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Add trigger'))!
+      .click();
+    fixture.detectChanges();
+    const dialog = element.querySelector('.create-dialog') as HTMLDialogElement;
+    expect(dialog.open || dialog.hasAttribute('open')).toBe(true);
+    const kind = dialog.querySelector('select') as HTMLSelectElement;
+    kind.value = 'milestone';
+    kind.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const milestoneSearch = dialog.querySelector('input[type="search"]') as HTMLInputElement;
+    milestoneSearch.focus();
+    milestoneSearch.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(dialog.textContent).toContain('Later');
+    kind.value = 'task';
+    kind.dispatchEvent(new Event('change'));
+    const inputs = dialog.querySelectorAll<HTMLInputElement>('.identity-fields input');
+    inputs[0]!.value = 'launch-authorized';
+    inputs[0]!.dispatchEvent(new Event('input'));
+    inputs[1]!.value = 'Launch authorized';
+    inputs[1]!.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Create manual-only trigger'))!
+      .click();
+    await Promise.resolve();
+    const request = http.expectOne('/api/v1/activation/triggers');
+    expect(request.request.body).toEqual({
+      key: 'launch-authorized',
+      title: 'Launch authorized',
+      requirements: [],
+    });
+    request.flush({
+      changed: true,
+      switchboard: {
+        ...response,
+        revision: 'r2',
+        activationTriggers: [
+          ...response.activationTriggers,
+          {
+            key: 'launch-authorized',
+            title: 'Launch authorized',
+            isActive: false,
+            activation: null,
+            satisfiedRequirementCount: 0,
+            requirementCount: 0,
+            requirementsSatisfied: false,
+            isLatchedDespiteUnmetRequirements: false,
+            requirements: [],
+            consumingMilestones: [],
+          },
+        ],
+      },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Launch authorized');
+    expect(changed).toBe(1);
   });
 
   it('keeps inspection but hides every lifecycle control when read-only', async () => {

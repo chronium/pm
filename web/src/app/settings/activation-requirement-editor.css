@@ -1,0 +1,106 @@
+:host {
+  display: grid;
+  gap: var(--pm-space-4);
+}
+.selected-requirements {
+  display: grid;
+  gap: var(--pm-space-2);
+}
+h3,
+ul {
+  margin: 0;
+}
+h3,
+label > span,
+.source-picker > span {
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  font-weight: 650;
+}
+ul {
+  display: grid;
+  gap: var(--pm-space-1);
+  padding: 0;
+  list-style: none;
+}
+li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+  min-height: 38px;
+  padding: var(--pm-space-1) var(--pm-space-2);
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+.requirement-identity {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: var(--pm-space-2);
+}
+.requirement-identity span,
+.requirement-identity small,
+.manual-only span {
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+.requirement-identity code {
+  overflow-wrap: anywhere;
+}
+.remove-requirement {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pm-radius-sm);
+  background: transparent;
+  color: var(--pm-text-muted);
+  font-size: 1.35rem;
+  cursor: pointer;
+}
+.remove-requirement:hover {
+  background: var(--pm-surface-hover);
+  color: var(--pm-text-primary);
+}
+.manual-only {
+  display: grid;
+  justify-content: start;
+  gap: 2px;
+  border-left: 3px solid var(--pm-warning);
+  background: var(--pm-warning-soft);
+}
+.manual-only strong {
+  font-size: var(--pm-font-size-sm);
+}
+.requirement-picker {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: end;
+  gap: var(--pm-space-3);
+}
+label,
+.source-picker {
+  display: grid;
+  gap: var(--pm-space-1);
+}
+select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding-inline: var(--pm-space-2);
+  border: 1px solid var(--pm-border-strong);
+  border-radius: var(--pm-radius-sm);
+  background: var(--pm-surface-raised);
+  color: var(--pm-text-primary);
+  font: inherit;
+}
+@media (max-width: 560px) {
+  .requirement-picker {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .requirement-identity {
+    flex-wrap: wrap;
+  }
+}

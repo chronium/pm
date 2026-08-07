@@ -160,6 +160,10 @@ export class SettingsPage implements DirtyRoute {
     this.activeSection.set(section);
   }
 
+  protected activationDefinitionsChanged(): void {
+    this.store.reloadLatest();
+  }
+
   protected projectAccent(accent: string): AccentPreference {
     return normalizeAccentPreference(accent);
   }

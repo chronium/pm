@@ -78,6 +78,53 @@ describe('ActivationSwitchboardStore', () => {
     http.expectNone('/api/v1/activation');
   });
 
+  it('creates a definition and adopts the returned switchboard without a redundant read', async () => {
+    const { store, http } = await load();
+    const request = {
+      key: 'architecture-ready',
+      title: 'Architecture ready',
+      requirements: [{ kind: 'milestone', source: 'current' }],
+    };
+    const result = store.create(request);
+    await Promise.resolve();
+    const create = http.expectOne('/api/v1/activation/triggers');
+    expect(create.request.body).toEqual(request);
+    expect(create.request.headers.get('If-Match')).toBe('"r1"');
+    create.flush({
+      changed: true,
+      switchboard: {
+        ...switchboard,
+        revision: 'r2',
+        activationTriggers: [
+          ...switchboard.activationTriggers,
+          {
+            key: 'architecture-ready',
+            title: 'Architecture ready',
+            isActive: false,
+            activation: null,
+            satisfiedRequirementCount: 0,
+            requirementCount: 1,
+            requirementsSatisfied: false,
+            isLatchedDespiteUnmetRequirements: false,
+            requirements: [
+              {
+                kind: 'milestone',
+                source: 'current',
+                isSatisfied: false,
+                wasWaivedAtActivation: false,
+              },
+            ],
+            consumingMilestones: [],
+          },
+        ],
+      },
+    });
+    expect(await result).toBe(true);
+    expect(store.switchboard()?.activationTriggers.at(-1)?.key).toBe('architecture-ready');
+    expect(store.statusMessage()).toBe('Activation trigger created.');
+    http.expectNone('/api/v1/activation');
+  });
+
   it('reviews a redefinition before applying the preview revision', async () => {
     const { store, http } = await load();
     const requirements = [{ kind: 'task', source: 'PM-0001' }];

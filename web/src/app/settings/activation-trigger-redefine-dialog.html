@@ -27,53 +27,12 @@
         Replacing requirements clears the current activation and evaluates the new definition
         deliberately.
       </p>
-      <div class="requirement-editor" aria-label="Activation requirements">
-        @for (requirement of requirements(); track $index) {
-          <div class="requirement-row">
-            <label
-              ><span class="visually-hidden">Requirement kind</span
-              ><select
-                [value]="requirement.kind"
-                [disabled]="pending()"
-                (change)="updateKind($index, $event)"
-              >
-                <option value="task">Task</option>
-                <option value="milestone">Milestone</option>
-              </select></label
-            >
-            <label
-              ><span class="visually-hidden">Requirement source</span
-              ><input
-                [value]="requirement.source"
-                [disabled]="pending()"
-                placeholder="Task ID or milestone key"
-                (input)="updateSource($index, $event)"
-            /></label>
-            <button
-              type="button"
-              class="remove-requirement"
-              [disabled]="pending()"
-              [attr.aria-label]="'Remove requirement ' + ($index + 1)"
-              (click)="removeRequirement($index)"
-            >
-              ×
-            </button>
-          </div>
-        } @empty {
-          <p class="empty-requirements">No requirements. This will be a manual-only trigger.</p>
-        }
-      </div>
-      <button
-        type="button"
-        class="pm-button pm-button--secondary add-requirement"
+      <pm-activation-requirement-editor
+        [requirements]="requirements()"
+        [milestones]="milestones()"
         [disabled]="pending()"
-        (click)="addRequirement()"
-      >
-        Add requirement
-      </button>
-      @if (validationError()) {
-        <p class="dialog-error" role="alert">{{ validationError() }}</p>
-      }
+        (requirementsChange)="updateRequirements($event)"
+      />
       @if (error()) {
         <p class="dialog-error" role="alert">{{ error() }}</p>
       }
@@ -142,7 +101,7 @@
           class="pm-button"
           [class.pm-button--danger]="preview()!.requiresConfirmation"
           [class.pm-button--primary]="!preview()!.requiresConfirmation"
-          [disabled]="pending() || discardPrompt() || !!validationError()"
+          [disabled]="pending() || discardPrompt()"
           (click)="requestApply()"
         >
           {{ pending() ? 'Applying…' : 'Apply redefinition' }}
@@ -151,7 +110,7 @@
         <button
           type="button"
           class="pm-button pm-button--primary"
-          [disabled]="pending() || discardPrompt() || !!validationError()"
+          [disabled]="pending() || discardPrompt()"
           (click)="requestReview()"
         >
           {{ pending() ? 'Reviewing…' : 'Review impact' }}

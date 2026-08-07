@@ -1,9 +1,8 @@
 import { Component, effect, ElementRef, input, output, signal, viewChild } from '@angular/core';
 
 import type {
-  ActivationRedefinitionPreview,
   ActivationRequirementRequest,
-  ActivationTrigger,
+  CreateActivationTriggerRequest,
 } from './activation-api.service';
 import {
   ActivationRequirementEditor,
@@ -11,38 +10,36 @@ import {
 } from './activation-requirement-editor';
 
 @Component({
-  selector: 'pm-activation-trigger-redefine-dialog',
+  selector: 'pm-activation-trigger-create-dialog',
   imports: [ActivationRequirementEditor],
-  templateUrl: './activation-trigger-redefine-dialog.html',
-  styleUrl: './activation-trigger-redefine-dialog.css',
+  templateUrl: './activation-trigger-create-dialog.html',
+  styleUrl: './activation-trigger-create-dialog.css',
 })
-export class ActivationTriggerRedefineDialog {
+export class ActivationTriggerCreateDialog {
   readonly open = input(false);
-  readonly trigger = input<ActivationTrigger | null>(null);
   readonly milestones = input<readonly ActivationRequirementMilestone[]>([]);
-  readonly preview = input<ActivationRedefinitionPreview | null>(null);
   readonly pending = input(false);
   readonly error = input<string | null>(null);
 
-  readonly review = output<ActivationRequirementRequest[]>();
-  readonly apply = output<ActivationRequirementRequest[]>();
-  readonly changed = output<void>();
+  readonly created = output<CreateActivationTriggerRequest>();
   readonly closed = output<void>();
   readonly dirtyChange = output<boolean>();
 
+  protected readonly key = signal('');
+  protected readonly title = signal('');
   protected readonly requirements = signal<ActivationRequirementRequest[]>([]);
   protected readonly dirty = signal(false);
   protected readonly discardPrompt = signal(false);
-  protected readonly headingId = `activation-redefine-heading-${crypto.randomUUID()}`;
+  protected readonly headingId = `activation-create-heading-${crypto.randomUUID()}`;
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   constructor() {
     effect(() => {
       const dialog = this.dialog().nativeElement;
       if (this.open() && !dialog.open) {
-        this.requirements.set(
-          (this.trigger()?.requirements ?? []).map(({ kind, source }) => ({ kind, source })),
-        );
+        this.key.set('');
+        this.title.set('');
+        this.requirements.set([]);
         this.dirty.set(false);
         this.discardPrompt.set(false);
         this.dirtyChange.emit(false);
@@ -55,17 +52,27 @@ export class ActivationTriggerRedefineDialog {
     });
   }
 
+  protected updateKey(event: Event): void {
+    this.key.set((event.target as HTMLInputElement).value);
+    this.markChanged();
+  }
+
+  protected updateTitle(event: Event): void {
+    this.title.set((event.target as HTMLInputElement).value);
+    this.markChanged();
+  }
+
   protected updateRequirements(requirements: ActivationRequirementRequest[]): void {
     this.requirements.set(requirements);
     this.markChanged();
   }
 
-  protected requestReview(): void {
-    if (!this.pending()) this.review.emit(this.normalizedRequirements());
-  }
-
-  protected requestApply(): void {
-    if (!this.pending() && this.preview()) this.apply.emit(this.normalizedRequirements());
+  protected submit(event: Event): void {
+    event.preventDefault();
+    const key = this.key().trim();
+    const title = this.title().trim();
+    if (this.pending() || !key || !title) return;
+    this.created.emit({ key, title, requirements: this.requirements() });
   }
 
   protected close(): void {
@@ -83,21 +90,19 @@ export class ActivationTriggerRedefineDialog {
     this.dirtyChange.emit(false);
     this.closed.emit();
   }
+
   protected cancel(event: Event): void {
     event.preventDefault();
     this.close();
   }
+
   protected backdrop(event: MouseEvent): void {
     if (event.target === this.dialog().nativeElement) this.close();
   }
 
-  private normalizedRequirements(): ActivationRequirementRequest[] {
-    return this.requirements().map((item) => ({ kind: item.kind, source: item.source.trim() }));
-  }
-
   private markChanged(): void {
+    if (this.dirty()) return;
     this.dirty.set(true);
-    this.changed.emit();
     this.dirtyChange.emit(true);
   }
 }

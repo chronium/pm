@@ -11,6 +11,12 @@
   gap: var(--pm-space-3);
   margin-bottom: var(--pm-space-3);
 }
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--pm-space-2);
+}
 .section-heading h2 {
   margin: 0;
   font-size: 1rem;

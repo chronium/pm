@@ -1,0 +1,57 @@
+<div class="selected-requirements" aria-live="polite">
+  <h3>Requirements</h3>
+  <ul>
+    @for (requirement of requirements(); track requirement.kind + ':' + requirement.source) {
+      <li>
+        <span class="requirement-identity">
+          <span>{{ requirement.kind === 'task' ? 'Task' : 'Milestone' }}</span>
+          <code>{{ requirement.source }}</code>
+          @if (requirement.kind === 'milestone' && milestoneTitle(requirement.source); as title) {
+            <small>{{ title }}</small>
+          }
+        </span>
+        <button
+          type="button"
+          class="remove-requirement"
+          [disabled]="disabled()"
+          [attr.aria-label]="'Remove ' + requirement.kind + ' requirement ' + requirement.source"
+          (click)="remove($index)"
+        >
+          ×
+        </button>
+      </li>
+    } @empty {
+      <li class="manual-only">
+        <strong>Manual-only trigger</strong>
+        <span>With no requirements, this trigger can only be activated explicitly.</span>
+      </li>
+    }
+  </ul>
+</div>
+
+<div class="requirement-picker">
+  <label>
+    <span>Requirement type</span>
+    <select [value]="kind()" [disabled]="disabled()" (change)="changeKind($event)">
+      <option value="task">Task</option>
+      <option value="milestone">Milestone</option>
+    </select>
+  </label>
+  <div class="source-picker">
+    <span>{{ kind() === 'task' ? 'Find a task' : 'Find a milestone' }}</span>
+    <pm-top-bar-search
+      [embedded]="true"
+      [disabled]="disabled()"
+      [ariaLabel]="kind() === 'task' ? 'Find a task requirement' : 'Find a milestone requirement'"
+      [listboxLabel]="kind() === 'task' ? 'Task requirements' : 'Milestone requirements'"
+      [placeholder]="kind() === 'task' ? 'Search by task ID or title' : 'Filter milestones'"
+      [emptyMessage]="kind() === 'task' ? 'No matching tasks.' : 'No matching milestones.'"
+      [(query)]="query"
+      [options]="options()"
+      [loading]="loading()"
+      [error]="error()"
+      (queryEdited)="editQuery($event)"
+      (optionSelected)="select($event)"
+    />
+  </div>
+</div>

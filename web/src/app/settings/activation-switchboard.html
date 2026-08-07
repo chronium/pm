@@ -4,15 +4,27 @@
       <h2 id="activation-heading">Activation</h2>
       <p>Latched gates that determine when milestone work becomes eligible.</p>
     </div>
-    @if (!readOnly() && reconciliationRequired()) {
-      <button
-        type="button"
-        class="pm-button pm-button--secondary"
-        [disabled]="store.pending()"
-        (click)="reviewReconciliation()"
-      >
-        {{ store.isPending('preview-reconcile', null) ? 'Reviewing…' : 'Reconcile' }}
-      </button>
+    @if (!readOnly()) {
+      <div class="section-actions">
+        @if (reconciliationRequired()) {
+          <button
+            type="button"
+            class="pm-button pm-button--secondary"
+            [disabled]="store.pending()"
+            (click)="reviewReconciliation()"
+          >
+            {{ store.isPending('preview-reconcile', null) ? 'Reviewing…' : 'Reconcile' }}
+          </button>
+        }
+        <button
+          type="button"
+          class="pm-button pm-button--secondary"
+          [disabled]="store.pending()"
+          (click)="openCreate()"
+        >
+          Add trigger
+        </button>
+      </div>
     }
   </div>
 
@@ -221,6 +233,15 @@
   }
 </section>
 
+<pm-activation-trigger-create-dialog
+  [open]="createOpen()"
+  [milestones]="store.switchboard()?.milestones ?? []"
+  [pending]="store.operation()?.kind === 'create'"
+  [error]="createError()"
+  (created)="createTrigger($event)"
+  (closed)="closeCreate()"
+  (dirtyChange)="dirtyChange.emit($event)"
+/>
 <pm-activation-trigger-action-dialog
   [open]="!!action()"
   [action]="action()?.action ?? 'activate'"
@@ -234,6 +255,7 @@
 <pm-activation-trigger-redefine-dialog
   [open]="!!redefineKey()"
   [trigger]="selectedRedefineTrigger()"
+  [milestones]="store.switchboard()?.milestones ?? []"
   [preview]="redefinePreview()"
   [pending]="store.pending()"
   [error]="redefineKey() ? store.errorFor(redefineKey()) : null"
