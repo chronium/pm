@@ -1084,123 +1084,188 @@ public sealed class PmMcpTools(
     }
 
     [McpServerTool(Name = "add_milestone", Destructive = false, OpenWorld = false, UseStructuredContent = true)]
-    [Description("Adds a structured milestone deliverable to the active project.")]
-    public McpToolResponse<ActivationMutationPayload> AddMilestone(
+    [Description("Adds a structured milestone deliverable to the selected write-trusted project.")]
+    public Task<McpToolResponse<ActivationMutationPayload>> AddMilestone(
         string key,
         string title,
         string? priority = null,
-        string? description = null) =>
-        ExecuteControlPlaneMutation(
-            () => ToPayload(configService.AddMilestone(key, title, priority, description)),
-            _ => $"Added milestone {key}.");
+        string? description = null,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => ToPayload(target.Config.AddMilestone(key, title, priority, description)),
+            _ => $"Added milestone {key}.",
+            cancellationToken: cancellationToken);
 
     [McpServerTool(Name = "set_milestone_priority", Destructive = false, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Sets a milestone priority to none, low, medium, high, or urgent.")]
-    public McpToolResponse<ActivationMutationPayload> SetMilestonePriority(string key, string priority) =>
-        ExecuteControlPlaneMutation(
-            () => ToPayload(configService.SetMilestonePriority(key, priority)),
-            _ => $"Updated milestone {key} priority.");
+    public Task<McpToolResponse<ActivationMutationPayload>> SetMilestonePriority(
+        string key,
+        string priority,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => ToPayload(target.Config.SetMilestonePriority(key, priority)),
+            _ => $"Updated milestone {key} priority.",
+            cancellationToken: cancellationToken);
 
     [McpServerTool(Name = "set_milestone_description", Destructive = false, Idempotent = true,
         OpenWorld = false, UseStructuredContent = true)]
-    [Description("Sets the Markdown deliverable description for a milestone in the active project.")]
-    public McpToolResponse<ActivationMutationPayload> SetMilestoneDescription(string key, string description) =>
-        ExecuteControlPlaneMutation(
-            () => ToPayload(configService.SetMilestoneDescription(key, description)),
-            _ => $"Updated milestone {key} description.");
+    [Description("Sets the Markdown deliverable description for a milestone in the selected write-trusted project.")]
+    public Task<McpToolResponse<ActivationMutationPayload>> SetMilestoneDescription(
+        string key,
+        string description,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => ToPayload(target.Config.SetMilestoneDescription(key, description)),
+            _ => $"Updated milestone {key} description.",
+            cancellationToken: cancellationToken);
 
     [McpServerTool(Name = "remove_milestone", Destructive = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Removes an unused milestone.")]
-    public McpToolResponse<ActivationMutationPayload> RemoveMilestone(string key) =>
-        ExecuteControlPlaneMutation(
-            () => ToPayload(configService.RemoveMilestone(key)),
-            _ => $"Removed milestone {key}.");
+    public Task<McpToolResponse<ActivationMutationPayload>> RemoveMilestone(
+        string key,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => ToPayload(target.Config.RemoveMilestone(key)),
+            _ => $"Removed milestone {key}.",
+            cancellationToken: cancellationToken);
 
     [McpServerTool(Name = "rename_milestone", Destructive = false, Idempotent = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Renames a milestone title without changing its key.")]
-    public McpToolResponse<ActivationMutationPayload> RenameMilestone(string key, string title) =>
-        ExecuteControlPlaneMutation(
-            () => ToPayload(configService.RenameMilestone(key, title)),
-            _ => $"Renamed milestone {key}.");
+    public Task<McpToolResponse<ActivationMutationPayload>> RenameMilestone(
+        string key,
+        string title,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => ToPayload(target.Config.RenameMilestone(key, title)),
+            _ => $"Renamed milestone {key}.",
+            cancellationToken: cancellationToken);
 
     [McpServerTool(Name = "add_activation_trigger", Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Adds a reusable activation trigger definition to the active project.")]
-    public McpToolResponse<ActivationMutationPayload> AddActivationTrigger(
+    [Description("Adds a reusable activation trigger definition to the selected write-trusted project.")]
+    public async Task<McpToolResponse<ActivationMutationPayload>> AddActivationTrigger(
         string key,
         string title,
-        IReadOnlyList<ActivationRequirementInputPayload> requirements)
+        IReadOnlyList<ActivationRequirementInputPayload> requirements,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         var denied = ControlPlaneDenied<ActivationMutationPayload>();
         if (denied != null) return denied;
         var parsed = ToActivationRequirements(requirements);
         if (!parsed.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(parsed);
 
-        return ExecuteTrustedControlPlaneMutation(
-            () => activationTriggers.AddTrigger(key, title, parsed.Payload!),
+        return await ExecuteTrustedDefinitionMutationAsync(
+            project,
+            target => target.ActivationTriggers.AddTrigger(key, title, parsed.Payload!),
             _ => $"Added activation trigger {key}.",
-            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones),
+            cancellationToken);
     }
 
     [McpServerTool(Name = "rename_activation_trigger", Destructive = false, Idempotent = true,
         OpenWorld = false, UseStructuredContent = true)]
     [Description("Renames an activation trigger without changing its key or requirements.")]
-    public McpToolResponse<ActivationMutationPayload> RenameActivationTrigger(string key, string title) =>
-        ExecuteControlPlaneMutation(
-            () => activationTriggers.RenameTrigger(key, title),
+    public Task<McpToolResponse<ActivationMutationPayload>> RenameActivationTrigger(
+        string key,
+        string title,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => target.ActivationTriggers.RenameTrigger(key, title),
             _ => $"Renamed activation trigger {key}.",
-            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones),
+            cancellationToken);
 
     [McpServerTool(Name = "remove_activation_trigger", Destructive = true, OpenWorld = false,
         UseStructuredContent = true)]
     [Description("Removes an activation trigger that is not required by a milestone.")]
-    public McpToolResponse<ActivationMutationPayload> RemoveActivationTrigger(string key) =>
-        ExecuteControlPlaneMutation(
-            () => activationTriggers.RemoveTrigger(key),
+    public Task<McpToolResponse<ActivationMutationPayload>> RemoveActivationTrigger(
+        string key,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => target.ActivationTriggers.RemoveTrigger(key),
             _ => $"Removed activation trigger {key}.",
-            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones),
+            cancellationToken);
 
     [McpServerTool(Name = "set_activation_trigger_requirements", Destructive = true, Idempotent = true,
         OpenWorld = false, UseStructuredContent = true)]
     [Description("Replaces the requirements of an inactive activation trigger; an empty list makes it manual-only.")]
-    public McpToolResponse<ActivationMutationPayload> SetActivationTriggerRequirements(
+    public async Task<McpToolResponse<ActivationMutationPayload>> SetActivationTriggerRequirements(
         string key,
-        IReadOnlyList<ActivationRequirementInputPayload> requirements)
+        IReadOnlyList<ActivationRequirementInputPayload> requirements,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         var denied = ControlPlaneDenied<ActivationMutationPayload>();
         if (denied != null) return denied;
         var parsed = ToActivationRequirements(requirements);
         if (!parsed.Success) return McpToolResponse<ActivationMutationPayload>.FromFailure(parsed);
 
-        return ExecuteTrustedControlPlaneMutation(
-            () => activationTriggers.SetRequirements(key, parsed.Payload!),
+        return await ExecuteTrustedDefinitionMutationAsync(
+            project,
+            target => target.ActivationTriggers.SetRequirements(key, parsed.Payload!),
             _ => $"Updated activation trigger {key} requirements.",
-            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones),
+            cancellationToken);
     }
 
     [McpServerTool(Name = "attach_activation_trigger_to_milestone", Destructive = false,
         OpenWorld = false, UseStructuredContent = true)]
     [Description("Makes a milestone require an activation trigger.")]
-    public McpToolResponse<ActivationMutationPayload> AttachActivationTriggerToMilestone(
+    public Task<McpToolResponse<ActivationMutationPayload>> AttachActivationTriggerToMilestone(
         string key,
-        string milestone) =>
-        ExecuteControlPlaneMutation(
-            () => activationTriggers.AttachTrigger(key, milestone),
+        string milestone,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => target.ActivationTriggers.AttachTrigger(key, milestone),
             _ => $"Attached activation trigger {key} to milestone {milestone}.",
-            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones),
+            cancellationToken);
 
     [McpServerTool(Name = "detach_activation_trigger_from_milestone", Destructive = true,
         OpenWorld = false, UseStructuredContent = true)]
     [Description("Removes an activation trigger requirement from a milestone.")]
-    public McpToolResponse<ActivationMutationPayload> DetachActivationTriggerFromMilestone(
+    public Task<McpToolResponse<ActivationMutationPayload>> DetachActivationTriggerFromMilestone(
         string key,
-        string milestone) =>
-        ExecuteControlPlaneMutation(
-            () => activationTriggers.DetachTrigger(key, milestone),
+        string milestone,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteDefinitionMutationAsync(
+            project,
+            target => target.ActivationTriggers.DetachTrigger(key, milestone),
             _ => $"Detached activation trigger {key} from milestone {milestone}.",
-            result => new ActivationMutationDetailsPayload(result.AffectedMilestones));
+            result => new ActivationMutationDetailsPayload(result.AffectedMilestones),
+            cancellationToken);
 
     [McpServerTool(Name = "preview_activation_trigger_redefinition", ReadOnly = true, Destructive = false,
         OpenWorld = false, UseStructuredContent = true)]
@@ -1683,6 +1748,58 @@ public sealed class PmMcpTools(
                 "mcp_control_plane_denied",
                 "The run-worker MCP profile cannot perform milestone activation control-plane operations.");
 
+    private Task<McpToolResponse<ActivationMutationPayload>> ExecuteDefinitionMutationAsync<T>(
+        string? project,
+        Func<LinkedProjectMutationTarget, AppResult<T>> operation,
+        Func<T, string> summary,
+        Func<T, ActivationMutationDetailsPayload?>? impact = null,
+        CancellationToken cancellationToken = default)
+    {
+        var denied = ControlPlaneDenied<ActivationMutationPayload>();
+        return denied == null
+            ? ExecuteTrustedDefinitionMutationAsync(project, operation, summary, impact, cancellationToken)
+            : Task.FromResult(denied);
+    }
+
+    private async Task<McpToolResponse<ActivationMutationPayload>> ExecuteTrustedDefinitionMutationAsync<T>(
+        string? project,
+        Func<LinkedProjectMutationTarget, AppResult<T>> operation,
+        Func<T, string> summary,
+        Func<T, ActivationMutationDetailsPayload?>? impact = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await linkedProjectMutations.ExecuteAsync(
+            project,
+            target =>
+            {
+                var mutation = operation(target);
+                if (!mutation.Success)
+                    return AppResult<DefinitionMutationResult<T>>.Fail(
+                        mutation.ErrorCode!, mutation.Message!);
+
+                var switchboard = ResolveActivationSwitchboard(target.Root);
+                return switchboard.Success
+                    ? AppResult<DefinitionMutationResult<T>>.Ok(
+                        new DefinitionMutationResult<T>(mutation.Payload!, switchboard.Payload!))
+                    : AppResult<DefinitionMutationResult<T>>.Fail(
+                        switchboard.ErrorCode!, switchboard.Message!);
+            },
+            MutationAccess,
+            cancellationToken);
+        if (!result.Success)
+            return McpToolResponse<ActivationMutationPayload>.FromFailure(result);
+
+        var receipt = result.Payload!.Receipt;
+        var value = result.Payload.Value;
+        return McpToolResponse<ActivationMutationPayload>.Ok(
+            summary(value.Value),
+            new ActivationMutationPayload(
+                receipt.ChangedPaths.Count > 0,
+                receipt.ChangedPaths.Count == 0 ? null : ToReceipt(receipt),
+                value.Switchboard,
+                impact?.Invoke(value.Value)));
+    }
+
     private McpToolResponse<ActivationMutationPayload> ExecuteControlPlaneMutation<T>(
         Func<AppResult<T>> operation,
         Func<T, string> summary,
@@ -1743,6 +1860,8 @@ public sealed class PmMcpTools(
 
         return AppResult<IReadOnlyList<ActivationRequirement>>.Ok(result);
     }
+
+    private sealed record DefinitionMutationResult<T>(T Value, ActivationSwitchboardPayload Switchboard);
 
     private static ResolvedActivationTriggerPayload ToActivationTriggerPayload(
         ResolvedActivationTrigger trigger) =>

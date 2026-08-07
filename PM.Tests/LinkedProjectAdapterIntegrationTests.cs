@@ -71,6 +71,10 @@ public sealed class LinkedProjectAdapterIntegrationTests
     public async Task StdioMcpAdvertisesAndExecutesLinkedReadsAndTrustedSiblingMutation()
     {
         using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        var duplicate = TestData.Task(
+            "STAR-0001", "Completed duplicate", track: "ROYALE", milestone: "m1");
+        fixture.Royale.WriteTask(duplicate);
+        fixture.Royale.UpdateTaskState(duplicate, "done");
         var environment = StdioClientTransportOptions.GetDefaultEnvironmentVariables();
         environment["PM_PROJECT_REGISTRY_PATH"] = fixture.RegistryPath;
         var errors = new List<string>();
@@ -90,6 +94,21 @@ public sealed class LinkedProjectAdapterIntegrationTests
         AssertSchemaProperty(tools, "list_tasks", "project");
         AssertSchemaProperty(tools, "list_tasks", "family");
         AssertSchemaProperty(tools, "append_task_note", "project");
+        foreach (var tool in new[]
+                 {
+                     "add_milestone",
+                     "rename_milestone",
+                     "remove_milestone",
+                     "set_milestone_priority",
+                     "set_milestone_description",
+                     "add_activation_trigger",
+                     "rename_activation_trigger",
+                     "remove_activation_trigger",
+                     "set_activation_trigger_requirements",
+                     "attach_activation_trigger_to_milestone",
+                     "detach_activation_trigger_from_milestone",
+                 })
+            AssertSchemaProperty(tools, tool, "project");
         Assert.Contains(tools, tool => tool.Name == "list_linked_projects");
 
         var family = await Call(client, "list_linked_projects");
@@ -123,6 +142,15 @@ public sealed class LinkedProjectAdapterIntegrationTests
             ("project", "starfall"));
         Assert.Contains("\"success\":false", Json(denied));
         Assert.Contains("linked_project_write_untrusted", Json(denied));
+        var beforeDeniedDefinition = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var deniedDefinition = await Call(
+            client,
+            "add_milestone",
+            ("key", "linked-release"),
+            ("title", "Linked release"),
+            ("project", "starfall"));
+        Assert.Contains("linked_project_write_untrusted", Json(deniedDefinition));
+        Assert.Equal(beforeDeniedDefinition, File.ReadAllText(fixture.Starfall.ConfigPath));
 
         var registry = fixture.Registry();
         Assert.True(registry.GrantWriteTrust("prj_starfall").Success);
@@ -139,6 +167,111 @@ public sealed class LinkedProjectAdapterIntegrationTests
                 .EnumerateArray(), member => member.GetProperty("projectId").GetString() == "prj_starfall");
             Assert.True(starfall.GetProperty("writeTrusted").GetBoolean());
         }
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "add_milestone",
+            ("key", "linked-release"),
+            ("title", "Linked release"),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "set_milestone_priority",
+            ("key", "linked-release"),
+            ("priority", "high"),
+            ("project", "prj_starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "set_milestone_description",
+            ("key", "linked-release"),
+            ("description", "Deliver the linked Starfall release."),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "rename_milestone",
+            ("key", "linked-release"),
+            ("title", "Starfall linked release"),
+            ("project", "starfall")), "prj_starfall");
+
+        var requirements = new[] { new { kind = "task", source = "STAR-0001" } };
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "add_activation_trigger",
+            ("key", "linked-entry"),
+            ("title", "Linked entry"),
+            ("requirements", requirements),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "rename_activation_trigger",
+            ("key", "linked-entry"),
+            ("title", "Starfall linked entry"),
+            ("project", "prj_starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "set_activation_trigger_requirements",
+            ("key", "linked-entry"),
+            ("requirements", requirements),
+            ("project", "starfall")), "prj_starfall");
+        var attached = await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "attach_activation_trigger_to_milestone",
+            ("key", "linked-entry"),
+            ("milestone", "linked-release"),
+            ("project", "starfall")), "prj_starfall");
+        var trigger = Assert.Single(attached.GetProperty("switchboard")
+            .GetProperty("activationTriggers").EnumerateArray());
+        Assert.False(trigger.GetProperty("requirementsSatisfied").GetBoolean());
+        Assert.Equal("inactive", attached.GetProperty("switchboard")
+            .GetProperty("milestones").EnumerateArray()
+            .Single(milestone => milestone.GetProperty("key").GetString() == "linked-release")
+            .GetProperty("lifecycle").GetString());
+
+        var beforeCycle = File.ReadAllText(fixture.Starfall.ConfigPath);
+        var cycle = await Call(
+            client,
+            "attach_activation_trigger_to_milestone",
+            ("key", "linked-entry"),
+            ("milestone", "m1"),
+            ("project", "starfall"));
+        Assert.Contains("activation_cycle", Json(cycle));
+        Assert.Equal(beforeCycle, File.ReadAllText(fixture.Starfall.ConfigPath));
+
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "detach_activation_trigger_from_milestone",
+            ("key", "linked-entry"),
+            ("milestone", "linked-release"),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "set_activation_trigger_requirements",
+            ("key", "linked-entry"),
+            ("requirements", Array.Empty<object>()),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "remove_activation_trigger",
+            ("key", "linked-entry"),
+            ("project", "starfall")), "prj_starfall");
+        await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "remove_milestone",
+            ("key", "linked-release"),
+            ("project", "starfall")), "prj_starfall");
+
+        Assert.True(registry.GrantWriteTrust("prj_games").Success);
+        var parentMutation = await AssertSelectedMutationMatchesReread(client, await Call(
+            client,
+            "set_milestone_description",
+            ("key", "m1"),
+            ("description", "Parent-owned deliverable."),
+            ("project", "parent")), "prj_games");
+        Assert.Equal("Parent-owned deliverable.", parentMutation.GetProperty("switchboard")
+            .GetProperty("milestones").EnumerateArray().Single()
+            .GetProperty("description").GetString());
+        Assert.NotEqual("Parent-owned deliverable.", fixture.Royale.Config!.Milestones["m1"].Description);
+
         var mutated = await Call(
             client, "append_task_note", ("taskId", "STAR-0001"), ("note", "MCP integration note"),
             ("project", "starfall"));
@@ -169,14 +302,18 @@ public sealed class LinkedProjectAdapterIntegrationTests
                 new ActivationRequirement
                 {
                     Kind = ActivationRequirementKind.Task,
-                    Source = "STAR-0001",
+                    Source = "GATE-0001",
                 },
             ],
         };
         fixture.Starfall.Config.Milestones["m1"].RequiredActivationTriggers = ["starfall-entry"];
         fixture.Starfall.Config.WriteConfig(fixture.Starfall);
+        var gate = TestData.Task(
+            "GATE-0001", "Starfall gate", track: "STAR", milestone: null);
+        fixture.Starfall.WriteTask(gate);
+        fixture.Starfall.UpdateTaskState(gate, "todo");
         var duplicate = TestData.Task(
-            "STAR-0001", "Completed duplicate", track: "ROYALE", milestone: "m1");
+            "GATE-0001", "Completed duplicate", track: "ROYALE", milestone: null);
         fixture.Royale.WriteTask(duplicate);
         fixture.Royale.UpdateTaskState(duplicate, "done");
 
@@ -230,7 +367,7 @@ public sealed class LinkedProjectAdapterIntegrationTests
 
         var activated = TestMilestoneActivationServices.Create(fixture.Starfall)
             .Triggers.ActivateTrigger("starfall-entry", "Proceed with family integration validation.");
-        Assert.True(activated.Success);
+        Assert.True(activated.Success, activated.Message);
 
         var eligible = await RunCli(fixture, fixture.Royale.RepositoryPath, "task", "next", "--family");
         Assert.Equal(0, eligible.ExitCode);
@@ -303,6 +440,28 @@ public sealed class LinkedProjectAdapterIntegrationTests
             ["pm://project/prj_games/task/SHARED-0001"],
             task.GetProperty("completedDependencies").EnumerateArray().Select(item => item.GetString()).ToList());
         Assert.Empty(task.GetProperty("unavailableDependencies").EnumerateArray());
+    }
+
+    private static async Task<JsonElement> AssertSelectedMutationMatchesReread(
+        McpClient client,
+        CallToolResult mutation,
+        string projectId)
+    {
+        Assert.NotEqual(true, mutation.IsError);
+        using var mutationDocument = JsonDocument.Parse(Json(mutation));
+        var data = mutationDocument.RootElement.GetProperty("data");
+        var receipt = data.GetProperty("mutation");
+        Assert.Equal(projectId, receipt.GetProperty("projectId").GetString());
+        Assert.All(receipt.GetProperty("changedPaths").EnumerateArray(), path =>
+            Assert.StartsWith(".pm/", path.GetString(), StringComparison.Ordinal));
+
+        var reread = await Call(
+            client, "get_activation_switchboard", ("project", projectId));
+        using var rereadDocument = JsonDocument.Parse(Json(reread));
+        Assert.Equal(
+            data.GetProperty("switchboard").GetRawText(),
+            rereadDocument.RootElement.GetProperty("data").GetRawText());
+        return data.Clone();
     }
 
     private static void AssertProject(CallToolResult result, string projectId, string relationship)

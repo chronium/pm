@@ -23,6 +23,8 @@ public sealed record LinkedProjectMutationTarget(
     string ProjectId,
     bool IsCurrent,
     ProjectRoot Root,
+    ProjectConfigService Config,
+    ActivationTriggerService ActivationTriggers,
     TaskService Tasks,
     BoardService Board,
     WikiService Wiki,
@@ -50,7 +52,8 @@ public sealed class LinkedProjectMutationService(
     INextIdService nextIdService,
     LinkedProjectFamilyService familyService,
     LinkedProjectRegistryStore registry,
-    TaskServiceFactory taskServices)
+    TaskServiceFactory taskServices,
+    TimeProvider timeProvider)
 {
     public static LinkedProjectMutationService ForCurrent(TaskService tasks)
     {
@@ -60,7 +63,8 @@ public sealed class LinkedProjectMutationService(
             tasks.NextIdService,
             LinkedProjectFamilyService.CreateDefault(root),
             new LinkedProjectRegistryStore(),
-            tasks.Factory);
+            tasks.Factory,
+            TimeProvider.System);
     }
 
     public static LinkedProjectMutationService ForCurrent(WikiService wiki)
@@ -71,7 +75,8 @@ public sealed class LinkedProjectMutationService(
             DisabledNextIdService.Instance,
             LinkedProjectFamilyService.CreateDefault(root),
             new LinkedProjectRegistryStore(),
-            new TaskServiceFactory(TimeProvider.System));
+            new TaskServiceFactory(TimeProvider.System),
+            TimeProvider.System);
     }
 
     public LinkedProjectMutationTracker Track(LinkedProjectMutationTarget target) => new(target);
@@ -169,11 +174,26 @@ public sealed class LinkedProjectMutationService(
 
     private LinkedProjectMutationTarget CreateTarget(string projectId, ProjectRoot root, bool isCurrent)
     {
-        var board = new BoardService(root, new MilestoneActivationResolver(root));
+        var resolver = new MilestoneActivationResolver(root);
+        var validator = new MilestoneActivationValidationService(
+            root,
+            new MilestoneActivationGraphService(),
+            resolver);
+        var persistence = new ProjectConfigPersistence(root);
+        var automaticActivations = new AutomaticActivationService(resolver, timeProvider);
+        var board = new BoardService(root, resolver);
         return new LinkedProjectMutationTarget(
             projectId,
             isCurrent,
             root,
+            new ProjectConfigService(root),
+            new ActivationTriggerService(
+                root,
+                resolver,
+                validator,
+                automaticActivations,
+                timeProvider,
+                persistence),
             taskServices.Create(root, nextIdService),
             board,
             new WikiService(root),

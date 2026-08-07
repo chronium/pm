@@ -1,7 +1,7 @@
 ---
 title: MCP Guide
 createdAt: 2026-07-27T06:14:45.2638910Z
-modifiedAt: 2026-08-07T13:25:59.3549600Z
+modifiedAt: 2026-08-07T14:01:20.3485380Z
 ---
 
 PM exposes a Model Context Protocol server over standard input/output. It gives coding agents structured access to the same services used by the CLI and web API.
@@ -69,6 +69,8 @@ Milestone delivery also uses preview and apply: call `preview_milestone_delivery
 Every successful activation mutation returns a project mutation receipt and a refreshed switchboard. Clients should compare that switchboard with an immediate `get_activation_switchboard` reread when authoritative post-mutation state matters. Rebuilds do not hot-reload an already running MCP process; restart the server before diagnosing changed code.
 
 These are normal-profile control-plane operations. A run-worker advertises `get_project`, `list_milestones`, and `get_activation_switchboard` for current-project context, but linked selectors return `mcp_project_scope_denied`. It does not advertise trigger definition, activation, override, reset, redefine, delivery, reopening, or reconciliation tools. The tool implementations retain the same denial guard as defense in depth.
+
+Milestone definition tools (`add_milestone`, `rename_milestone`, `remove_milestone`, `set_milestone_priority`, and `set_milestone_description`) and inactive trigger definition tools (`add_activation_trigger`, `rename_activation_trigger`, `remove_activation_trigger`, `set_activation_trigger_requirements`, `attach_activation_trigger_to_milestone`, and `detach_activation_trigger_from_milestone`) also accept `project`. A linked target must be locally write-trusted before mutation. Successful responses carry the selected project ID and repository-relative paths in their mutation receipt, plus a switchboard reread resolved from that same project. Trigger transitions, active-trigger redefinition, reconciliation, delivery, and reopening remain current-project operations until their dedicated cross-project support is implemented.
 
 ## Safe wiki patching
 

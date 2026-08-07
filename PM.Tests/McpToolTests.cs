@@ -664,7 +664,12 @@ public class McpToolTests
             new LinkedProjectResolver(registry, new NullSubmoduleInspector()));
         var nextIds = new RecordingNextIdService();
         var mutations = new LinkedProjectMutationService(
-            active, nextIds, family, registry, new TaskServiceFactory(TimeProvider.System));
+            active, nextIds, family, registry, new TaskServiceFactory(TimeProvider.System), TimeProvider.System);
+        var target = await mutations.ResolveTargetAsync("child");
+        Assert.True(target.Success);
+        Assert.Equal("prj_child", target.Payload!.ProjectId);
+        Assert.Equal("Child", target.Payload.Config.GetSettings().Payload!.ProjectName);
+        Assert.True(target.Payload.ActivationTriggers.ListTriggers().Success);
         var tools = CreateTools(active, nextIds,
             linkedProjectFamily: family,
             linkedProjectMutations: mutations);
@@ -1130,7 +1135,7 @@ public class McpToolTests
         projectRoot.UpdateTaskState(gateTask, "todo");
         var tools = CreateTools(projectRoot);
 
-        var addedMilestone = tools.AddMilestone(
+        var addedMilestone = await tools.AddMilestone(
             "beta", "Public beta", "high", "Deliver the complete local beta workflow.");
         Assert.True(addedMilestone.Success);
         await AssertMutationRereads(addedMilestone.Data!);
@@ -1140,14 +1145,14 @@ public class McpToolTests
         var betaTask = TestData.Task("PM-0002", "Package beta", milestone: "beta");
         projectRoot.WriteTask(betaTask);
         projectRoot.UpdateTaskState(betaTask, "done");
-        var addedTrigger = tools.AddActivationTrigger(
+        var addedTrigger = await tools.AddActivationTrigger(
             "beta-entry",
             "Beta entry criteria",
             [new ActivationRequirementInputPayload(ActivationRequirementInputKind.Task, gateTask.Id)]);
         Assert.True(addedTrigger.Success);
         await AssertMutationRereads(addedTrigger.Data!);
 
-        var attached = tools.AttachActivationTriggerToMilestone("beta-entry", "beta");
+        var attached = await tools.AttachActivationTriggerToMilestone("beta-entry", "beta");
         Assert.True(attached.Success);
         await AssertMutationRereads(attached.Data!);
         Assert.Equal("inactive", attached.Data!.Switchboard.Milestones.Single(item => item.Key == "beta").Lifecycle);
@@ -1247,12 +1252,17 @@ public class McpToolTests
 
         var failures = new[]
         {
-            tools.AddActivationTrigger("gate", "Gate", requirements).ErrorCode,
-            tools.RenameActivationTrigger("gate", "Renamed gate").ErrorCode,
-            tools.RemoveActivationTrigger("gate").ErrorCode,
-            tools.SetActivationTriggerRequirements("gate", requirements).ErrorCode,
-            tools.AttachActivationTriggerToMilestone("gate", "beta").ErrorCode,
-            tools.DetachActivationTriggerFromMilestone("gate", "beta").ErrorCode,
+            (await tools.AddMilestone("beta", "Beta")).ErrorCode,
+            (await tools.RenameMilestone("beta", "Renamed beta")).ErrorCode,
+            (await tools.SetMilestonePriority("beta", "high")).ErrorCode,
+            (await tools.SetMilestoneDescription("beta", "Description")).ErrorCode,
+            (await tools.RemoveMilestone("beta")).ErrorCode,
+            (await tools.AddActivationTrigger("gate", "Gate", requirements)).ErrorCode,
+            (await tools.RenameActivationTrigger("gate", "Renamed gate")).ErrorCode,
+            (await tools.RemoveActivationTrigger("gate")).ErrorCode,
+            (await tools.SetActivationTriggerRequirements("gate", requirements)).ErrorCode,
+            (await tools.AttachActivationTriggerToMilestone("gate", "beta")).ErrorCode,
+            (await tools.DetachActivationTriggerFromMilestone("gate", "beta")).ErrorCode,
             tools.ActivateActivationTrigger("gate").ErrorCode,
             tools.OverrideActivationTrigger("gate", "reason").ErrorCode,
             tools.ResetActivationTrigger("gate").ErrorCode,
@@ -1285,10 +1295,11 @@ public class McpToolTests
         Assert.Equal("duplicate_track", tools.AddTrack("BUILD", "Duplicate").ErrorCode);
         Assert.Equal("invalid_track", tools.AddTrack(" ", "Missing").ErrorCode);
 
-        Assert.True(tools.AddMilestone("m1", "Milestone 1", "HIGH").Success);
-        Assert.Equal("duplicate_milestone", tools.AddMilestone("m1", "Duplicate").ErrorCode);
-        Assert.Equal("invalid_milestone", tools.AddMilestone("m2", " ").ErrorCode);
-        Assert.Equal("invalid_priority", tools.AddMilestone("m2", "Milestone 2", "later").ErrorCode);
+        Assert.True((await tools.AddMilestone("m1", "Milestone 1", "HIGH")).Success);
+        Assert.Equal("duplicate_milestone", (await tools.AddMilestone("m1", "Duplicate")).ErrorCode);
+        Assert.Equal("invalid_milestone", (await tools.AddMilestone("m2", " ")).ErrorCode);
+        Assert.Equal("invalid_priority",
+            (await tools.AddMilestone("m2", "Milestone 2", "later")).ErrorCode);
 
         var project = await tools.GetProject();
         Assert.Contains(project.Data!.Milestones,
@@ -1303,9 +1314,9 @@ public class McpToolTests
             milestones: new Dictionary<string, string> { ["m1"] = "Milestone 1" }));
         var tools = CreateTools(projectRoot);
 
-        var update = tools.SetMilestonePriority("m1", "Urgent");
-        var invalid = tools.SetMilestonePriority("m1", "later");
-        var missing = tools.SetMilestonePriority("missing", "high");
+        var update = await tools.SetMilestonePriority("m1", "Urgent");
+        var invalid = await tools.SetMilestonePriority("m1", "later");
+        var missing = await tools.SetMilestonePriority("missing", "high");
 
         Assert.True(update.Success);
         Assert.Equal("invalid_priority", invalid.ErrorCode);
@@ -1351,9 +1362,9 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
 
         Assert.True(tools.RenameTrack("BUILD", "Build Work").Success);
-        Assert.True(tools.RenameMilestone("m1", "Launch").Success);
+        Assert.True((await tools.RenameMilestone("m1", "Launch")).Success);
         Assert.Equal("missing_track", tools.RenameTrack("missing", "Missing").ErrorCode);
-        Assert.Equal("missing_milestone", tools.RenameMilestone("missing", "Missing").ErrorCode);
+        Assert.Equal("missing_milestone", (await tools.RenameMilestone("missing", "Missing")).ErrorCode);
 
         var project = await tools.GetProject();
         Assert.Contains(project.Data!.Tracks, track => track.Key == "BUILD" && track.Name == "Build Work");
@@ -1372,9 +1383,9 @@ public class McpToolTests
         var tools = CreateTools(projectRoot);
 
         Assert.Equal("track_in_use", tools.RemoveTrack("BUILD").ErrorCode);
-        Assert.Equal("milestone_in_use", tools.RemoveMilestone("m1").ErrorCode);
+        Assert.Equal("milestone_in_use", (await tools.RemoveMilestone("m1")).ErrorCode);
         Assert.True(tools.RemoveTrack("UI").Success);
-        Assert.True(tools.RemoveMilestone("m2").Success);
+        Assert.True((await tools.RemoveMilestone("m2")).Success);
 
         var project = await tools.GetProject();
         Assert.DoesNotContain(project.Data!.Tracks, track => track.Key == "UI");
