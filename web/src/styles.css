@@ -490,7 +490,7 @@
   box-shadow: none;
 }
 
-:root .pm-board-surface :is(.status-group > summary, .task-list) {
+:root .pm-board-surface :is(.deliverable-description, .status-group > summary, .task-list) {
   background: transparent;
 }
 

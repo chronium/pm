@@ -91,9 +91,11 @@ const meta = {
   render: (args) => ({
     props: args,
     template:
+      '<section class="pm-board-surface">' +
       '<details pmTaskMilestone [milestone]="milestone" [headingId]="headingId" ' +
       '[selectedTaskId]="selectedTaskId" [openStates]="openStates" ' +
-      '[milestoneOpen]="milestoneOpen"></details>',
+      '[milestoneOpen]="milestoneOpen"></details>' +
+      '</section>',
   }),
 } satisfies Meta<TaskMilestone>;
 
@@ -146,6 +148,7 @@ const expandDeliverable: NonNullable<Story['play']> = async ({ canvasElement }) 
   expect(deliverableTitle!.getBoundingClientRect().left).toBe(
     statusTitle!.getBoundingClientRect().left,
   );
+  expect(getComputedStyle(details!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
   expect(getComputedStyle(details!).backgroundColor).toBe(
     getComputedStyle(statusSummary!).backgroundColor,
   );
