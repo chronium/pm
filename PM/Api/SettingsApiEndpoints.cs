@@ -42,73 +42,114 @@ public sealed record SetMilestoneDescriptionRequest([property: JsonRequired] str
 public sealed record SetMilestonePriorityRequest([property: JsonRequired] string Priority);
 public sealed record SetProjectAccentRequest([property: JsonRequired] string Accent);
 
+internal sealed record SettingsApiReadTarget(
+    ProjectConfigService Config,
+    ResourceRevisionService Revisions);
+
+internal sealed record SettingsApiWriteTarget(
+    ProjectConfigService Config,
+    ResourceRevisionService Revisions,
+    Func<LinkedProjectMutationTracker?> BeginMutation);
+
+internal delegate (SettingsApiReadTarget? Target, IResult? Error) SettingsApiReadTargetResolver(
+    HttpRequest request);
+
+internal delegate (SettingsApiWriteTarget? Target, IResult? Error) SettingsApiWriteTargetResolver(
+    HttpRequest request);
+
 public static class SettingsApiEndpoints
 {
     public static void MapSettingsApi(this RouteGroupBuilder api, ProjectConfigService configService,
         ResourceRevisionService revisions)
     {
-        api.MapGet("/settings", (HttpRequest request) => Read(request, configService, revisions))
-            .WithName("GetSettings")
+        MapSettingsApi(
+            api,
+            _ => (new SettingsApiReadTarget(configService, revisions), null),
+            _ => (new SettingsApiWriteTarget(configService, revisions, () => null), null),
+            static name => name,
+            false);
+    }
+
+    internal static void MapSettingsApi(
+        this RouteGroupBuilder api,
+        SettingsApiReadTargetResolver resolveRead,
+        SettingsApiWriteTargetResolver resolveWrite,
+        Func<string, string> operationName,
+        bool linkedProject)
+    {
+        api.MapGet("/settings", (HttpRequest request) =>
+            {
+                var resolved = resolveRead(request);
+                return resolved.Error ?? Read(request, resolved.Target!.Config, resolved.Target.Revisions);
+            })
+            .WithName(operationName("GetSettings"))
             .WithSummary("Get project settings")
             .Produces<SettingsResponse>()
             .WithRevisionedReadMetadata()
-            .WithSettingsReadProblems();
+            .WithSettingsReadProblems(linkedProject);
 
         MapCreateMutation<SetProjectAccentRequest>(api, "/settings/accent",
-            "SetProjectAccent", "Set the project accent color", configService, revisions,
-            (service, input) => service.SetAccent(input.Accent), HttpMethods.Put);
+            operationName("SetProjectAccent"), "Set the project accent color", resolveWrite,
+            (service, input) => service.SetAccent(input.Accent), linkedProject, HttpMethods.Put);
 
         MapCreateMutation<CreateSettingsOptionRequest>(api, "/settings/statuses",
-            "CreateStatus", "Create a status", configService, revisions,
-            (service, input) => service.AddStatus(input.Key, input.Name));
+            operationName("CreateStatus"), "Create a status", resolveWrite,
+            (service, input) => service.AddStatus(input.Key, input.Name), linkedProject);
         MapItemMutation<RenameSettingsOptionRequest>(api, "/settings/statuses/{key}",
-            "RenameStatus", "Rename a status", configService, revisions,
-            (service, input, key) => service.RenameStatus(key, input.Name));
-        MapDelete(api, "/settings/statuses/{key}", "DeleteStatus", "Delete a status",
-            configService, revisions, (service, key) => service.RemoveStatus(key));
+            operationName("RenameStatus"), "Rename a status", resolveWrite,
+            (service, input, key) => service.RenameStatus(key, input.Name), linkedProject);
+        MapDelete(api, "/settings/statuses/{key}", operationName("DeleteStatus"), "Delete a status",
+            resolveWrite, (service, key) => service.RemoveStatus(key), linkedProject);
 
         MapCreateMutation<CreateSettingsOptionRequest>(api, "/settings/tracks",
-            "CreateTrack", "Create a track", configService, revisions,
-            (service, input) => service.AddTrack(input.Key, input.Name));
+            operationName("CreateTrack"), "Create a track", resolveWrite,
+            (service, input) => service.AddTrack(input.Key, input.Name), linkedProject);
         MapItemMutation<RenameSettingsOptionRequest>(api, "/settings/tracks/{key}",
-            "RenameTrack", "Rename a track", configService, revisions,
-            (service, input, key) => service.RenameTrack(key, input.Name));
-        MapDelete(api, "/settings/tracks/{key}", "DeleteTrack", "Delete a track",
-            configService, revisions, (service, key) => service.RemoveTrack(key));
+            operationName("RenameTrack"), "Rename a track", resolveWrite,
+            (service, input, key) => service.RenameTrack(key, input.Name), linkedProject);
+        MapDelete(api, "/settings/tracks/{key}", operationName("DeleteTrack"), "Delete a track",
+            resolveWrite, (service, key) => service.RemoveTrack(key), linkedProject);
 
         MapCreateMutation<CreateMilestoneRequest>(api, "/settings/milestones",
-            "CreateMilestone", "Create a milestone", configService, revisions,
-            (service, input) => service.AddMilestone(input.Key, input.Title, input.Priority, input.Description));
+            operationName("CreateMilestone"), "Create a milestone", resolveWrite,
+            (service, input) => service.AddMilestone(input.Key, input.Title, input.Priority, input.Description),
+            linkedProject);
         MapItemMutation<RenameMilestoneRequest>(api, "/settings/milestones/{key}",
-            "RenameMilestone", "Rename a milestone", configService, revisions,
-            (service, input, key) => service.RenameMilestone(key, input.Title));
-        MapDelete(api, "/settings/milestones/{key}", "DeleteMilestone", "Delete a milestone",
-            configService, revisions, (service, key) => service.RemoveMilestone(key));
+            operationName("RenameMilestone"), "Rename a milestone", resolveWrite,
+            (service, input, key) => service.RenameMilestone(key, input.Title), linkedProject);
+        MapDelete(api, "/settings/milestones/{key}", operationName("DeleteMilestone"), "Delete a milestone",
+            resolveWrite, (service, key) => service.RemoveMilestone(key), linkedProject);
         MapItemMutation<SetMilestonePriorityRequest>(api,
-            "/settings/milestones/{key}/priority", "SetMilestonePriority",
-            "Set a milestone priority", configService, revisions,
-            (service, input, key) => service.SetMilestonePriority(key, input.Priority));
+            "/settings/milestones/{key}/priority", operationName("SetMilestonePriority"),
+            "Set a milestone priority", resolveWrite,
+            (service, input, key) => service.SetMilestonePriority(key, input.Priority), linkedProject);
         MapItemMutation<SetMilestoneDescriptionRequest>(api,
-            "/settings/milestones/{key}/description", "SetMilestoneDescription",
-            "Set a milestone description", configService, revisions,
-            (service, input, key) => service.SetMilestoneDescription(key, input.Description));
+            "/settings/milestones/{key}/description", operationName("SetMilestoneDescription"),
+            "Set a milestone description", resolveWrite,
+            (service, input, key) => service.SetMilestoneDescription(key, input.Description), linkedProject);
     }
 
     private static void MapCreateMutation<TRequest>(RouteGroupBuilder api, string pattern,
-        string name, string summary, ProjectConfigService configService, ResourceRevisionService revisions,
-        Func<ProjectConfigService, TRequest, AppResult> mutate, string method = "POST")
+        string name, string summary, SettingsApiWriteTargetResolver resolveWrite,
+        Func<ProjectConfigService, TRequest, AppResult> mutate, bool linkedProject, string method = "POST")
         where TRequest : class
     {
         api.MapMethods(pattern, [method], async (HttpRequest request, CancellationToken cancellationToken) =>
             {
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
                 var (input, error) = await ApiJsonRequest.Read<TRequest>(request, cancellationToken);
                 if (error != null) return error;
-                var precondition = CheckPrecondition(request, revisions);
+                var target = resolved.Target!;
+                var precondition = CheckPrecondition(request, target.Revisions);
                 if (precondition != null) return precondition;
-                var result = mutate(configService, input!);
-                return result.Success
-                    ? Refreshed(request, configService, revisions)
-                    : ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                using var tracker = target.BeginMutation();
+                var result = mutate(target.Config, input!);
+                if (!result.Success)
+                    return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                var refreshed = Refreshed(request, target.Config, target.Revisions);
+                SetMutationReceipt(request, tracker);
+                return refreshed;
             })
             .WithName(name)
             .WithSummary(summary)
@@ -116,24 +157,30 @@ public static class SettingsApiEndpoints
             .Produces<SettingsResponse>()
             .WithClientHeaderMetadata()
             .WithRevisionedMutationMetadata()
-            .WithSettingsMutationProblems();
+            .WithSettingsMutationProblems(linkedProject);
     }
 
     private static void MapItemMutation<TRequest>(RouteGroupBuilder api, string pattern,
-        string name, string summary, ProjectConfigService configService, ResourceRevisionService revisions,
-        Func<ProjectConfigService, TRequest, string, AppResult> mutate)
+        string name, string summary, SettingsApiWriteTargetResolver resolveWrite,
+        Func<ProjectConfigService, TRequest, string, AppResult> mutate, bool linkedProject)
         where TRequest : class
     {
         api.MapPut(pattern, async (HttpRequest request, string key, CancellationToken cancellationToken) =>
             {
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
                 var (input, error) = await ApiJsonRequest.Read<TRequest>(request, cancellationToken);
                 if (error != null) return error;
-                var precondition = CheckPrecondition(request, revisions);
+                var target = resolved.Target!;
+                var precondition = CheckPrecondition(request, target.Revisions);
                 if (precondition != null) return precondition;
-                var result = mutate(configService, input!, key);
-                return result.Success
-                    ? Refreshed(request, configService, revisions)
-                    : ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                using var tracker = target.BeginMutation();
+                var result = mutate(target.Config, input!, key);
+                if (!result.Success)
+                    return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                var refreshed = Refreshed(request, target.Config, target.Revisions);
+                SetMutationReceipt(request, tracker);
+                return refreshed;
             })
             .WithName(name)
             .WithSummary(summary)
@@ -141,28 +188,34 @@ public static class SettingsApiEndpoints
             .Produces<SettingsResponse>()
             .WithClientHeaderMetadata()
             .WithRevisionedMutationMetadata()
-            .WithSettingsMutationProblems();
+            .WithSettingsMutationProblems(linkedProject);
     }
 
     private static void MapDelete(RouteGroupBuilder api, string pattern, string name, string summary,
-        ProjectConfigService configService, ResourceRevisionService revisions,
-        Func<ProjectConfigService, string, AppResult> mutate)
+        SettingsApiWriteTargetResolver resolveWrite,
+        Func<ProjectConfigService, string, AppResult> mutate, bool linkedProject)
     {
         api.MapDelete(pattern, (HttpRequest request, string key) =>
             {
-                var precondition = CheckPrecondition(request, revisions);
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
+                var target = resolved.Target!;
+                var precondition = CheckPrecondition(request, target.Revisions);
                 if (precondition != null) return precondition;
-                var result = mutate(configService, key);
-                return result.Success
-                    ? Refreshed(request, configService, revisions)
-                    : ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                using var tracker = target.BeginMutation();
+                var result = mutate(target.Config, key);
+                if (!result.Success)
+                    return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
+                var refreshed = Refreshed(request, target.Config, target.Revisions);
+                SetMutationReceipt(request, tracker);
+                return refreshed;
             })
             .WithName(name)
             .WithSummary(summary)
             .Produces<SettingsResponse>()
             .WithClientHeaderMetadata()
             .WithRevisionedMutationMetadata()
-            .WithSettingsMutationProblems();
+            .WithSettingsMutationProblems(linkedProject);
     }
 
     internal static IResult Read(HttpRequest request, ProjectConfigService configService,
@@ -226,15 +279,34 @@ public static class SettingsApiEndpoints
             : ApiResults.Failure(revision.ErrorCode, revision.Message, request.Path);
     }
 
-    private static RouteHandlerBuilder WithSettingsReadProblems(this RouteHandlerBuilder builder) => builder
-        .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+    private static void SetMutationReceipt(HttpRequest request, LinkedProjectMutationTracker? tracker)
+    {
+        if (tracker != null) ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
+    }
 
-    private static RouteHandlerBuilder WithSettingsMutationProblems(this RouteHandlerBuilder builder) => builder
-        .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status415UnsupportedMediaType, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+    private static RouteHandlerBuilder WithSettingsReadProblems(
+        this RouteHandlerBuilder builder, bool linkedProject)
+    {
+        builder
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+        if (linkedProject)
+            builder.Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json");
+        return builder;
+    }
+
+    private static RouteHandlerBuilder WithSettingsMutationProblems(
+        this RouteHandlerBuilder builder, bool linkedProject)
+    {
+        builder
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status415UnsupportedMediaType, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+        if (linkedProject)
+            builder.Produces<ApiProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json");
+        return builder;
+    }
 }

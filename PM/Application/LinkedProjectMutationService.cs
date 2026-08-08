@@ -25,6 +25,8 @@ public sealed record LinkedProjectMutationTarget(
     bool IsCurrent,
     ProjectRoot Root,
     ProjectConfigService Config,
+    MilestoneActivationResolver ActivationResolver,
+    MilestoneActivationValidationService ActivationValidation,
     ActivationTriggerService ActivationTriggers,
     MilestoneDeliveryService MilestoneDeliveries,
     TaskService Tasks,
@@ -197,6 +199,8 @@ public sealed class LinkedProjectMutationService(
             isCurrent,
             root,
             new ProjectConfigService(root),
+            resolver,
+            validator,
             new ActivationTriggerService(
                 root,
                 resolver,

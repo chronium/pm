@@ -123,6 +123,25 @@ public sealed record MilestoneDeliveryPreviewResponse(
     IReadOnlyList<string> UnfinishedTaskIds,
     bool RequiresConfirmation);
 
+internal sealed record ActivationApiReadTarget(
+    MilestoneActivationResolver Resolver,
+    MilestoneActivationValidationService Validation,
+    ResourceRevisionService Revisions);
+
+internal sealed record ActivationApiWriteTarget(
+    MilestoneActivationResolver Resolver,
+    MilestoneActivationValidationService Validation,
+    ActivationTriggerService ActivationTriggers,
+    MilestoneDeliveryService MilestoneDeliveries,
+    ResourceRevisionService Revisions,
+    Func<LinkedProjectMutationTracker?> BeginMutation);
+
+internal delegate (ActivationApiReadTarget? Target, IResult? Error) ActivationApiReadTargetResolver(
+    HttpRequest request);
+
+internal delegate (ActivationApiWriteTarget? Target, IResult? Error) ActivationApiWriteTargetResolver(
+    HttpRequest request);
+
 public static class MilestoneActivationApiEndpoints
 {
     public static void MapMilestoneActivationApi(
@@ -133,88 +152,127 @@ public static class MilestoneActivationApiEndpoints
         MilestoneDeliveryService deliveryService,
         ResourceRevisionService revisions)
     {
-        api.MapGet("/activation", (HttpRequest request) => Read(request, resolver, validationService, revisions))
-            .WithName("GetMilestoneActivation")
+        MapMilestoneActivationApi(
+            api,
+            _ => (new ActivationApiReadTarget(resolver, validationService, revisions), null),
+            _ => (new ActivationApiWriteTarget(
+                resolver,
+                validationService,
+                triggerService,
+                deliveryService,
+                revisions,
+                () => null), null),
+            static name => name,
+            false);
+    }
+
+    internal static void MapMilestoneActivationApi(
+        this RouteGroupBuilder api,
+        ActivationApiReadTargetResolver resolveRead,
+        ActivationApiWriteTargetResolver resolveWrite,
+        Func<string, string> operationName,
+        bool linkedProject)
+    {
+        api.MapGet("/activation", (HttpRequest request) =>
+            {
+                var resolved = resolveRead(request);
+                return resolved.Error ?? Read(
+                    request, resolved.Target!.Resolver, resolved.Target.Validation, resolved.Target.Revisions);
+            })
+            .WithName(operationName("GetMilestoneActivation"))
             .WithSummary("Get the milestone activation switchboard")
             .Produces<ActivationSwitchboardResponse>()
             .WithRevisionedReadMetadata()
-            .WithActivationProblems();
+            .WithActivationProblems(false);
 
         MapJsonWithoutKey<CreateActivationTriggerRequest, ActivationTriggerMutationResult>(api, "/activation/triggers", HttpMethods.Post,
-            "CreateActivationTrigger", "Create an activation trigger", resolver, validationService, revisions,
-            (input, _) => ParseRequirements(input.Requirements, requirements =>
-                triggerService.AddTrigger(input.Key, input.Title, requirements)), MutationImpact);
+            operationName("CreateActivationTrigger"), "Create an activation trigger", resolveWrite,
+            (target, input, _) => ParseRequirements(input.Requirements, requirements =>
+                target.ActivationTriggers.AddTrigger(input.Key, input.Title, requirements)), MutationImpact,
+            linkedProject: linkedProject);
         MapJson<RenameActivationTriggerRequest, ActivationTriggerMutationResult>(api, "/activation/triggers/{key}/title", HttpMethods.Put,
-            "RenameActivationTrigger", "Rename an activation trigger", resolver, validationService, revisions,
-            (input, key, _) => triggerService.RenameTrigger(key, input.Title), MutationImpact);
+            operationName("RenameActivationTrigger"), "Rename an activation trigger", resolveWrite,
+            (target, input, key, _) => target.ActivationTriggers.RenameTrigger(key, input.Title), MutationImpact,
+            linkedProject: linkedProject);
         MapJson<SetActivationRequirementsRequest, ActivationTriggerMutationResult>(api, "/activation/triggers/{key}/requirements", HttpMethods.Put,
-            "SetActivationTriggerRequirements", "Replace inactive trigger requirements", resolver, validationService, revisions,
-            (input, key, _) => ParseRequirements(input.Requirements, requirements =>
-                triggerService.SetRequirements(key, requirements)), MutationImpact);
-        MapDelete(api, "/activation/triggers/{key}", "DeleteActivationTrigger", "Delete an activation trigger",
-            resolver, validationService, revisions, key => triggerService.RemoveTrigger(key), MutationImpact);
+            operationName("SetActivationTriggerRequirements"), "Replace inactive trigger requirements", resolveWrite,
+            (target, input, key, _) => ParseRequirements(input.Requirements, requirements =>
+                target.ActivationTriggers.SetRequirements(key, requirements)), MutationImpact,
+            linkedProject: linkedProject);
+        MapDelete(api, "/activation/triggers/{key}", operationName("DeleteActivationTrigger"),
+            "Delete an activation trigger", resolveWrite,
+            (target, key) => target.ActivationTriggers.RemoveTrigger(key), MutationImpact, linkedProject);
 
         MapPreview<SetActivationRequirementsRequest, ActivationTriggerRedefinitionPreview,
             ActivationTriggerRedefinitionPreviewResponse>(api,
-            "/activation/triggers/{key}/redefinition-preview", "PreviewActivationTriggerRedefinition",
-            "Preview redefining an active trigger", resolver, validationService, revisions,
-            (input, key) => ParseRequirements(input.Requirements, requirements =>
-                triggerService.PreviewRedefinition(key, requirements)), ToResponse);
+            "/activation/triggers/{key}/redefinition-preview", operationName("PreviewActivationTriggerRedefinition"),
+            "Preview redefining an active trigger", resolveWrite,
+            (target, input, key) => ParseRequirements(input.Requirements, requirements =>
+                target.ActivationTriggers.PreviewRedefinition(key, requirements)), ToResponse, linkedProject);
         MapJson<RedefineActivationTriggerRequest, ActivationTriggerRedefinitionResult>(api, "/activation/triggers/{key}/redefinition", HttpMethods.Put,
-            "RedefineActivationTrigger", "Redefine an active trigger", resolver, validationService, revisions,
-            (input, key, _) => ParseRequirements(input.Requirements, requirements =>
-                triggerService.RedefineTrigger(key, requirements, input.PreviewRevision, input.AllowDeactivation)),
-            result => new ActivationMutationImpactResponse(result.AffectedMilestones, [], []));
+            operationName("RedefineActivationTrigger"), "Redefine an active trigger", resolveWrite,
+            (target, input, key, _) => ParseRequirements(input.Requirements, requirements =>
+                target.ActivationTriggers.RedefineTrigger(
+                    key, requirements, input.PreviewRevision, input.AllowDeactivation)),
+            result => new ActivationMutationImpactResponse(result.AffectedMilestones, [], []),
+            linkedProject: linkedProject);
 
         MapJson<ActivateActivationTriggerRequest, ResolvedActivationTrigger>(api,
-            "/activation/triggers/{key}/activate", HttpMethods.Post, "ActivateManualTrigger",
-            "Activate a manual-only trigger", resolver, validationService, revisions,
-            (_, key, _) => triggerService.ActivateTrigger(key, null), TriggerImpact);
+            "/activation/triggers/{key}/activate", HttpMethods.Post, operationName("ActivateManualTrigger"),
+            "Activate a manual-only trigger", resolveWrite,
+            (target, _, key, _) => target.ActivationTriggers.ActivateTrigger(key, null), TriggerImpact,
+            linkedProject: linkedProject);
         MapJson<OverrideActivationTriggerRequest, ResolvedActivationTrigger>(api, "/activation/triggers/{key}/override", HttpMethods.Post,
-            "OverrideActivationTrigger", "Override unmet activation requirements", resolver, validationService, revisions,
-            (input, key, _) => triggerService.ActivateTrigger(key, input.Reason), TriggerImpact);
-        MapDelete(api, "/activation/triggers/{key}/activation", "ResetActivationTrigger",
-            "Reset a latched activation trigger", resolver, validationService, revisions,
-            key => triggerService.ResetTrigger(key), TriggerImpact);
+            operationName("OverrideActivationTrigger"), "Override unmet activation requirements", resolveWrite,
+            (target, input, key, _) => target.ActivationTriggers.ActivateTrigger(key, input.Reason), TriggerImpact,
+            linkedProject: linkedProject);
+        MapDelete(api, "/activation/triggers/{key}/activation", operationName("ResetActivationTrigger"),
+            "Reset a latched activation trigger", resolveWrite,
+            (target, key) => target.ActivationTriggers.ResetTrigger(key), TriggerImpact, linkedProject);
 
         MapJsonWithoutKey<ReconcileActivationRequest, ActivationReconciliationResult>(api, "/activation/reconcile", HttpMethods.Post,
-            "ReconcileActivationTriggers", "Latch satisfied activation triggers", resolver, validationService, revisions,
-            (input, _) => triggerService.Reconcile(input.DryRun),
+            operationName("ReconcileActivationTriggers"), "Latch satisfied activation triggers", resolveWrite,
+            (target, input, _) => target.ActivationTriggers.Reconcile(input.DryRun),
             result => new ActivationMutationImpactResponse(
                 result.ActivationImpact.MilestoneChanges.Select(change => change.MilestoneKey).ToList(),
                 [],
                 result.ActivationImpact.ActivatedTriggers.Select(trigger => trigger.Key).ToList()),
-            result => result.ActivationImpact.ActivatedTriggers.Count > 0 && !result.DryRun);
+            result => result.ActivationImpact.ActivatedTriggers.Count > 0 && !result.DryRun,
+            linkedProject);
 
         MapPreview<SetMilestoneRequiredTriggersPreviewRequest, MilestoneRequiredTriggersPreview,
             MilestoneRequiredTriggersPreviewResponse>(api,
-            "/activation/milestones/{key}/required-triggers-preview", "PreviewMilestoneRequiredTriggers",
-            "Preview replacing a milestone's required triggers", resolver, validationService, revisions,
-            (input, key) => triggerService.PreviewMilestoneRequiredTriggers(key, input.TriggerKeys), ToResponse);
+            "/activation/milestones/{key}/required-triggers-preview", operationName("PreviewMilestoneRequiredTriggers"),
+            "Preview replacing a milestone's required triggers", resolveWrite,
+            (target, input, key) => target.ActivationTriggers.PreviewMilestoneRequiredTriggers(
+                key, input.TriggerKeys), ToResponse, linkedProject);
         MapJson<SetMilestoneRequiredTriggersRequest, ActivationTriggerMutationResult>(api,
             "/activation/milestones/{key}/required-triggers", HttpMethods.Put,
-            "SetMilestoneRequiredTriggers", "Replace a milestone's required triggers",
-            resolver, validationService, revisions,
-            (input, key, _) => triggerService.SetMilestoneRequiredTriggers(
-                key, input.TriggerKeys, input.PreviewRevision, input.AllowDeactivation), MutationImpact);
+            operationName("SetMilestoneRequiredTriggers"), "Replace a milestone's required triggers",
+            resolveWrite,
+            (target, input, key, _) => target.ActivationTriggers.SetMilestoneRequiredTriggers(
+                key, input.TriggerKeys, input.PreviewRevision, input.AllowDeactivation), MutationImpact,
+            linkedProject: linkedProject);
 
         MapPreview<MilestoneDeliveryPreviewRequest, MilestoneDeliveryPreview,
             MilestoneDeliveryPreviewResponse>(api,
-            "/activation/milestones/{key}/delivery-preview", "PreviewMilestoneDelivery",
-            "Preview milestone delivery", resolver, validationService, revisions,
-            (input, key) => deliveryService.PreviewDelivery(key, input.Reason), ToResponse);
+            "/activation/milestones/{key}/delivery-preview", operationName("PreviewMilestoneDelivery"),
+            "Preview milestone delivery", resolveWrite,
+            (target, input, key) => target.MilestoneDeliveries.PreviewDelivery(key, input.Reason),
+            ToResponse, linkedProject);
         MapJson<DeliverMilestoneRequest, LifecycleMutationResult<ResolvedMilestone>>(api, "/activation/milestones/{key}/delivery", HttpMethods.Put,
-            "DeliverMilestone", "Deliver a milestone", resolver, validationService, revisions,
-            (input, key, _) => deliveryService.DeliverMilestone(
+            operationName("DeliverMilestone"), "Deliver a milestone", resolveWrite,
+            (target, input, key, _) => target.MilestoneDeliveries.DeliverMilestone(
                 key, input.Reason, input.PreviewRevision, input.AllowExceptional),
             result => new ActivationMutationImpactResponse(
                 result.ActivationImpact.MilestoneChanges.Select(change => change.MilestoneKey).ToList(),
                 [],
-                result.ActivationImpact.ActivatedTriggers.Select(trigger => trigger.Key).ToList()));
-        MapDelete(api, "/activation/milestones/{key}/delivery", "ReopenMilestone",
-            "Reopen a delivered milestone", resolver, validationService, revisions,
-            key => deliveryService.ReopenMilestone(key),
-            milestone => new ActivationMutationImpactResponse([milestone.Key], [], []));
+                result.ActivationImpact.ActivatedTriggers.Select(trigger => trigger.Key).ToList()),
+            linkedProject: linkedProject);
+        MapDelete(api, "/activation/milestones/{key}/delivery", operationName("ReopenMilestone"),
+            "Reopen a delivered milestone", resolveWrite,
+            (target, key) => target.MilestoneDeliveries.ReopenMilestone(key),
+            milestone => new ActivationMutationImpactResponse([milestone.Key], [], []), linkedProject);
     }
 
     internal static IResult Read(
@@ -232,95 +290,108 @@ public static class MilestoneActivationApiEndpoints
     }
 
     private static void MapDelete<T>(RouteGroupBuilder api, string pattern, string name, string summary,
-        MilestoneActivationResolver resolver, MilestoneActivationValidationService validationService,
-        ResourceRevisionService revisions, Func<string, AppResult<T>> mutate,
-        Func<T, ActivationMutationImpactResponse?>? impact = null)
+        ActivationApiWriteTargetResolver resolveWrite,
+        Func<ActivationApiWriteTarget, string, AppResult<T>> mutate,
+        Func<T, ActivationMutationImpactResponse?>? impact = null,
+        bool linkedProject = false)
     {
         api.MapDelete(pattern, (HttpRequest request, string key) =>
-            ExecuteMutation(request, resolver, validationService, revisions, () => mutate(key), impact))
+            {
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
+                return ExecuteMutation(request, resolved.Target!, () => mutate(resolved.Target!, key), impact);
+            })
             .WithName(name).WithSummary(summary).Produces<ActivationMutationResponse>()
-            .WithClientHeaderMetadata().WithRevisionedMutationMetadata().WithActivationProblems();
+            .WithClientHeaderMetadata().WithRevisionedMutationMetadata().WithActivationProblems(linkedProject);
     }
 
     private static void MapJson<TRequest, TResult>(RouteGroupBuilder api, string pattern, string method,
-        string name, string summary, MilestoneActivationResolver resolver,
-        MilestoneActivationValidationService validationService, ResourceRevisionService revisions,
-        Func<TRequest, string, HttpRequest, AppResult<TResult>> mutate,
+        string name, string summary, ActivationApiWriteTargetResolver resolveWrite,
+        Func<ActivationApiWriteTarget, TRequest, string, HttpRequest, AppResult<TResult>> mutate,
         Func<TResult, ActivationMutationImpactResponse?>? impact = null,
-        Func<TResult, bool>? changed = null)
+        Func<TResult, bool>? changed = null,
+        bool linkedProject = false)
         where TRequest : class
     {
         api.MapMethods(pattern, [method], async (HttpRequest request, string key, CancellationToken cancellationToken) =>
             {
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
                 var (input, error) = await ApiJsonRequest.Read<TRequest>(request, cancellationToken);
                 if (error != null) return error;
-                return ExecuteMutation(request, resolver, validationService, revisions,
-                    () => mutate(input!, key, request), impact, changed);
+                return ExecuteMutation(request, resolved.Target!,
+                    () => mutate(resolved.Target!, input!, key, request), impact, changed);
             })
             .WithName(name).WithSummary(summary).Accepts<TRequest>("application/json")
             .Produces<ActivationMutationResponse>().WithClientHeaderMetadata()
-            .WithRevisionedMutationMetadata().WithActivationProblems();
+            .WithRevisionedMutationMetadata().WithActivationProblems(linkedProject);
     }
 
     private static void MapJsonWithoutKey<TRequest, TResult>(RouteGroupBuilder api, string pattern, string method,
-        string name, string summary, MilestoneActivationResolver resolver,
-        MilestoneActivationValidationService validationService, ResourceRevisionService revisions,
-        Func<TRequest, HttpRequest, AppResult<TResult>> mutate,
+        string name, string summary, ActivationApiWriteTargetResolver resolveWrite,
+        Func<ActivationApiWriteTarget, TRequest, HttpRequest, AppResult<TResult>> mutate,
         Func<TResult, ActivationMutationImpactResponse?>? impact = null,
-        Func<TResult, bool>? changed = null)
+        Func<TResult, bool>? changed = null,
+        bool linkedProject = false)
         where TRequest : class
     {
         api.MapMethods(pattern, [method], async (HttpRequest request, CancellationToken cancellationToken) =>
             {
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
                 var (input, error) = await ApiJsonRequest.Read<TRequest>(request, cancellationToken);
                 if (error != null) return error;
-                return ExecuteMutation(request, resolver, validationService, revisions,
-                    () => mutate(input!, request), impact, changed);
+                return ExecuteMutation(request, resolved.Target!,
+                    () => mutate(resolved.Target!, input!, request), impact, changed);
             })
             .WithName(name).WithSummary(summary).Accepts<TRequest>("application/json")
             .Produces<ActivationMutationResponse>().WithClientHeaderMetadata()
-            .WithRevisionedMutationMetadata().WithActivationProblems();
+            .WithRevisionedMutationMetadata().WithActivationProblems(linkedProject);
     }
 
     private static void MapPreview<TRequest, TPreview, TResponse>(RouteGroupBuilder api, string pattern,
-        string name, string summary, MilestoneActivationResolver resolver,
-        MilestoneActivationValidationService validationService, ResourceRevisionService revisions,
-        Func<TRequest, string, AppResult<TPreview>> preview,
-        Func<TPreview, TResponse> map)
+        string name, string summary, ActivationApiWriteTargetResolver resolveWrite,
+        Func<ActivationApiWriteTarget, TRequest, string, AppResult<TPreview>> preview,
+        Func<TPreview, TResponse> map,
+        bool linkedProject)
         where TRequest : class
     {
         api.MapPost(pattern, async (HttpRequest request, string key, CancellationToken cancellationToken) =>
             {
+                var resolved = resolveWrite(request);
+                if (resolved.Error != null) return resolved.Error;
                 var (input, error) = await ApiJsonRequest.Read<TRequest>(request, cancellationToken);
                 if (error != null) return error;
-                var precondition = CheckPrecondition(request, resolver, revisions);
+                var target = resolved.Target!;
+                var precondition = CheckPrecondition(request, target.Resolver, target.Revisions);
                 if (precondition != null) return precondition;
-                var result = preview(input!, key);
+                var result = preview(target, input!, key);
                 if (!result.Success)
                     return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-                var current = GetResponse(resolver, validationService, revisions, request);
+                var current = GetResponse(target.Resolver, target.Validation, target.Revisions, request);
                 if (current.Error != null) return current.Error;
                 ApiPreconditions.SetETag(request.HttpContext.Response, current.Value!.Revision);
                 return Results.Ok(map(result.Payload!));
             })
             .WithName(name).WithSummary(summary).Accepts<TRequest>("application/json")
             .Produces<TResponse>().WithClientHeaderMetadata().WithRevisionedMutationMetadata()
-            .WithActivationProblems();
+            .WithActivationProblems(linkedProject);
     }
 
-    private static IResult ExecuteMutation<TResult>(HttpRequest request,
-        MilestoneActivationResolver resolver, MilestoneActivationValidationService validationService,
-        ResourceRevisionService revisions, Func<AppResult<TResult>> mutate,
+    private static IResult ExecuteMutation<TResult>(HttpRequest request, ActivationApiWriteTarget target,
+        Func<AppResult<TResult>> mutate,
         Func<TResult, ActivationMutationImpactResponse?>? impact = null,
         Func<TResult, bool>? changed = null)
     {
-        var precondition = CheckPrecondition(request, resolver, revisions);
+        var precondition = CheckPrecondition(request, target.Resolver, target.Revisions);
         if (precondition != null) return precondition;
+        using var tracker = target.BeginMutation();
         var result = mutate();
         if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
-        var response = GetResponse(resolver, validationService, revisions, request);
+        var response = GetResponse(target.Resolver, target.Validation, target.Revisions, request);
         if (response.Error != null) return response.Error;
         ApiPreconditions.SetETag(request.HttpContext.Response, response.Value!.Revision);
+        if (tracker != null) ProjectMutationApiHeaders.Set(request.HttpContext.Response, tracker.Receipt);
         return Results.Ok(new ActivationMutationResponse(
             changed?.Invoke(result.Payload!) ?? true,
             response.Value,
@@ -428,10 +499,17 @@ public static class MilestoneActivationApiEndpoints
                 ? $"_{char.ToLowerInvariant(character)}"
                 : char.ToLowerInvariant(character).ToString()));
 
-    private static RouteHandlerBuilder WithActivationProblems(this RouteHandlerBuilder builder) => builder
-        .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status415UnsupportedMediaType, "application/problem+json")
-        .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+    private static RouteHandlerBuilder WithActivationProblems(
+        this RouteHandlerBuilder builder, bool linkedProject)
+    {
+        builder
+            .Produces<ApiProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status415UnsupportedMediaType, "application/problem+json")
+            .Produces<ApiProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+        if (linkedProject)
+            builder.Produces<ApiProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json");
+        return builder;
+    }
 }

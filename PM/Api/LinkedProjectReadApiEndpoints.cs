@@ -28,6 +28,17 @@ public static class LinkedProjectReadApiEndpoints
         var projects = api.MapGroup("/projects/{projectId}")
             .AddEndpointFilter((context, next) => ResolveProject(context, next, familyService, mutations));
 
+        projects.MapSettingsApi(
+            ResolveSettingsReadTarget,
+            request => ResolveSettingsWriteTarget(request, mutations),
+            LinkedOperationName,
+            true);
+        projects.MapMilestoneActivationApi(
+            ResolveActivationReadTarget,
+            request => ResolveActivationWriteTarget(request, mutations),
+            LinkedOperationName,
+            true);
+
         projects.MapGet("/project", (HttpRequest request) =>
             {
                 var context = GetContext(request);
@@ -52,13 +63,6 @@ public static class LinkedProjectReadApiEndpoints
             .WithRevisionedReadMetadata()
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json");
-
-        projects.MapGet("/settings", (HttpRequest request) =>
-                SettingsApiEndpoints.Read(request, GetContext(request).Config, GetContext(request).Revisions))
-            .WithName("GetLinkedProjectSettings")
-            .WithSummary("Get readable linked-project configuration")
-            .Produces<SettingsResponse>()
-            .WithRevisionedReadMetadata();
 
         projects.MapGet("/board/navigation", (HttpRequest request) =>
             {
@@ -518,6 +522,65 @@ public static class LinkedProjectReadApiEndpoints
             request.Path));
     }
 
+    private static (SettingsApiReadTarget? Target, IResult? Error) ResolveSettingsReadTarget(
+        HttpRequest request)
+    {
+        var context = GetContext(request);
+        return (new SettingsApiReadTarget(context.Config, context.Revisions), null);
+    }
+
+    private static (SettingsApiWriteTarget? Target, IResult? Error) ResolveSettingsWriteTarget(
+        HttpRequest request,
+        LinkedProjectMutationService mutations)
+    {
+        var writable = GetWritableContext(request);
+        if (writable.Error != null) return (null, writable.Error);
+        var target = writable.Context!.MutationTarget!;
+        return (new SettingsApiWriteTarget(
+            target.Config,
+            target.Revisions,
+            () => mutations.Track(target)), null);
+    }
+
+    private static (ActivationApiReadTarget? Target, IResult? Error) ResolveActivationReadTarget(
+        HttpRequest request)
+    {
+        var context = GetContext(request);
+        return (new ActivationApiReadTarget(
+            context.ActivationResolver,
+            context.ActivationValidation,
+            context.Revisions), null);
+    }
+
+    private static (ActivationApiWriteTarget? Target, IResult? Error) ResolveActivationWriteTarget(
+        HttpRequest request,
+        LinkedProjectMutationService mutations)
+    {
+        var writable = GetWritableContext(request);
+        if (writable.Error != null) return (null, writable.Error);
+        var target = writable.Context!.MutationTarget!;
+        return (new ActivationApiWriteTarget(
+            target.ActivationResolver,
+            target.ActivationValidation,
+            target.ActivationTriggers,
+            target.MilestoneDeliveries,
+            target.Revisions,
+            () => mutations.Track(target)), null);
+    }
+
+    private static string LinkedOperationName(string name)
+    {
+        if (string.Equals(name, "SetProjectAccent", StringComparison.Ordinal))
+            return "SetLinkedProjectAccent";
+        string[] verbs =
+        [
+            "Get", "Set", "Create", "Rename", "Delete", "Preview", "Redefine", "Activate",
+            "Override", "Reset", "Reconcile", "Deliver", "Reopen",
+        ];
+        var verb = verbs.FirstOrDefault(name.StartsWith);
+        return verb == null ? $"LinkedProject{name}" : $"{verb}LinkedProject{name[verb.Length..]}";
+    }
+
     private static string EncodeWikiPath(string path) =>
         string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
 
@@ -562,13 +625,21 @@ public static class LinkedProjectReadApiEndpoints
             else mutationFailure = resolved;
         }
 
-        var board = mutationTarget?.Board ??
-                    new BoardService(member.Project, new MilestoneActivationResolver(member.Project));
+        var activationResolver = mutationTarget?.ActivationResolver ??
+                                 new MilestoneActivationResolver(member.Project);
+        var activationValidation = mutationTarget?.ActivationValidation ??
+                                   new MilestoneActivationValidationService(
+                                       member.Project,
+                                       new MilestoneActivationGraphService(),
+                                       activationResolver);
+        var board = mutationTarget?.Board ?? new BoardService(member.Project, activationResolver);
         context.HttpContext.Items[ContextKey] = new LinkedProjectReadContext(
             member,
             member.Project,
             board,
             new ProjectConfigService(member.Project),
+            activationResolver,
+            activationValidation,
             mutationTarget?.Tasks ?? mutations.CreateTaskService(member.Project, ReadOnlyNextIdService.Instance),
             mutationTarget?.Wiki ?? new WikiService(member.Project),
             mutationTarget?.Revisions ?? new ResourceRevisionService(member.Project, board),
@@ -588,6 +659,8 @@ public static class LinkedProjectReadApiEndpoints
         ProjectRoot Root,
         BoardService Board,
         ProjectConfigService Config,
+        MilestoneActivationResolver ActivationResolver,
+        MilestoneActivationValidationService ActivationValidation,
         TaskService Tasks,
         WikiService Wiki,
         ResourceRevisionService Revisions,

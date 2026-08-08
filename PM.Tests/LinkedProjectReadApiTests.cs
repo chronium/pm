@@ -284,6 +284,299 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task LinkedSettingsAndActivationReadsRemainAvailableWhenWritesAreUntrusted()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await workspace.CreateProject(TestData.Config(name: "Games"));
+        await WriteProjectId(active, "prj_games");
+        var child = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "royale"), "prj_royale", "Royale");
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children = [Declaration("prj_royale", "royale", "royale")],
+        });
+        Assert.True(TestMilestoneActivationServices.Create(child).Triggers
+            .AddTrigger("launch-authorized", "Launch authorized", []).Success);
+
+        var parentConfig = File.ReadAllText(active.ConfigPath);
+        var childConfig = File.ReadAllText(child.ConfigPath);
+        var family = LinkedFamily(active, workspace);
+        var (app, client) = await CreateApiClient(active, linkedProjectFamilyService: family);
+        await using (app)
+        using (client)
+        {
+            var settings = await client.GetAsync("/api/v1/projects/prj_royale/settings");
+            Assert.Equal(HttpStatusCode.OK, settings.StatusCode);
+            Assert.Equal("Royale", (await settings.Content.ReadFromJsonAsync<SettingsResponse>())!.ProjectName);
+
+            var activation = await client.GetAsync("/api/v1/projects/prj_royale/activation");
+            Assert.Equal(HttpStatusCode.OK, activation.StatusCode);
+            var switchboard = (await activation.Content.ReadFromJsonAsync<ActivationSwitchboardResponse>())!;
+            Assert.Contains(switchboard.ActivationTriggers, trigger => trigger.Key == "launch-authorized");
+
+            using var deniedSetting = RevisionedRequest(
+                HttpMethod.Put,
+                "/api/v1/projects/prj_royale/settings/accent",
+                settings.Headers.ETag!.ToString(),
+                new { accent = "purple" });
+            var deniedSettingResponse = await client.SendAsync(deniedSetting);
+            Assert.Equal(HttpStatusCode.Forbidden, deniedSettingResponse.StatusCode);
+            Assert.Equal("linked_project_write_untrusted",
+                (await deniedSettingResponse.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+
+            using var deniedActivation = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/activation/triggers",
+                activation.Headers.ETag!.ToString(),
+                new { key = "beta-entry", title = "Beta entry", requirements = Array.Empty<object>() });
+            var deniedActivationResponse = await client.SendAsync(deniedActivation);
+            Assert.Equal(HttpStatusCode.Forbidden, deniedActivationResponse.StatusCode);
+            Assert.Equal("linked_project_write_untrusted",
+                (await deniedActivationResponse.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
+
+            Assert.Equal(parentConfig, File.ReadAllText(active.ConfigPath));
+            Assert.Equal(childConfig, File.ReadAllText(child.ConfigPath));
+        }
+    }
+
+    [Fact]
+    public async Task TrustedLinkedSettingsAndActivationMutationsStayWithinSelectedProject()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await workspace.CreateProject(TestData.Config(name: "Games"));
+        await WriteProjectId(active, "prj_games");
+        var child = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "royale"), "prj_royale", "Royale");
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children = [Declaration("prj_royale", "royale", "royale")],
+        });
+        Assert.True(new ProjectConfigService(child)
+            .AddMilestone("release", "Royale release", "high", "Deliver the Royale release.").Success);
+        var releaseTask = TestData.Task("GAME-0001", "Release validation", track: "GAME", milestone: "release");
+        child.WriteTask(releaseTask);
+        child.UpdateTaskState(releaseTask, "todo");
+
+        var parentConfig = File.ReadAllText(active.ConfigPath);
+        var registry = new LinkedProjectRegistryStore(new LinkedProjectRegistryStoreOptions
+        {
+            RootPath = Path.Combine(workspace.Path, "linked-api-registry"),
+        });
+        Assert.True(registry.Bind("prj_royale", child.RepositoryPath).Success);
+        var family = LinkedFamily(active, workspace, registry);
+        var nextIds = new ApiNextIdService();
+        var mutations = new LinkedProjectMutationService(
+            active, nextIds, family, registry, new TaskServiceFactory(TimeProvider.System), TimeProvider.System);
+        var (app, client) = await CreateApiClient(active, nextIdService: nextIds,
+            linkedProjectFamilyService: family, linkedProjectMutationService: mutations,
+            linkedProjectRegistry: registry);
+        await using (app)
+        using (client)
+        {
+            using var trust = new HttpRequestMessage(HttpMethod.Post,
+                "/api/v1/project/links/prj_royale/write-trust")
+            {
+                Content = JsonContent.Create(new { }),
+            };
+            trust.Headers.Add(ApiV1Endpoints.ClientHeader, "linked-settings-test");
+            Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(trust)).StatusCode);
+
+            var settingsRead = await client.GetAsync("/api/v1/projects/prj_royale/settings");
+            using var accent = RevisionedRequest(
+                HttpMethod.Put,
+                "/api/v1/projects/prj_royale/settings/accent",
+                settingsRead.Headers.ETag!.ToString(),
+                new { accent = "purple" });
+            var accentResponse = await client.SendAsync(accent);
+            AssertLinkedMutationReceipt(accentResponse, "prj_royale", ".pm/pm_config.yaml");
+            var settings = (await accentResponse.Content.ReadFromJsonAsync<SettingsResponse>())!;
+            Assert.Equal("purple", settings.Accent);
+
+            using var staleStatus = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/settings/statuses",
+                settingsRead.Headers.ETag!.ToString(),
+                new { key = "stale", name = "Stale" });
+            var staleStatusResponse = await client.SendAsync(staleStatus);
+            Assert.Equal(HttpStatusCode.PreconditionFailed, staleStatusResponse.StatusCode);
+
+            using var missingPrecondition = new HttpRequestMessage(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/settings/statuses")
+            {
+                Content = JsonContent.Create(new { key = "unguarded", name = "Unguarded" }),
+            };
+            missingPrecondition.Headers.Add(ApiV1Endpoints.ClientHeader, "linked-settings-test");
+            Assert.Equal((HttpStatusCode)428,
+                (await client.SendAsync(missingPrecondition)).StatusCode);
+
+            using var status = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/settings/statuses",
+                accentResponse.Headers.ETag!.ToString(),
+                new { key = "blocked", name = "Blocked" });
+            var statusResponse = await client.SendAsync(status);
+            Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
+
+            using var track = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/settings/tracks",
+                statusResponse.Headers.ETag!.ToString(),
+                new { key = "OPS", name = "Operations" });
+            var trackResponse = await client.SendAsync(track);
+            Assert.Equal(HttpStatusCode.OK, trackResponse.StatusCode);
+
+            using var milestone = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/settings/milestones",
+                trackResponse.Headers.ETag!.ToString(),
+                new { key = "later", title = "Later release", priority = "low", description = "A later deliverable." });
+            var milestoneResponse = await client.SendAsync(milestone);
+            Assert.Equal(HttpStatusCode.OK, milestoneResponse.StatusCode);
+
+            var activationRead = await client.GetAsync("/api/v1/projects/prj_royale/activation");
+            using var createTrigger = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/activation/triggers",
+                activationRead.Headers.ETag!.ToString(),
+                new { key = "release-entry", title = "Release entry", requirements = Array.Empty<object>() });
+            var triggerResponse = await client.SendAsync(createTrigger);
+            AssertLinkedMutationReceipt(triggerResponse, "prj_royale", ".pm/pm_config.yaml");
+
+            using var requiredPreview = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/activation/milestones/release/required-triggers-preview",
+                triggerResponse.Headers.ETag!.ToString(),
+                new { triggerKeys = new[] { "release-entry" } });
+            var requiredPreviewResponse = await client.SendAsync(requiredPreview);
+            Assert.Equal(HttpStatusCode.OK, requiredPreviewResponse.StatusCode);
+            var requiredPreviewBody = (await requiredPreviewResponse.Content
+                .ReadFromJsonAsync<MilestoneRequiredTriggersPreviewResponse>())!;
+
+            using var setRequired = RevisionedRequest(
+                HttpMethod.Put,
+                "/api/v1/projects/prj_royale/activation/milestones/release/required-triggers",
+                requiredPreviewResponse.Headers.ETag!.ToString(),
+                new
+                {
+                    triggerKeys = new[] { "release-entry" },
+                    previewRevision = requiredPreviewBody.PreviewRevision,
+                    allowDeactivation = true,
+                });
+            var requiredResponse = await client.SendAsync(setRequired);
+            Assert.Equal(HttpStatusCode.OK, requiredResponse.StatusCode);
+
+            using var activate = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/activation/triggers/release-entry/activate",
+                requiredResponse.Headers.ETag!.ToString(),
+                new { });
+            var activatedResponse = await client.SendAsync(activate);
+            Assert.Equal(HttpStatusCode.OK, activatedResponse.StatusCode);
+
+            using var deliveryPreview = RevisionedRequest(
+                HttpMethod.Post,
+                "/api/v1/projects/prj_royale/activation/milestones/release/delivery-preview",
+                activatedResponse.Headers.ETag!.ToString(),
+                new { reason = "Accept remaining dogfood validation." });
+            var deliveryPreviewResponse = await client.SendAsync(deliveryPreview);
+            var deliveryPreviewBody = (await deliveryPreviewResponse.Content
+                .ReadFromJsonAsync<MilestoneDeliveryPreviewResponse>())!;
+
+            using var deliver = RevisionedRequest(
+                HttpMethod.Put,
+                "/api/v1/projects/prj_royale/activation/milestones/release/delivery",
+                deliveryPreviewResponse.Headers.ETag!.ToString(),
+                new
+                {
+                    reason = "Accept remaining dogfood validation.",
+                    previewRevision = deliveryPreviewBody.PreviewRevision,
+                    allowExceptional = true,
+                });
+            var deliveredResponse = await client.SendAsync(deliver);
+            Assert.Equal(HttpStatusCode.OK, deliveredResponse.StatusCode);
+
+            using var reopen = RevisionedRequest(
+                HttpMethod.Delete,
+                "/api/v1/projects/prj_royale/activation/milestones/release/delivery",
+                deliveredResponse.Headers.ETag!.ToString());
+            var reopenedResponse = await client.SendAsync(reopen);
+            AssertLinkedMutationReceipt(reopenedResponse, "prj_royale", ".pm/pm_config.yaml");
+
+            var reread = await client.GetFromJsonAsync<ActivationSwitchboardResponse>(
+                "/api/v1/projects/prj_royale/activation");
+            Assert.Contains(reread!.ActivationTriggers,
+                trigger => trigger.Key == "release-entry" && trigger.IsActive);
+            Assert.Contains(reread.Milestones,
+                item => item.Key == "release" && item.Delivery == null && item.Lifecycle == "active");
+
+            Assert.Equal(parentConfig, File.ReadAllText(active.ConfigPath));
+            Assert.True(child.TryReloadConfig());
+            Assert.Equal("purple", child.Config!.Accent);
+            Assert.Contains("blocked", child.Config.TaskStates.Keys);
+            Assert.Contains("OPS", child.Config.Tracks.Keys);
+            Assert.Contains("later", child.Config.Milestones.Keys);
+        }
+    }
+
+    [Fact]
+    public async Task OpenApiPublishesCompleteLinkedSettingsAndActivationSurface()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var root = await workspace.CreateProject();
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var document = await client.GetFromJsonAsync<JsonElement>("/openapi/v1.json");
+            var paths = document.GetProperty("paths");
+            string[] expectedPaths =
+            [
+                "/api/v1/projects/{projectId}/settings",
+                "/api/v1/projects/{projectId}/settings/accent",
+                "/api/v1/projects/{projectId}/settings/statuses",
+                "/api/v1/projects/{projectId}/settings/statuses/{key}",
+                "/api/v1/projects/{projectId}/settings/tracks",
+                "/api/v1/projects/{projectId}/settings/tracks/{key}",
+                "/api/v1/projects/{projectId}/settings/milestones",
+                "/api/v1/projects/{projectId}/settings/milestones/{key}",
+                "/api/v1/projects/{projectId}/settings/milestones/{key}/priority",
+                "/api/v1/projects/{projectId}/settings/milestones/{key}/description",
+                "/api/v1/projects/{projectId}/activation",
+                "/api/v1/projects/{projectId}/activation/triggers",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/title",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/requirements",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/redefinition-preview",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/redefinition",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/activate",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/override",
+                "/api/v1/projects/{projectId}/activation/triggers/{key}/activation",
+                "/api/v1/projects/{projectId}/activation/reconcile",
+                "/api/v1/projects/{projectId}/activation/milestones/{key}/required-triggers-preview",
+                "/api/v1/projects/{projectId}/activation/milestones/{key}/required-triggers",
+                "/api/v1/projects/{projectId}/activation/milestones/{key}/delivery-preview",
+                "/api/v1/projects/{projectId}/activation/milestones/{key}/delivery",
+            ];
+            foreach (var path in expectedPaths) Assert.True(paths.TryGetProperty(path, out _), path);
+
+            Assert.Equal("GetLinkedProjectSettings", paths
+                .GetProperty("/api/v1/projects/{projectId}/settings").GetProperty("get")
+                .GetProperty("operationId").GetString());
+            Assert.Equal("GetLinkedProjectMilestoneActivation", paths
+                .GetProperty("/api/v1/projects/{projectId}/activation").GetProperty("get")
+                .GetProperty("operationId").GetString());
+            var linkedMutation = paths
+                .GetProperty("/api/v1/projects/{projectId}/activation/triggers").GetProperty("post");
+            Assert.Equal("CreateLinkedProjectActivationTrigger",
+                linkedMutation.GetProperty("operationId").GetString());
+            Assert.True(linkedMutation.GetProperty("responses").TryGetProperty("403", out _));
+            Assert.True(linkedMutation.GetProperty("responses").TryGetProperty("412", out _));
+            Assert.True(linkedMutation.GetProperty("responses").TryGetProperty("428", out _));
+        }
+    }
+
+    [Fact]
     public async Task LinkedProjectReadApiUsesExactIdsAndDistinguishesUnavailableProjects()
     {
         using var workspace = new TempWorkingDirectory();
@@ -309,6 +602,30 @@ public partial class ApiContractTests
             Assert.Equal("linked_project_unavailable",
                 (await unavailable.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
         }
+    }
+
+    private static HttpRequestMessage RevisionedRequest(
+        HttpMethod method,
+        string path,
+        string revision,
+        object? body = null)
+    {
+        var request = new HttpRequestMessage(method, path);
+        if (body != null) request.Content = JsonContent.Create(body);
+        request.Headers.Add(ApiV1Endpoints.ClientHeader, "linked-settings-test");
+        request.Headers.TryAddWithoutValidation("If-Match", revision);
+        return request;
+    }
+
+    private static void AssertLinkedMutationReceipt(
+        HttpResponseMessage response,
+        string projectId,
+        string changedPath)
+    {
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(projectId, response.Headers.GetValues("X-PM-Project-Id").Single());
+        Assert.Contains(changedPath,
+            response.Headers.GetValues("X-PM-Changed-Path"));
     }
 
     private static LinkedProjectFamilyService LinkedFamily(
