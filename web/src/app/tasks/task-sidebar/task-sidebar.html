@@ -40,7 +40,13 @@
     }
   }
 
-  <div class="scope-scroll" aria-live="polite">
+  <div
+    class="scope-scroll pm-accent-scrollbar"
+    role="region"
+    aria-label="Milestones and tracks"
+    aria-live="polite"
+    tabindex="0"
+  >
     @if (store.loading()) {
       <p class="sidebar-message" role="status">Loading scopes…</p>
     } @else if (store.error(); as error) {

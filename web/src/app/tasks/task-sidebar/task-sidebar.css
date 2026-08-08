@@ -11,6 +11,7 @@ a,
 .next-task-action {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   min-height: 32px;
   padding: 0 var(--pm-space-2);
   border-radius: var(--pm-radius-sm);
@@ -53,6 +54,7 @@ a:hover,
 }
 
 .recommendation-message {
+  flex: 0 0 auto;
   margin: var(--pm-space-1) var(--pm-space-2);
   color: var(--pm-text-subtle);
   font-size: var(--pm-font-size-xs);
@@ -92,8 +94,11 @@ a.active .scope-count {
 
 .scope-scroll {
   min-height: 0;
+  flex: 1 1 0;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 section {
@@ -128,6 +133,7 @@ h2 {
 }
 
 .settings-link {
+  flex: 0 0 auto;
   gap: var(--pm-space-2);
   margin-top: auto;
 }

@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { applicationConfig } from '@storybook/angular-vite';
+import { expect, userEvent } from 'storybook/test';
 
 import { TaskSidebar } from './task-sidebar';
 import { TaskSidebarStore, type BoardNavigationResponse } from './task-sidebar.store';
@@ -91,6 +92,31 @@ export const LongListsAndZeroCounts: Story = {
       providers: [{ provide: TaskSidebarStore, useValue: storyStore(realistic) }],
     }),
   ],
+  play: async ({ canvas, canvasElement }) => {
+    const scope = canvasElement.querySelector<HTMLElement>('.scope-scroll')!;
+    const allTasks = canvas.getByRole('link', { name: /All tasks/ });
+    const settings = canvas.getByRole('link', { name: 'Settings' });
+    const lastTrack = canvas.getByRole('link', { name: /Documentation/ });
+    const topBefore = allTasks.getBoundingClientRect().top;
+    const settingsBefore = settings.getBoundingClientRect().top;
+
+    await expect(settings).toBeVisible();
+    expect(scope.scrollHeight).toBeGreaterThan(scope.clientHeight);
+    expect(scope.scrollWidth).toBeLessThanOrEqual(scope.clientWidth);
+    expect(getComputedStyle(scope).scrollbarGutter).toBe('stable');
+
+    scope.focus();
+    for (let index = 0; index < realistic.milestones.length + realistic.tracks.length; index++) {
+      await userEvent.tab();
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(document.activeElement).toBe(lastTrack);
+    expect(scope.scrollTop).toBeGreaterThan(0);
+    await expect(lastTrack).toBeVisible();
+    expect(allTasks.getBoundingClientRect().top).toBeCloseTo(topBefore, 1);
+    expect(settings.getBoundingClientRect().top).toBeCloseTo(settingsBefore, 1);
+  },
 };
 
 export const ActiveMilestone: Story = {
@@ -142,6 +168,13 @@ export const EmptyCollections: Story = {
       ],
     }),
   ],
+  play: async ({ canvas, canvasElement }) => {
+    const scope = canvasElement.querySelector<HTMLElement>('.scope-scroll')!;
+
+    await expect(canvas.getByRole('link', { name: 'Settings' })).toBeVisible();
+    expect(scope.scrollHeight).toBeLessThanOrEqual(scope.clientHeight);
+    expect(getComputedStyle(scope).scrollbarGutter).toBe('stable');
+  },
 };
 
 export const NoReadyRecommendation: Story = {
