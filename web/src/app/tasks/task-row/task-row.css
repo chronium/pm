@@ -41,7 +41,7 @@ a:hover {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--pm-space-1);
+  gap: var(--pm-space-2);
 }
 .task-title {
   overflow: hidden;

@@ -147,6 +147,7 @@ const verifyLongIdsDesktop: NonNullable<Story['play']> = async ({ canvasElement 
           (taskIdBounds.top + taskIdBounds.height / 2),
       ),
     ).toBeLessThanOrEqual(1);
+    expect(taskIdBounds.left - priorityBounds.right).toBe(8);
     expect(priorityBounds.left).toBe(title!.getBoundingClientRect().left);
   }
 };
