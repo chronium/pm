@@ -36,7 +36,7 @@ const blockedTask: BoardTask = {
   ...readyTask,
   id: 'PM-0056',
   title: 'A very long blocked task title that remains fully available to assistive technology',
-  priority: 'critical',
+  priority: 'urgent',
   dependencies: {
     ready: false,
     dependsOn: ['PM-9999'],
@@ -134,22 +134,45 @@ describe('Task board components', () => {
     expect(link.getAttribute('href')).toBe('/tasks/PM-0055');
     expect(link.textContent).toContain('PM-0055');
     expect(link.textContent).toContain('angular-web');
-    expect(link.textContent).toContain('Priority: high');
-    expect(link.textContent).toContain('Dependencies: ready');
-    expect(link.textContent).toContain('Activation: eligible');
+    const priority = link.querySelector('pm-priority-indicator') as HTMLElement;
+    expect(priority.getAttribute('aria-label')).toBe('Priority: high');
+    expect(priority.getAttribute('title')).toBe(
+      'Priority: high — effective priority from milestone',
+    );
+    const readyStatuses = [...link.querySelectorAll<HTMLElement>('.task-status')];
+    expect(readyStatuses.map((status) => status.dataset['icon'])).toEqual([
+      'cssUnblock',
+      'cssLockUnlock',
+    ]);
+    expect(readyStatuses.map((status) => status.getAttribute('aria-label'))).toEqual([
+      'Dependencies: ready',
+      'Activation: eligible',
+    ]);
     expect(link.textContent).toContain('Keep a deliberately useful preview');
+    expect(link.querySelector('pm-badge')).toBeNull();
 
     const blockedFixture = TestBed.createComponent(TaskRow);
     blockedFixture.componentRef.setInput('task', blockedTask);
     blockedFixture.componentRef.setInput('selected', false);
     blockedFixture.detectChanges();
-    const badges = blockedFixture.nativeElement.querySelectorAll('pm-badge');
-    expect(badges[0]?.querySelector('.badge--danger')).toBeTruthy();
-    expect(badges[1]?.querySelector('.badge--danger')).toBeTruthy();
-    expect(badges[1]?.getAttribute('title')).toBe('missing PM-9999');
-    expect(badges[1]?.textContent).toContain('Dependencies: blocked');
-    expect(badges[2]?.querySelector('.badge--warning')).toBeTruthy();
-    expect(badges[2]?.textContent).toContain('Activation: inactive');
+    const blockedPriority = blockedFixture.nativeElement.querySelector(
+      'pm-priority-indicator',
+    ) as HTMLElement;
+    const blockedStatuses = [
+      ...(blockedFixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.task-status',
+      ),
+    ];
+    expect(blockedPriority.dataset['priority']).toBe('urgent');
+    expect(blockedStatuses.map((status) => status.dataset['icon'])).toEqual([
+      'cssBlock',
+      'cssLock',
+    ]);
+    expect(blockedStatuses.map((status) => status.dataset['tone'])).toEqual(['danger', 'warning']);
+    expect(blockedStatuses[0]?.getAttribute('title')).toBe(
+      'Dependencies: blocked — missing PM-9999',
+    );
+    expect(blockedStatuses[1]?.getAttribute('aria-label')).toBe('Activation: inactive');
     expect(blockedFixture.nativeElement.textContent).toContain('A very long blocked task title');
   });
 });

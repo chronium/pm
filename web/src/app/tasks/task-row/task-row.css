@@ -28,7 +28,7 @@ a:hover {
 }
 .task-identity,
 .task-context,
-.task-badges {
+.task-statuses {
   min-width: 0;
 }
 .task-identity {
@@ -36,6 +36,12 @@ a:hover {
   grid-template-columns: max-content minmax(0, 1fr);
   align-items: baseline;
   gap: var(--pm-space-2);
+}
+.task-id-group {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--pm-space-1);
 }
 .task-title {
   overflow: hidden;
@@ -58,10 +64,31 @@ a:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.task-badges {
+.task-statuses {
   display: flex;
   justify-content: flex-end;
-  gap: var(--pm-space-1);
+  gap: var(--pm-space-2);
+}
+.task-status {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  color: var(--pm-text-muted);
+}
+.task-status[data-tone='success'] {
+  color: var(--pm-success);
+}
+.task-status[data-tone='warning'] {
+  color: var(--pm-warning);
+}
+.task-status[data-tone='danger'] {
+  color: var(--pm-danger);
+}
+.task-status ng-icon {
+  width: 18px;
+  height: 18px;
 }
 .task-preview {
   grid-column: 1 / -1;
@@ -105,7 +132,7 @@ a:hover {
     display: contents;
   }
 
-  :host .task-id {
+  :host .task-id-group {
     grid-column: 2;
   }
 
@@ -117,16 +144,8 @@ a:hover {
     grid-column: 4;
   }
 
-  :host .task-badges {
+  :host .task-statuses {
     grid-column: 5;
-    display: grid;
-    grid-template-columns: repeat(3, max-content);
-    gap: var(--pm-space-1);
-  }
-
-  :host :is(.priority-badge, .dependency-badge, .activation-badge) {
-    width: auto;
-    white-space: nowrap;
   }
 
   :host .task-preview {
@@ -153,7 +172,7 @@ a:hover {
   .task-title {
     white-space: normal;
   }
-  .task-badges {
+  .task-statuses {
     justify-content: flex-start;
     overflow: hidden;
   }

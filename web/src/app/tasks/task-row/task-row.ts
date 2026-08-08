@@ -1,15 +1,20 @@
 import { Component, inject, input } from '@angular/core';
 import { Router } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { cssBlock, cssLock, cssLockUnlock, cssUnblock } from '@ng-icons/css.gg';
 
-import { PmBadge, type BadgeTone } from '../../ui/badge/badge';
+import { PriorityIndicator } from '../../ui/priority-indicator/priority-indicator';
 import type { BoardTask } from '../tasks-board.store';
 import { TaskNavigationService } from '../task-navigation.service';
 
+type StatusTone = 'neutral' | 'success' | 'warning' | 'danger';
+
 @Component({
   selector: 'li[pmTaskRow]',
-  imports: [PmBadge],
+  imports: [NgIcon, PriorityIndicator],
   templateUrl: './task-row.html',
   styleUrl: './task-row.css',
+  providers: [provideIcons({ cssBlock, cssLock, cssLockUnlock, cssUnblock })],
   host: { '[class.selected]': 'selected()' },
 })
 export class TaskRow {
@@ -26,29 +31,30 @@ export class TaskRow {
     return this.navigation.canonicalHref(this.router, this.task().id);
   }
 
-  protected priorityTone(priority: string): BadgeTone {
-    switch (priority.toLowerCase()) {
-      case 'critical':
-      case 'urgent':
-      case 'high':
-        return 'danger';
-      case 'medium':
-        return 'warning';
-      case 'low':
-        return 'neutral';
-      default:
-        return 'accent';
-    }
-  }
-
-  protected dependencyTone(task: BoardTask): BadgeTone {
+  protected dependencyTone(task: BoardTask): StatusTone {
     if (task.dependencies.missing.length > 0) return 'danger';
     return task.dependencies.ready ? 'success' : 'warning';
   }
 
-  protected activationTone(task: BoardTask): BadgeTone {
+  protected dependencyIcon(task: BoardTask): string {
+    return task.dependencies.ready ? 'cssUnblock' : 'cssBlock';
+  }
+
+  protected dependencyLabel(task: BoardTask): string {
+    return `Dependencies: ${task.dependencies.ready ? 'ready' : 'blocked'}`;
+  }
+
+  protected dependencyTitle(task: BoardTask): string {
+    return `${this.dependencyLabel(task)} — ${task.dependencies.summary}`;
+  }
+
+  protected activationTone(task: BoardTask): StatusTone {
     if (task.activation.isEligible) return 'success';
     return task.activation.milestoneLifecycle === 'inactive' ? 'warning' : 'neutral';
+  }
+
+  protected activationIcon(task: BoardTask): string {
+    return task.activation.milestoneLifecycle === 'inactive' ? 'cssLock' : 'cssLockUnlock';
   }
 
   protected activationLabel(task: BoardTask): string {
@@ -66,5 +72,9 @@ export class TaskRow {
       default:
         return 'Activation: unavailable';
     }
+  }
+
+  protected activationTitle(task: BoardTask): string {
+    return `${this.activationLabel(task)} — ${task.activation.summary}`;
   }
 }

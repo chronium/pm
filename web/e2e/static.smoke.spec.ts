@@ -160,7 +160,7 @@ test('mutation-only hash routes redirect while activation settings remain inspec
   await expect(page.getByText(/Controls are hidden/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Activate' })).toHaveCount(0);
   await page.goto('/#/tasks?milestone=later');
-  await expect(page.getByText('Activation: delivered', { exact: true })).toBeVisible();
+  await expect(page.locator('.task-status[aria-label="Activation: delivered"]')).toBeVisible();
   await page.goto('/#/wiki/edit/welcome');
   await expect(page).toHaveURL(/#\/wiki\/welcome$/);
   await expect(page.getByRole('heading', { name: 'Wiki page 1' })).toBeVisible();

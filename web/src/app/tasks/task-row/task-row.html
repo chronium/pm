@@ -1,31 +1,33 @@
 <a [attr.href]="href()" [attr.aria-current]="selected() ? 'true' : null" (click)="open($event)">
   <span class="task-identity"
-    ><span class="task-id">{{ task().id }}</span
+    ><span class="task-id-group"
+      ><pm-priority-indicator [priority]="task().priority" [source]="task().prioritySource" />
+      <span class="task-id">{{ task().id }}</span></span
     ><span class="task-title">{{ task().title }}</span></span
   >
   <span class="task-context"
     ><span>{{ task().track }}</span
     ><span aria-hidden="true">·</span><span>{{ task().milestone ?? 'Unassigned' }}</span></span
   >
-  <span class="task-badges">
-    <pm-badge
-      class="priority-badge"
-      [tone]="priorityTone(task().priority)"
-      [title]="'Effective priority from ' + task().prioritySource"
-      >Priority: {{ task().priority }}</pm-badge
+  <span class="task-statuses">
+    <span
+      class="task-status"
+      [attr.data-icon]="dependencyIcon(task())"
+      [attr.data-tone]="dependencyTone(task())"
+      [attr.aria-label]="dependencyLabel(task())"
+      [title]="dependencyTitle(task())"
     >
-    <pm-badge
-      class="dependency-badge"
-      [tone]="dependencyTone(task())"
-      [title]="task().dependencies.summary"
-      >Dependencies: {{ task().dependencies.ready ? 'ready' : 'blocked' }}</pm-badge
+      <ng-icon [name]="dependencyIcon(task())" aria-hidden="true" />
+    </span>
+    <span
+      class="task-status"
+      [attr.data-icon]="activationIcon(task())"
+      [attr.data-tone]="activationTone(task())"
+      [attr.aria-label]="activationLabel(task())"
+      [title]="activationTitle(task())"
     >
-    <pm-badge
-      class="activation-badge"
-      [tone]="activationTone(task())"
-      [title]="task().activation.summary"
-      >{{ activationLabel(task()) }}</pm-badge
-    >
+      <ng-icon [name]="activationIcon(task())" aria-hidden="true" />
+    </span>
   </span>
   @if (task().descriptionPreview) {
     <span class="task-preview">{{ task().descriptionPreview }}</span>

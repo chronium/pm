@@ -69,10 +69,17 @@ type Story = StoryObj<typeof meta>;
 export const Ready: Story = {
   args: { task: ready, selected: false },
   play: async ({ canvasElement }) => {
-    const badges = [...canvasElement.querySelectorAll<HTMLElement>('.task-badges pm-badge')];
-    expect(badges).toHaveLength(3);
-    for (const badge of badges)
-      expect(badge.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+    const priority = canvasElement.querySelector<HTMLElement>('pm-priority-indicator');
+    const statuses = [...canvasElement.querySelectorAll<HTMLElement>('.task-status')];
+    expect(priority?.dataset['priority']).toBe('high');
+    expect(priority?.getAttribute('aria-label')).toBe('Priority: high');
+    expect(statuses).toHaveLength(2);
+    expect(statuses.map((status) => status.dataset['icon'])).toEqual([
+      'cssUnblock',
+      'cssLockUnlock',
+    ]);
+    for (const status of statuses)
+      expect(status.getBoundingClientRect().height).toBeLessThanOrEqual(20);
   },
 };
 export const BlockedSelected: Story = { args: { task: blocked, selected: true } };

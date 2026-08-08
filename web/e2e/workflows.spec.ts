@@ -576,7 +576,7 @@ test('opens partial milestone work, preserves the latch, and enforces reset sema
 }) => {
   await seedPartialActivationStory();
   await page.goto('/tasks?milestone=later');
-  await expect(page.getByText('Activation: inactive', { exact: true })).toBeVisible();
+  await expect(page.locator('.task-status[aria-label="Activation: inactive"]')).toBeVisible();
   await page.getByText('E2E-0004', { exact: true }).first().click();
   const activation = page.locator('.activation-context');
   await expect(activation).toContainText('Ineligible: milestone later is inactive.');
@@ -598,7 +598,7 @@ test('opens partial milestone work, preserves the latch, and enforces reset sema
   await setTaskState(page, 'E2E-0001', 'done', 'Done');
   await setTaskState(page, 'E2E-0002', 'done', 'Done');
   await page.goto('/tasks?milestone=later');
-  await expect(page.getByText('Activation: eligible', { exact: true })).toBeVisible();
+  await expect(page.locator('.task-status[aria-label="Activation: eligible"]')).toBeVisible();
   const menu = page.getByRole('button', { name: 'Toggle navigation' });
   if (await menu.isVisible()) await menu.click();
   await page.getByRole('button', { name: 'Next task' }).click();
@@ -616,7 +616,7 @@ test('opens partial milestone work, preserves the latch, and enforces reset sema
   await expect(beta.getByText('Pending — 1 / 2')).toBeVisible();
 
   await page.goto('/tasks?milestone=later');
-  await expect(page.getByText('Activation: inactive', { exact: true })).toBeVisible();
+  await expect(page.locator('.task-status[aria-label="Activation: inactive"]')).toBeVisible();
   await setTaskState(page, 'E2E-0001', 'done', 'Done');
   await page.goto('/tasks/settings');
   await page.getByRole('button', { name: 'Activation', exact: true }).click();

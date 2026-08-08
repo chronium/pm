@@ -198,13 +198,16 @@ describe('TasksBoard', () => {
     expect(sessionStorage.getItem('pm.tasks-board.v1.current.second.done.open')).toBe('true');
   });
 
-  it('renders semantic task links with textual priority and dependency meaning and long content', async () => {
+  it('renders semantic task links with accessible priority and status icons and long content', async () => {
     const { element } = await render();
     const link = element.querySelector<HTMLAnchorElement>('a[href="/tasks/PM-0002"]');
     expect(link).toBeTruthy();
-    expect(link?.textContent).toContain('Priority: high');
-    expect(link?.textContent).toContain('Dependencies: blocked');
-    expect(link?.textContent).toContain('Activation: inactive');
+    expect(link?.querySelector('pm-priority-indicator')?.getAttribute('aria-label')).toBe(
+      'Priority: high',
+    );
+    expect(link?.querySelector('[aria-label="Dependencies: blocked"]')).toBeTruthy();
+    expect(link?.querySelector('[aria-label="Activation: inactive"]')).toBeTruthy();
+    expect(link?.querySelector('pm-badge')).toBeNull();
     expect(link?.textContent).not.toContain('waiting on PM-0001');
     expect(link?.textContent).toContain('A deliberately long task title');
     expect(link?.textContent).toContain('A useful and intentionally long description preview');
