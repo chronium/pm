@@ -379,10 +379,10 @@
             aria-labelledby="activation-heading"
           >
             <h2 id="activation-heading">Activation</h2>
-            <p>{{ task.activation.summary }}</p>
+            <p>{{ activationSummary(task) }}</p>
             @if (task.activation.unmetActivationTriggers.length) {
               <p class="activation-gates">
-                <span>Unmet gates</span>
+                <span>{{ unmetGateLabel(task.activation.unmetActivationTriggers.length) }}</span>
                 @for (trigger of task.activation.unmetActivationTriggers; track trigger) {
                   <code>{{ trigger }}</code>
                 }

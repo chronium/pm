@@ -388,6 +388,22 @@ export class TaskWorkspace {
     if (this.presentation() === 'dialog') this.navigation.openDialog(event, this.router, id);
   }
 
+  protected activationSummary(task: TaskResponse): string {
+    if (
+      task.activation.milestoneLifecycle === 'inactive' &&
+      task.milestone &&
+      task.activation.unmetActivationTriggers.length
+    ) {
+      return `Ineligible: milestone ${task.milestone} is inactive.`;
+    }
+
+    return task.activation.summary;
+  }
+
+  protected unmetGateLabel(count: number): string {
+    return count === 1 ? 'Unmet gate (1)' : `Unmet gates (${count})`;
+  }
+
   protected dependencyLink(id: string): ProjectLinkResolution {
     return this.projectLinks.resolve(id);
   }

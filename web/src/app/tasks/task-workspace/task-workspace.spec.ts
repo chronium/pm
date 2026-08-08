@@ -337,9 +337,55 @@ describe('TaskWorkspace', () => {
 
     expect(activation.getAttribute('data-eligible')).toBe('false');
     expect(activation.textContent).toContain('Activation');
-    expect(activation.textContent).toContain('milestone angular-web is inactive');
+    expect(activation.textContent).toContain('Ineligible: milestone angular-web is inactive.');
+    expect(activation.textContent).toContain('Unmet gate (1)');
+    expect((activation.textContent ?? '').split('beta-entry').length).toBe(2);
     expect(activation.querySelector('code')?.textContent).toBe('beta-entry');
+    expect(activation.textContent).not.toContain('unmet activation triggers');
     expect(element.querySelector('.dependencies')).not.toBeNull();
+  });
+
+  it('lists multiple unmet activation gates once with a count-aware label', async () => {
+    const multipleGateTask: TaskResponse = {
+      ...task,
+      activation: {
+        ...task.activation,
+        requiredActivationTriggers: ['beta-entry', 'risk-entry'],
+        unmetActivationTriggers: ['beta-entry', 'risk-entry'],
+        summary:
+          'Ineligible: milestone angular-web is inactive; unmet activation triggers: beta-entry, risk-entry.',
+      },
+    };
+
+    const { element } = await render('detail', 'page', multipleGateTask);
+    const activation = element.querySelector('.activation-context') as HTMLElement;
+
+    expect(activation.textContent).toContain('Unmet gates (2)');
+    expect((activation.textContent ?? '').split('beta-entry').length).toBe(2);
+    expect((activation.textContent ?? '').split('risk-entry').length).toBe(2);
+    expect([...activation.querySelectorAll('code')].map((code) => code.textContent)).toEqual([
+      'beta-entry',
+      'risk-entry',
+    ]);
+  });
+
+  it('preserves activation summaries when there are no unmet gates', async () => {
+    const eligibleTask: TaskResponse = {
+      ...task,
+      activation: {
+        isEligible: true,
+        milestoneLifecycle: 'active',
+        requiredActivationTriggers: ['beta-entry'],
+        unmetActivationTriggers: [],
+        summary: 'Eligible: milestone angular-web is active.',
+      },
+    };
+
+    const { element } = await render('detail', 'page', eligibleTask);
+    const activation = element.querySelector('.activation-context') as HTMLElement;
+
+    expect(activation.textContent).toContain('Eligible: milestone angular-web is active.');
+    expect(activation.querySelector('.activation-gates')).toBeNull();
   });
 
   it('renders each dependency once with an explicit icon-backed state', async () => {

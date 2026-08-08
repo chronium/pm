@@ -577,6 +577,13 @@ test('opens partial milestone work, preserves the latch, and enforces reset sema
   await seedPartialActivationStory();
   await page.goto('/tasks?milestone=later');
   await expect(page.getByText('Activation: inactive', { exact: true })).toBeVisible();
+  await page.getByText('E2E-0004', { exact: true }).first().click();
+  const activation = page.locator('.activation-context');
+  await expect(activation).toContainText('Ineligible: milestone later is inactive.');
+  await expect(activation.getByText('Unmet gates (2)', { exact: true })).toBeVisible();
+  await expect(activation.locator('code').filter({ hasText: 'beta-entry' })).toHaveCount(1);
+  await expect(activation.locator('code').filter({ hasText: 'risk-entry' })).toHaveCount(1);
+  await expect(activation).not.toContainText('unmet activation triggers');
 
   await page.goto('/tasks/settings');
   await page.getByRole('button', { name: 'Activation', exact: true }).click();
