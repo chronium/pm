@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { applicationConfig } from '@storybook/angular-vite';
+import { expect, userEvent } from 'storybook/test';
 
 import type { BoardMilestoneGroup, BoardTask } from '../tasks-board.store';
 import { TaskMilestone } from './task-milestone';
@@ -107,6 +108,75 @@ export const InactiveWithDeliverable: Story = {
     openStates: { todo: true },
     milestoneOpen: true,
   },
+};
+
+export const InactiveWithDeliverableDark: Story = {
+  ...InactiveWithDeliverable,
+  globals: { theme: 'dark' },
+};
+
+const expandDeliverable: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const details = canvasElement.querySelector<HTMLDetailsElement>('.deliverable-description');
+  const statusGroups = canvasElement.querySelector<HTMLElement>('.status-groups');
+  const summary = details?.querySelector<HTMLElement>('summary');
+  const caret = details?.querySelector<HTMLElement>('.deliverable-disclosure');
+  const milestoneCaret = canvasElement.querySelector<HTMLElement>('.milestone-disclosure');
+  const statusCaret = canvasElement.querySelector<HTMLElement>('.disclosure-icon');
+  const deliverableTitle = details?.querySelector<HTMLElement>('.deliverable-title');
+  const milestoneTitle = canvasElement.querySelector<HTMLElement>('.milestone-heading');
+  const milestoneSummary = canvasElement.querySelector<HTMLElement>('.milestone-summary');
+  const statusTitle = canvasElement.querySelector<HTMLElement>('.status-name');
+  const statusSummary = canvasElement.querySelector<HTMLElement>('.status-group > summary');
+  expect(details).not.toBeNull();
+  expect(statusGroups).not.toBeNull();
+  expect(summary).not.toBeNull();
+  expect(caret).not.toBeNull();
+  expect(milestoneCaret).not.toBeNull();
+  expect(statusCaret).not.toBeNull();
+  expect(deliverableTitle).not.toBeNull();
+  expect(milestoneTitle).not.toBeNull();
+  expect(milestoneSummary).not.toBeNull();
+  expect(statusTitle).not.toBeNull();
+  expect(statusSummary).not.toBeNull();
+  expect(caret!.getBoundingClientRect().left).toBe(milestoneCaret!.getBoundingClientRect().left);
+  expect(caret!.getBoundingClientRect().left).toBe(statusCaret!.getBoundingClientRect().left);
+  expect(deliverableTitle!.getBoundingClientRect().left).toBe(
+    milestoneTitle!.getBoundingClientRect().left,
+  );
+  expect(deliverableTitle!.getBoundingClientRect().left).toBe(
+    statusTitle!.getBoundingClientRect().left,
+  );
+  expect(getComputedStyle(details!).backgroundColor).toBe(
+    getComputedStyle(statusSummary!).backgroundColor,
+  );
+  expect(getComputedStyle(details!).borderBottomWidth).toBe(
+    getComputedStyle(milestoneSummary!).borderBottomWidth,
+  );
+  expect(getComputedStyle(details!).borderBottomColor).toBe(
+    getComputedStyle(milestoneSummary!).borderBottomColor,
+  );
+  expect(getComputedStyle(summary!).borderBottomWidth).toBe('0px');
+  expect(getComputedStyle(details!).borderRadius).toBe('0px');
+  expect(details!.open).toBe(false);
+  await userEvent.click(summary!);
+  expect(details!.open).toBe(true);
+  await userEvent.click(summary!);
+  expect(details!.open).toBe(false);
+  await userEvent.click(summary!);
+  expect(details!.open).toBe(true);
+  expect(getComputedStyle(caret!).transform).not.toBe('none');
+  expect(statusGroups!.getBoundingClientRect().top).toBe(details!.getBoundingClientRect().bottom);
+};
+
+export const ExpandedDeliverable: Story = {
+  ...InactiveWithDeliverable,
+  play: expandDeliverable,
+};
+
+export const ExpandedDeliverableDark: Story = {
+  ...InactiveWithDeliverable,
+  globals: { theme: 'dark' },
+  play: expandDeliverable,
 };
 
 export const DeliveredWithAcceptedWork: Story = {

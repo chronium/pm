@@ -19,7 +19,10 @@
 </summary>
 @if (milestone().description.trim()) {
   <details class="deliverable-description">
-    <summary>Deliverable</summary>
+    <summary>
+      <ng-icon class="deliverable-disclosure" name="cssChevronRight" aria-hidden="true" />
+      <span class="deliverable-title">Deliverable</span>
+    </summary>
     <div class="deliverable-body">
       <pm-markdown-display [markdown]="milestone().description" />
     </div>

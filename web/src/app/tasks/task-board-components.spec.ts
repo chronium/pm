@@ -96,6 +96,9 @@ describe('Task board components', () => {
       'details.deliverable-description',
     ) as HTMLDetailsElement;
     expect(deliverable.open).toBe(false);
+    expect(deliverable.querySelector('.deliverable-disclosure')?.getAttribute('name')).toBe(
+      'cssChevronRight',
+    );
     deliverable.open = true;
     deliverable.dispatchEvent(new Event('toggle'));
     fixture.detectChanges();
