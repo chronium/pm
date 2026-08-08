@@ -75,7 +75,18 @@ test('switches linked projects with isolated filters and read-only task and wiki
   if (await menu.isVisible()) await menu.click();
   await expect(page.getByRole('link', { name: 'New task' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Next task' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\/settings$/);
+  await expect(page.getByRole('heading', { name: 'Project settings' })).toBeVisible();
+  await expect(page.getByText(/Changes require write trust/)).toBeVisible();
+  await expect(
+    page.getByText('Project health is not available from the host project.'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Members' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Activation' }).click();
+  await expect(page.getByText(/Controls are hidden in this read-only project/)).toBeVisible();
+  await page.getByRole('link', { name: /^Tasks/ }).click();
+  if (await menu.isVisible()) await menu.click();
   await page.getByRole('link', { name: /Linked work/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
 

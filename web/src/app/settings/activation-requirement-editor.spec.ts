@@ -1,16 +1,27 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Component } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 
 import type { ActivationRequirementRequest } from './activation-api.service';
 import { ActivationRequirementEditor } from './activation-requirement-editor';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 describe('ActivationRequirementEditor', () => {
   beforeEach(async () =>
     TestBed.configureTestingModule({
       imports: [ActivationRequirementEditor],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
+      ],
     }).compileComponents(),
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
@@ -145,6 +156,32 @@ describe('ActivationRequirementEditor', () => {
       fixture.detectChanges();
 
       expect(element.querySelector('[role="listbox"]')?.textContent).toContain('Later release');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('searches tasks in the selected linked project', async () => {
+    vi.useFakeTimers();
+    try {
+      await TestBed.inject(Router).navigateByUrl('/projects/child/tasks/settings');
+      const fixture = TestBed.createComponent(ActivationRequirementEditor);
+      fixture.componentRef.setInput('requirements', [] satisfies ActivationRequirementRequest[]);
+      fixture.detectChanges();
+      const search = fixture.nativeElement.querySelector(
+        'input[type="search"]',
+      ) as HTMLInputElement;
+      search.value = 'foundation';
+      search.dispatchEvent(new Event('input'));
+      await vi.advanceTimersByTimeAsync(250);
+
+      TestBed.inject(HttpTestingController)
+        .expectOne(
+          (candidate) =>
+            candidate.url === '/api/v1/projects/child/tasks/search' &&
+            candidate.params.get('query') === 'foundation',
+        )
+        .flush([]);
     } finally {
       vi.useRealTimers();
     }

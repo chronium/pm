@@ -1,12 +1,16 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
 import { By } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 
 import { MarkdownEditor } from '../markdown/markdown-editor';
 import type { SettingsResponse, ValidationResponse } from './settings-api.service';
 import { SettingsPage } from './settings-page';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 const settings: SettingsResponse = {
   projectName: 'Atlas',
@@ -78,7 +82,14 @@ describe('SettingsPage', () => {
   beforeEach(async () =>
     TestBed.configureTestingModule({
       imports: [SettingsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
+      ],
     }).compileComponents(),
   );
   afterEach(() => {
@@ -92,12 +103,43 @@ describe('SettingsPage', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/v1/settings').flush(settings);
     http.expectOne('/api/v1/validation').flush(validation);
+    http.expectOne('/api/v1/project').flush({
+      projectId: 'project-1',
+      name: settings.projectName,
+      accent: settings.accent,
+      relationship: 'current',
+      readOnly: false,
+      revision: 'project-r1',
+    });
     await fixture.whenStable();
     fixture.detectChanges();
     http.expectOne('/api/v1/project/identity').flush(identity);
     http.expectOne('/api/v1/project/members').flush(membership);
     http.expectOne('/api/v1/project/invitations').flush({ invitations: [] });
     http.expectOne('/api/v1/runners').flush([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, element: fixture.nativeElement as HTMLElement, http };
+  }
+
+  async function renderLinked(readOnly: boolean) {
+    await TestBed.inject(Router).navigateByUrl('/projects/child/tasks/settings');
+    const fixture = TestBed.createComponent(SettingsPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/projects/child/settings').flush({
+      ...settings,
+      projectName: 'Child project',
+      revision: 'child-settings-r1',
+    });
+    http.expectOne('/api/v1/projects/child/project').flush({
+      projectId: 'child',
+      name: 'Child project',
+      accent: 'teal',
+      relationship: 'child',
+      readOnly,
+      revision: 'child-project-r1',
+    });
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement, http };
@@ -513,5 +555,123 @@ describe('SettingsPage', () => {
     ).click();
     fixture.detectChanges();
     expect((element.querySelector('.settings-row input') as HTMLInputElement).value).toBe('Ready');
+  });
+
+  it('shows linked project-owned settings without host controls or host health', async () => {
+    const { fixture, element, http } = await renderLinked(true);
+    const navigation = element.querySelector('.settings-navigation')!;
+
+    expect(element.textContent).toContain('Child project');
+    expect(element.querySelector('.project-context-notice')?.textContent).toContain('write trust');
+    expect(navigation.textContent).not.toContain('Linked projects');
+    expect(navigation.textContent).not.toContain('Members');
+    expect(navigation.textContent).not.toContain('Agent runners');
+    expect(element.textContent).toContain('Project health is not available from the host project.');
+    expect(element.querySelector('pm-project-members')).toBeNull();
+    expect(element.querySelector('pm-agent-runners')).toBeNull();
+    expect(
+      element.querySelector('button[aria-label="Edit status name"]')?.hasAttribute('disabled'),
+    ).toBe(true);
+    expect(element.querySelector('.milestone-row .pm-button--secondary')?.textContent).toContain(
+      'View deliverable',
+    );
+    http.expectNone('/api/v1/validation');
+    http.expectNone('/api/v1/project/identity');
+    http.expectNone('/api/v1/project/members');
+    http.expectNone('/api/v1/runners');
+
+    [...navigation.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Activation')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/v1/projects/child/activation').flush({
+      revision: 'child-activation-r1',
+      activationTriggers: [],
+      milestones: [],
+      issues: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Controls are hidden in this read-only project.');
+    expect(element.textContent).not.toContain('Add trigger');
+  });
+
+  it('sends trusted linked-project edits only to the selected project', async () => {
+    const { fixture, element, http } = await renderLinked(false);
+    expect(element.querySelector('.project-context-notice')?.textContent).toContain(
+      'selected project only',
+    );
+    const purple = [...element.querySelectorAll('pm-accent-picker button')].find(
+      (button) => button.textContent?.trim() === 'Purple',
+    ) as HTMLButtonElement;
+    expect(purple.disabled).toBe(false);
+    purple.click();
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    const request = http.expectOne('/api/v1/projects/child/settings/accent');
+    expect(request.request.headers.get('If-Match')).toBe('"child-settings-r1"');
+    request.flush({
+      ...settings,
+      projectName: 'Child project',
+      accent: 'purple',
+      revision: 'child-settings-r2',
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    http.expectNone('/api/v1/validation');
+    http.expectNone('/api/v1/settings/accent');
+
+    [...element.querySelectorAll<HTMLButtonElement>('.settings-navigation button')]
+      .find((button) => button.textContent?.trim() === 'Activation')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/v1/projects/child/activation').flush({
+      revision: 'child-activation-r1',
+      activationTriggers: [
+        {
+          key: 'launch-authorized',
+          title: 'Launch authorized',
+          isActive: false,
+          activation: null,
+          satisfiedRequirementCount: 0,
+          requirementCount: 0,
+          requirementsSatisfied: false,
+          isLatchedDespiteUnmetRequirements: false,
+          requirements: [],
+          consumingMilestones: [],
+        },
+      ],
+      milestones: [],
+      issues: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const trigger = element.querySelector(
+      'pm-activation-switchboard details',
+    ) as HTMLDetailsElement;
+    trigger.open = true;
+    fixture.detectChanges();
+    (trigger.querySelector('.pm-button--primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (
+      element.querySelector(
+        'pm-activation-trigger-action-dialog .pm-button--primary',
+      ) as HTMLButtonElement
+    ).click();
+    await Promise.resolve();
+    const activation = http.expectOne(
+      '/api/v1/projects/child/activation/triggers/launch-authorized/activate',
+    );
+    expect(activation.request.headers.get('If-Match')).toBe('"child-activation-r1"');
+    activation.flush({
+      changed: true,
+      switchboard: {
+        revision: 'child-activation-r2',
+        activationTriggers: [],
+        milestones: [],
+        issues: [],
+      },
+    });
   });
 });

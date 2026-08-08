@@ -166,6 +166,7 @@ Evidence: how will completion be demonstrated?`;
   }
 
   protected toggleTrigger(key: string, checked: boolean): void {
+    if (this.mutationsBlocked()) return;
     this.selectedTriggerKeys.update((keys) =>
       checked ? [...keys, key] : keys.filter((candidate) => candidate !== key),
     );

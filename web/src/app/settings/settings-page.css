@@ -30,6 +30,14 @@
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-sm);
 }
+.project-context-notice {
+  margin: calc(-1 * var(--pm-space-3)) 0 var(--pm-space-5);
+  padding: var(--pm-space-2) var(--pm-space-3);
+  border-left: 3px solid var(--pm-accent-strong);
+  background: var(--pm-accent-soft);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
 .settings-layout {
   display: grid;
   grid-template-columns: 176px minmax(0, 1fr);

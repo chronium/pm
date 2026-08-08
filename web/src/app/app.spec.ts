@@ -31,18 +31,24 @@ describe('application shell', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   async function renderAt(url: string, projectName = 'Test Project') {
+    const selectedProjectId = /^\/projects\/([^/]+)/.exec(url)?.[1] ?? null;
+    const apiPrefix = selectedProjectId
+      ? `/api/v1/projects/${encodeURIComponent(selectedProjectId)}`
+      : '/api/v1';
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
     await router.navigateByUrl(url);
     fixture.detectChanges();
-    TestBed.inject(HttpTestingController).expectOne('/api/v1/project').flush({
-      projectId: 'project-1',
-      name: projectName,
-      accent: 'purple',
-      relationship: 'current',
-      readOnly: false,
-      revision: 'project-revision',
-    });
+    TestBed.inject(HttpTestingController)
+      .expectOne(`${apiPrefix}/project`)
+      .flush({
+        projectId: selectedProjectId ?? 'project-1',
+        name: projectName,
+        accent: 'purple',
+        relationship: selectedProjectId ? 'child' : 'current',
+        readOnly: false,
+        revision: 'project-revision',
+      });
     TestBed.inject(HttpTestingController)
       .expectOne('/api/v1/project/links')
       .flush({
@@ -58,11 +64,25 @@ describe('application shell', () => {
             readable: true,
             writeTrusted: true,
           },
+          ...(selectedProjectId
+            ? [
+                {
+                  projectId: selectedProjectId,
+                  name: projectName,
+                  alias: 'child',
+                  relationship: 'child',
+                  status: 'resolved',
+                  source: 'manifest',
+                  readable: true,
+                  writeTrusted: true,
+                },
+              ]
+            : []),
         ],
         warnings: [],
       });
     const boardRequest = TestBed.inject(HttpTestingController).match(
-      (request) => request.url === '/api/v1/board',
+      (request) => request.url === `${apiPrefix}/board`,
     );
     for (const request of boardRequest) {
       request.flush({
@@ -75,7 +95,9 @@ describe('application shell', () => {
         revision: 'board-revision',
       });
     }
-    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/board/navigation')) {
+    for (const request of TestBed.inject(HttpTestingController).match(
+      `${apiPrefix}/board/navigation`,
+    )) {
       request.flush({
         remainingCount: 3,
         activationEligibleCount: 2,
@@ -105,7 +127,7 @@ describe('application shell', () => {
       });
     }
     const taskRequests = TestBed.inject(HttpTestingController).match((request) =>
-      request.url.startsWith('/api/v1/tasks/'),
+      request.url.startsWith(`${apiPrefix}/tasks/`),
     );
     for (const request of taskRequests) {
       request.flush(
@@ -141,7 +163,7 @@ describe('application shell', () => {
         { headers: { ETag: '"task-revision"' } },
       );
     }
-    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/settings')) {
+    for (const request of TestBed.inject(HttpTestingController).match(`${apiPrefix}/settings`)) {
       request.flush({
         projectName,
         statuses: [],
@@ -201,7 +223,7 @@ describe('application shell', () => {
             : []),
         ]
       : [];
-    for (const request of TestBed.inject(HttpTestingController).match('/api/v1/wiki/pages')) {
+    for (const request of TestBed.inject(HttpTestingController).match(`${apiPrefix}/wiki/pages`)) {
       request.flush(wikiPages);
     }
     fixture.detectChanges();
@@ -211,7 +233,7 @@ describe('application shell', () => {
     fixture.detectChanges();
     await Promise.resolve();
     for (const request of TestBed.inject(HttpTestingController).match((request) =>
-      request.url.startsWith('/api/v1/wiki/pages/'),
+      request.url.startsWith(`${apiPrefix}/wiki/pages/`),
     )) {
       request.flush(
         {
@@ -401,6 +423,26 @@ describe('application shell', () => {
     expect(allTasks?.classList.contains('active')).toBe(false);
     expect(settingsLink?.classList.contains('active')).toBe(true);
     expect(settingsLink?.querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('routes linked Settings through the selected project and keeps its sidebar context', async () => {
+    const { fixture, router } = await renderAt(
+      '/projects/prj_child/tasks/settings',
+      'Child project',
+    );
+    const element = fixture.nativeElement as HTMLElement;
+    const settingsLink = element.querySelector(
+      'aside a[href="/projects/prj_child/tasks/settings"]',
+    );
+
+    expect(router.url).toBe('/projects/prj_child/tasks/settings');
+    expect(element.querySelector('main h1')?.textContent).toBe('Project settings');
+    expect(element.querySelector('main')?.textContent).toContain('Child project');
+    expect(settingsLink?.classList.contains('active')).toBe(true);
+    expect(element.querySelector('aside a[href="/tasks/settings"]')).toBeNull();
+    expect(
+      element.querySelector('.mode-navigation a[href="/projects/prj_child/wiki"]'),
+    ).toBeTruthy();
   });
 
   it('uses semantic navigation and hides decorative icons from assistive technology', async () => {

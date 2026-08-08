@@ -1,8 +1,9 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { PollingCoordinator } from '../core/polling-coordinator';
+import { ProjectContextService } from '../core/project-context.service';
 import { PmConfirmDialog } from '../ui/confirm-dialog/confirm-dialog';
 import { PmErrorState, PmLoadingState } from '../ui/state/state';
 import type {
@@ -43,6 +44,7 @@ interface ActionSelection {
   styleUrl: './activation-switchboard.css',
 })
 export class ActivationSwitchboard {
+  protected readonly projectContext = inject(ProjectContextService);
   readonly readOnly = input(false);
   readonly dirtyChange = output<boolean>();
   readonly definitionChanged = output<void>();
@@ -269,7 +271,7 @@ export class ActivationSwitchboard {
   }
 
   protected requirementUrl(kind: string, source: string): string {
-    return kind === 'task' ? `/tasks/${encodeURIComponent(source)}` : '/tasks';
+    return kind === 'task' ? this.projectContext.taskUrl(source) : this.projectContext.tasksRoot();
   }
 
   protected requirementQuery(kind: string, source: string): Record<string, string> | null {

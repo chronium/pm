@@ -2,6 +2,7 @@ import { HttpErrorResponse, HttpResponse, httpResource } from '@angular/common/h
 import { computed, effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { firstValueFrom, type Observable } from 'rxjs';
 import { PollingCoordinator } from '../core/polling-coordinator';
+import { ProjectContextService } from '../core/project-context.service';
 
 import {
   SettingsApiService,
@@ -47,6 +48,7 @@ export class SettingsStore {
   private readonly api = inject(SettingsApiService);
   private readonly activationApi = inject(ActivationApiService);
   private readonly polling = inject(PollingCoordinator);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly retainedSettings = signal<SettingsResponse | undefined>(undefined);
   private readonly acceptedRevision = signal<string | null>(null);
   private readonly dirtyState = signal(false);
@@ -59,9 +61,14 @@ export class SettingsStore {
   } | null>(null);
   private mutationQueue: Promise<void> = Promise.resolve();
   private reloadRevision: string | null = null;
+  private projectGeneration = 0;
 
-  readonly settingsResource = httpResource<SettingsResponse>(() => '/api/v1/settings');
-  readonly validationResource = httpResource<ValidationResponse>(() => '/api/v1/validation');
+  readonly settingsResource = httpResource<SettingsResponse>(() =>
+    this.projectContext.apiUrl('/settings'),
+  );
+  readonly validationResource = httpResource<ValidationResponse>(() =>
+    this.projectContext.selectedProjectId() ? undefined : this.projectContext.apiUrl('/validation'),
+  );
   readonly settings = computed(() => this.retainedSettings());
   readonly validation = computed(() =>
     this.validationResource.hasValue() ? this.validationResource.value() : undefined,
@@ -89,13 +96,26 @@ export class SettingsStore {
   readonly pollSession = this.polling.create<SettingsResponse>({
     target: () =>
       this.settings() && this.acceptedRevision()
-        ? { url: '/api/v1/settings', etag: `"${this.acceptedRevision()}"` }
+        ? {
+            url: this.projectContext.apiUrl('/settings'),
+            etag: `"${this.acceptedRevision()}"`,
+          }
         : null,
     accept: (response) => this.acceptExternal(response),
   });
   readonly liveUpdateUnavailable = computed(() => this.pollSession.state() === 'retrying');
 
   constructor() {
+    let projectKey = this.projectContext.storageProjectId();
+    effect(() => {
+      const nextProjectKey = this.projectContext.storageProjectId();
+      if (nextProjectKey === projectKey) return;
+      projectKey = nextProjectKey;
+      untracked(() => {
+        this.projectGeneration++;
+        this.resetForProjectChange();
+      });
+    });
     effect(() => {
       if (!this.settingsResource.hasValue()) return;
       const settings = this.settingsResource.value();
@@ -177,23 +197,31 @@ export class SettingsStore {
     key: string,
     triggerKeys: string[],
   ): Promise<MilestoneGatePreview | null> {
+    if (this.projectContext.readOnly()) return null;
+    const generation = this.projectGeneration;
     const operation: SettingsOperation = { kind: 'preview', collection: 'milestone', key };
-    return this.runActivationOperation(operation, async () => {
-      const activation = await firstValueFrom(this.activationApi.read());
-      if (!activation.body) throw new Error('The activation switchboard returned no data.');
-      const preview = await firstValueFrom(
-        this.activationApi.previewMilestoneRequiredTriggers(
-          key,
-          triggerKeys,
-          activation.body.revision,
-        ),
-      );
-      if (!preview.body) throw new Error('The activation preview returned no data.');
-      return {
-        impact: preview.body,
-        activationRevision: this.responseRevision(preview) ?? activation.body.revision,
-      };
-    });
+    return this.runActivationOperation(
+      operation,
+      async () => {
+        const activation = await firstValueFrom(this.activationApi.read());
+        if (generation !== this.projectGeneration) return null;
+        if (!activation.body) throw new Error('The activation switchboard returned no data.');
+        const preview = await firstValueFrom(
+          this.activationApi.previewMilestoneRequiredTriggers(
+            key,
+            triggerKeys,
+            activation.body.revision,
+          ),
+        );
+        if (generation !== this.projectGeneration) return null;
+        if (!preview.body) throw new Error('The activation preview returned no data.');
+        return {
+          impact: preview.body,
+          activationRevision: this.responseRevision(preview) ?? activation.body.revision,
+        };
+      },
+      generation,
+    );
   }
 
   async applyMilestoneRequiredTriggers(
@@ -201,6 +229,8 @@ export class SettingsStore {
     triggerKeys: string[],
     preview: MilestoneGatePreview,
   ): Promise<boolean> {
+    if (this.projectContext.readOnly()) return false;
+    const generation = this.projectGeneration;
     const operation: SettingsOperation = { kind: 'activation', collection: 'milestone', key };
     this.mutationCount.update((count) => count + 1);
     this.activeOperation.set(operation);
@@ -216,13 +246,16 @@ export class SettingsStore {
           preview.activationRevision,
         ),
       );
+      if (generation !== this.projectGeneration) return false;
       applied = true;
       const settings = await firstValueFrom(this.api.readSettings());
+      if (generation !== this.projectGeneration) return false;
       if (!settings.body) throw new Error('The refreshed project settings returned no data.');
       this.acceptSettings(settings.body);
-      this.validationResource.reload();
+      this.reloadValidation();
       return true;
     } catch (error) {
+      if (generation !== this.projectGeneration) return false;
       const mapped = this.api.error(
         error,
         applied
@@ -237,7 +270,7 @@ export class SettingsStore {
       }
       return false;
     } finally {
-      this.activeOperation.set(null);
+      if (generation === this.projectGeneration) this.activeOperation.set(null);
       this.mutationCount.update((count) => count - 1);
     }
   }
@@ -278,7 +311,7 @@ export class SettingsStore {
   }
 
   reloadValidation(): boolean {
-    return this.validationResource.reload();
+    return this.projectContext.selectedProjectId() ? false : this.validationResource.reload();
   }
   clearOperationError(): void {
     this.operationErrorState.set(null);
@@ -314,23 +347,27 @@ export class SettingsStore {
     operation: SettingsOperation,
     request: (revision: string) => Observable<SettingsMutationResponse>,
   ): Promise<boolean> {
+    if (this.projectContext.readOnly()) return Promise.resolve(false);
+    const generation = this.projectGeneration;
     if (this.stale()) return Promise.resolve(false);
     this.mutationCount.update((count) => count + 1);
     let succeeded = false;
     const execute = async () => {
-      if (this.stale()) return;
+      if (generation !== this.projectGeneration || this.stale()) return;
       const revision = this.acceptedRevision() ?? this.settings()?.revision;
       if (!revision) return;
       this.activeOperation.set(operation);
       this.operationErrorState.set(null);
       try {
         const response = await firstValueFrom(request(revision));
+        if (generation !== this.projectGeneration) return;
         if (response.body) {
           this.acceptSettings(response.body);
         }
         succeeded = true;
-        this.validationResource.reload();
+        this.reloadValidation();
       } catch (error) {
+        if (generation !== this.projectGeneration) return;
         const mapped = this.api.error(error, 'The settings change failed.');
         this.operationErrorState.set({ operation, error: mapped });
         if (mapped.conflict) {
@@ -338,7 +375,7 @@ export class SettingsStore {
           this.reloadLatest();
         }
       } finally {
-        this.activeOperation.set(null);
+        if (generation === this.projectGeneration) this.activeOperation.set(null);
       }
     };
     const result = this.mutationQueue
@@ -355,20 +392,23 @@ export class SettingsStore {
   private async runActivationOperation<T>(
     operation: SettingsOperation,
     request: () => Promise<T>,
+    generation = this.projectGeneration,
   ): Promise<T | null> {
     this.mutationCount.update((count) => count + 1);
     this.activeOperation.set(operation);
     this.operationErrorState.set(null);
     try {
-      return await request();
+      const value = await request();
+      return generation === this.projectGeneration ? value : null;
     } catch (error) {
+      if (generation !== this.projectGeneration) return null;
       this.operationErrorState.set({
         operation,
         error: this.api.error(error, 'The activation impact could not be reviewed.'),
       });
       return null;
     } finally {
-      this.activeOperation.set(null);
+      if (generation === this.projectGeneration) this.activeOperation.set(null);
       this.mutationCount.update((count) => count - 1);
     }
   }
@@ -404,8 +444,20 @@ export class SettingsStore {
       this.retainedSettings.set(response.body);
       this.pendingExternalSettings.set(null);
       this.stale.set(false);
-      this.validationResource.reload();
+      this.reloadValidation();
     }
+  }
+
+  private resetForProjectChange(): void {
+    this.pollSession.stop();
+    this.retainedSettings.set(undefined);
+    this.acceptedRevision.set(null);
+    this.dirtyState.set(false);
+    this.pendingExternalSettings.set(null);
+    this.operationErrorState.set(null);
+    this.stale.set(false);
+    this.reloadRevision = null;
+    this.reloadGeneration.update((value) => value + 1);
   }
 
   private readError(error: Error | undefined, fallback: string): string | null {

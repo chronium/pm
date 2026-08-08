@@ -161,7 +161,7 @@
               <ul class="consumer-list">
                 @for (key of trigger.consumingMilestones; track key) {
                   <li>
-                    <a routerLink="/tasks" [queryParams]="{ milestone: key }"
+                    <a [routerLink]="projectContext.tasksRoot()" [queryParams]="{ milestone: key }"
                       ><code>{{ key }}</code></a
                     >
                   </li>

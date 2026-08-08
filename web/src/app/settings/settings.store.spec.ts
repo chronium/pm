@@ -1,10 +1,15 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 
 import type { SettingsResponse, ValidationResponse } from './settings-api.service';
 import { SettingsStore } from './settings.store';
 import { PollingCoordinator } from '../core/polling-coordinator';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 const initial: SettingsResponse = {
   projectName: 'Atlas',
@@ -34,6 +39,10 @@ describe('SettingsStore', () => {
         PollingCoordinator,
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
       ],
     }),
   );
@@ -265,5 +274,20 @@ describe('SettingsStore', () => {
     store.reloadValidation();
     TestBed.flushEffects();
     http.expectOne('/api/v1/validation').flush(validation);
+  });
+
+  it('clears retained state and reloads only selected-project settings after a project switch', async () => {
+    const { store, http } = await load();
+
+    await TestBed.inject(Router).navigateByUrl('/projects/child/tasks/settings');
+    TestBed.flushEffects();
+    expect(store.settings()).toBeUndefined();
+    expect(store.validation()).toBeUndefined();
+    http.expectNone('/api/v1/projects/child/validation');
+
+    const childSettings = { ...initial, projectName: 'Child', revision: 'child-r1' };
+    http.expectOne('/api/v1/projects/child/settings').flush(childSettings);
+    TestBed.flushEffects();
+    await vi.waitFor(() => expect(store.settings()).toEqual(childSettings));
   });
 });

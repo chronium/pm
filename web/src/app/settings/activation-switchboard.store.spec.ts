@@ -1,10 +1,15 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 
 import { PollingCoordinator } from '../core/polling-coordinator';
 import type { ActivationSwitchboardResponse } from './activation-api.service';
 import { ActivationSwitchboardStore } from './activation-switchboard.store';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 const switchboard: ActivationSwitchboardResponse = {
   revision: 'r1',
@@ -34,6 +39,10 @@ describe('ActivationSwitchboardStore', () => {
         PollingCoordinator,
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
       ],
     }),
   );
@@ -235,5 +244,17 @@ describe('ActivationSwitchboardStore', () => {
     expect(reconcile.request.body).toEqual({ dryRun: false });
     reconcile.flush({ changed: true, switchboard: { ...switchboard, revision: 'r2' } });
     expect(await result).toBe(true);
+  });
+
+  it('clears retained state and reloads activation for the selected project', async () => {
+    const { store, http } = await load();
+
+    await TestBed.inject(Router).navigateByUrl('/projects/child/tasks/settings');
+    TestBed.flushEffects();
+    expect(store.switchboard()).toBeNull();
+
+    const childSwitchboard = { ...switchboard, revision: 'child-r1', activationTriggers: [] };
+    http.expectOne('/api/v1/projects/child/activation').flush(childSwitchboard);
+    await vi.waitFor(() => expect(store.switchboard()).toEqual(childSwitchboard));
   });
 });

@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 
 import type { components } from '../api/generated/pm-api';
+import { ProjectContextService } from '../core/project-context.service';
 
 export type ActivationSwitchboardResponse = components['schemas']['ActivationSwitchboardResponse'];
 export type ActivationTrigger = components['schemas']['ActivationTriggerResponse'];
@@ -27,16 +28,17 @@ export interface ActivationApiError {
 @Injectable({ providedIn: 'root' })
 export class ActivationApiService {
   private readonly http = inject(HttpClient);
+  private readonly projectContext = inject(ProjectContextService);
 
   read() {
-    return this.http.get<ActivationSwitchboardResponse>('/api/v1/activation', {
+    return this.http.get<ActivationSwitchboardResponse>(this.url('/activation'), {
       observe: 'response',
     });
   }
 
   create(request: CreateActivationTriggerRequest, revision: string) {
     return this.http.post<ActivationMutationResponse>(
-      '/api/v1/activation/triggers',
+      this.url('/activation/triggers'),
       request,
       this.options(revision),
     );
@@ -112,7 +114,7 @@ export class ActivationApiService {
 
   reconcile(dryRun: boolean, revision: string) {
     return this.http.post<ActivationMutationResponse>(
-      '/api/v1/activation/reconcile',
+      this.url('/activation/reconcile'),
       { dryRun },
       this.options(revision),
     );
@@ -120,7 +122,7 @@ export class ActivationApiService {
 
   previewMilestoneRequiredTriggers(key: string, triggerKeys: string[], revision: string) {
     return this.http.post<MilestoneRequiredTriggersPreviewResponse>(
-      `/api/v1/activation/milestones/${encodeURIComponent(key)}/required-triggers-preview`,
+      this.url(`/activation/milestones/${encodeURIComponent(key)}/required-triggers-preview`),
       { triggerKeys },
       this.options(revision),
     );
@@ -134,7 +136,7 @@ export class ActivationApiService {
     revision: string,
   ) {
     return this.http.put<ActivationMutationResponse>(
-      `/api/v1/activation/milestones/${encodeURIComponent(key)}/required-triggers`,
+      this.url(`/activation/milestones/${encodeURIComponent(key)}/required-triggers`),
       { triggerKeys, previewRevision, allowDeactivation },
       this.options(revision),
     );
@@ -158,7 +160,11 @@ export class ActivationApiService {
   }
 
   private triggerUrl(key: string): string {
-    return `/api/v1/activation/triggers/${encodeURIComponent(key)}`;
+    return this.url(`/activation/triggers/${encodeURIComponent(key)}`);
+  }
+
+  private url(path: string): string {
+    return this.projectContext.apiUrl(path);
   }
 
   private options(revision: string) {

@@ -1,13 +1,25 @@
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 
 import { ActivationApiService } from './activation-api.service';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 describe('ActivationApiService', () => {
   beforeEach(() =>
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
+      ],
     }),
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
@@ -125,5 +137,16 @@ describe('ActivationApiService', () => {
         'Fallback',
       ).conflict,
     ).toBe(true);
+  });
+
+  it('targets the selected linked project', async () => {
+    await TestBed.inject(Router).navigateByUrl('/projects/child/tasks/settings');
+    const api = TestBed.inject(ActivationApiService);
+    api.read().subscribe();
+    api.activate('beta/entry', 'r1').subscribe();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/projects/child/activation').flush({});
+    http.expectOne('/api/v1/projects/child/activation/triggers/beta%2Fentry/activate').flush({});
   });
 });

@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpResponse } from '@angular/common/htt
 import { inject, Injectable } from '@angular/core';
 
 import type { components } from '../api/generated/pm-api';
+import { ProjectContextService } from '../core/project-context.service';
 
 export type SettingsResponse = components['schemas']['SettingsResponse'];
 export type SettingsOption = components['schemas']['SettingsOptionResponse'];
@@ -29,10 +30,11 @@ export interface SettingsApiError {
 @Injectable({ providedIn: 'root' })
 export class SettingsApiService {
   private readonly http = inject(HttpClient);
+  private readonly projectContext = inject(ProjectContextService);
 
   setAccent(request: SetProjectAccentRequest, revision: string) {
     return this.http.put<SettingsResponse>(
-      '/api/v1/settings/accent',
+      this.url('/settings/accent'),
       request,
       this.options(revision),
     );
@@ -40,7 +42,7 @@ export class SettingsApiService {
 
   createStatus(request: CreateSettingsOptionRequest, revision: string) {
     return this.http.post<SettingsResponse>(
-      '/api/v1/settings/statuses',
+      this.url('/settings/statuses'),
       request,
       this.options(revision),
     );
@@ -63,7 +65,7 @@ export class SettingsApiService {
 
   createTrack(request: CreateSettingsOptionRequest, revision: string) {
     return this.http.post<SettingsResponse>(
-      '/api/v1/settings/tracks',
+      this.url('/settings/tracks'),
       request,
       this.options(revision),
     );
@@ -86,14 +88,14 @@ export class SettingsApiService {
 
   createMilestone(request: CreateMilestoneRequest, revision: string) {
     return this.http.post<SettingsResponse>(
-      '/api/v1/settings/milestones',
+      this.url('/settings/milestones'),
       request,
       this.options(revision),
     );
   }
 
   readSettings() {
-    return this.http.get<SettingsResponse>('/api/v1/settings', { observe: 'response' });
+    return this.http.get<SettingsResponse>(this.url('/settings'), { observe: 'response' });
   }
 
   renameMilestone(key: string, request: RenameMilestoneRequest, revision: string) {
@@ -150,11 +152,15 @@ export class SettingsApiService {
   }
 
   private optionUrl(collection: 'statuses' | 'tracks', key: string): string {
-    return `/api/v1/settings/${collection}/${encodeURIComponent(key)}`;
+    return this.url(`/settings/${collection}/${encodeURIComponent(key)}`);
   }
 
   private milestoneUrl(key: string): string {
-    return `/api/v1/settings/milestones/${encodeURIComponent(key)}`;
+    return this.url(`/settings/milestones/${encodeURIComponent(key)}`);
+  }
+
+  private url(path: string): string {
+    return this.projectContext.apiUrl(path);
   }
 
   private isProblem(value: unknown): value is components['schemas']['ApiProblemDetails'] {

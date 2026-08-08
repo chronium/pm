@@ -84,6 +84,7 @@ export class ProjectContextService {
     return mode === 'wiki' ? 'wiki' : 'tasks';
   });
   readonly tasksRoot = computed(() => this.routeRoot('tasks'));
+  readonly settingsRoot = computed(() => `${this.tasksRoot()}/settings`);
   readonly wikiRoot = computed(() => this.routeRoot('wiki'));
   readonly storageProjectId = computed(() => this.selectedProjectId() ?? 'current');
 

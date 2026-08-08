@@ -1,8 +1,9 @@
 import { HttpResponse } from '@angular/common/http';
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { firstValueFrom, type Observable } from 'rxjs';
 
 import { PollingCoordinator } from '../core/polling-coordinator';
+import { ProjectContextService } from '../core/project-context.service';
 import {
   ActivationApiService,
   type ActivationApiError,
@@ -46,9 +47,11 @@ export interface ActivationReconciliationPreview {
 export class ActivationSwitchboardStore {
   private readonly api = inject(ActivationApiService);
   private readonly polling = inject(PollingCoordinator);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly retained = signal<ActivationSwitchboardResponse | null>(null);
   private readonly operationState = signal<ActivationOperation | null>(null);
   private readonly failureState = signal<ActivationOperationFailure | null>(null);
+  private projectGeneration = 0;
 
   readonly switchboard = computed(() => this.retained());
   readonly loading = signal(true);
@@ -61,7 +64,12 @@ export class ActivationSwitchboardStore {
   readonly pollSession = this.polling.create<ActivationSwitchboardResponse>({
     target: () => {
       const current = this.switchboard();
-      return current ? { url: '/api/v1/activation', etag: `"${current.revision}"` } : null;
+      return current
+        ? {
+            url: this.projectContext.apiUrl('/activation'),
+            etag: `"${current.revision}"`,
+          }
+        : null;
     },
     accept: (response) => {
       if (response.body) this.accept(response.body);
@@ -70,27 +78,42 @@ export class ActivationSwitchboardStore {
   readonly liveUpdateUnavailable = computed(() => this.pollSession.state() === 'retrying');
 
   constructor() {
+    let projectKey = this.projectContext.storageProjectId();
     void this.reload(false);
+    effect(() => {
+      const nextProjectKey = this.projectContext.storageProjectId();
+      if (nextProjectKey === projectKey) return;
+      projectKey = nextProjectKey;
+      untracked(() => {
+        const generation = ++this.projectGeneration;
+        this.resetForProjectChange();
+        void this.reload(false, generation);
+      });
+    });
   }
 
-  async reload(refreshing = true): Promise<boolean> {
+  async reload(refreshing = true, generation = this.projectGeneration): Promise<boolean> {
     this.loadError.set(null);
     if (refreshing && this.switchboard()) this.refreshing.set(true);
     else this.loading.set(true);
     try {
       const response = await firstValueFrom(this.api.read());
+      if (generation !== this.projectGeneration) return false;
       if (!response.body) throw new Error('The activation switchboard returned no data.');
       this.accept(response.body);
       this.pollSession.start();
       return true;
     } catch (error) {
+      if (generation !== this.projectGeneration) return false;
       this.loadError.set(
         this.api.error(error, 'The activation switchboard could not be loaded.').message,
       );
       return false;
     } finally {
-      this.loading.set(false);
-      this.refreshing.set(false);
+      if (generation === this.projectGeneration) {
+        this.loading.set(false);
+        this.refreshing.set(false);
+      }
     }
   }
 
@@ -181,6 +204,8 @@ export class ActivationSwitchboardStore {
     key: string,
     requirements: ActivationRequirementRequest[],
   ): Promise<ActivationRedefinitionPreview | null> {
+    if (this.projectContext.readOnly()) return null;
+    const generation = this.projectGeneration;
     const operation = { kind: 'preview-redefine', key } satisfies ActivationOperation;
     const revision = this.switchboard()?.revision;
     if (!revision || this.pending()) return null;
@@ -189,13 +214,15 @@ export class ActivationSwitchboardStore {
       const response = await firstValueFrom(
         this.api.previewRedefinition(key, requirements, revision),
       );
+      if (generation !== this.projectGeneration) return null;
       if (!response.body) throw new Error('The redefinition preview returned no data.');
       return response.body;
     } catch (error) {
+      if (generation !== this.projectGeneration) return null;
       await this.fail(operation, error, 'The redefinition impact could not be reviewed.');
       return null;
     } finally {
-      this.operationState.set(null);
+      if (generation === this.projectGeneration) this.operationState.set(null);
     }
   }
 
@@ -220,12 +247,15 @@ export class ActivationSwitchboardStore {
   }
 
   async previewReconciliation(): Promise<ActivationReconciliationPreview | null> {
+    if (this.projectContext.readOnly()) return null;
+    const generation = this.projectGeneration;
     const operation = { kind: 'preview-reconcile', key: null } satisfies ActivationOperation;
     const revision = this.switchboard()?.revision;
     if (!revision || this.pending()) return null;
     this.begin(operation);
     try {
       const response = await firstValueFrom(this.api.reconcile(true, revision));
+      if (generation !== this.projectGeneration) return null;
       if (!response.body) throw new Error('The reconciliation preview returned no data.');
       this.accept(response.body.switchboard);
       return {
@@ -234,10 +264,11 @@ export class ActivationSwitchboardStore {
         milestoneKeys: response.body.impact?.affectedMilestones ?? [],
       };
     } catch (error) {
+      if (generation !== this.projectGeneration) return null;
       await this.fail(operation, error, 'Reconciliation impact could not be reviewed.');
       return null;
     } finally {
-      this.operationState.set(null);
+      if (generation === this.projectGeneration) this.operationState.set(null);
     }
   }
 
@@ -256,20 +287,24 @@ export class ActivationSwitchboardStore {
     request: (revision: string) => Observable<HttpResponse<ActivationMutationResponse>>,
     success: string,
   ): Promise<boolean> {
+    if (this.projectContext.readOnly()) return false;
+    const generation = this.projectGeneration;
     const revision = this.switchboard()?.revision;
     if (!revision || this.pending()) return false;
     this.begin(operation);
     try {
       const response = await firstValueFrom(request(revision));
+      if (generation !== this.projectGeneration) return false;
       if (!response.body) throw new Error('The activation mutation returned no data.');
       this.accept(response.body.switchboard);
       this.statusMessage.set(success);
       return true;
     } catch (error) {
+      if (generation !== this.projectGeneration) return false;
       await this.fail(operation, error, fallback);
       return false;
     } finally {
-      this.operationState.set(null);
+      if (generation === this.projectGeneration) this.operationState.set(null);
     }
   }
 
@@ -297,5 +332,16 @@ export class ActivationSwitchboardStore {
   private accept(value: ActivationSwitchboardResponse): void {
     this.retained.set(value);
     this.loadError.set(null);
+  }
+
+  private resetForProjectChange(): void {
+    this.pollSession.stop();
+    this.retained.set(null);
+    this.operationState.set(null);
+    this.failureState.set(null);
+    this.statusMessage.set(null);
+    this.loadError.set(null);
+    this.loading.set(true);
+    this.refreshing.set(false);
   }
 }

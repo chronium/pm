@@ -81,6 +81,7 @@ export class SettingsPage implements DirtyRoute {
   private readonly document = inject(DOCUMENT);
   private readonly accent = inject(AccentService);
   protected readonly projectContext = inject(ProjectContextService);
+  protected readonly linkedProject = computed(() => !!this.projectContext.selectedProjectId());
   protected readonly activeSection = signal<SettingsSection>(
     this.document.defaultView?.location.hash === '#agent-runners' ? 'runners' : 'overview',
   );
@@ -130,6 +131,7 @@ export class SettingsPage implements DirtyRoute {
   );
 
   constructor() {
+    this.projectContext.enableProjectMetadata();
     let generation = this.store.reloadGeneration();
     effect(() => {
       const next = this.store.reloadGeneration();
@@ -154,9 +156,15 @@ export class SettingsPage implements DirtyRoute {
       const settings = this.store.settings();
       if (settings) this.accent.applyProjectPreference(settings.accent);
     });
+    effect(() => {
+      if (this.linkedProject() && this.isHostSection(this.activeSection())) {
+        this.activeSection.set('overview');
+      }
+    });
   }
 
   protected selectSection(section: SettingsSection): void {
+    if (this.linkedProject() && this.isHostSection(section)) return;
     this.activeSection.set(section);
   }
 
@@ -169,7 +177,12 @@ export class SettingsPage implements DirtyRoute {
   }
 
   protected async selectAccent(accent: AccentPreference): Promise<void> {
-    if (this.store.pending() || this.store.stale() || accent === this.store.settings()?.accent)
+    if (
+      this.projectContext.readOnly() ||
+      this.store.pending() ||
+      this.store.stale() ||
+      accent === this.store.settings()?.accent
+    )
       return;
     await this.store.setAccent({ accent });
   }
@@ -187,6 +200,7 @@ export class SettingsPage implements DirtyRoute {
   }
 
   protected beginAdd(collection: SettingsCollection): void {
+    if (this.projectContext.readOnly()) return;
     this.store.clearOperationError();
     this.editor.set(null);
     this.adding.set(collection);
@@ -204,6 +218,7 @@ export class SettingsPage implements DirtyRoute {
   }
 
   protected beginEdit(editor: Editor, value: string): void {
+    if (this.projectContext.readOnly()) return;
     this.store.clearOperationError();
     this.adding.set(null);
     this.editor.set(editor);
@@ -222,6 +237,7 @@ export class SettingsPage implements DirtyRoute {
 
   protected async createOption(event: Event, collection: 'status' | 'track'): Promise<void> {
     event.preventDefault();
+    if (this.projectContext.readOnly()) return;
     this.optionCreateForm().markAsTouched();
     if (!this.optionCreateForm().valid() || this.store.pending() || this.store.stale()) return;
     const model = this.optionCreateModel();
@@ -238,6 +254,7 @@ export class SettingsPage implements DirtyRoute {
 
   protected async createMilestone(event: Event): Promise<void> {
     event.preventDefault();
+    if (this.projectContext.readOnly()) return;
     this.milestoneCreateForm().markAsTouched();
     if (!this.milestoneCreateForm().valid() || this.store.pending() || this.store.stale()) return;
     const value = this.milestoneCreateModel();
@@ -272,6 +289,7 @@ export class SettingsPage implements DirtyRoute {
 
   protected async saveEdit(event: Event): Promise<void> {
     event.preventDefault();
+    if (this.projectContext.readOnly()) return;
     this.editForm().markAsTouched();
     const editor = this.editor();
     if (!editor || !this.editForm().valid() || this.store.pending() || this.store.stale()) return;
@@ -288,11 +306,13 @@ export class SettingsPage implements DirtyRoute {
   }
 
   protected requestRemoval(collection: SettingsCollection, key: string, label: string): void {
+    if (this.projectContext.readOnly()) return;
     this.store.clearOperationError();
     this.removal.set({ collection, key, label });
   }
 
   protected async confirmRemoval(): Promise<void> {
+    if (this.projectContext.readOnly()) return;
     const removal = this.removal();
     if (!removal) return;
     let success = false;
@@ -386,5 +406,9 @@ export class SettingsPage implements DirtyRoute {
     this.draftSnapshot = null;
     this.conflictPhase.set(null);
     this.store.keepLatest();
+  }
+
+  private isHostSection(section: SettingsSection): boolean {
+    return section === 'members' || section === 'linked-projects' || section === 'runners';
   }
 }

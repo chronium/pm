@@ -11,6 +11,16 @@
     }
   </header>
 
+  @if (linkedProject()) {
+    <p class="project-context-notice" role="status">
+      @if (projectContext.readOnly()) {
+        Viewing settings for this linked project. Changes require write trust from the host project.
+      } @else {
+        Editing settings for this linked project. Changes apply to the selected project only.
+      }
+    </p>
+  }
+
   @if (store.loading()) {
     <pm-loading-state>Loading project settings…</pm-loading-state>
   } @else if (store.settingsError() && !store.settings()) {
@@ -36,14 +46,16 @@
 
     <div class="settings-layout">
       <nav class="settings-navigation" aria-label="Project settings sections">
-        <button
-          type="button"
-          [class.active]="activeSection() === 'linked-projects'"
-          [attr.aria-current]="activeSection() === 'linked-projects' ? 'page' : null"
-          (click)="selectSection('linked-projects')"
-        >
-          Linked projects
-        </button>
+        @if (!linkedProject()) {
+          <button
+            type="button"
+            [class.active]="activeSection() === 'linked-projects'"
+            [attr.aria-current]="activeSection() === 'linked-projects' ? 'page' : null"
+            (click)="selectSection('linked-projects')"
+          >
+            Linked projects
+          </button>
+        }
         <button
           type="button"
           [class.active]="activeSection() === 'overview'"
@@ -52,22 +64,24 @@
         >
           General
         </button>
-        <button
-          type="button"
-          [class.active]="activeSection() === 'members'"
-          [attr.aria-current]="activeSection() === 'members' ? 'page' : null"
-          (click)="selectSection('members')"
-        >
-          Members
-        </button>
-        <button
-          type="button"
-          [class.active]="activeSection() === 'runners'"
-          [attr.aria-current]="activeSection() === 'runners' ? 'page' : null"
-          (click)="selectSection('runners')"
-        >
-          Agent runners
-        </button>
+        @if (!linkedProject()) {
+          <button
+            type="button"
+            [class.active]="activeSection() === 'members'"
+            [attr.aria-current]="activeSection() === 'members' ? 'page' : null"
+            (click)="selectSection('members')"
+          >
+            Members
+          </button>
+          <button
+            type="button"
+            [class.active]="activeSection() === 'runners'"
+            [attr.aria-current]="activeSection() === 'runners' ? 'page' : null"
+            (click)="selectSection('runners')"
+          >
+            Agent runners
+          </button>
+        }
         <button
           type="button"
           [class.active]="activeSection() === 'statuses'"
@@ -104,13 +118,24 @@
 
       <div class="settings-content">
         <div class="settings-panel" [hidden]="activeSection() !== 'overview'">
-          <pm-project-health
-            [validation]="store.validation()"
-            [loading]="store.validationLoading()"
-            [refreshing]="store.validationRefreshing()"
-            [error]="store.validationError()"
-            (retry)="store.reloadValidation()"
-          />
+          @if (linkedProject()) {
+            <section class="project-health-unavailable" aria-labelledby="project-health-heading">
+              <div class="section-heading">
+                <div>
+                  <h2 id="project-health-heading">Project health</h2>
+                  <p>Project health is not available from the host project.</p>
+                </div>
+              </div>
+            </section>
+          } @else {
+            <pm-project-health
+              [validation]="store.validation()"
+              [loading]="store.validationLoading()"
+              [refreshing]="store.validationRefreshing()"
+              [error]="store.validationError()"
+              (retry)="store.reloadValidation()"
+            />
+          }
           <section class="appearance-settings" aria-labelledby="appearance-heading">
             <div class="section-heading">
               <div>
@@ -120,7 +145,7 @@
             </div>
             <pm-accent-picker
               [preference]="projectAccent(settings.accent)"
-              [disabled]="store.pending() || store.stale()"
+              [disabled]="projectContext.readOnly() || store.pending() || store.stale()"
               (selection)="selectAccent($event)"
             />
             @if (store.errorFor('project', 'accent')) {
@@ -129,19 +154,21 @@
           </section>
         </div>
 
-        <div class="settings-panel" [hidden]="activeSection() !== 'members'">
-          <pm-project-members />
-        </div>
+        @if (!linkedProject()) {
+          <div class="settings-panel" [hidden]="activeSection() !== 'members'">
+            <pm-project-members />
+          </div>
 
-        @if (activeSection() === 'linked-projects') {
-          <div class="settings-panel">
-            <pm-linked-projects />
+          @if (activeSection() === 'linked-projects') {
+            <div class="settings-panel">
+              <pm-linked-projects />
+            </div>
+          }
+
+          <div class="settings-panel" [hidden]="activeSection() !== 'runners'">
+            <pm-agent-runners />
           </div>
         }
-
-        <div class="settings-panel" [hidden]="activeSection() !== 'runners'">
-          <pm-agent-runners />
-        </div>
 
         <section
           class="settings-section"
@@ -156,7 +183,12 @@
             <button
               type="button"
               class="pm-button pm-button--secondary"
-              [disabled]="store.pending() || store.stale() || adding() === 'status'"
+              [disabled]="
+                projectContext.readOnly() ||
+                store.pending() ||
+                store.stale() ||
+                adding() === 'status'
+              "
               (click)="beginAdd('status')"
             >
               Add status
@@ -204,7 +236,12 @@
                 ><button
                   type="submit"
                   class="pm-button pm-button--primary"
-                  [disabled]="store.pending() || store.stale() || !optionCreateForm().valid()"
+                  [disabled]="
+                    projectContext.readOnly() ||
+                    store.pending() ||
+                    store.stale() ||
+                    !optionCreateForm().valid()
+                  "
                 >
                   {{
                     pending('create', 'status', optionCreateModel().key.trim())
@@ -250,7 +287,12 @@
                       ><button
                         type="submit"
                         class="pm-button pm-button--primary"
-                        [disabled]="store.pending() || store.stale() || !editForm().valid()"
+                        [disabled]="
+                          projectContext.readOnly() ||
+                          store.pending() ||
+                          store.stale() ||
+                          !editForm().valid()
+                        "
                       >
                         {{ pending('rename', 'status', status.key) ? 'Saving…' : 'Save' }}
                       </button>
@@ -262,7 +304,7 @@
                     <button
                       type="button"
                       class="icon-action"
-                      [disabled]="store.pending() || store.stale()"
+                      [disabled]="projectContext.readOnly() || store.pending() || store.stale()"
                       aria-label="Edit status name"
                       title="Edit status name"
                       (click)="
@@ -276,7 +318,7 @@
                     ><button
                       type="button"
                       class="icon-action danger-action"
-                      [disabled]="store.pending() || store.stale()"
+                      [disabled]="projectContext.readOnly() || store.pending() || store.stale()"
                       aria-label="Remove status"
                       title="Remove status"
                       (click)="requestRemoval('status', status.key, status.name)"
@@ -424,7 +466,9 @@
                     [disabled]="store.pending()"
                     (click)="openMilestoneEditor(milestone.key)"
                   >
-                    Edit deliverable</button
+                    {{
+                      projectContext.readOnly() ? 'View deliverable' : 'Edit deliverable'
+                    }}</button
                   ><button
                     type="button"
                     class="icon-action danger-action"
@@ -461,7 +505,12 @@
             <button
               type="button"
               class="pm-button pm-button--secondary"
-              [disabled]="store.pending() || store.stale() || adding() === 'track'"
+              [disabled]="
+                projectContext.readOnly() ||
+                store.pending() ||
+                store.stale() ||
+                adding() === 'track'
+              "
               (click)="beginAdd('track')"
             >
               Add track
@@ -490,7 +539,12 @@
                 ><button
                   type="submit"
                   class="pm-button pm-button--primary"
-                  [disabled]="store.pending() || store.stale() || !optionCreateForm().valid()"
+                  [disabled]="
+                    projectContext.readOnly() ||
+                    store.pending() ||
+                    store.stale() ||
+                    !optionCreateForm().valid()
+                  "
                 >
                   Add track
                 </button>
@@ -527,7 +581,12 @@
                       ><button
                         type="submit"
                         class="pm-button pm-button--primary"
-                        [disabled]="store.pending() || store.stale() || !editForm().valid()"
+                        [disabled]="
+                          projectContext.readOnly() ||
+                          store.pending() ||
+                          store.stale() ||
+                          !editForm().valid()
+                        "
                       >
                         Save
                       </button>
@@ -539,7 +598,7 @@
                     <button
                       type="button"
                       class="icon-action"
-                      [disabled]="store.pending() || store.stale()"
+                      [disabled]="projectContext.readOnly() || store.pending() || store.stale()"
                       aria-label="Edit track name"
                       title="Edit track name"
                       (click)="
@@ -553,7 +612,7 @@
                     ><button
                       type="button"
                       class="icon-action danger-action"
-                      [disabled]="store.pending() || store.stale()"
+                      [disabled]="projectContext.readOnly() || store.pending() || store.stale()"
                       aria-label="Remove track"
                       title="Remove track"
                       (click)="requestRemoval('track', track.key, track.name)"

@@ -1,10 +1,14 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Component } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 
 import type { ActivationSwitchboardResponse } from './activation-api.service';
 import { ActivationSwitchboard } from './activation-switchboard';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 const response: ActivationSwitchboardResponse = {
   revision: 'r1',
@@ -81,17 +85,24 @@ describe('ActivationSwitchboard', () => {
   beforeEach(async () =>
     TestBed.configureTestingModule({
       imports: [ActivationSwitchboard],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
+      ],
     }).compileComponents(),
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  async function render(readOnly = false, value = response) {
+  async function render(readOnly = false, value = response, endpoint = '/api/v1/activation') {
     const fixture = TestBed.createComponent(ActivationSwitchboard);
     fixture.componentRef.setInput('readOnly', readOnly);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/v1/activation').flush(value);
+    http.expectOne(endpoint).flush(value);
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement, http };
@@ -110,6 +121,21 @@ describe('ActivationSwitchboard', () => {
     expect(beta.textContent).toContain('Waived at activation');
     expect(beta.textContent).toContain('Reset…');
     expect(beta.textContent).toContain('Redefine…');
+  });
+
+  it('keeps requirement and consumer links inside the selected linked project', async () => {
+    await TestBed.inject(Router).navigateByUrl('/projects/child/tasks/settings');
+    const { fixture, element } = await render(false, response, '/api/v1/projects/child/activation');
+    const beta = element.querySelectorAll('details')[1] as HTMLDetailsElement;
+    beta.open = true;
+    fixture.detectChanges();
+
+    expect(beta.querySelector('section[aria-label="Requirements"] a')?.getAttribute('href')).toBe(
+      '/projects/child/tasks/PM-0001',
+    );
+    expect(
+      beta.querySelector('section[aria-label="Consuming milestones"] a')?.getAttribute('href'),
+    ).toBe('/projects/child/tasks?milestone=beta');
   });
 
   it('activates a manual-only trigger through the confirmation dialog', async () => {

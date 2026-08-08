@@ -1,8 +1,13 @@
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 
 import { SettingsApiService, type SettingsResponse } from './settings-api.service';
+
+@Component({ template: '' })
+class RouteTarget {}
 
 const settings: SettingsResponse = {
   projectName: 'Atlas',
@@ -26,7 +31,14 @@ const settings: SettingsResponse = {
 describe('SettingsApiService', () => {
   beforeEach(() =>
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([
+          { path: 'tasks/settings', component: RouteTarget },
+          { path: 'projects/:projectId/tasks/settings', component: RouteTarget },
+        ]),
+      ],
     }),
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
@@ -104,5 +116,18 @@ describe('SettingsApiService', () => {
     expect(api.error(new HttpErrorResponse({ status: 0 }), 'Fallback').message).toContain(
       'could not be reached',
     );
+  });
+
+  it('targets the selected linked project', async () => {
+    await TestBed.inject(Router).navigateByUrl('/projects/child%20project/tasks/settings');
+    const api = TestBed.inject(SettingsApiService);
+    api.readSettings().subscribe();
+    api.renameStatus('waiting/review', { name: 'Waiting' }, settings.revision).subscribe();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/projects/child%20project/settings').flush(settings);
+    http
+      .expectOne('/api/v1/projects/child%20project/settings/statuses/waiting%2Freview')
+      .flush(settings);
   });
 });

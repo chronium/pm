@@ -39,6 +39,7 @@ describe('ProjectContextService', () => {
     expect(context.selectedProjectId()).toBe('prj_child');
     expect(context.readOnly()).toBe(true);
     expect(context.apiUrl('/board')).toBe('/api/v1/projects/prj_child/board');
+    expect(context.settingsRoot()).toBe('/projects/prj_child/tasks/settings');
     expect(context.taskUrl('GAME-0001', true)).toBe('/projects/prj_child/tasks/dialog/GAME-0001');
     expect(context.wikiUrl('guide/start')).toBe('/projects/prj_child/wiki/guide/start');
     expect(context.wikiCreateUrl()).toBe('/projects/prj_child/wiki/new');
@@ -103,5 +104,10 @@ describe('ProjectContextService', () => {
       ),
     }));
     expect(context.readOnly()).toBe(false);
+  });
+
+  it('keeps current-project settings on the ordinary task root', async () => {
+    await TestBed.inject(Router).navigateByUrl('/tasks');
+    expect(TestBed.inject(ProjectContextService).settingsRoot()).toBe('/tasks/settings');
   });
 });

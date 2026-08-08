@@ -111,16 +111,14 @@
     }
   </div>
 
-  @if (!projectContext.readOnly() || staticMode.enabled) {
-    <a
-      class="settings-link"
-      routerLink="/tasks/settings"
-      [class.active]="settingsActive()"
-      [attr.aria-current]="settingsActive() ? 'page' : null"
-      (click)="select($event)"
-    >
-      <ng-icon name="cssOptions" aria-hidden="true" />
-      <span>Settings</span>
-    </a>
-  }
+  <a
+    class="settings-link"
+    [routerLink]="projectContext.settingsRoot()"
+    [class.active]="settingsActive()"
+    [attr.aria-current]="settingsActive() ? 'page' : null"
+    (click)="select($event)"
+  >
+    <ng-icon name="cssOptions" aria-hidden="true" />
+    <span>Settings</span>
+  </a>
 </nav>

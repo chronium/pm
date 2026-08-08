@@ -13,6 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
 
 import type { components } from '../api/generated/pm-api';
+import { ProjectContextService } from '../core/project-context.service';
 import { TopBarSearch, type TopBarSearchOption } from '../shared/top-bar-search/top-bar-search';
 import type { ActivationRequirementRequest } from './activation-api.service';
 
@@ -37,6 +38,7 @@ interface RequirementOption extends TopBarSearchOption {
 })
 export class ActivationRequirementEditor {
   private readonly http = inject(HttpClient);
+  private readonly projectContext = inject(ProjectContextService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly search = viewChild(TopBarSearch);
   private readonly taskQueries = new Subject<string>();
@@ -97,7 +99,7 @@ export class ActivationRequirementEditor {
           this.loading.set(true);
           this.error.set(null);
           return this.http
-            .get<TaskSearchResult[]>('/api/v1/tasks/search', {
+            .get<TaskSearchResult[]>(this.projectContext.apiUrl('/tasks/search'), {
               params: new HttpParams().set('query', query).set('limit', 20),
             })
             .pipe(
