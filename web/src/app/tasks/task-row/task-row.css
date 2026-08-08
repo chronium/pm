@@ -112,10 +112,10 @@ a:hover {
 
   :host a {
     grid-template-columns:
-      var(--pm-task-selection-slot) 104px minmax(240px, 1fr) minmax(180px, 0.58fr)
+      var(--pm-task-selection-slot) minmax(260px, 1fr) minmax(180px, 0.58fr)
       max-content;
     gap: 0 var(--pm-space-3);
-    min-height: 44px;
+    min-height: 52px;
     padding: 0 var(--pm-space-3);
   }
 
@@ -129,23 +129,40 @@ a:hover {
   }
 
   :host .task-identity {
-    display: contents;
+    display: grid;
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 1px;
+    align-self: center;
   }
 
   :host .task-id-group {
-    grid-column: 2;
+    display: inline-flex;
+    width: max-content;
+    line-height: 18px;
+  }
+
+  :host .task-id {
+    display: inline-flex;
+    min-height: 18px;
+    align-self: center;
+    align-items: center;
+    line-height: 18px;
+    transform: translateY(1px);
+    white-space: nowrap;
   }
 
   :host .task-title {
-    grid-column: 3;
+    grid-column: auto;
   }
 
   :host .task-context {
-    grid-column: 4;
+    grid-column: 3;
   }
 
   :host .task-statuses {
-    grid-column: 5;
+    grid-column: 4;
   }
 
   :host .task-preview {

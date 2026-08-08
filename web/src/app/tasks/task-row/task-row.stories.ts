@@ -51,6 +51,22 @@ const blocked: BoardTask = {
     summary: 'Ineligible: milestone angular-web is inactive; unmet activation triggers: entry.',
   },
 };
+const contentTask: BoardTask = {
+  ...blocked,
+  id: 'CONTENT-0018',
+  title: 'Freeze initial Draft 0 Fire Arrow inputs',
+  track: 'CONTENT',
+  milestone: 'M8',
+  priority: 'medium',
+};
+const protocolTask: BoardTask = {
+  ...blocked,
+  id: 'PROTOCOL-0011',
+  title: 'Add Fire Arrow facts and serialization',
+  track: 'PROTOCOL',
+  milestone: 'M8',
+  priority: 'medium',
+};
 const meta = {
   title: 'Tasks/Task row',
   component: TaskRow,
@@ -82,8 +98,68 @@ export const Ready: Story = {
       expect(status.getBoundingClientRect().height).toBeLessThanOrEqual(20);
   },
 };
-export const BlockedSelected: Story = { args: { task: blocked, selected: true } };
+export const BlockedSelected: Story = {
+  args: { task: blocked, selected: true },
+};
 export const LongContentMobile: Story = {
   args: { task: blocked, selected: false },
   globals: { viewport: 'mobile' },
+};
+
+const longIdsDesktopRender: NonNullable<Story['render']> = () => ({
+  props: { contentTask, protocolTask },
+  template: `
+    <main style="padding: 24px">
+      <ul style="margin: 0; padding: 0; list-style: none">
+        <li pmTaskRow [task]="contentTask" [selected]="false"></li>
+        <li pmTaskRow [task]="protocolTask" [selected]="true"></li>
+      </ul>
+    </main>
+  `,
+});
+
+const verifyLongIdsDesktop: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const rows = [...canvasElement.querySelectorAll<HTMLElement>('li[pmTaskRow] a')];
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    expect(row.getBoundingClientRect().height).toBe(52);
+    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+  }
+  for (const taskId of canvasElement.querySelectorAll<HTMLElement>('.task-id')) {
+    expect(taskId.scrollHeight).toBeLessThanOrEqual(taskId.clientHeight);
+  }
+  for (const row of canvasElement.querySelectorAll<HTMLElement>('li[pmTaskRow]')) {
+    const priority = row.querySelector<HTMLElement>('pm-priority-indicator');
+    const taskId = row.querySelector<HTMLElement>('.task-id');
+    const title = row.querySelector<HTMLElement>('.task-title');
+    expect(priority).not.toBeNull();
+    expect(taskId).not.toBeNull();
+    expect(title).not.toBeNull();
+    expect(taskId!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      title!.getBoundingClientRect().top,
+    );
+    const priorityBounds = priority!.getBoundingClientRect();
+    const taskIdBounds = taskId!.getBoundingClientRect();
+    expect(
+      Math.abs(
+        priorityBounds.top +
+          priorityBounds.height / 2 -
+          (taskIdBounds.top + taskIdBounds.height / 2),
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(priorityBounds.left).toBe(title!.getBoundingClientRect().left);
+  }
+};
+
+export const LongIdsDesktop: Story = {
+  args: { task: contentTask, selected: false },
+  render: longIdsDesktopRender,
+  play: verifyLongIdsDesktop,
+};
+
+export const LongIdsDesktopDark: Story = {
+  args: { task: contentTask, selected: false },
+  globals: { theme: 'dark' },
+  render: longIdsDesktopRender,
+  play: verifyLongIdsDesktop,
 };
