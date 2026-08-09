@@ -26,8 +26,10 @@ public static class FileSystem
         AnsiConsole.MarkupLineInterpolated(
             $"Written [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
         if (GlobalConfig.DryRun) return;
+        var mutation = ActiveMutation.Value;
+        var trackedPath = mutation?.Prepare(path);
         File.WriteAllText(path, content);
-        ActiveMutation.Value?.Record(path);
+        if (trackedPath != null) mutation!.Record(trackedPath);
     }
 
     public static void WriteAllTextAtomic(string path, string content)
@@ -35,6 +37,8 @@ public static class FileSystem
         AnsiConsole.MarkupLineInterpolated(
             $"Written [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
         if (GlobalConfig.DryRun) return;
+        var mutation = ActiveMutation.Value;
+        var trackedPath = mutation?.Prepare(path);
 
         var directory = Path.GetDirectoryName(path) ??
                         throw new InvalidOperationException("File path does not have a parent directory.");
@@ -43,7 +47,7 @@ public static class FileSystem
         {
             File.WriteAllText(temporaryPath, content);
             File.Move(temporaryPath, path, true);
-            ActiveMutation.Value?.Record(path);
+            if (trackedPath != null) mutation!.Record(trackedPath);
         }
         finally
         {
@@ -74,8 +78,10 @@ public static class FileSystem
         AnsiConsole.MarkupLineInterpolated(
             $"Deleted [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
         if (GlobalConfig.DryRun) return;
+        var mutation = ActiveMutation.Value;
+        var trackedPath = mutation?.Prepare(path);
         File.Delete(path);
-        ActiveMutation.Value?.Record(path);
+        if (trackedPath != null) mutation!.Record(trackedPath);
     }
 
     public static void DeleteDirectory(string path)
@@ -120,7 +126,7 @@ public sealed class FileMutationScope : IDisposable
 
     public IReadOnlyList<string> ChangedPaths => changedPaths.Order(StringComparer.Ordinal).ToList();
 
-    internal void Record(string path)
+    internal string Prepare(string path)
     {
         var fullPath = Path.GetFullPath(path);
         var relative = Path.GetRelativePath(repositoryPath, fullPath);
@@ -128,8 +134,10 @@ public sealed class FileMutationScope : IDisposable
             relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
             throw new InvalidOperationException("A mutation attempted to report a path outside its target repository.");
 
-        changedPaths.Add(relative.Replace(Path.DirectorySeparatorChar, '/'));
+        return relative.Replace(Path.DirectorySeparatorChar, '/');
     }
+
+    internal void Record(string relativePath) => changedPaths.Add(relativePath);
 
     public void Dispose()
     {

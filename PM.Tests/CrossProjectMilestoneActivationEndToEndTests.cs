@@ -11,6 +11,96 @@ namespace PM.Tests;
 public sealed class CrossProjectMilestoneActivationEndToEndTests
 {
     [Fact]
+    public async Task TrustedLinkedMovePreservesAtomicStateAndStructuredReceipt()
+    {
+        using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        Assert.True(new ProjectConfigService(fixture.Starfall).AddStatus("doing", "Doing").Success);
+        fixture.Starfall.SetTaskOrder(new TaskOrderScope("STAR", "todo", "m1"), ["STAR-0001"]);
+        fixture.Starfall.SetTaskOrder(new TaskOrderScope("STAR", "doing", "m1"), []);
+        var registry = fixture.Registry();
+        Assert.True(registry.Remember(fixture.Starfall).Success);
+        Assert.True(registry.GrantWriteTrust("prj_starfall").Success);
+        var sourcePath = Path.Combine(fixture.Starfall.StatesPath, "todo", "STAR-0001.ref");
+        var destinationPath = Path.Combine(fixture.Starfall.StatesPath, "doing", "STAR-0001.ref");
+        var originalSource = File.ReadAllText(sourcePath);
+        var originalOrder = File.ReadAllText(fixture.Starfall.TaskOrderPath);
+
+        await using var client = await CreateMcpClient(fixture);
+        var invalid = await Call(
+            client,
+            "move_task",
+            ("taskId", "STAR-0001"),
+            ("targetState", "missing"),
+            ("project", "starfall"));
+        using (var invalidDocument = JsonDocument.Parse(Json(invalid)))
+        {
+            Assert.False(invalidDocument.RootElement.GetProperty("success").GetBoolean());
+            Assert.Equal("invalid_state", invalidDocument.RootElement.GetProperty("errorCode").GetString());
+        }
+        Assert.Equal(originalSource, File.ReadAllText(sourcePath));
+        Assert.False(File.Exists(destinationPath));
+        Assert.Equal(originalOrder, File.ReadAllText(fixture.Starfall.TaskOrderPath));
+
+        var moved = await Call(
+            client,
+            "move_task",
+            ("taskId", "STAR-0001"),
+            ("targetState", "doing"),
+            ("project", "starfall"));
+        Assert.NotEqual(true, moved.IsError);
+        using (var movedDocument = JsonDocument.Parse(Json(moved)))
+        {
+            var root = movedDocument.RootElement;
+            Assert.True(root.GetProperty("success").GetBoolean());
+            var receipt = root.GetProperty("data").GetProperty("mutation");
+            Assert.Equal("prj_starfall", receipt.GetProperty("projectId").GetString());
+            var changedPaths = receipt.GetProperty("changedPaths")
+                .EnumerateArray().Select(path => path.GetString()).ToList();
+            Assert.Contains(".pm/states/todo/STAR-0001.ref", changedPaths);
+            Assert.Contains(".pm/states/doing/STAR-0001.ref", changedPaths);
+            Assert.Contains(".pm/task_order.yaml", changedPaths);
+        }
+
+        Assert.False(File.Exists(sourcePath));
+        var relativeTasks = Path.GetRelativePath(Path.GetDirectoryName(destinationPath)!, fixture.Starfall.TasksPath);
+        Assert.Equal($"{relativeTasks}/STAR-0001.md", File.ReadAllText(destinationPath));
+        Assert.Empty(fixture.Starfall.GetTaskOrder(new TaskOrderScope("STAR", "todo", "m1")));
+        Assert.Equal(["STAR-0001"],
+            fixture.Starfall.GetTaskOrder(new TaskOrderScope("STAR", "doing", "m1")));
+
+        var reread = await Call(client, "get_task", ("taskId", "STAR-0001"), ("project", "starfall"));
+        Assert.Equal("doing", Data(reread).GetProperty("state").GetString());
+    }
+
+    [Fact]
+    public async Task TrustedLinkedMoveReturnsStructuredFailureWithoutOrphaningSourceState()
+    {
+        using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();
+        Assert.True(new ProjectConfigService(fixture.Starfall).AddStatus("doing", "Doing").Success);
+        var registry = fixture.Registry();
+        Assert.True(registry.Remember(fixture.Starfall).Success);
+        Assert.True(registry.GrantWriteTrust("prj_starfall").Success);
+        var sourcePath = Path.Combine(fixture.Starfall.StatesPath, "todo", "STAR-0001.ref");
+        var destinationPath = Path.Combine(fixture.Starfall.StatesPath, "doing", "STAR-0001.ref");
+        var originalSource = File.ReadAllText(sourcePath);
+        Directory.CreateDirectory(destinationPath);
+
+        await using var client = await CreateMcpClient(fixture);
+        var failed = await Call(
+            client,
+            "move_task",
+            ("taskId", "STAR-0001"),
+            ("targetState", "doing"),
+            ("project", "starfall"));
+
+        using var document = JsonDocument.Parse(Json(failed));
+        Assert.False(document.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("task_state_write_failed", document.RootElement.GetProperty("errorCode").GetString());
+        Assert.Equal(originalSource, File.ReadAllText(sourcePath));
+        Assert.True(Directory.Exists(destinationPath));
+    }
+
+    [Fact]
     public async Task CrossProjectTaskCompletionLatchesOnlyTheOwningProjectsDuplicateTrigger()
     {
         using var fixture = await LinkedProjectIntegrationFixture.CreateAsync();

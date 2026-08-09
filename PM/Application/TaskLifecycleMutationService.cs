@@ -56,7 +56,7 @@ public sealed class TaskLifecycleMutationService(
         {
             primaryMutation();
         }
-        catch (Exception exception) when (IsStorageException(exception))
+        catch (Exception exception) when (IsMutationException(exception))
         {
             return RestoreOrFail(
                 snapshots,
@@ -74,8 +74,8 @@ public sealed class TaskLifecycleMutationService(
             if (!persistence.Reload())
                 throw new InvalidDataException("The project configuration could not be reloaded.");
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
-                                           InvalidDataException or YamlException)
+        catch (Exception exception) when (IsMutationException(exception) ||
+                                           exception is InvalidDataException or YamlException)
         {
             return RestoreOrFail(
                 snapshots,
@@ -122,7 +122,7 @@ public sealed class TaskLifecycleMutationService(
         {
             restored &= persistence.Reload();
         }
-        catch (Exception exception) when (IsStorageException(exception))
+        catch (Exception exception) when (IsMutationException(exception))
         {
             restored = false;
         }
@@ -134,8 +134,8 @@ public sealed class TaskLifecycleMutationService(
                 $"{failureMessage} The previous project state could not be fully restored.");
     }
 
-    private static bool IsStorageException(Exception exception) =>
-        exception is IOException or UnauthorizedAccessException;
+    private static bool IsMutationException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or InvalidOperationException;
 
     private sealed record FileSnapshot(string Path, bool Existed, string? Content)
     {
@@ -161,7 +161,7 @@ public sealed class TaskLifecycleMutationService(
 
                 return true;
             }
-            catch (Exception exception) when (IsStorageException(exception))
+            catch (Exception exception) when (IsMutationException(exception))
             {
                 return false;
             }
