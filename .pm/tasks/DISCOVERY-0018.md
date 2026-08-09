@@ -6,7 +6,7 @@ milestone: site-overview-discovery
 dependsOn:
 - DISCOVERY-0015
 createdAt: 2026-08-09T10:22:50.2126660Z
-modifiedAt: 2026-08-09T10:22:50.2226580Z
+modifiedAt: 2026-08-09T10:34:50.4067610Z
 ---
 
 ## Goal
@@ -20,16 +20,17 @@ Prototype and validate a bounded project-configurable choice between single-colu
 - Render `primary` and `secondary` as PM-owned columns at qualifying wide viewports; render `after` across the available width below them.
 - Collapse split layouts deterministically to `primary`, then `secondary`, then `after` at narrower widths.
 - Require `hero` exactly once and first in `sections` or `primary`.
-- Allow only the approved `hero`, `markdown`, `milestone`, `tasks`, and `wiki` section vocabulary in every region.
-- Reject nested splits, arbitrary column widths, grid coordinates, gaps, breakpoints, backgrounds, custom CSS, and raw HTML.
+- Allow the approved `hero`, `markdown`, `milestone`, `tasks`, and `wiki` content vocabulary in composition regions.
+- Add a quiet `copyright` footer section with a plain notice string. Permit it only at the end of a single `sections` list or within split `after`; do not permit it in `primary` or `secondary`.
+- Reject nested splits, arbitrary column widths, grid coordinates, gaps, breakpoints, backgrounds, custom CSS, raw HTML, and general-purpose footer markup.
 - Keep Overview, Tasks, and Wiki navigation owned by PM.
 
 ## Prototype and validate
 
 - Add Storybook compositions showing both layout modes across the validated software-product, library, infrastructure, and personal-project archetypes.
 - Confirm that projects which do not benefit from a split retain a coherent single-column page.
-- Exercise documentation in `primary` and `after`, uneven column heights, long Markdown, dense task lists, empty optional regions, light and dark themes, and realistic wide and narrow viewports.
-- Validate DOM order, keyboard focus order, screen-reader reading order, responsive collapse, and absence of horizontal overflow.
+- Exercise documentation and copyright content in `after`, documentation in `primary`, uneven column heights, long Markdown, dense task lists, empty optional regions, light and dark themes, and realistic wide and narrow viewports.
+- Validate DOM order, keyboard focus order, screen-reader reading order, responsive collapse, semantic footer placement, and absence of horizontal overflow.
 - Identify whether the fixed regions and mobile order are expressive enough before the public schema is frozen.
 
 ## Deliverable

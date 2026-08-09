@@ -7,6 +7,8 @@ p {
 }
 
 .overview-task-list {
+  container-name: overview-task-list;
+  container-type: inline-size;
   margin: 0;
   padding: 0;
   border-bottom: 1px solid var(--pm-border-subtle);

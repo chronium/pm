@@ -1,9 +1,12 @@
 :host {
   display: block;
+  height: 100%;
 }
 
 .overview-hero {
+  box-sizing: border-box;
   max-width: 760px;
+  height: 100%;
   padding: var(--pm-space-5) 0 var(--pm-space-6);
   border-bottom: 1px solid var(--pm-border-subtle);
 }

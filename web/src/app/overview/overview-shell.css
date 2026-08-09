@@ -9,7 +9,7 @@
 
   width: min(
     calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin)),
-    1040px
+    var(--pm-overview-shell-max-width, 1040px)
   );
   height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
   min-height: 0;

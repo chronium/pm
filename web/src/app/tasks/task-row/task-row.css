@@ -222,3 +222,43 @@ a:hover {
     display: none;
   }
 }
+
+@container overview-task-list (max-width: 640px) {
+  :host[data-layout='overview'] a {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--pm-space-1) var(--pm-space-2);
+    min-height: 58px;
+  }
+
+  :host[data-layout='overview'] .task-identity {
+    grid-column: 1;
+  }
+
+  :host[data-layout='overview'] .task-context {
+    display: none;
+  }
+
+  :host[data-layout='overview'] .task-statuses {
+    grid-column: 2;
+  }
+
+  :host[data-layout='overview'] .task-preview {
+    display: none;
+  }
+}
+
+@container overview-task-list (max-width: 440px) {
+  :host[data-layout='overview'] a {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :host[data-layout='overview'] .task-title {
+    white-space: normal;
+  }
+
+  :host[data-layout='overview'] .task-statuses {
+    grid-column: 1;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+}

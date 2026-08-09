@@ -25,6 +25,14 @@ describe('Markdown components', () => {
     expect(html).not.toContain('javascript:');
   });
 
+  it('makes horizontally scrollable code blocks keyboard accessible', () => {
+    const renderer = TestBed.inject(MarkdownService);
+
+    const html = renderer.render('```ts\nconst value = "a long line";\n```');
+
+    expect(html).toContain('<pre tabindex="0">');
+  });
+
   it('rewrites available project links and degrades unavailable links to safe text', () => {
     TestBed.overrideProvider(ProjectLinksService, {
       useValue: {

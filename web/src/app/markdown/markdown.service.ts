@@ -30,6 +30,9 @@ export class MarkdownService {
         anchor.replaceWith(replacement);
       }
     }
+    for (const codeBlock of template.content.querySelectorAll<HTMLElement>('pre')) {
+      codeBlock.tabIndex = 0;
+    }
     return DOMPurify.sanitize(template.innerHTML);
   }
 }

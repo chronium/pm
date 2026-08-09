@@ -1,8 +1,11 @@
 :host {
   display: block;
+  height: 100%;
 }
 
 .overview-section {
+  box-sizing: border-box;
+  height: 100%;
   padding: var(--pm-space-6) 0;
   border-bottom: 1px solid var(--pm-border-subtle);
 }
