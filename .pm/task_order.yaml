@@ -18,7 +18,6 @@ orders:
   state: todo
   milestone: site-overview-discovery
   taskIds:
-  - DISCOVERY-0013
   - DISCOVERY-0014
   - DISCOVERY-0015
   - DISCOVERY-0017

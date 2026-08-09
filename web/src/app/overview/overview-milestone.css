@@ -1,0 +1,129 @@
+:host {
+  display: block;
+}
+
+.overview-section {
+  padding: var(--pm-space-6) 0;
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h2 {
+  margin-bottom: var(--pm-space-4);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.milestone-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pm-space-4);
+}
+
+h3 {
+  color: var(--pm-text-primary);
+  font-size: clamp(1.2rem, 3vw, 1.55rem);
+  line-height: 1.2;
+}
+
+.milestone-key,
+.milestone-priority {
+  color: var(--pm-text-subtle);
+  font-family: var(--pm-font-family-mono);
+  font-size: var(--pm-font-size-xs);
+}
+
+.milestone-key {
+  margin-top: var(--pm-space-1);
+}
+
+.milestone-description {
+  display: block;
+  max-width: 72ch;
+  margin-top: var(--pm-space-4);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+  line-height: 1.55;
+}
+
+.milestone-gates {
+  margin-top: var(--pm-space-3);
+  color: var(--pm-warning);
+  font-size: var(--pm-font-size-sm);
+}
+
+.milestone-progress-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--pm-space-3);
+  margin-top: var(--pm-space-5);
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+
+.milestone-progress-summary strong {
+  color: var(--pm-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin-top: var(--pm-space-2);
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  accent-color: var(--pm-accent);
+  background: var(--pm-surface-hover);
+}
+
+progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--pm-surface-hover);
+}
+
+progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--pm-accent);
+}
+
+progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--pm-accent);
+}
+
+.milestone-priority {
+  margin-top: var(--pm-space-3);
+}
+
+.overview-empty {
+  padding: var(--pm-space-4) 0;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-sm);
+}
+
+@media (max-width: 520px) {
+  .overview-section {
+    padding-block: var(--pm-space-5);
+  }
+
+  .milestone-header {
+    align-items: flex-start;
+  }
+
+  .milestone-progress-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--pm-space-1);
+  }
+}

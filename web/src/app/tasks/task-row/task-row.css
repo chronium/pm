@@ -168,10 +168,35 @@ a:hover {
   :host .task-preview {
     display: none;
   }
+
+  :host[data-layout='overview'] a {
+    grid-template-columns: minmax(260px, 1fr) minmax(180px, 0.58fr) minmax(160px, 0.36fr);
+    padding-inline: 0;
+  }
+
+  :host[data-layout='overview'] a::before {
+    content: none;
+    display: none;
+  }
+
+  :host[data-layout='overview'] .task-identity {
+    grid-column: 1;
+  }
+
+  :host[data-layout='overview'] .task-context {
+    grid-column: 2;
+  }
+
+  :host[data-layout='overview'] .task-statuses {
+    grid-column: 3;
+  }
 }
 @media (max-width: 820px) {
   a {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+  :host[data-layout='overview'] a {
+    padding-inline: 0;
   }
   .task-context {
     display: none;

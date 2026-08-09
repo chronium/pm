@@ -153,6 +153,11 @@ describe('Task board components', () => {
     ]);
     expect(link.textContent).toContain('Keep a deliberately useful preview');
     expect(link.querySelector('pm-badge')).toBeNull();
+    expect(readyFixture.nativeElement.getAttribute('data-layout')).toBe('board');
+
+    readyFixture.componentRef.setInput('showState', true);
+    readyFixture.detectChanges();
+    expect(link.querySelector('pm-badge')?.textContent).toContain('todo');
 
     const blockedFixture = TestBed.createComponent(TaskRow);
     blockedFixture.componentRef.setInput('task', blockedTask);

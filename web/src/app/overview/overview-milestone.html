@@ -1,0 +1,46 @@
+<section class="overview-section overview-milestone" [attr.aria-labelledby]="headingId()">
+  <h2 [id]="headingId()">{{ title() }}</h2>
+
+  @if (milestone(); as item) {
+    <header class="milestone-header">
+      <div>
+        <h3>{{ item.title }}</h3>
+        <p class="milestone-key">{{ item.key }}</p>
+      </div>
+      <pm-badge [tone]="lifecycleTone(item.lifecycle)">{{
+        lifecycleLabel(item.lifecycle)
+      }}</pm-badge>
+    </header>
+
+    @if (item.description.trim()) {
+      <pm-markdown-display class="milestone-description" [markdown]="item.description" />
+    }
+
+    @if (item.unmetActivationTriggers.length) {
+      <p class="milestone-gates">Waiting on: {{ item.unmetActivationTriggers.join(', ') }}</p>
+    }
+
+    <div class="milestone-progress-summary">
+      <span>{{ progressLabel(item) }}</span>
+      @if (progress(); as percentage) {
+        <strong>{{ percentage }}%</strong>
+      } @else if (item.assignedTaskCount > 0) {
+        <strong>0%</strong>
+      } @else {
+        <strong>No assigned tasks</strong>
+      }
+    </div>
+
+    @if (item.assignedTaskCount > 0) {
+      <progress
+        [value]="item.doneTaskCount"
+        [max]="item.assignedTaskCount"
+        [attr.aria-label]="progressLabel(item)"
+      ></progress>
+    }
+
+    <p class="milestone-priority">{{ priorityLabel(item.priority) }}</p>
+  } @else {
+    <p class="overview-empty">No active milestone is available.</p>
+  }
+</section>

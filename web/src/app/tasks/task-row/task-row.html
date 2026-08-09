@@ -10,6 +10,9 @@
     ><span aria-hidden="true">·</span><span>{{ task().milestone ?? 'Unassigned' }}</span></span
   >
   <span class="task-statuses">
+    @if (showState()) {
+      <pm-badge>{{ task().state }}</pm-badge>
+    }
     <span
       class="task-status"
       [attr.data-icon]="dependencyIcon(task())"
