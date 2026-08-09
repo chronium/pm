@@ -17,5 +17,4 @@ orders:
 - track: DISCOVERY
   state: todo
   milestone: site-overview-discovery
-  taskIds:
-  - DISCOVERY-0016
+  taskIds: []

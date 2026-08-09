@@ -1,24 +1,26 @@
 ---
 title: Published Project Overview Configuration
 createdAt: 2026-08-09T07:55:11.6039200Z
-modifiedAt: 2026-08-09T08:06:36.2132700Z
+modifiedAt: 2026-08-09T14:43:47.1278900Z
 ---
 
-This page defines the discovery contract for configurable project Overview pages. It is an implementation target, not documentation of a currently available feature.
+This page defines the frozen production contract for configurable project Overview pages. It is the implementation boundary approved by the Overview discovery milestone.
 
-PM owns the visual system, responsive layout, accessibility, navigation, and rendering behavior. A project chooses the ordered content that tells its story. The contract deliberately does not expose arbitrary layout, CSS, colors, HTML, or page-builder controls.
+PM owns the visual system, responsive layout, accessibility, navigation, and rendering behavior. A project chooses the content, order, and one bounded composition mode that tells its story. The contract deliberately does not expose arbitrary layout, CSS, colors, HTML, or page-builder controls.
 
 ## Decision summary
 
-- Overview is opt-in through site.enabled: true.
+- Overview is opt-in through `site.enabled: true`.
 - A project without enabled site configuration behaves exactly as it does today.
 - Enabled live and embedded applications expose Overview in navigation but continue to open Tasks by default.
 - Enabled static exports open Overview by default.
-- Overview uses one shared composition model across live, embedded, and static modes.
-- PM provides hero, milestone, tasks, wiki, and wiki-sourced Markdown sections.
+- Overview uses one shared resolved composition across live, embedded, linked-project, and static modes.
+- The implicit `single` composition provides hero, milestone, tasks, and wiki sections.
+- Projects may choose a bounded `split` composition with `primary`, `secondary`, and optional full-width `after` regions.
+- PM provides hero, milestone, tasks, wiki, wiki-sourced Markdown, and a bounded copyright footer section.
 - Configuration controls content and order, not grid geometry or visual styling.
 - Explicit invalid configuration is reported; publishing never silently drops broken sections.
-- Production parsing, routes, APIs, snapshots, and components are deferred to the implementation milestone.
+- The first production implementation is YAML-authored. A Settings editor is deferred until real usage validates the contract.
 
 ## Storage boundary
 
@@ -38,12 +40,13 @@ site:
   enabled: true
 ~~~
 
-This produces the implicit composition:
+This produces the implicit single composition:
 
 ~~~yaml
 site:
   enabled: true
   home:
+    layout: single
     sections:
       - type: hero
       - type: milestone
@@ -51,9 +54,9 @@ site:
       - type: wiki
 ~~~
 
-Markdown is not implicit because it requires a source page.
+`home`, `layout`, and `sections` are omitted in the minimal source configuration. Markdown is not implicit because it requires a source page.
 
-## Full configuration
+## Explicit single configuration
 
 ~~~yaml
 site:
@@ -62,6 +65,7 @@ site:
   description: >
     Local project management built for software projects and agents.
   home:
+    layout: single
     sections:
       - type: hero
 
@@ -84,9 +88,47 @@ site:
           - getting-started
           - architecture
           - publishing/static-site
+
+      - type: copyright
+        notice: Copyright 2026 Example Project.
 ~~~
 
-Section objects are always mappings with an explicit type. Scalar shorthand such as - hero is not supported.
+`layout: single` is optional because single is the default. Section objects are always mappings with an explicit `type`; scalar shorthand such as `- hero` is not supported.
+
+## Split configuration
+
+~~~yaml
+site:
+  enabled: true
+  title: PM
+  description: >
+    Local project management built for software projects and agents.
+  home:
+    layout: split
+    primary:
+      - type: hero
+      - type: markdown
+        title: Introduction
+        source: wiki:overview
+    secondary:
+      - type: milestone
+        title: Current milestone
+      - type: tasks
+        title: What's being worked on
+        filter: "state:in-progress"
+        limit: 5
+    after:
+      - type: wiki
+        title: Documentation
+        pages:
+          - overview
+          - architecture/published-project-overview
+          - publishing/static-site
+      - type: copyright
+        notice: Copyright 2026 Example Project.
+~~~
+
+The three split regions are fixed PM concepts. Projects cannot add regions, nest compositions, configure column widths, or choose breakpoints.
 
 ## Disabled configuration
 
@@ -126,21 +168,37 @@ description is optional plain text. Folded or literal YAML strings are allowed, 
 
 An absent description removes the hero description. An explicitly present value must contain non-whitespace text.
 
-### home.sections
+### home composition
 
-sections is an optional ordered sequence of uniform section objects. Omission selects the implicit composition. An explicitly present sequence must contain at least one section.
+`home` is optional. When omitted, PM resolves the implicit single composition.
 
-Array order is presentation order. One hero is allowed. Milestone, tasks, wiki, and Markdown sections may repeat with different selections.
+`layout` is optional and accepts only `single` or `split`. Omission means `single`.
+
+For a single composition:
+
+- `sections` is optional; omission selects the implicit composition.
+- An explicitly present `sections` sequence must be non-empty.
+- `primary`, `secondary`, and `after` are invalid.
+
+For a split composition:
+
+- `primary` and `secondary` are required non-empty section sequences.
+- `after` is optional; when present it must be non-empty.
+- `sections` is invalid.
+
+Configured order is authoritative within each region. At narrow widths the authoritative region order is `primary`, then `secondary`, then `after`.
 
 ## Common section behavior
 
-Every section requires a supported type. Non-hero sections may provide an optional non-empty title. When omitted, PM supplies a type-specific title.
+Every section requires a supported `type`. Non-hero, non-copyright sections may provide an optional non-empty `title`; PM supplies a type-specific title when it is omitted.
+
+Every ready composition contains exactly one hero. It must be the first single section or the first primary section. Milestone, tasks, wiki, and Markdown sections may repeat with different selections.
 
 A section that resolves to no content remains visible as a compact, type-appropriate empty state. This keeps the configured story stable as project data changes and communicates current truth without layout collapse.
 
-Repeated content section types are intentional and valid. A second hero is invalid. Duplicate page paths within one wiki section are invalid.
+At most one copyright section is allowed. It must be the final single section or the final section of `after`. It is invalid in `primary` or `secondary`.
 
-Unknown fields are invalid. This prevents accidental configuration typos and rejects layout controls that PM does not own.
+Duplicate page paths within one wiki section are invalid. Unknown fields are invalid. This prevents accidental configuration typos and rejects layout controls that PM does not own.
 
 ## Hero section
 
@@ -148,9 +206,9 @@ Unknown fields are invalid. This prevents accidental configuration typos and rej
 - type: hero
 ~~~
 
-Hero uses site.title or the project name and the optional site.description. It provides restrained links into Tasks and Wiki using PM's fixed information architecture.
+Hero uses `site.title` or the project name and the optional `site.description`. It provides restrained links into Tasks and Wiki using PM's fixed information architecture.
 
-Hero accepts no section-specific content or styling fields. It may be omitted from an explicit composition, but it may appear at most once.
+Hero accepts no section-specific content or styling fields. It is required exactly once and must be first in `sections` or `primary`.
 
 Default title: not applicable; the hero uses the site presentation title.
 
@@ -256,38 +314,57 @@ No implicit family-wide wiki selection occurs. Cross-project links inside displa
 
 Fields:
 
-- type: required and equal to markdown.
-- title: optional plain-text section heading. When absent, use the source wiki page title.
-- source: required and formatted exactly as wiki:<normalized-local-path>.
+- `type`: required and equal to `markdown`.
+- `title`: optional plain-text section heading. When absent, use the source wiki page title.
+- `source`: required and formatted exactly as `wiki:<normalized-local-path>`.
 
 Only PM wiki pages are valid sources in the first version. Raw Markdown, file paths, URLs, inline HTML, and arbitrary resource schemes are not accepted.
 
 The source page must exist and parse successfully. Rendering reuses PM's established sanitized Markdown pipeline and canonical project-link handling.
 
+## Copyright section
+
+~~~yaml
+- type: copyright
+  notice: Copyright 2026 Example Project.
+~~~
+
+Fields:
+
+- `type`: required and equal to `copyright`.
+- `notice`: required non-whitespace plain text.
+
+Copyright accepts no title, Markdown, HTML, link, styling, or selection fields. It is optional, may appear at most once, and is rendered as a quiet semantic footer. It must be last in a single composition or last in the split `after` region.
+
 ## Validation
 
 Project validation rejects:
 
-- A non-mapping site or home value.
-- A non-Boolean enabled value.
-- Blank explicit site or section titles.
-- A blank explicit site description.
-- A non-sequence or explicitly empty sections value.
+- A non-mapping `site` or `home` value.
+- A non-Boolean `enabled` value.
+- A `layout` value other than `single` or `split`.
+- Single-only and split-only fields mixed in one home mapping.
+- A non-sequence or explicitly empty configured section region.
+- A split composition without non-empty `primary` and `secondary` regions.
 - Scalar section shorthand.
 - Missing or unknown section types.
 - Unknown fields on site, home, or section mappings.
-- More than one hero.
+- A missing, repeated, or incorrectly placed hero.
+- A repeated or incorrectly placed copyright section.
+- A blank copyright notice or copyright fields other than `type` and `notice`.
+- Blank explicit site or section titles.
+- A blank explicit site description.
 - Fields that attempt to control columns, widths, colors, backgrounds, padding, raw HTML, CSS, or arbitrary layout.
 - Missing explicit milestone references.
 - Invalid task-query syntax or referenced task metadata.
-- in:selection in a tasks section.
+- `in:selection` in a tasks section.
 - A tasks limit outside 1 through 20.
 - An explicitly empty wiki pages sequence.
 - Missing, invalid, or duplicate wiki page paths.
 - Missing or unsupported Markdown sources.
 - A Markdown source whose wiki page is missing or invalid.
 
-pm doctor reports these as actionable project configuration errors. Validation includes dormant configuration so stored compositions remain trustworthy.
+`pm doctor` reports these as actionable project configuration errors. Validation includes dormant configuration so stored compositions remain trustworthy.
 
 ## Failure boundaries
 
@@ -307,11 +384,23 @@ Valid selections with no current content are not errors. They render the empty s
 
 Projects without site configuration require no migration and preserve all current live, embedded, and static behavior.
 
-The future serializer must omit an absent site value so unrelated configuration writes do not add site: null or otherwise churn older project files. A present disabled site remains round-trippable.
+The serializer must omit an absent `site` value so unrelated configuration writes do not add `site: null` or otherwise churn older project files. A present disabled site remains round-trippable.
 
 The contract does not require older PM releases to understand configuration introduced by a newer release. New PM releases must continue to read older projects without site configuration. Breaking future site-schema changes require an explicit, owned migration rather than an indefinite internal compatibility path.
 
 Unknown section types and unknown fields remain errors. New section types are additive capabilities that require a PM version that explicitly understands them.
+
+## Presentation contract
+
+Single compositions retain PM's accepted 1040px bounded reading surface.
+
+At qualifying wide widths, split compositions use a PM-owned fluid surface bounded by `clamp(1040px, 70vw, 1680px)`, with 44/56 primary and secondary columns and the established spacing tokens. The split activates when the Overview route container provides at least 1100px.
+
+Primary section N and secondary section N occupy the same intrinsic grid row. The taller item determines the shared row height. Unmatched trailing sections occupy their own rows. The `after` region spans both columns below all paired rows.
+
+At narrower widths, split becomes one column in the semantic order primary, secondary, then after. Wide visual pairing never changes DOM order, keyboard focus order, or screen-reader reading order. Sections retain their configured order within each region.
+
+PM owns these dimensions, breakpoints, surfaces, spacing, and responsive rules. They are not configuration fields.
 
 ## Routing contract
 
@@ -345,14 +434,14 @@ The Overview document title uses site.title when configured and the project name
 
 ## Resolved presentation contract
 
-Presentation components consume one atomic, revisioned Overview document. They do not receive ProjectConfig, section filters, file paths, task-order data, or services that read project files.
+Presentation components consume one atomic, revisioned Overview document. They do not receive `ProjectConfig`, selectors, filters, file paths, task-order data, or services that read project files.
 
-The future live read routes are:
+The live read routes are:
 
-- GET /api/v1/overview for the current project.
-- GET /api/v1/projects/{projectId}/overview for a readable linked project.
+- `GET /api/v1/overview` for the current project.
+- `GET /api/v1/projects/{projectId}/overview` for a readable linked project.
 
-Both return the same transport-neutral shape and participate in the existing revisioned-read and ETag conventions. These routes and types are specified here for later implementation; DISCOVERY-0011 does not add them.
+Both return the same transport-neutral shape and participate in the existing revisioned-read and ETag conventions.
 
 ### Atomic document
 
@@ -362,7 +451,7 @@ OverviewDocument
   projectId: string or null
   projectName: string
   documentTitle: string
-  sections: ordered OverviewSection[]
+  composition: OverviewComposition or null
   issues: OverviewIssue[]
   revision: string
 
@@ -374,13 +463,29 @@ OverviewIssue
 
 State invariants:
 
-- disabled has no sections or issues. documentTitle falls back to the operational project name; dormant site presentation fields are not exposed.
-- ready has its complete ordered section list and no issues.
-- invalid has one or more issues and no sections. PM never returns a partially resolved page.
-- A valid section with no current content remains part of a ready document and carries an empty value appropriate to its type.
+- `disabled` has no composition or issues. `documentTitle` falls back to the operational project name; dormant presentation fields are not exposed.
+- `ready` has one complete composition and no issues.
+- `invalid` has one or more issues and no composition. PM never returns a partially resolved page.
+- A valid content section with no current content remains in a ready composition and carries its type-appropriate empty value.
 - Transport, access, and unexpected project-read failures are request failures rather than invalid document states.
 
-The revision covers the effective site configuration and every project value that contributed to the resolved document, including selected task order, task state, milestone lifecycle, activation state, and selected wiki content. An unrelated project change that cannot affect the document need not change the revision.
+The revision covers the effective site configuration and every project value that contributed to the resolved document, including task order and state, milestone lifecycle and activation, and selected wiki content. An unrelated project change that cannot affect the document need not change the revision.
+
+### Composition union
+
+~~~text
+SingleOverviewComposition
+  layout: single
+  sections: OverviewSection[]
+
+SplitOverviewComposition
+  layout: split
+  primary: OverviewContentSection[]
+  secondary: OverviewContentSection[]
+  after: OverviewSection[]
+~~~
+
+The resolved single array is non-empty. Resolved split primary and secondary arrays are non-empty; `after` is transported as an empty array when omitted. Configuration-only selectors are not echoed.
 
 ### Section union
 
@@ -412,17 +517,21 @@ MarkdownOverviewSection
   title: string
   sourcePath: string
   body: string
+
+CopyrightOverviewSection
+  type: copyright
+  notice: string
 ~~~
 
-Array order is the resolved presentation order. The response does not echo configuration-only fields such as milestone selectors, task filters, task limits, or wiki page selectors.
+`OverviewContentSection` excludes copyright. Hero appears only as the first single or primary item. Copyright appears only as the final single or after item.
 
-A section has no user-configured identifier in the first version. Rendering tracks sections by their resolved array position because repeated section types are legal and configuration order is authoritative.
+A section has no user-configured identifier in the first version. Rendering tracks it by layout region and resolved array position because repeated content types are legal and configured order is authoritative.
 
 ### Hero data
 
 Hero contains the resolved presentation title and optional plain-text description. The fixed Tasks and Wiki links are derived from the selected project context rather than transported as configurable URLs.
 
-documentTitle and the hero title intentionally contain the same resolved site title when a hero is present. documentTitle remains available when an explicit composition omits hero.
+`documentTitle` and the hero title intentionally contain the same resolved site title.
 
 ### Milestone data
 
@@ -439,15 +548,15 @@ OverviewMilestone
   unmetActivationTriggers: string[]
 ~~~
 
-The renderer derives a completion percentage from doneTaskCount and assignedTaskCount. Zero assigned tasks produce an empty progress state rather than a vacuous 100 percent.
+The renderer derives a completion percentage from `doneTaskCount` and `assignedTaskCount`. Zero assigned tasks produce an empty progress state rather than a vacuous 100 percent.
 
 For automatic selection, the resolver considers only milestones whose resolved lifecycle is active, ranks urgent before high, medium, low, and none, then uses configured milestone order as the stable tie-breaker.
 
-An explicit milestone may have any lifecycle. If no automatic candidate exists, milestone is null and the section renders the no-active-milestone empty state.
+An explicit milestone may have any lifecycle. If no automatic candidate exists, `milestone` is null and the section renders the no-active-milestone empty state.
 
 ### Task data
 
-OverviewTask reuses the semantic fields of BoardTaskSummaryResponse:
+`OverviewTask` reuses the semantic fields of `BoardTaskSummaryResponse`:
 
 ~~~text
 OverviewTask
@@ -466,9 +575,9 @@ OverviewTask
 
 It never includes Markdown, full descriptions, local metadata, file paths, or mutation revisions.
 
-The resolver begins with the complete BoardService task sequence. It evaluates the existing task-query predicates without adopting search relevance ordering, retains BoardService order, and only then applies the configured limit.
+The resolver begins with the complete `BoardService` task sequence. It evaluates the existing task-query predicates without adopting search relevance ordering, retains board order, and only then applies the configured limit.
 
-An omitted filter selects tasks that are not in a configured terminal task state. The first implementation uses PM's existing done state semantics; it does not infer completion from labels or array position.
+An omitted filter selects tasks that are not in a configured terminal task state. The first implementation uses PM's existing done-state semantics; it does not infer completion from labels or array position.
 
 ### Wiki data
 
@@ -479,31 +588,35 @@ OverviewWikiPage
   modifiedAt: UTC timestamp
 ~~~
 
-Wiki links are local to the selected project. Routes are constructed by the project context so linked-project Overview pages lead to the corresponding linked-project Wiki workspace.
+Wiki links are local to the selected project. Routes are constructed by project context so linked-project Overview pages lead to that linked project's Wiki workspace.
 
 Implicit selection uses at most six top-level pages in ordinal path order. Explicit selection preserves configuration order.
 
 ### Markdown data
 
-Markdown contains the resolved source page path, resolved heading, and source body. sourcePath is retained for canonical link resolution and provenance; the local file path and wiki frontmatter are not transported.
+Markdown contains the resolved source page path, resolved heading, and source body. `sourcePath` is retained for canonical link resolution and provenance; local file paths and wiki frontmatter are not transported.
 
 The renderer uses PM's established sanitized Markdown and project-link translation. Empty source bodies remain valid and render the standard empty-content treatment.
+
+### Copyright data
+
+Copyright transports only the validated plain-text notice. It does not resolve Markdown, HTML, links, project identity, or an inferred year.
 
 ## Resolution pipeline
 
 One application service owns Overview resolution for current, linked, embedded, and static consumers:
 
 1. Read the selected project's structured configuration and validate the complete dormant or enabled site definition.
-2. Return disabled immediately when site.enabled is not true.
-3. Return invalid with the complete deterministic issue list when the enabled site parses but fails Overview validation.
-4. Expand the implicit section list when home.sections is omitted.
+2. Return `disabled` when `site.enabled` is not true.
+3. Return `invalid` with the complete deterministic issue list when the enabled site parses but fails Overview validation.
+4. Expand the implicit single composition when `home` or `home.sections` is omitted.
 5. Read board, activation, task-order, and wiki data once for the selected project.
-6. Resolve sections in configuration order using the rules below.
+6. Resolve every composition region in configured order.
 7. Return one ready document and compute its revision.
 
 Resolution must not be duplicated in Angular or in the static exporter. Linked-project resolution uses the selected project's existing read context and the same resolver. It never falls back to the primary project's configuration or content.
 
-The static snapshot builder stores the resolved Overview document and increments the snapshot schema when this contract is implemented. The static interceptor exposes it through the same /api/v1/overview read used by the Angular store. An enabled invalid configuration fails site publishing before a snapshot is emitted.
+The static snapshot builder stores the resolved Overview document and advances the snapshot schema from 5 to 6. The static interceptor exposes it through the same `/api/v1/overview` read used by the Angular store. An enabled invalid configuration fails site publishing before a snapshot is emitted.
 
 ## Loading, empty, and failure behavior
 
@@ -543,7 +656,7 @@ Overview has no mutation controls in the first implementation. Static and read-o
 
 ### Ready current project
 
-A live enabled project returns ready, exposes /overview in navigation, and still opens /tasks from /. Its sections contain only resolved display data in configured order.
+A live enabled project returns ready, exposes /overview in navigation, and still opens /tasks from /. Its composition contains only resolved display data in configured region order.
 
 ### Disabled project
 
@@ -563,7 +676,7 @@ Live and embedded Overview show the diagnostics. Static publishing fails.
 
 ### Empty project
 
-The implicit ready composition contains hero, a null milestone, an empty tasks list, and an empty wiki list. The page remains structurally complete.
+The implicit ready single composition contains hero, a null milestone, an empty tasks list, and an empty wiki list. The page remains structurally complete.
 
 ### Enabled linked project
 
@@ -577,12 +690,15 @@ The static snapshot contains one ready Overview document. The empty hash route s
 
 The first implementation must not add:
 
-- Grid, column, width, breakpoint, spacing, background, color, or typography controls.
+- User-configurable grid, column, width, breakpoint, spacing, background, color, or typography controls.
+- Nested or merged/composite section groups.
 - Raw HTML, arbitrary Markdown strings, external embeds, scripts, or CSS.
 - User-defined navigation or replacement routes.
-- A general page builder or nested arbitrary layouts.
-- A Settings editor before the YAML contract and production behavior are implemented.
-- Activity feeds, task statistics, linked-project sections, or other section types not approved by the discovery milestone.
-- Production code as part of DISCOVERY-0010.
+- A general page builder.
+- A Settings editor; v1 is authored through YAML.
+- Activity feeds, task statistics, linked-project sections, timelines, or other section types not approved by discovery.
+- Copyright inference or legal-text generation.
 
-The subsequent discovery tasks own the resolved read model, isolated Storybook prototypes, cross-project-archetype review, and final implementation contract. Production work is planned only after those decisions are approved.
+Merged sections remain a future design question. They require their own semantic, responsive, and accessibility contract and must not be smuggled into v1 as nested layout.
+
+Production work is owned by the separately planned Published project Overview milestone.

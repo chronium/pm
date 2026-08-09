@@ -146,4 +146,48 @@ milestones:
     priority: low
     requiredActivationTriggers: []
     delivery: null
+  published-project-overview:
+    title: Published project Overview
+    description: >-
+      ## Outcome
+
+
+      Deliver opt-in published project Overview pages across live, embedded, linked-project, and static PM contexts using the approved single and split composition contract.
+
+
+      ## Scope
+
+
+      - Persist and validate the dedicated `site:` YAML configuration without changing projects that omit it.
+
+      - Resolve one atomic current- or linked-project Overview document from project configuration and PM data.
+
+      - Expose revisioned Overview read APIs and include the resolved document in static snapshots.
+
+      - Render the approved hero, milestone, tasks, wiki, Markdown, and copyright sections.
+
+      - Support the implicit single layout and the bounded 44/56 split layout with deterministic mobile collapse.
+
+      - Keep live and embedded PM Tasks-first while enabled static exports open Overview first.
+
+      - Configure PM's own published Overview as the initial production showcase.
+
+
+      ## Exclusions
+
+
+      - No Settings editor in v1.
+
+      - No merged or nested sections, arbitrary geometry, custom styling, raw HTML, configurable navigation, timeline, activity, task-statistics, or linked-project section types.
+
+      - No inferred copyright or legal text.
+
+
+      ## Evidence
+
+
+      A backward-compatible YAML contract, validated application resolver, current and linked APIs, schema-v6 static snapshots, accessible responsive Angular presentation, PM dogfood configuration, and a passing complete release gate.
+    priority: urgent
+    requiredActivationTriggers: []
+    delivery: null
 activationTriggers: {}
