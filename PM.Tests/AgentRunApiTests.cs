@@ -143,14 +143,22 @@ public class AgentRunApiTests
             root, new MilestoneActivationGraphService(), activationResolver);
         var persistence = new ProjectConfigPersistence(root);
         var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
+        var nextIds = new StubNextIdService();
+        var linkedReads = new LinkedProjectReadService(
+            root,
+            LinkedProjectFamilyService.CreateDefault(root),
+            nextIds,
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
         app.MapApiV1(root, new ProjectConfigService(root), new ProjectValidationService(root), board,
-            TestTaskServices.Create(root, new StubNextIdService()), new WikiService(root),
+            TestTaskServices.Create(root, nextIds), new WikiService(root),
             new ResourceRevisionService(root, board), activationResolver, activationValidator,
             new ActivationTriggerService(root, activationResolver, activationValidator,
                 automaticActivations, TimeProvider.System, persistence),
             new MilestoneDeliveryService(root, activationResolver, activationValidator,
                 automaticActivations, TimeProvider.System, persistence),
-            agentRunService: runs, agentRunnerClient: runners);
+            new OverviewService(linkedReads), agentRunService: runs, agentRunnerClient: runners,
+            linkedProjectReadService: linkedReads);
         app.MapOpenApi("/openapi/{documentName}.json");
         await app.StartAsync();
         return (app, new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") });

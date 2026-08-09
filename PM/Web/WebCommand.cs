@@ -31,6 +31,7 @@ public class WebCommand(
     MilestoneActivationValidationService milestoneActivationValidationService,
     ActivationTriggerService activationTriggerService,
     MilestoneDeliveryService milestoneDeliveryService,
+    OverviewService overviewService,
     IProjectMembershipService membershipService,
     IAgentRunService? agentRunService,
     IAgentRunnerClient? agentRunnerClient,
@@ -76,7 +77,7 @@ public class WebCommand(
         var app = builder.Build();
         MapApiEndpoints(app, projectRoot, configService, validationService, boardService, taskService, wikiService,
             milestoneActivationResolver, milestoneActivationValidationService,
-            activationTriggerService, milestoneDeliveryService,
+            activationTriggerService, milestoneDeliveryService, overviewService,
             membershipService, agentRunService, agentRunnerClient, linkedProjectMutations, linkedProjectRegistry,
             linkedProjectReads);
         if (!settings.Api) app.MapAngularWeb(angularAssets!);
@@ -125,6 +126,18 @@ public class WebCommand(
             {
                 if (context.JsonTypeInfo.Type == typeof(AgentRunProtocolVersion))
                     schema.Type = JsonSchemaType.String;
+                if (context.JsonTypeInfo.Type != typeof(OverviewCompositionResponse) &&
+                    context.JsonTypeInfo.Type.IsAssignableTo(typeof(OverviewCompositionResponse)))
+                {
+                    schema.Required ??= new HashSet<string>();
+                    schema.Required.Add("layout");
+                }
+                if (context.JsonTypeInfo.Type != typeof(OverviewSectionResponse) &&
+                    context.JsonTypeInfo.Type.IsAssignableTo(typeof(OverviewSectionResponse)))
+                {
+                    schema.Required ??= new HashSet<string>();
+                    schema.Required.Add("type");
+                }
                 return Task.CompletedTask;
             });
         });
@@ -142,6 +155,7 @@ public class WebCommand(
         MilestoneActivationValidationService milestoneActivationValidationService,
         ActivationTriggerService activationTriggerService,
         MilestoneDeliveryService milestoneDeliveryService,
+        OverviewService overviewService,
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
         IAgentRunnerClient? agentRunnerClient = null,
@@ -152,7 +166,7 @@ public class WebCommand(
         endpoints.MapApiV1(projectRoot, configService, validationService, boardService, taskService,
             wikiService, new ResourceRevisionService(projectRoot, boardService),
             milestoneActivationResolver, milestoneActivationValidationService,
-            activationTriggerService, milestoneDeliveryService,
+            activationTriggerService, milestoneDeliveryService, overviewService,
             membershipService: membershipService,
             agentRunService: agentRunService,
             agentRunnerClient: agentRunnerClient,

@@ -214,6 +214,23 @@ export interface paths {
         patch: operations["UpdateWikiPageMetadata"];
         trace?: never;
     };
+    "/api/v1/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the project Overview */
+        get: operations["GetOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1535,6 +1552,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{projectId}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a linked project's Overview */
+        get: operations["GetLinkedProjectOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{projectId}/project": {
         parameters: {
             query?: never;
@@ -2394,6 +2428,91 @@ export interface components {
         };
         OverrideActivationTriggerRequest: {
             reason: string;
+        };
+        OverviewCompositionResponse: components["schemas"]["OverviewCompositionResponseSingleOverviewCompositionResponse"] | components["schemas"]["OverviewCompositionResponseSplitOverviewCompositionResponse"];
+        OverviewCompositionResponseSingleOverviewCompositionResponse: {
+            /** @enum {string} */
+            layout: "single";
+            sections: components["schemas"]["OverviewSectionResponse"][];
+        };
+        OverviewCompositionResponseSplitOverviewCompositionResponse: {
+            /** @enum {string} */
+            layout: "split";
+            primary: components["schemas"]["OverviewSectionResponse"][];
+            secondary: components["schemas"]["OverviewSectionResponse"][];
+            after: components["schemas"]["OverviewSectionResponse"][];
+        };
+        OverviewDocumentResponse: {
+            status: components["schemas"]["OverviewDocumentStatusResponse"];
+            projectId: null | string;
+            projectName: string;
+            documentTitle: string;
+            composition: null | components["schemas"]["OverviewCompositionResponse"];
+            issues: components["schemas"]["OverviewIssueResponse"][];
+            revision: string;
+        };
+        /** @enum {unknown} */
+        OverviewDocumentStatusResponse: "disabled" | "ready" | "invalid";
+        OverviewIssueResponse: {
+            code: string;
+            message: string;
+            path: string;
+        };
+        OverviewMilestoneResponse: {
+            key: string;
+            title: string;
+            description: string;
+            priority: string;
+            lifecycle: string;
+            /** Format: int32 */
+            assignedTaskCount: number | string;
+            /** Format: int32 */
+            doneTaskCount: number | string;
+            requiredActivationTriggers: string[];
+            unmetActivationTriggers: string[];
+        };
+        OverviewSectionResponse: components["schemas"]["OverviewSectionResponseHeroOverviewSectionResponse"] | components["schemas"]["OverviewSectionResponseMilestoneOverviewSectionResponse"] | components["schemas"]["OverviewSectionResponseTasksOverviewSectionResponse"] | components["schemas"]["OverviewSectionResponseWikiOverviewSectionResponse"] | components["schemas"]["OverviewSectionResponseMarkdownOverviewSectionResponse"] | components["schemas"]["OverviewSectionResponseCopyrightOverviewSectionResponse"];
+        OverviewSectionResponseCopyrightOverviewSectionResponse: {
+            /** @enum {string} */
+            type: "copyright";
+            notice: string;
+        };
+        OverviewSectionResponseHeroOverviewSectionResponse: {
+            /** @enum {string} */
+            type: "hero";
+            title: string;
+            description: null | string;
+        };
+        OverviewSectionResponseMarkdownOverviewSectionResponse: {
+            /** @enum {string} */
+            type: "markdown";
+            title: string;
+            sourcePath: string;
+            body: string;
+        };
+        OverviewSectionResponseMilestoneOverviewSectionResponse: {
+            /** @enum {string} */
+            type: "milestone";
+            title: string;
+            milestone: null | components["schemas"]["OverviewMilestoneResponse"];
+        };
+        OverviewSectionResponseTasksOverviewSectionResponse: {
+            /** @enum {string} */
+            type: "tasks";
+            title: string;
+            tasks: components["schemas"]["BoardTaskSummaryResponse"][];
+        };
+        OverviewSectionResponseWikiOverviewSectionResponse: {
+            /** @enum {string} */
+            type: "wiki";
+            title: string;
+            pages: components["schemas"]["OverviewWikiPageResponse"][];
+        };
+        OverviewWikiPageResponse: {
+            path: string;
+            title: string;
+            /** Format: date-time */
+            modifiedAt: string;
         };
         PairAgentRunnerRequest: {
             endpoint: string;
@@ -3621,6 +3740,67 @@ export interface operations {
             };
             /** @description Precondition Required */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetOverview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewDocumentResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10539,6 +10719,78 @@ export interface operations {
             };
             /** @description Precondition Required */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+        };
+    };
+    GetLinkedProjectOverview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Return 304 when this resource revision still matches. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewDocumentResponse"];
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    /** @description Strong ETag for the returned resource revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

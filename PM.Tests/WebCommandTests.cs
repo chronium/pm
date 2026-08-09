@@ -162,6 +162,7 @@ public class WebCommandTests
             activation.Validator,
             activation.Triggers,
             activation.Deliveries,
+            CreateOverviewService(projectRoot),
             new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
             null,
             null);
@@ -240,6 +241,7 @@ public class WebCommandTests
                 activation.Validator,
                 activation.Triggers,
                 activation.Deliveries,
+                CreateOverviewService(projectRoot),
                 new ProjectMembershipService(projectRoot, new IdentityService(), new PmWorkerClient(new HttpClient())),
                 null,
                 null)
@@ -271,5 +273,17 @@ public class WebCommandTests
 
         public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
+    }
+
+    private static OverviewService CreateOverviewService(ProjectRoot projectRoot)
+    {
+        var nextIds = new RecordingNextIdService();
+        var linkedReads = new LinkedProjectReadService(
+            projectRoot,
+            LinkedProjectFamilyService.CreateDefault(projectRoot),
+            nextIds,
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
+        return new OverviewService(linkedReads);
     }
 }

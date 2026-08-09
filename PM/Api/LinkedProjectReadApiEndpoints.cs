@@ -23,6 +23,7 @@ public static class LinkedProjectReadApiEndpoints
         this RouteGroupBuilder api,
         LinkedProjectFamilyService familyService,
         LinkedProjectMutationService mutations,
+        OverviewService overviewService,
         LinkedProjectReadService? linkedReads = null)
     {
         var projects = api.MapGroup("/projects/{projectId}")
@@ -38,6 +39,7 @@ public static class LinkedProjectReadApiEndpoints
             request => ResolveActivationWriteTarget(request, mutations),
             LinkedOperationName,
             true);
+        projects.MapLinkedOverviewApi(overviewService);
 
         projects.MapGet("/project", (HttpRequest request) =>
             {

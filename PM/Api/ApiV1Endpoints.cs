@@ -40,6 +40,7 @@ public static class ApiV1Endpoints
         MilestoneActivationValidationService milestoneActivationValidationService,
         ActivationTriggerService activationTriggerService,
         MilestoneDeliveryService milestoneDeliveryService,
+        OverviewService overviewService,
         Action<RouteGroupBuilder>? configure = null,
         IProjectMembershipService? membershipService = null,
         IAgentRunService? agentRunService = null,
@@ -88,6 +89,7 @@ public static class ApiV1Endpoints
         api.MapBoardApi(boardService, revisions, linkedProjectReadService);
         api.MapTaskApi(boardService, taskService, revisions, linkedProjectReadService);
         api.MapWikiApi(wikiService, revisions);
+        api.MapOverviewApi(overviewService);
         api.MapSettingsApi(configService, revisions);
         api.MapMilestoneActivationApi(
             milestoneActivationResolver,
@@ -100,7 +102,7 @@ public static class ApiV1Endpoints
         var linkedRegistry = linkedProjectRegistry ?? new LinkedProjectRegistryStore();
         var linkedMutations = linkedProjectMutationService ?? LinkedProjectMutationService.ForCurrent(taskService);
         api.MapLinkedProjectApi(linkedProjects, linkedRegistry, linkedProjectReadService);
-        api.MapLinkedProjectReadApi(linkedProjects, linkedMutations, linkedProjectReadService);
+        api.MapLinkedProjectReadApi(linkedProjects, linkedMutations, overviewService, linkedProjectReadService);
         if (membershipService != null) api.MapProjectMembershipApi(membershipService);
         if (agentRunService != null && agentRunnerClient != null)
             api.MapAgentRunApi(agentRunService, agentRunnerClient);

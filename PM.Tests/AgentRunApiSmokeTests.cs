@@ -114,15 +114,23 @@ public class AgentRunApiSmokeTests
             projectRoot, new MilestoneActivationGraphService(), activationResolver);
         var persistence = new ProjectConfigPersistence(projectRoot);
         var automaticActivations = new AutomaticActivationService(activationResolver, TimeProvider.System);
+        var nextIds = new SmokeNextIdService();
+        var linkedReads = new LinkedProjectReadService(
+            projectRoot,
+            LinkedProjectFamilyService.CreateDefault(projectRoot),
+            nextIds,
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
         app.MapApiV1(projectRoot, new ProjectConfigService(projectRoot),
             new ProjectValidationService(projectRoot), board,
-            TestTaskServices.Create(projectRoot, new SmokeNextIdService()), new WikiService(projectRoot),
+            TestTaskServices.Create(projectRoot, nextIds), new WikiService(projectRoot),
             new ResourceRevisionService(projectRoot, board), activationResolver, activationValidator,
             new ActivationTriggerService(projectRoot, activationResolver, activationValidator,
                 automaticActivations, TimeProvider.System, persistence),
             new MilestoneDeliveryService(projectRoot, activationResolver, activationValidator,
-                automaticActivations, TimeProvider.System, persistence), agentRunService: runService,
-            agentRunnerClient: runnerClient);
+                automaticActivations, TimeProvider.System, persistence), new OverviewService(linkedReads),
+            agentRunService: runService, agentRunnerClient: runnerClient,
+            linkedProjectReadService: linkedReads);
         app.MapOpenApi("/openapi/{documentName}.json");
         await app.StartAsync();
         return (app, new Uri($"http://127.0.0.1:{port}"));
