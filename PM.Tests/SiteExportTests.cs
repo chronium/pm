@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using PM.Application;
 using PM.Project;
 using PM.Site;
@@ -15,9 +16,11 @@ public class SiteExportTests
     public async Task SnapshotContainsCompletePublicProjectDataWithoutLocalMetadata()
     {
         using var workspace = new TempWorkingDirectory();
-        var projectRoot = await workspace.CreateProject(TestData.Config(
+        var config = TestData.Config(
             nextIdServiceUrl: "https://secret-next-id.example.test",
-            milestones: new Dictionary<string, string> { ["launch"] = "Launch" }));
+            milestones: new Dictionary<string, string> { ["launch"] = "Launch" });
+        config.Accent = "purple";
+        var projectRoot = await workspace.CreateProject(config);
         var dependency = TestData.Task("PM-0001", "Dependency");
         var task = TestData.Task("PM-0002", "Export", "Private task body", milestone: "launch",
             dependsOn: [dependency.Id]);
@@ -42,6 +45,8 @@ public class SiteExportTests
         Assert.DoesNotContain("secret-next-id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(projectRoot.RootPath, json, StringComparison.Ordinal);
         Assert.Equal(5, payload.SchemaVersion);
+        Assert.Equal("purple", payload.Project.Accent);
+        Assert.Equal("purple", payload.Settings.Accent);
         Assert.Equal("static-snapshot", payload.Activation.Revision);
         Assert.Equal(1, payload.Navigation.ActivationEligibleCount);
         var milestone = Assert.Single(payload.Board.MilestoneGroups, group => group.Key == "launch");
@@ -138,6 +143,31 @@ public class SiteExportTests
         Assert.True(File.Exists(Path.Combine(result.Payload!, "pm-snapshot.json")));
         Assert.True(File.Exists(Path.Combine(result.Payload!, ".nojekyll")));
         Assert.Equal("console.log('site')", File.ReadAllText(Path.Combine(result.Payload!, "assets", "main.js")));
+    }
+
+    [Theory]
+    [InlineData("purple", "purple")]
+    [InlineData(" Purple ", "purple")]
+    [InlineData("infrared", "teal")]
+    public async Task BuildBakesNormalizedProjectAccentIntoTheDocument(string configured, string expected)
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config();
+        config.Accent = configured;
+        var projectRoot = await workspace.CreateProject(config);
+        var assets = new MemoryAssetStore(new Dictionary<string, string>
+        {
+            ["index.html"] = "<html lang=\"en\" data-accent='blue'><head><base href=\"/\"></head><body></body></html>",
+        });
+
+        var result = await CreateExportService(projectRoot).BuildAsync("public", false, assets, GeneratedAt);
+
+        Assert.True(result.Success, result.Message);
+        var index = File.ReadAllText(Path.Combine(result.Payload!, "index.html"));
+        Assert.Contains($"data-accent=\"{expected}\"", index);
+        Assert.Single(Regex.Matches(index, "data-accent=", RegexOptions.IgnoreCase).Cast<Match>());
+        var snapshot = File.ReadAllText(Path.Combine(result.Payload!, SiteExportService.SnapshotFileName));
+        Assert.Contains($"\"accent\": \"{expected}\"", snapshot);
     }
 
     [Fact]

@@ -56,7 +56,7 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
         try
         {
             Directory.CreateDirectory(stage);
-            CopyAssets(assets, stage, generatedAt);
+            CopyAssets(assets, stage, generatedAt, snapshotResult.Payload!.Project.Accent);
             File.WriteAllText(Path.Combine(stage, SnapshotFileName),
                 SerializeSnapshot(snapshotResult.Payload!), new UTF8Encoding(false));
             File.WriteAllText(Path.Combine(stage, ".nojekyll"), string.Empty, new UTF8Encoding(false));
@@ -108,7 +108,11 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
         return null;
     }
 
-    private static void CopyAssets(IAngularAssetStore assets, string stage, DateTimeOffset generatedAt)
+    private static void CopyAssets(
+        IAngularAssetStore assets,
+        string stage,
+        DateTimeOffset generatedAt,
+        string accent)
     {
         foreach (var path in assets.Paths.OrderBy(path => path, StringComparer.Ordinal))
         {
@@ -120,7 +124,7 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
             if (path == "index.html")
             {
                 var html = Encoding.UTF8.GetString(asset.Content);
-                File.WriteAllText(target, PrepareIndex(html, generatedAt), new UTF8Encoding(false));
+                File.WriteAllText(target, PrepareIndex(html, generatedAt, accent), new UTF8Encoding(false));
             }
             else
             {
@@ -129,14 +133,28 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
         }
     }
 
-    private static string PrepareIndex(string html, DateTimeOffset generatedAt)
+    private static string PrepareIndex(string html, DateTimeOffset generatedAt, string accent)
     {
         html = BaseElementRegex().IsMatch(html)
             ? BaseElementRegex().Replace(html, "<base href=\"./\">", 1)
             : html.Replace("<head>", "<head><base href=\"./\">", StringComparison.OrdinalIgnoreCase);
+        html = ApplyAccent(html, accent);
         var metadata =
             $"<meta name=\"pm-site-mode\" content=\"static\"><meta name=\"pm-site-snapshot\" content=\"./{SnapshotFileName}\"><meta name=\"pm-site-generated-at\" content=\"{generatedAt.ToUniversalTime():O}\">";
         return html.Replace("</head>", metadata + "</head>", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ApplyAccent(string html, string accent)
+    {
+        if (!ProjectAccent.TryNormalize(accent, out var normalized))
+            normalized = ProjectAccent.Default;
+
+        return HtmlElementRegex().Replace(html, match =>
+        {
+            var htmlElement = AccentAttributeRegex().Replace(match.Value, string.Empty, 1);
+            var encodedAccent = HtmlEncoder.Default.Encode(normalized);
+            return htmlElement.Insert(htmlElement.Length - 1, $" data-accent=\"{encodedAccent}\"");
+        }, 1);
     }
 
     private static bool IsSafeAssetPath(string path) =>
@@ -162,4 +180,10 @@ public sealed partial class SiteExportService(ProjectRoot projectRoot, SiteSnaps
 
     [GeneratedRegex("<base\\s+[^>]*href=[\\\"'][^\\\"']*[\\\"'][^>]*>", RegexOptions.IgnoreCase)]
     private static partial Regex BaseElementRegex();
+
+    [GeneratedRegex("<html(?:\\s[^>]*)?>", RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlElementRegex();
+
+    [GeneratedRegex("\\sdata-accent=[\\\"'][^\\\"']*[\\\"']", RegexOptions.IgnoreCase)]
+    private static partial Regex AccentAttributeRegex();
 }

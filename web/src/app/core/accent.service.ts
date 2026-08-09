@@ -26,7 +26,9 @@ export function normalizeAccentPreference(preference: string | null | undefined)
 @Injectable({ providedIn: 'root' })
 export class AccentService {
   private readonly document = inject(DOCUMENT);
-  private readonly preferenceState = signal<AccentPreference>('teal');
+  private readonly preferenceState = signal<AccentPreference>(
+    normalizeAccentPreference(this.document.documentElement.dataset['accent']),
+  );
 
   readonly preference = this.preferenceState.asReadonly();
   readonly label = computed(

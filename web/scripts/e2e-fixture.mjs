@@ -187,6 +187,7 @@ ${
 
 function staticProjectConfig(size) {
   return `name: Playwright Project
+accent: purple
 idWidth: 4
 idPrefix: E2E
 nextIdServiceUrl: http://127.0.0.1:${idPort}

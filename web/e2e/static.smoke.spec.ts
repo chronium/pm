@@ -6,7 +6,20 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
 
+  const indexResponse = await page.request.get('/');
+  expect(indexResponse.ok()).toBe(true);
+  expect(await indexResponse.text()).toMatch(/<html[^>]*data-accent="purple"/i);
+
   await page.goto('/#/tasks?track=OPS');
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await page.evaluate(() => localStorage.setItem('pm.theme', 'light'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.evaluate(() => localStorage.setItem('pm.theme', 'dark'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('.snapshot-context')).toBeVisible();
   await expect(page.locator('.snapshot-context')).toContainText('Read-only');
   const modeCount = page.locator('.mode-count');
@@ -83,6 +96,7 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
     await expect(page).toHaveURL(/#\/tasks\/E2E-0003\?track=OPS$/);
   }
   await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
   await expect(page.getByText('E2E-0003', { exact: true }).first()).toBeVisible();
   if (testInfo.project.name.includes('mobile')) {
     const description = await page.locator('.description-section').boundingBox();
@@ -122,6 +136,7 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Metadata' })).toHaveCount(0);
   await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
   await expect(page.getByRole('heading', { name: 'Wiki page 2' })).toBeVisible();
 
   await page.goto('/#/wiki/welcome');

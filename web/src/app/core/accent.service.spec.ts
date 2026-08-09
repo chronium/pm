@@ -21,6 +21,25 @@ describe('AccentService', () => {
     expect(document.documentElement.dataset['accent']).toBe('teal');
   });
 
+  it('preserves a valid accent applied before Angular bootstraps', () => {
+    document.documentElement.dataset['accent'] = 'amber';
+
+    const service = TestBed.inject(AccentService);
+
+    expect(service.preference()).toBe('amber');
+    expect(service.label()).toBe('Amber');
+    expect(document.documentElement.dataset['accent']).toBe('amber');
+  });
+
+  it('normalizes an invalid bootstrap accent to teal', () => {
+    document.documentElement.dataset['accent'] = 'infrared';
+
+    const service = TestBed.inject(AccentService);
+
+    expect(service.preference()).toBe('teal');
+    expect(document.documentElement.dataset['accent']).toBe('teal');
+  });
+
   it('applies the project accent without writing browser storage', () => {
     const service = TestBed.inject(AccentService);
     const storage = vi.spyOn(Storage.prototype, 'setItem');
