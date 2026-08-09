@@ -1,0 +1,67 @@
+:host {
+  display: block;
+}
+
+.overview-hero {
+  max-width: 760px;
+  padding: var(--pm-space-5) 0 var(--pm-space-6);
+  border-bottom: 1px solid var(--pm-border-subtle);
+}
+
+.overview-project-context {
+  margin: 0 0 var(--pm-space-2);
+  color: var(--pm-accent-strong);
+  font-size: var(--pm-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+h1 {
+  max-width: 18ch;
+  margin: 0;
+  color: var(--pm-text-primary);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.overview-description {
+  max-width: 64ch;
+  margin: var(--pm-space-3) 0 0;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-lg);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pm-space-2);
+  margin-top: var(--pm-space-5);
+}
+
+@media (max-width: 520px) {
+  .overview-hero {
+    padding-top: var(--pm-space-4);
+    padding-bottom: var(--pm-space-5);
+  }
+
+  h1 {
+    font-size: clamp(1.65rem, 9vw, 2.1rem);
+  }
+
+  .overview-description {
+    font-size: 1rem;
+  }
+
+  .overview-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .overview-actions .pm-button {
+    width: 100%;
+  }
+}

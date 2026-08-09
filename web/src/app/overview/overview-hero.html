@@ -1,0 +1,16 @@
+<header class="overview-hero">
+  @if (projectContext(); as context) {
+    <p class="overview-project-context">{{ context }}</p>
+  }
+
+  <h1>{{ title() }}</h1>
+
+  @if (resolvedDescription(); as text) {
+    <p class="overview-description">{{ text }}</p>
+  }
+
+  <nav class="overview-actions" aria-label="Project destinations">
+    <a pmButton="primary" [routerLink]="tasksUrl()">View tasks</a>
+    <a pmButton="secondary" [routerLink]="wikiUrl()">Read documentation</a>
+  </nav>
+</header>
