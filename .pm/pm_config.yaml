@@ -19,25 +19,37 @@ milestones:
     description: ''
     priority: none
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-09T15:01:57.6662440+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   angular-web:
     title: Angular Web UI Migration
     description: ''
     priority: high
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-09T15:01:57.7404760+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   agent-runs:
     title: Agent execution and remote runners
     description: ''
     priority: urgent
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-09T15:01:57.8154710+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   linked-project-foundation:
     title: Linked project foundation
     description: ''
     priority: none
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-09T15:01:57.8802380+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   agent-runner-evolution:
     title: Agent runner evolution
     description: ''
@@ -49,7 +61,10 @@ milestones:
     description: ''
     priority: none
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-09T15:01:57.9453480+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   milestone-activation:
     title: Milestone deliverables and activation
     description: ''
@@ -103,7 +118,10 @@ milestones:
       - Recorded design decisions sufficient to create a separate production implementation milestone without reopening foundational choices.
     priority: urgent
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-09T15:01:58.0132590+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   deliverable-timeline-discovery:
     title: Generated deliverable timeline discovery
     description: >-
