@@ -52,7 +52,47 @@ milestones:
       acceptedTaskIds: []
   agent-runner-evolution:
     title: Agent runner evolution
-    description: ''
+    description: >-
+      ## Outcome
+
+
+      Deliver a trustworthy, operator-ready agent runner that can execute PM tasks on a private Linux host, preserve durable evidence, and return reviewed work to the local project without granting unattended agents control of PM or Git.
+
+
+      ## Scope
+
+
+      - Run immutable task requests in isolated, credential-free rootless containers through an authenticated and restart-safe runner.
+
+      - Preserve replayable lifecycle events, bounded logs, failure diagnostics, downloadable artifacts, and guarded patch collection.
+
+      - Add explicit repository allowlists, requirement-based capability discovery, and runner-global operational reporting.
+
+      - Surface runner activity and full-height supervision in the task workflow.
+
+      - Publish signed, versioned runner releases and define the next interactive Codex collaboration and Git-delivery boundary.
+
+
+      ## Exclusions
+
+
+      - No automatic task completion, merge, push, or acceptance of agent-produced work.
+
+      - No access to the operator's home directory, host Git credentials, container control socket, unrelated repositories, or unrestricted network.
+
+      - No silent trust of changed runner identity, runtime profiles, capabilities, or repository targets.
+
+      - No general-purpose fleet scheduler or arbitrary remote shell.
+
+
+      ## Evidence
+
+
+      - A supported Linux host can pair privately, survive control-plane disconnects and restarts, and execute an isolated run from an immutable committed base.
+
+      - PM can supervise progress, reconnect through durable replay, inspect actionable failures, download bounded artifacts, and collect a patch through explicit safeguards.
+
+      - Capability, repository, and operational state are visible before launch, and the released runner artifact is versioned and signed.
     priority: high
     requiredActivationTriggers: []
     delivery: null
