@@ -1,0 +1,53 @@
+<pm-overview-shell [class.overview-shell--split]="composition().layout === 'split'">
+  <div class="overview-composition" [attr.data-layout]="composition().layout">
+    @if (composition().layout === 'single') {
+      <div class="overview-region" data-region="single">
+        @for (section of singleSections(); track $index) {
+          <pm-overview-composition-section
+            [projectName]="projectName()"
+            region="single"
+            [sectionIndex]="$index"
+            [section]="section"
+          />
+        }
+      </div>
+    } @else if (composition().layout === 'split') {
+      <div class="overview-region" data-region="primary">
+        @for (section of splitPrimary(); track $index) {
+          <pm-overview-composition-section
+            class="primary-section"
+            [projectName]="projectName()"
+            region="primary"
+            [sectionIndex]="$index"
+            [section]="section"
+            [style.--overview-section-row]="$index + 1"
+          />
+        }
+      </div>
+      <div class="overview-region" data-region="secondary">
+        @for (section of splitSecondary(); track $index) {
+          <pm-overview-composition-section
+            class="secondary-section"
+            [projectName]="projectName()"
+            region="secondary"
+            [sectionIndex]="$index"
+            [section]="section"
+            [style.--overview-section-row]="$index + 1"
+          />
+        }
+      </div>
+      @if (splitAfter().length) {
+        <div class="overview-region" data-region="after">
+          @for (section of splitAfter(); track $index) {
+            <pm-overview-composition-section
+              [projectName]="projectName()"
+              region="after"
+              [sectionIndex]="$index"
+              [section]="section"
+            />
+          }
+        </div>
+      }
+    }
+  </div>
+</pm-overview-shell>

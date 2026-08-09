@@ -1,0 +1,14 @@
+:host {
+  display: block;
+}
+
+.overview-copyright {
+  padding: var(--pm-space-4) 0 var(--pm-space-2);
+  color: var(--pm-text-subtle);
+  font-size: var(--pm-font-size-xs);
+  line-height: 1.5;
+}
+
+p {
+  margin: 0;
+}
