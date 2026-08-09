@@ -2,24 +2,9 @@
   display: block;
 }
 
-.overview-section {
-  padding: var(--pm-space-6) 0;
-  border-bottom: 1px solid var(--pm-border-subtle);
-}
-
-h2,
 h3,
 p {
   margin: 0;
-}
-
-h2 {
-  margin-bottom: var(--pm-space-4);
-  color: var(--pm-text-muted);
-  font-size: var(--pm-font-size-sm);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .milestone-header {
@@ -113,10 +98,6 @@ progress::-moz-progress-bar {
 }
 
 @media (max-width: 520px) {
-  .overview-section {
-    padding-block: var(--pm-space-5);
-  }
-
   .milestone-header {
     align-items: flex-start;
   }

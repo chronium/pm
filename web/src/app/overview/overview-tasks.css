@@ -2,22 +2,8 @@
   display: block;
 }
 
-.overview-section {
-  padding: var(--pm-space-6) 0;
-}
-
-h2,
 p {
   margin: 0;
-}
-
-h2 {
-  margin-bottom: var(--pm-space-4);
-  color: var(--pm-text-muted);
-  font-size: var(--pm-font-size-sm);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .overview-task-list {
@@ -35,10 +21,4 @@ h2 {
   padding: var(--pm-space-4) 0;
   color: var(--pm-text-muted);
   font-size: var(--pm-font-size-sm);
-}
-
-@media (max-width: 520px) {
-  .overview-section {
-    padding-block: var(--pm-space-5);
-  }
 }

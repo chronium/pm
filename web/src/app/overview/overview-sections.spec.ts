@@ -1,9 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import { ProjectContextService } from '../core/project-context.service';
+import { ProjectLinksService } from '../core/project-links.service';
 import type { BoardTask } from '../tasks/tasks-board.store';
+import { OverviewInvalidState, type OverviewIssue } from './overview-invalid-state';
+import { OverviewMarkdown } from './overview-markdown';
 import { OverviewMilestone, type OverviewMilestoneData } from './overview-milestone';
 import { OverviewTasks } from './overview-tasks';
+import { OverviewWiki, type OverviewWikiPage } from './overview-wiki';
 
 const milestone: OverviewMilestoneData = {
   key: 'public-beta',
@@ -43,7 +48,7 @@ const task: BoardTask = {
   modifiedAt: '2026-08-09T08:00:00Z',
 };
 
-describe('Overview milestone and task sections', () => {
+describe('Overview resolved sections', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter([])] }));
 
   it('presents milestone lifecycle, Markdown, completion, and accessible progress', () => {
@@ -116,5 +121,112 @@ describe('Overview milestone and task sections', () => {
     fixture.detectChanges();
     expect(element.querySelector('li[pmTaskRow]')).toBeNull();
     expect(element.textContent).toContain('No tasks match this section.');
+  });
+
+  it('renders ordered documentation links through the selected project context', () => {
+    const wikiUrl = vi.fn(
+      (path: string) =>
+        `/projects/prj_child/wiki/${path
+          .split('/')
+          .map((segment) => encodeURIComponent(segment))
+          .join('/')}`,
+    );
+    TestBed.overrideProvider(ProjectContextService, { useValue: { wikiUrl } });
+    const pages: readonly OverviewWikiPage[] = [
+      {
+        path: 'publishing/static site',
+        title: 'Static publishing',
+        modifiedAt: '2026-08-09T08:00:00Z',
+      },
+      {
+        path: 'architecture',
+        title: 'Architecture',
+        modifiedAt: '2026-08-08T08:00:00Z',
+      },
+    ];
+    const fixture = TestBed.createComponent(OverviewWiki);
+    fixture.componentRef.setInput('headingId', 'documentation');
+    fixture.componentRef.setInput('title', 'Documentation');
+    fixture.componentRef.setInput('pages', pages);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const links = [...element.querySelectorAll<HTMLAnchorElement>('li a')];
+    expect(links.map((link) => link.querySelector('.wiki-page-title')?.textContent)).toEqual([
+      'Static publishing',
+      'Architecture',
+    ]);
+    expect(links[0]?.getAttribute('href')).toBe(
+      '/projects/prj_child/wiki/publishing/static%20site',
+    );
+    expect(wikiUrl).toHaveBeenCalledWith('publishing/static site');
+
+    fixture.componentRef.setInput('pages', []);
+    fixture.detectChanges();
+    expect(element.querySelector('li')).toBeNull();
+    expect(element.textContent).toContain('No documentation pages are available.');
+  });
+
+  it('renders sanitized source Markdown without changing authored heading levels', () => {
+    TestBed.overrideProvider(ProjectContextService, {
+      useValue: { wikiUrl: (path: string) => `/wiki/${path}` },
+    });
+    TestBed.overrideProvider(ProjectLinksService, {
+      useValue: {
+        resolve: (href: string) =>
+          href === 'pm://project/child/wiki/guide'
+            ? { kind: 'available', href: '/projects/child/wiki/guide', local: true }
+            : { kind: 'not-project-link' },
+      },
+    });
+    const fixture = TestBed.createComponent(OverviewMarkdown);
+    fixture.componentRef.setInput('headingId', 'introduction');
+    fixture.componentRef.setInput('title', 'Introduction');
+    fixture.componentRef.setInput('sourcePath', 'overview');
+    fixture.componentRef.setInput(
+      'body',
+      '### Start here\n\nRead the [child guide](pm://project/child/wiki/guide).<script>alert(1)</script>',
+    );
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('h2')?.textContent).toBe('Introduction');
+    expect(element.querySelector('.markdown-body h3')?.textContent).toBe('Start here');
+    expect(element.querySelector('.markdown-body script')).toBeNull();
+    expect(element.querySelector<HTMLAnchorElement>('.markdown-body a')?.getAttribute('href')).toBe(
+      '/projects/child/wiki/guide',
+    );
+    expect(
+      element.querySelector<HTMLAnchorElement>('.overview-markdown-source a')?.getAttribute('href'),
+    ).toBe('/wiki/overview');
+
+    fixture.componentRef.setInput('body', '   ');
+    fixture.detectChanges();
+    expect(element.querySelector('.markdown-body')).toBeNull();
+    expect(element.textContent).toContain('This documentation page is empty.');
+  });
+
+  it('presents every invalid Overview issue in one page-level alert', () => {
+    const issues: readonly OverviewIssue[] = [
+      {
+        code: 'missing_overview_wiki_page',
+        message: 'Wiki page missing was not found.',
+        path: 'site.home.sections[2].pages[0]',
+      },
+      {
+        code: 'missing_overview_markdown_source',
+        message: 'Markdown source wiki:introduction was not found.',
+        path: 'site.home.sections[3].source',
+      },
+    ];
+    const fixture = TestBed.createComponent(OverviewInvalidState);
+    fixture.componentRef.setInput('issues', issues);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.querySelectorAll('li')).toHaveLength(2);
+    expect(element.textContent).toContain('missing_overview_wiki_page');
+    expect(element.textContent).toContain('site.home.sections[3].source');
   });
 });

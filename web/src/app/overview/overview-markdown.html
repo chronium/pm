@@ -1,0 +1,13 @@
+<pm-overview-section [headingId]="headingId()" [title]="title()">
+  <div class="overview-markdown-content">
+    @if (body().trim()) {
+      <pm-markdown-display [markdown]="body()" />
+    } @else {
+      <p class="overview-empty">This documentation page is empty.</p>
+    }
+
+    <p class="overview-markdown-source">
+      From <a [routerLink]="sourceLink()">{{ sourcePath() }}</a>
+    </p>
+  </div>
+</pm-overview-section>

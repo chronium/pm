@@ -1,6 +1,4 @@
-<section class="overview-section overview-milestone" [attr.aria-labelledby]="headingId()">
-  <h2 [id]="headingId()">{{ title() }}</h2>
-
+<pm-overview-section [headingId]="headingId()" [title]="title()">
   @if (milestone(); as item) {
     <header class="milestone-header">
       <div>
@@ -43,4 +41,4 @@
   } @else {
     <p class="overview-empty">No active milestone is available.</p>
   }
-</section>
+</pm-overview-section>

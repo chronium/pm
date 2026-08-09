@@ -2,6 +2,7 @@ import { Component, computed, input } from '@angular/core';
 
 import { MarkdownDisplay } from '../markdown/markdown-display';
 import { PmBadge, type BadgeTone } from '../ui/badge/badge';
+import { OverviewSection } from './overview-section';
 
 export type OverviewMilestoneLifecycle = 'inactive' | 'active' | 'ready_to_deliver' | 'delivered';
 
@@ -19,7 +20,7 @@ export interface OverviewMilestoneData {
 
 @Component({
   selector: 'pm-overview-milestone',
-  imports: [MarkdownDisplay, PmBadge],
+  imports: [MarkdownDisplay, OverviewSection, PmBadge],
   templateUrl: './overview-milestone.html',
   styleUrl: './overview-milestone.css',
 })

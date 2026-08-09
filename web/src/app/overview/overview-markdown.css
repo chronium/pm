@@ -1,0 +1,41 @@
+:host {
+  display: block;
+}
+
+.overview-markdown-content {
+  max-width: 76ch;
+}
+
+pm-markdown-display {
+  display: block;
+  color: var(--pm-text-muted);
+  font-size: var(--pm-font-size-md);
+  line-height: 1.6;
+}
+
+.overview-empty,
+.overview-markdown-source {
+  margin: 0;
+  font-size: var(--pm-font-size-sm);
+}
+
+.overview-empty {
+  padding: var(--pm-space-4) 0;
+  color: var(--pm-text-muted);
+}
+
+.overview-markdown-source {
+  margin-top: var(--pm-space-4);
+  color: var(--pm-text-subtle);
+}
+
+.overview-markdown-source a {
+  color: var(--pm-text-muted);
+  font-family: var(--pm-font-family-mono);
+  font-size: var(--pm-font-size-xs);
+  text-underline-offset: 0.16em;
+}
+
+.overview-markdown-source a:hover {
+  color: var(--pm-accent-strong);
+}

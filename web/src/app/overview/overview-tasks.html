@@ -1,6 +1,4 @@
-<section class="overview-section overview-tasks" [attr.aria-labelledby]="headingId()">
-  <h2 [id]="headingId()">{{ title() }}</h2>
-
+<pm-overview-section [headingId]="headingId()" [title]="title()">
   @if (tasks().length) {
     <ul class="overview-task-list">
       @for (task of tasks(); track task.id) {
@@ -10,4 +8,4 @@
   } @else {
     <p class="overview-empty">No tasks match this section.</p>
   }
-</section>
+</pm-overview-section>

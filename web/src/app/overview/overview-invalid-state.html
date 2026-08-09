@@ -1,0 +1,15 @@
+<section class="overview-diagnostic" role="alert" aria-labelledby="overview-diagnostic-title">
+  <p class="diagnostic-context">Overview configuration</p>
+  <h1 id="overview-diagnostic-title">This Overview needs attention</h1>
+  <p>Fix the following project configuration issues before publishing this page.</p>
+  <ul>
+    @for (issue of issues(); track issue.code + issue.path) {
+      <li>
+        <strong>{{ issue.message }}</strong>
+        <span
+          ><code>{{ issue.path }}</code> · {{ issue.code }}</span
+        >
+      </li>
+    }
+  </ul>
+</section>

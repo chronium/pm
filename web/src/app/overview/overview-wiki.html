@@ -1,0 +1,16 @@
+<pm-overview-section [headingId]="headingId()" [title]="title()">
+  @if (pages().length) {
+    <ul class="overview-wiki-grid">
+      @for (page of pages(); track page.path) {
+        <li>
+          <a [routerLink]="wikiLink(page.path)">
+            <span class="wiki-page-title">{{ page.title }}</span>
+            <span class="wiki-page-path">{{ page.path }}</span>
+          </a>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="overview-empty">No documentation pages are available.</p>
+  }
+</pm-overview-section>
