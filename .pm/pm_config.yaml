@@ -104,4 +104,46 @@ milestones:
     priority: urgent
     requiredActivationTriggers: []
     delivery: null
+  deliverable-timeline-discovery:
+    title: Generated deliverable timeline discovery
+    description: >-
+      ## Outcome
+
+
+      Approve a coherent generated deliverable timeline model that presents PM delivery history and forward delivery paths without fabricating schedule dates.
+
+
+      ## Scope
+
+
+      - A vertical time spine with deliverable cards alternating left and right at wide viewports.
+
+      - Factual delivery history from persisted delivery records.
+
+      - A generated forward delivery path from lifecycle, activation, dependency, priority, and progress data.
+
+      - A clearly separated future calendar-roadmap concept based only on optional authored target dates or windows.
+
+      - Responsive, accessible, repository-backed presentation suitable for live and static PM views.
+
+
+      ## Exclusions
+
+
+      - Production implementation during discovery.
+
+      - A task-level Gantt chart, effort estimation, resource scheduling, or inferred calendar dates.
+
+      - Adding Timeline to the published Overview vocabulary before its standalone model is approved.
+
+      - Arbitrary visual layout configuration.
+
+
+      ## Evidence
+
+
+      An owner-approved prototype and design contract covering generation rules, branching, temporal semantics, responsive behavior, accessibility, linked-project boundaries, and implementation scope.
+    priority: low
+    requiredActivationTriggers: []
+    delivery: null
 activationTriggers: {}
