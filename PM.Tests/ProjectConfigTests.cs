@@ -146,4 +146,110 @@ public class ProjectConfigTests
 
         Assert.Throws<YamlException>(() => YamlSerde.Deserialize<ProjectConfig>(yaml));
     }
+
+    [Fact]
+    public void AbsentOverviewSiteRemainsAbsentAcrossRoundTrip()
+    {
+        var config = TestData.Config();
+
+        var yaml = YamlSerde.Serialize(config);
+        var roundTrip = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.DoesNotContain("site:", yaml);
+        Assert.Null(roundTrip.Site);
+    }
+
+    [Fact]
+    public void OverviewSiteRoundTripsWithoutMaterializingImplicitValues()
+    {
+        var config = TestData.Config();
+        config.Site = new OverviewSiteDefinition
+        {
+            Enabled = true,
+            Title = "Published PM",
+            Home = new OverviewHomeDefinition
+            {
+                Layout = OverviewLayouts.Split,
+                Primary =
+                [
+                    new OverviewSectionDefinition { Type = OverviewSectionKinds.Hero },
+                    new OverviewSectionDefinition
+                    {
+                        Type = OverviewSectionKinds.Markdown,
+                        Source = "wiki:overview",
+                    },
+                ],
+                Secondary =
+                [
+                    new OverviewSectionDefinition
+                    {
+                        Type = OverviewSectionKinds.Tasks,
+                        Filter = "state:todo in:all",
+                        Limit = 5,
+                    },
+                ],
+                After = [],
+            },
+        };
+
+        var yaml = YamlSerde.Serialize(config);
+        var roundTrip = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.Contains("site:", yaml);
+        Assert.Contains("layout: split", yaml);
+        Assert.DoesNotContain("description:", yaml);
+        Assert.DoesNotContain("sections:", yaml);
+        Assert.NotNull(roundTrip.Site);
+        Assert.Null(roundTrip.Site.Description);
+        Assert.Equal(OverviewLayouts.Split, roundTrip.Site.Home!.Layout);
+        Assert.Null(roundTrip.Site.Home.Sections);
+        Assert.Empty(roundTrip.Site.Home.After!);
+        Assert.Equal(
+            [OverviewSectionKinds.Hero, OverviewSectionKinds.Markdown],
+            roundTrip.Site.Home.Primary!.Select(section => section.Type));
+    }
+
+    [Fact]
+    public void OverviewSitePreservesOmittedEnabledLayoutAndSections()
+    {
+        var config = TestData.Config();
+        config.Site = new OverviewSiteDefinition { Home = new OverviewHomeDefinition() };
+
+        var yaml = YamlSerde.Serialize(config);
+        var roundTrip = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.Contains("site:", yaml);
+        Assert.DoesNotContain("enabled:", yaml);
+        Assert.DoesNotContain("layout:", yaml);
+        Assert.DoesNotContain("sections:", yaml);
+        Assert.Null(roundTrip.Site!.Enabled);
+        Assert.Null(roundTrip.Site.Home!.Layout);
+        Assert.Null(roundTrip.Site.Home.Sections);
+    }
+
+    [Fact]
+    public void ExplicitlyDisabledOverviewSiteRoundTripsWithoutChurn()
+    {
+        var config = TestData.Config();
+        config.Site = new OverviewSiteDefinition { Enabled = false };
+
+        var yaml = YamlSerde.Serialize(config);
+        var roundTrip = YamlSerde.Deserialize<ProjectConfig>(yaml);
+
+        Assert.Contains("site:", yaml);
+        Assert.Contains("enabled: false", yaml);
+        Assert.False(roundTrip.Site!.Enabled);
+        Assert.Equal(yaml, YamlSerde.Serialize(roundTrip));
+    }
+
+    [Theory]
+    [InlineData("site:\n  enabled: true\n  columns: 2\n")]
+    [InlineData("site:\n  home:\n    columns: 2\n")]
+    [InlineData("site:\n  home:\n    sections:\n    - type: hero\n      background: blue\n")]
+    public void UnknownOverviewConfigurationFieldsAreRejected(string siteYaml)
+    {
+        var yaml = YamlSerde.Serialize(TestData.Config()) + siteYaml;
+
+        Assert.Throws<YamlException>(() => YamlSerde.Deserialize<ProjectConfig>(yaml));
+    }
 }

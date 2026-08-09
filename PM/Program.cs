@@ -71,6 +71,7 @@ serviceProvider.AddSingleton<BoardService>();
 serviceProvider.AddSingleton<WikiService>();
 serviceProvider.AddSingleton<MilestoneActivationGraphService>();
 serviceProvider.AddSingleton<MilestoneActivationValidationService>();
+serviceProvider.AddSingleton<OverviewConfigurationValidationService>();
 serviceProvider.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
 serviceProvider.AddSingleton<AutomaticActivationService>();
 serviceProvider.AddSingleton<ActivationTriggerService>();

@@ -30,6 +30,9 @@ public class ProjectConfig
     public Dictionary<string, MilestoneDefinition> Milestones { get; set; } = new();
     public Dictionary<string, ActivationTriggerDefinition> ActivationTriggers { get; set; } = new();
 
+    [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public OverviewSiteDefinition? Site { get; set; }
+
     [YamlIgnore]
     public bool RequiresMilestoneSchemaMigration { get; private set; }
 
@@ -109,6 +112,7 @@ public class ProjectConfig
             TaskStates = legacy.TaskStates ?? new Dictionary<string, string>(),
             Tracks = legacy.Tracks ?? new Dictionary<string, string>(),
             Milestones = milestones,
+            Site = legacy.Site,
             RequiresMilestoneSchemaMigration = true,
             LegacyMilestonePriorities = priorities,
         };
@@ -175,5 +179,6 @@ public class ProjectConfig
         public Dictionary<string, string>? Tracks { get; set; }
         public Dictionary<string, string>? Milestones { get; set; }
         public Dictionary<string, string>? MilestonePriorities { get; set; }
+        public OverviewSiteDefinition? Site { get; set; }
     }
 }

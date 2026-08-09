@@ -94,6 +94,39 @@ public class ProjectConfigMigrationTests
         Assert.True(projectRoot.Config!.RequiresMilestoneSchemaMigration);
     }
 
+    [Fact]
+    public async Task LegacyMilestoneMigrationPreservesOverviewSiteConfiguration()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var initialRoot = await workspace.CreateProject();
+        var legacy = ValidLegacyConfig() + """
+
+                                                 site:
+                                                   enabled: true
+                                                   home:
+                                                     layout: single
+                                                     sections:
+                                                     - type: hero
+                                                     - type: tasks
+                                                       limit: 4
+                                                 """;
+        File.WriteAllText(initialRoot.ConfigPath, legacy);
+        var projectRoot = new ProjectRoot();
+
+        var result = new ProjectConfigService(projectRoot).MigrateMilestoneSchema();
+
+        Assert.True(result.Success);
+        var migrated = ProjectConfig.ReadConfig(projectRoot);
+        Assert.True(migrated.Site!.Enabled);
+        var home = Assert.IsType<OverviewHomeDefinition>(migrated.Site.Home);
+        var sections = Assert.IsType<List<OverviewSectionDefinition>>(home.Sections);
+        Assert.Equal(OverviewLayouts.Single, home.Layout);
+        Assert.Equal(
+            [OverviewSectionKinds.Hero, OverviewSectionKinds.Tasks],
+            sections.Select(section => section.Type));
+        Assert.Equal(4, sections[1].Limit);
+    }
+
     private static string ValidLegacyConfig() => """
                                                  name: Legacy
                                                  idWidth: 4

@@ -24,6 +24,7 @@ public sealed class ProjectValidationService
     private readonly LinkedProjectFamilyService linkedProjectFamily;
     private readonly LinkedProjectTaskGraphService linkedTaskGraph;
     private readonly MilestoneActivationValidationService milestoneActivationValidation;
+    private readonly OverviewConfigurationValidationService overviewConfigurationValidation;
 
     public ProjectValidationService(ProjectRoot projectRoot)
         : this(projectRoot, new LinkedProjectService(projectRoot),
@@ -46,7 +47,8 @@ public sealed class ProjectValidationService
         LinkedProjectFamilyService linkedProjectFamily,
         LinkedProjectTaskGraphService linkedTaskGraph)
         : this(projectRoot, linkedProjects, linkedProjectFamily, linkedTaskGraph,
-            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)))
+            new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
+            new OverviewConfigurationValidationService(projectRoot))
     {
     }
 
@@ -55,13 +57,15 @@ public sealed class ProjectValidationService
         LinkedProjectService linkedProjects,
         LinkedProjectFamilyService linkedProjectFamily,
         LinkedProjectTaskGraphService linkedTaskGraph,
-        MilestoneActivationValidationService milestoneActivationValidation)
+        MilestoneActivationValidationService milestoneActivationValidation,
+        OverviewConfigurationValidationService overviewConfigurationValidation)
     {
         this.projectRoot = projectRoot;
         this.linkedProjects = linkedProjects;
         this.linkedProjectFamily = linkedProjectFamily;
         this.linkedTaskGraph = linkedTaskGraph;
         this.milestoneActivationValidation = milestoneActivationValidation;
+        this.overviewConfigurationValidation = overviewConfigurationValidation;
     }
 
     public AppResult<ProjectValidationResult> ValidateProject() =>
@@ -77,6 +81,7 @@ public sealed class ProjectValidationService
         ValidateConfigMetadata(issues);
         await ValidateLinkedProjects(issues, cancellationToken);
         var tasksById = ValidateTaskFiles(issues);
+        issues.AddRange(overviewConfigurationValidation.Validate(projectRoot.Config));
         issues.AddRange(milestoneActivationValidation.Validate(projectRoot.Config, tasksById));
         ValidateTaskDependencies(issues, tasksById);
         ValidateStateRefs(issues, tasksById);
