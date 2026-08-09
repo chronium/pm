@@ -1,0 +1,32 @@
+@if (overview.document(); as document) {
+  @if (document.status === 'ready' && document.composition) {
+    <pm-overview-composition
+      [composition]="document.composition"
+      [projectName]="document.projectName"
+    />
+  } @else {
+    <pm-overview-shell>
+      @if (document.status === 'invalid') {
+        <pm-overview-invalid-state [issues]="document.issues" />
+      } @else {
+        <pm-loading-state>Opening tasks…</pm-loading-state>
+      }
+    </pm-overview-shell>
+  }
+} @else {
+  <pm-overview-shell>
+    @if (overview.error(); as error) {
+      <pm-error-state>
+        <div class="overview-error">
+          <strong>Could not load this Overview</strong>
+          <span>{{ error }}</span>
+          <button class="pm-button pm-button--secondary" type="button" (click)="overview.reload()">
+            Retry
+          </button>
+        </div>
+      </pm-error-state>
+    } @else {
+      <pm-loading-state>Loading Overview…</pm-loading-state>
+    }
+  </pm-overview-shell>
+}

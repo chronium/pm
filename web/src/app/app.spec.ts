@@ -11,6 +11,7 @@ import { SyncStatusService } from './core/sync-status.service';
 import { StaticModeService } from './static/static-mode.service';
 import { StaticSnapshotStore } from './static/static-snapshot.interceptor';
 import { of } from 'rxjs';
+import type { OverviewDocument } from './overview/overview.store';
 
 describe('application shell', () => {
   beforeEach(async () => {
@@ -30,7 +31,11 @@ describe('application shell', () => {
 
   afterEach(() => TestBed.resetTestingModule());
 
-  async function renderAt(url: string, projectName = 'Test Project') {
+  async function renderAt(
+    url: string,
+    projectName = 'Test Project',
+    overviewStatus: OverviewDocument['status'] = 'disabled',
+  ) {
     const selectedProjectId = /^\/projects\/([^/]+)/.exec(url)?.[1] ?? null;
     const apiPrefix = selectedProjectId
       ? `/api/v1/projects/${encodeURIComponent(selectedProjectId)}`
@@ -81,6 +86,11 @@ describe('application shell', () => {
         ],
         warnings: [],
       });
+    TestBed.inject(HttpTestingController)
+      .expectOne(`${apiPrefix}/overview`)
+      .flush(overviewDocument(projectName, overviewStatus));
+    await TestBed.tick();
+    fixture.detectChanges();
     const boardRequest = TestBed.inject(HttpTestingController).match(
       (request) => request.url === `${apiPrefix}/board`,
     );
@@ -311,6 +321,27 @@ describe('application shell', () => {
     );
   });
 
+  it.each(['ready', 'invalid'] as const)(
+    'shows fixed Overview, Tasks, and Wiki navigation for a %s document',
+    async (status) => {
+      const { fixture } = await renderAt('/tasks', 'Project Atlas', status);
+      const element = fixture.nativeElement as HTMLElement;
+      const links = [...element.querySelectorAll<HTMLAnchorElement>('.mode-navigation a')];
+
+      expect(links.map((link) => link.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+        'Overview',
+        'Tasks3 left',
+        'Wiki',
+      ]);
+      expect(links[0]?.getAttribute('href')).toBe('/overview');
+    },
+  );
+
+  it('does not expose Overview navigation for a disabled document', async () => {
+    const { fixture } = await renderAt('/tasks');
+    expect(fixture.nativeElement.querySelector('.mode-navigation a[href="/overview"]')).toBeNull();
+  });
+
   it('keeps PM as the loading and error fallback', async () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
@@ -324,6 +355,9 @@ describe('application shell', () => {
       members: [],
       warnings: [],
     });
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/overview')
+      .flush({ title: 'Unavailable' }, { status: 503, statusText: 'Service Unavailable' });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -488,3 +522,27 @@ describe('application shell', () => {
     expect(menu.getAttribute('aria-expanded')).toBe('false');
   });
 });
+
+function overviewDocument(
+  projectName: string,
+  status: OverviewDocument['status'],
+): OverviewDocument {
+  return {
+    status,
+    projectId: 'project-1',
+    projectName,
+    documentTitle: status === 'disabled' ? projectName : `${projectName} home`,
+    composition:
+      status === 'ready'
+        ? {
+            layout: 'single',
+            sections: [{ type: 'hero', title: `${projectName} home`, description: '' }],
+          }
+        : null,
+    issues:
+      status === 'invalid'
+        ? [{ code: 'invalid_overview', message: 'Overview is invalid.', path: 'site.home' }]
+        : [],
+    revision: `overview-${status}`,
+  };
+}

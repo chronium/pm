@@ -18,6 +18,15 @@
   }
 
   <nav class="mode-navigation" aria-label="Workspace">
+    @if (overview.available()) {
+      <a
+        [routerLink]="projectContext.modeLink('overview')"
+        routerLinkActive="active"
+        #overviewLink="routerLinkActive"
+        [attr.aria-current]="overviewLink.isActive ? 'page' : null"
+        >Overview</a
+      >
+    }
     <a
       [routerLink]="projectContext.modeLink('tasks')"
       routerLinkActive="active"

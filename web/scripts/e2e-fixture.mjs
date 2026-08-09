@@ -1,4 +1,4 @@
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export const e2eRoot = process.env.PM_E2E_ROOT;
@@ -131,6 +131,43 @@ export async function seedActivationReconciliationStory() {
       join(projectRoot, '.pm', 'states', 'done', `${id}.ref`),
     );
   }
+}
+
+export async function seedOverviewRoutingStory() {
+  await enableOverview(projectRoot, 'Playwright Overview');
+  await enableOverview(linkedProjectRoot, 'Royale Overview');
+}
+
+export async function seedInvalidOverviewStory() {
+  const configPath = join(projectRoot, '.pm', 'pm_config.yaml');
+  const config = await readFile(configPath, 'utf8');
+  await writeFile(
+    configPath,
+    `${config.trimEnd()}
+site:
+  enabled: true
+  title: Broken Overview
+  home:
+    sections:
+      - type: hero
+      - type: milestone
+        milestone: missing-deliverable
+`,
+  );
+}
+
+async function enableOverview(root, title) {
+  const configPath = join(root, '.pm', 'pm_config.yaml');
+  const config = await readFile(configPath, 'utf8');
+  await writeFile(
+    configPath,
+    `${config.trimEnd()}
+site:
+  enabled: true
+  title: ${title}
+  description: Project delivery and documentation at a glance.
+`,
+  );
 }
 
 function projectConfig(partialActivation = false, size = 'small') {

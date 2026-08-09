@@ -15,6 +15,7 @@ import { SyncStatusService } from './core/sync-status.service';
 import { StaticProjectSwitcher } from './static/static-project-switcher';
 import { ProjectSwitcher } from './project-switcher/project-switcher';
 import { ProjectContextService } from './core/project-context.service';
+import { OverviewStore } from './overview/overview.store';
 
 @Component({
   selector: 'pm-root',
@@ -41,6 +42,7 @@ export class App {
   protected readonly staticMode = inject(StaticModeService);
   protected readonly syncStatus = inject(SyncStatusService);
   protected readonly projectContext = inject(ProjectContextService);
+  protected readonly overview = inject(OverviewStore);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
 
   protected toggleNavigation(): void {

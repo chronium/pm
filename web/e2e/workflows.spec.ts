@@ -6,6 +6,8 @@ import {
   projectRoot,
   resetFixture,
   seedActivationReconciliationStory,
+  seedInvalidOverviewStory,
+  seedOverviewRoutingStory,
   seedPartialActivationStory,
 } from '../scripts/e2e-fixture.mjs';
 import {
@@ -132,6 +134,67 @@ test('switches linked projects with isolated filters and read-only task and wiki
   await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
   await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
+});
+
+test('routes ready Overview documents across current and linked projects and falls back for disabled targets', async ({
+  page,
+}) => {
+  await seedOverviewRoutingStory();
+
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByRole('link', { name: 'Overview', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Playwright Overview' })).toBeVisible();
+  await expect(page).toHaveTitle('Playwright Overview');
+  await expect(page.getByRole('link', { name: 'View tasks' })).toHaveAttribute('href', '/tasks');
+
+  const overviewLink = page.getByRole('link', { name: 'Overview', exact: true });
+  await overviewLink.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: /^Tasks/ })).toBeFocused();
+
+  await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
+  await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
+  await expect(page).toHaveURL(/\/projects\/linked-project\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Royale Overview' })).toBeVisible();
+  await expect(page).toHaveTitle('Royale Overview');
+  await expect(page.getByRole('link', { name: 'Read documentation' })).toHaveAttribute(
+    'href',
+    '/projects/linked-project/wiki',
+  );
+
+  await page.getByRole('button', { name: 'Switch project from Royale Project' }).click();
+  await page.getByRole('link', { name: /Starfall Project.*Read-only/ }).click();
+  await expect(page).toHaveURL(/\/projects\/sibling-project\/tasks$/);
+  await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveCount(0);
+  await expect(page).toHaveTitle('PM');
+});
+
+test('keeps invalid Overview diagnostics available and retries transport failures locally', async ({
+  page,
+}) => {
+  await seedInvalidOverviewStory();
+
+  await page.goto('/overview');
+  await expect(page.getByRole('heading', { name: 'This Overview needs attention' })).toBeVisible();
+  await expect(page.getByText('missing-deliverable', { exact: false })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(page).toHaveTitle('Broken Overview');
+
+  await resetFixture('small');
+  await seedOverviewRoutingStory();
+  await page.route('**/api/v1/overview', (route) => route.abort());
+  await page.reload();
+  await expect(page.getByText('Could not load this Overview')).toBeVisible();
+  await expect(page.getByText('The Overview API could not be reached.')).toBeVisible();
+  await page.unroute('**/api/v1/overview');
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.getByRole('heading', { name: 'Playwright Overview' })).toBeVisible();
 });
 
 test('task search follows sidebar scope, supports in:all, and preserves board context', async ({

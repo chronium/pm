@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.overview-error {
+  display: grid;
+  justify-items: center;
+  gap: var(--pm-space-2);
+}
+
+.overview-error .pm-button {
+  margin-top: var(--pm-space-1);
+}

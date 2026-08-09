@@ -43,6 +43,8 @@ export interface LinkedProjectFamily {
   warnings: LinkedProjectWarning[];
 }
 
+export type ProjectMode = 'overview' | 'tasks' | 'wiki';
+
 @Injectable({ providedIn: 'root' })
 export class ProjectContextService {
   private readonly router = inject(Router, { optional: true });
@@ -78,11 +80,12 @@ export class ProjectContextService {
     if (member) return !member.writeTrusted;
     return !this.project.hasValue() || this.project.value().readOnly;
   });
-  readonly mode = computed<'tasks' | 'wiki'>(() => {
+  readonly mode = computed<ProjectMode>(() => {
     const segments = this.segments();
     const mode = segments[0] === 'projects' ? segments[2] : segments[0];
-    return mode === 'wiki' ? 'wiki' : 'tasks';
+    return mode === 'overview' || mode === 'wiki' ? mode : 'tasks';
   });
+  readonly overviewRoot = computed(() => this.routeRoot('overview'));
   readonly tasksRoot = computed(() => this.routeRoot('tasks'));
   readonly settingsRoot = computed(() => `${this.tasksRoot()}/settings`);
   readonly wikiRoot = computed(() => this.routeRoot('wiki'));
@@ -164,7 +167,7 @@ export class ProjectContextService {
     return `${this.wikiRoot()}/meta/${this.encodeWikiPath(path)}`;
   }
 
-  projectModeUrl(projectId: string, mode: 'tasks' | 'wiki' = this.mode()): string {
+  projectModeUrl(projectId: string, mode: ProjectMode = this.mode()): string {
     const activeProjectId = this.family.hasValue() ? this.family.value().activeProjectId : null;
     const root =
       projectId === activeProjectId
@@ -180,7 +183,7 @@ export class ProjectContextService {
     }
   }
 
-  modeUrl(mode: 'tasks' | 'wiki'): string {
+  modeUrl(mode: ProjectMode): string {
     const root = this.routeRoot(mode);
     if (mode !== 'tasks' || this.staticMode.enabled) return root;
     try {
@@ -191,12 +194,12 @@ export class ProjectContextService {
     }
   }
 
-  modeLink(mode: 'tasks' | 'wiki'): string | UrlTree {
+  modeLink(mode: ProjectMode): string | UrlTree {
     const url = this.modeUrl(mode);
     return url.includes('?') ? (this.router?.parseUrl(url) ?? url) : url;
   }
 
-  projectModeLink(projectId: string, mode: 'tasks' | 'wiki' = this.mode()): string | UrlTree {
+  projectModeLink(projectId: string, mode: ProjectMode = this.mode()): string | UrlTree {
     const url = this.projectModeUrl(projectId, mode);
     return url.includes('?') ? (this.router?.parseUrl(url) ?? url) : url;
   }
@@ -218,7 +221,7 @@ export class ProjectContextService {
     }
   }
 
-  private routeRoot(mode: 'tasks' | 'wiki'): string {
+  private routeRoot(mode: ProjectMode): string {
     const projectId = this.selectedProjectId();
     return projectId ? `/projects/${encodeURIComponent(projectId)}/${mode}` : `/${mode}`;
   }

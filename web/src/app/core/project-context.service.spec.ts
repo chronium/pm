@@ -17,8 +17,10 @@ describe('ProjectContextService', () => {
         provideRouter([
           { path: 'tasks', component: RouteTarget },
           { path: 'wiki', component: RouteTarget },
+          { path: 'overview', component: RouteTarget },
           { path: 'projects/:projectId/tasks', component: RouteTarget },
           { path: 'projects/:projectId/wiki', component: RouteTarget },
+          { path: 'projects/:projectId/overview', component: RouteTarget },
         ]),
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -109,5 +111,16 @@ describe('ProjectContextService', () => {
   it('keeps current-project settings on the ordinary task root', async () => {
     await TestBed.inject(Router).navigateByUrl('/tasks');
     expect(TestBed.inject(ProjectContextService).settingsRoot()).toBe('/tasks/settings');
+  });
+
+  it('treats Overview as a project-scoped mode without carrying task filters', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/projects/prj_child/overview');
+    const context = TestBed.inject(ProjectContextService);
+
+    expect(context.mode()).toBe('overview');
+    expect(context.overviewRoot()).toBe('/projects/prj_child/overview');
+    expect(context.modeUrl('overview')).toBe('/projects/prj_child/overview');
+    expect(context.projectModeUrl('prj_other')).toBe('/projects/prj_other/overview');
   });
 });

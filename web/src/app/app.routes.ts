@@ -8,6 +8,7 @@ import { WikiShell } from './wiki/wiki-shell';
 import { wikiEditMatcher, wikiMetaMatcher, wikiPathMatcher } from './wiki/wiki.routes';
 
 export enum AppShell {
+  Overview = 'overview',
   Tasks = 'tasks',
   Wiki = 'wiki',
   Components = 'components',
@@ -78,6 +79,11 @@ const linkedWikiRoutes: Routes = [
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'tasks' },
+  {
+    path: 'overview',
+    loadComponent: () => import('./overview/overview-page').then((module) => module.OverviewPage),
+    data: { shell: AppShell.Overview },
+  },
   {
     path: 'tasks',
     component: TasksShell,
@@ -160,6 +166,11 @@ export const routes: Routes = [
         loadComponent: () => import('./wiki/wiki-workspace').then((module) => module.WikiWorkspace),
       },
     ],
+  },
+  {
+    path: 'projects/:projectId/overview',
+    loadComponent: () => import('./overview/overview-page').then((module) => module.OverviewPage),
+    data: { shell: AppShell.Overview, linkedProject: true },
   },
   {
     path: 'projects/:projectId/tasks',
