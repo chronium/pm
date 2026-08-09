@@ -1,6 +1,15 @@
 import { staticRoutes } from '../app.routes';
 
 describe('static routes', () => {
+  it('loads the snapshot-aware root and the read-only Overview route', () => {
+    const root = staticRoutes.find((route) => route.path === '')!;
+    const overview = staticRoutes.find((route) => route.path === 'overview')!;
+
+    expect(root.loadComponent).toBeDefined();
+    expect(root.redirectTo).toBeUndefined();
+    expect(overview.loadComponent).toBeDefined();
+  });
+
   it('keeps activation settings readable while redirecting mutation-only task routes', () => {
     const tasks = staticRoutes.find((route) => route.path === 'tasks')!;
     const children = tasks.children!;

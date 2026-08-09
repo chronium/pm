@@ -1,8 +1,10 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using PM.Api;
 using PM.Application;
 using PM.Project;
 using PM.Site;
+using PM.Tasks;
 using PM.Web;
 
 namespace PM.Tests;
@@ -44,7 +46,9 @@ public class SiteExportTests
         Assert.DoesNotContain("nextId", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret-next-id", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(projectRoot.RootPath, json, StringComparison.Ordinal);
-        Assert.Equal(5, payload.SchemaVersion);
+        Assert.Equal(6, payload.SchemaVersion);
+        Assert.Equal(OverviewDocumentStatusResponse.Disabled, payload.Overview.Status);
+        Assert.Equal("Test Project", payload.Overview.DocumentTitle);
         Assert.Equal("purple", payload.Project.Accent);
         Assert.Equal("purple", payload.Settings.Accent);
         Assert.Equal("static-snapshot", payload.Activation.Revision);
@@ -92,6 +96,35 @@ public class SiteExportTests
         var json = SiteExportService.SerializeSnapshot(snapshot.Payload);
         Assert.DoesNotContain("repositoryPath", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("missing-royale", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SnapshotContainsTheResolvedReadyOverviewDocument()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string> { ["launch"] = "Launch" });
+        config.Site = new OverviewSiteDefinition
+        {
+            Enabled = true,
+            Title = "Published project",
+            Description = "Delivery and documentation.",
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var task = TestData.Task("PM-0001", "Publish", milestone: "launch");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+
+        var snapshot = await CreateSnapshotBuilder(projectRoot).BuildAsync(GeneratedAt);
+
+        Assert.True(snapshot.Success, snapshot.Message);
+        Assert.Equal(6, snapshot.Payload!.SchemaVersion);
+        Assert.Equal(OverviewDocumentStatusResponse.Ready, snapshot.Payload.Overview.Status);
+        Assert.Equal("Published project", snapshot.Payload.Overview.DocumentTitle);
+        var composition = Assert.IsType<SingleOverviewCompositionResponse>(
+            snapshot.Payload.Overview.Composition);
+        Assert.Contains(composition.Sections, section => section is HeroOverviewSectionResponse);
+        Assert.Contains(composition.Sections, section => section is TasksOverviewSectionResponse);
     }
 
     [Fact]
@@ -212,6 +245,41 @@ public class SiteExportTests
     }
 
     [Fact]
+    public async Task InvalidEnabledOverviewLeavesExistingDestinationUntouched()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config();
+        config.Site = new OverviewSiteDefinition
+        {
+            Enabled = true,
+            Home = new OverviewHomeDefinition
+            {
+                Sections =
+                [
+                    new OverviewSectionDefinition
+                    {
+                        Type = OverviewSectionKinds.Milestone,
+                        Milestone = "missing-deliverable",
+                    },
+                ],
+            },
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var output = Path.Combine(workspace.Path, "existing-overview");
+        Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(output, "keep.txt"), "keep");
+
+        var result = await CreateExportService(projectRoot)
+            .BuildAsync(output, true, ValidAssets(), GeneratedAt);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_overview_configuration", result.ErrorCode);
+        Assert.Contains("missing-deliverable", result.Message);
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(output, "keep.txt")));
+        Assert.False(File.Exists(Path.Combine(output, SiteExportService.SnapshotFileName)));
+    }
+
+    [Fact]
     public async Task BuildRejectsMissingAssetsAndDangerousDestinations()
     {
         using var workspace = new TempWorkingDirectory();
@@ -267,6 +335,7 @@ public class SiteExportTests
         var activation = TestMilestoneActivationServices.Create(projectRoot);
         return new(
             projectRoot,
+            CreateOverviewService(projectRoot),
             new ProjectConfigService(projectRoot),
             TestBoardServices.Create(projectRoot),
             new WikiService(projectRoot),
@@ -274,6 +343,17 @@ public class SiteExportTests
             activation.Validator,
             new LinkedProjectService(projectRoot),
             LinkedProjectFamilyService.CreateDefault(projectRoot));
+    }
+
+    private static OverviewService CreateOverviewService(ProjectRoot projectRoot)
+    {
+        var linkedReads = new LinkedProjectReadService(
+            projectRoot,
+            LinkedProjectFamilyService.CreateDefault(projectRoot),
+            new SiteNextIdService(),
+            new LinkedProjectGitInspector(),
+            new TaskServiceFactory(TimeProvider.System));
+        return new OverviewService(linkedReads);
     }
 
     private static MemoryAssetStore ValidAssets() => new(new Dictionary<string, string>
@@ -297,5 +377,24 @@ public class SiteExportTests
             asset = null!;
             return false;
         }
+    }
+
+    private sealed class SiteNextIdService : INextIdService
+    {
+        public Task<int> GetNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default) => Task.FromResult(1);
+
+        public Task<int> PeekNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default) => Task.FromResult(1);
+
+        public Task<int?> PeekExistingNextId(ProjectRoot projectRoot, string track,
+            CancellationToken cancellationToken = default) => Task.FromResult<int?>(1);
+
+        public Task<ProjectRegistration> RegisterProject(ProjectRoot projectRoot,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ProjectRegistration("site-test", "recovery-test"));
+
+        public Task<bool> Healthy(ProjectConfig config, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 }

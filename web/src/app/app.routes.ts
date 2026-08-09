@@ -235,7 +235,17 @@ export const routes: Routes = [
 ];
 
 export const staticRoutes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'tasks' },
+  {
+    path: '',
+    pathMatch: 'full',
+    loadComponent: () =>
+      import('./static/static-root-route').then((module) => module.StaticRootRoute),
+  },
+  {
+    path: 'overview',
+    loadComponent: () => import('./overview/overview-page').then((module) => module.OverviewPage),
+    data: { shell: AppShell.Overview },
+  },
   {
     path: 'tasks',
     component: TasksShell,

@@ -1,5 +1,35 @@
 import { expect, test } from '@playwright/test';
 
+test('enabled static snapshot opens its responsive Overview from the empty root', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/');
+
+  await expect(page).toHaveURL(/#\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Playwright Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Current Release' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Current work' })).toBeVisible();
+  await expect(page.getByText('Copyright 2026 Playwright Project.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Tasks', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Wiki', exact: true })).toBeVisible();
+
+  const layout = await page.locator('.overview-composition').evaluate((composition) => ({
+    clientWidth: composition.clientWidth,
+    scrollWidth: composition.scrollWidth,
+    columns: getComputedStyle(composition).gridTemplateColumns,
+  }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+  if (testInfo.project.name.includes('mobile')) expect(layout.columns).toBe('none');
+  else {
+    expect(layout.columns).not.toBe('none');
+    const snapshotContext = await page.locator('.snapshot-context').boundingBox();
+    const overviewSurface = await page.locator('.overview-shell').boundingBox();
+    const snapshotCenter = snapshotContext!.x + snapshotContext!.width / 2;
+    const overviewCenter = overviewSurface!.x + overviewSurface!.width / 2;
+    expect(Math.abs(snapshotCenter - overviewCenter)).toBeLessThanOrEqual(1);
+  }
+});
+
 test('static snapshot supports filters, task views, dependencies, wiki folders, and hash reloads', async ({
   page,
 }, testInfo) => {
@@ -41,12 +71,14 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
     expect(headerLayout.topbarScrollWidth).toBeLessThanOrEqual(headerLayout.topbarClientWidth);
   } else {
     await expect(modeCount.locator('.mode-count-suffix')).toBeVisible();
-    const tasksLabel = await page
-      .getByRole('link', { name: /Tasks \d+ tasks left/ })
-      .getByText('Tasks', { exact: true })
+    const firstModeLabel = await page
+      .locator('.mode-navigation a')
+      .first()
+      .locator('span')
+      .first()
       .boundingBox();
     const boardSurface = await page.locator('.pm-board-surface').boundingBox();
-    const workspaceInset = tasksLabel!.x - boardSurface!.x;
+    const workspaceInset = firstModeLabel!.x - boardSurface!.x;
     expect(workspaceInset).toBeGreaterThanOrEqual(8);
     expect(workspaceInset).toBeLessThanOrEqual(16);
   }

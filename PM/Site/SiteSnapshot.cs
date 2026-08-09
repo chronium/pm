@@ -8,6 +8,7 @@ public sealed record SiteSnapshot(
     string? ProjectId,
     IReadOnlyList<SiteLinkedProjectResponse> LinkedProjects,
     ProjectResponse Project,
+    OverviewDocumentResponse Overview,
     SettingsResponse Settings,
     ActivationSwitchboardResponse Activation,
     BoardNavigationResponse Navigation,

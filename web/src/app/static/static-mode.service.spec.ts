@@ -5,7 +5,7 @@ import { adaptGet, validateSnapshot } from './static-snapshot.interceptor';
 import { isStaticDocument } from './static-mode.service';
 
 const snapshot: StaticSnapshot = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   generatedAt: '2026-07-27T12:30:00Z',
   projectId: 'static-pm',
   linkedProjects: [],
@@ -16,6 +16,18 @@ const snapshot: StaticSnapshot = {
     relationship: 'current',
     readOnly: true,
     revision: 'static-snapshot',
+  },
+  overview: {
+    status: 'ready',
+    projectId: 'static-pm',
+    projectName: 'Static PM',
+    documentTitle: 'Static PM Overview',
+    composition: {
+      layout: 'single',
+      sections: [{ type: 'hero', title: 'Static PM', description: 'Published project.' }],
+    },
+    issues: [],
+    revision: 'overview-static',
   },
   settings: {
     projectName: 'Static PM',
@@ -205,9 +217,18 @@ describe('static snapshot mode', () => {
   it('validates the supported schema and reports malformed or future snapshots', () => {
     expect(validateSnapshot(snapshot)).toBe(snapshot);
     expect(() => validateSnapshot({ ...snapshot, tasks: undefined })).toThrow(/collections/);
-    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 3 })).toThrow(
-      /Unsupported static snapshot schema version: 3/,
+    expect(() => validateSnapshot({ ...snapshot, schemaVersion: 5 })).toThrow(
+      /Unsupported static snapshot schema version: 5/,
     );
+    expect(() => validateSnapshot({ ...snapshot, overview: undefined })).toThrow(
+      /invalid overview/,
+    );
+    expect(() =>
+      validateSnapshot({
+        ...snapshot,
+        overview: { ...snapshot.overview, status: 'ready', composition: null },
+      }),
+    ).toThrow(/invalid overview/);
     expect(() =>
       validateSnapshot({
         ...snapshot,
@@ -224,8 +245,9 @@ describe('static snapshot mode', () => {
     ).toThrow(/invalid linkedProjects/);
   });
 
-  it('adapts project, task, wiki, and display settings GET contracts', () => {
+  it('adapts project, Overview, task, wiki, and display settings GET contracts', () => {
     expect(adaptGet(snapshot, get('/api/v1/project'))).toEqual(snapshot.project);
+    expect(adaptGet(snapshot, get('/api/v1/overview'))).toEqual(snapshot.overview);
     expect(adaptGet(snapshot, get('/api/v1/settings'))).toEqual(snapshot.settings);
     expect(adaptGet(snapshot, get('/api/v1/activation'))).toEqual(snapshot.activation);
     expect(adaptGet(snapshot, get('/api/v1/wiki/pages'))).toEqual(snapshot.wikiIndex);

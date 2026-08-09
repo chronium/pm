@@ -24,6 +24,7 @@ type SettingsResponse = components['schemas']['SettingsResponse'];
 type ActivationResponse = components['schemas']['ActivationSwitchboardResponse'];
 type WikiSummary = components['schemas']['WikiPageSummaryResponse'];
 type WikiPage = components['schemas']['WikiPageResponse'];
+type OverviewDocument = components['schemas']['OverviewDocumentResponse'];
 
 export interface StaticSnapshot {
   schemaVersion: number;
@@ -31,6 +32,7 @@ export interface StaticSnapshot {
   projectId: string | null;
   linkedProjects: StaticLinkedProject[];
   project: ProjectResponse;
+  overview: OverviewDocument;
   settings: SettingsResponse;
   activation: ActivationResponse;
   navigation: NavigationResponse;
@@ -87,7 +89,7 @@ export function staticSnapshotInterceptor(
 
 export function validateSnapshot(value: unknown): StaticSnapshot {
   if (!isRecord(value)) throw new Error('The static snapshot is malformed.');
-  if (value['schemaVersion'] !== 5)
+  if (value['schemaVersion'] !== 6)
     throw new Error(
       `Unsupported static snapshot schema version: ${String(value['schemaVersion'])}.`,
     );
@@ -96,6 +98,7 @@ export function validateSnapshot(value: unknown): StaticSnapshot {
     'projectId',
     'linkedProjects',
     'project',
+    'overview',
     'settings',
     'activation',
     'navigation',
@@ -117,7 +120,38 @@ export function validateSnapshot(value: unknown): StaticSnapshot {
     throw new Error('The static snapshot is malformed: invalid projectId.');
   if (!value['linkedProjects'].every(isLinkedProject))
     throw new Error('The static snapshot is malformed: invalid linkedProjects.');
+  if (!isOverviewDocument(value['overview']))
+    throw new Error('The static snapshot is malformed: invalid overview.');
   return value as unknown as StaticSnapshot;
+}
+
+function isOverviewDocument(value: unknown): value is OverviewDocument {
+  if (!isRecord(value)) return false;
+  const status = String(value['status']);
+  const composition = value['composition'];
+  const issues = value['issues'];
+  if (
+    !['disabled', 'ready', 'invalid'].includes(status) ||
+    (value['projectId'] !== null && typeof value['projectId'] !== 'string') ||
+    typeof value['projectName'] !== 'string' ||
+    typeof value['documentTitle'] !== 'string' ||
+    typeof value['revision'] !== 'string' ||
+    !Array.isArray(issues) ||
+    !issues.every(isOverviewIssue)
+  )
+    return false;
+  if (status === 'ready')
+    return isRecord(composition) && ['single', 'split'].includes(String(composition['layout']));
+  return composition === null;
+}
+
+function isOverviewIssue(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['code'] === 'string' &&
+    typeof value['message'] === 'string' &&
+    typeof value['path'] === 'string'
+  );
 }
 
 function isLinkedProject(value: unknown): value is StaticLinkedProject {
@@ -144,6 +178,7 @@ function isHttpUrl(value: string): boolean {
 export function adaptGet(snapshot: StaticSnapshot, request: HttpRequest<unknown>): unknown {
   const url = request.url;
   if (url === '/api/v1/project') return snapshot.project;
+  if (url === '/api/v1/overview') return snapshot.overview;
   if (url === '/api/v1/settings') return snapshot.settings;
   if (url === '/api/v1/activation') return snapshot.activation;
   if (url === '/api/v1/board/navigation') return snapshot.navigation;

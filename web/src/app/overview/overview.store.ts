@@ -3,18 +3,14 @@ import { computed, inject, Injectable } from '@angular/core';
 
 import type { components } from '../api/generated/pm-api';
 import { ProjectContextService } from '../core/project-context.service';
-import { StaticModeService } from '../static/static-mode.service';
 
 export type OverviewDocument = components['schemas']['OverviewDocumentResponse'];
 
 @Injectable({ providedIn: 'root' })
 export class OverviewStore {
   private readonly projectContext = inject(ProjectContextService);
-  private readonly staticMode = inject(StaticModeService);
 
-  readonly resource = httpResource<OverviewDocument>(() =>
-    this.staticMode.enabled ? undefined : this.projectContext.apiUrl('/overview'),
-  );
+  readonly resource = httpResource<OverviewDocument>(() => this.projectContext.apiUrl('/overview'));
   readonly document = computed(() => (this.resource.hasValue() ? this.resource.value() : null));
   readonly loading = computed(() => this.resource.isLoading() && !this.document());
   readonly available = computed(() => {

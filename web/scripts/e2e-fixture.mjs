@@ -290,6 +290,34 @@ activationTriggers:
     activation:
       at: 2026-01-01T00:45:00.0000000Z
       mode: automatic
+${
+  size === 'large'
+    ? ''
+    : `site:
+  enabled: true
+  title: Playwright Overview
+  description: Published delivery, current work, and documentation.
+  home:
+    layout: split
+    primary:
+      - type: hero
+      - type: markdown
+        source: wiki:welcome
+    secondary:
+      - type: milestone
+        milestone: current
+      - type: tasks
+        title: Current work
+        filter: state:todo
+        limit: 3
+    after:
+      - type: wiki
+        pages:
+          - welcome
+      - type: copyright
+        notice: Copyright 2026 Playwright Project.
+`
+}
 `;
 }
 

@@ -6,6 +6,7 @@ namespace PM.Site;
 
 public sealed class SiteSnapshotBuilder(
     ProjectRoot projectRoot,
+    OverviewService overviewService,
     ProjectConfigService configService,
     BoardService boardService,
     WikiService wikiService,
@@ -14,13 +15,27 @@ public sealed class SiteSnapshotBuilder(
     LinkedProjectService linkedProjectService,
     LinkedProjectFamilyService linkedProjectFamilyService)
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
     private const string StaticRevision = "static-snapshot";
 
     public async Task<AppResult<SiteSnapshot>> BuildAsync(
         DateTimeOffset generatedAt,
         CancellationToken cancellationToken = default)
     {
+        var overviewResult = await overviewService.ResolveAsync(cancellationToken: cancellationToken);
+        if (!overviewResult.Success)
+            return Fail(overviewResult);
+
+        var overview = overviewResult.Payload!;
+        if (overview.Status == OverviewDocumentStatus.Invalid)
+        {
+            var issues = string.Join("; ", overview.Issues.Select(issue =>
+                $"{issue.Code} at {issue.Path}: {issue.Message}"));
+            return AppResult<SiteSnapshot>.Fail(
+                "invalid_overview_configuration",
+                $"The enabled Overview configuration is invalid: {issues}");
+        }
+
         var settingsResult = configService.GetSettings();
         if (!settingsResult.Success)
             return Fail(settingsResult);
@@ -134,6 +149,7 @@ public sealed class SiteSnapshotBuilder(
                 "current",
                 true,
                 StaticRevision),
+            OverviewApiEndpoints.ToResponse(overview),
             responseSettings,
             responseActivation,
             new BoardNavigationResponse(

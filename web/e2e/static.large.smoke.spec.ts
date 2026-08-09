@@ -4,7 +4,8 @@ test('large static snapshot search stays responsive and limited', async ({ page 
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
 
-  await page.goto('/#/tasks');
+  await page.goto('/');
+  await expect(page).toHaveURL(/#\/tasks$/);
   const taskSearch = page.getByRole('combobox', { name: 'Search tasks' });
   const mobileTaskSearch = page.getByRole('button', { name: 'Search tasks' });
   if (await mobileTaskSearch.isVisible()) await mobileTaskSearch.click();
@@ -15,6 +16,7 @@ test('large static snapshot search stays responsive and limited', async ({ page 
   await taskSearch.press('Escape');
 
   await page.getByRole('link', { name: 'Wiki' }).click();
+  await expect(page).toHaveURL(/#\/wiki$/);
   const wikiSearch = page.getByRole('combobox', { name: 'Search wiki' });
   const mobileWikiSearch = page.getByRole('button', { name: 'Search wiki' });
   if (await mobileWikiSearch.isVisible()) await mobileWikiSearch.click();

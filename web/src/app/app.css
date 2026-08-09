@@ -121,6 +121,15 @@
   color: var(--pm-text-subtle);
 }
 
+@media (min-width: 1100px) {
+  .topbar--overview .snapshot-context {
+    position: absolute;
+    left: 50%;
+    margin-left: 0;
+    transform: translateX(-50%);
+  }
+}
+
 .icon-button {
   display: inline-grid;
   place-items: center;

@@ -1,4 +1,4 @@
-<header class="topbar">
+<header class="topbar" [class.topbar--overview]="projectContext.mode() === 'overview'">
   <button
     #menuButton
     class="icon-button menu-button"
@@ -24,8 +24,9 @@
         routerLinkActive="active"
         #overviewLink="routerLinkActive"
         [attr.aria-current]="overviewLink.isActive ? 'page' : null"
-        >Overview</a
       >
+        <span>Overview</span>
+      </a>
     }
     <a
       [routerLink]="projectContext.modeLink('tasks')"
