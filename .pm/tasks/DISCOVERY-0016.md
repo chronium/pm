@@ -4,9 +4,9 @@ title: Freeze the Overview design and implementation contract
 track: DISCOVERY
 milestone: site-overview-discovery
 dependsOn:
-- DISCOVERY-0015
+- DISCOVERY-0017
 createdAt: 2026-08-09T07:14:48.1940960Z
-modifiedAt: 2026-08-09T07:14:57.1227630Z
+modifiedAt: 2026-08-09T08:24:06.7963470Z
 ---
 
 ## Goal
