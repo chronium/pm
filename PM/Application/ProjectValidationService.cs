@@ -81,7 +81,12 @@ public sealed class ProjectValidationService
         ValidateConfigMetadata(issues);
         await ValidateLinkedProjects(issues, cancellationToken);
         var tasksById = ValidateTaskFiles(issues);
-        issues.AddRange(overviewConfigurationValidation.Validate(projectRoot.Config));
+        issues.AddRange(overviewConfigurationValidation.Validate(projectRoot.Config).Select(issue =>
+            new ProjectValidationIssue(
+                "error",
+                issue.Code,
+                $"{issue.Path}: {issue.Message}",
+                projectRoot.ConfigPath)));
         issues.AddRange(milestoneActivationValidation.Validate(projectRoot.Config, tasksById));
         ValidateTaskDependencies(issues, tasksById);
         ValidateStateRefs(issues, tasksById);

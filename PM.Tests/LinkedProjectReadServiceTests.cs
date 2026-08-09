@@ -397,7 +397,7 @@ public sealed class LinkedProjectReadServiceTests
         var resolvedFamily = await family.ResolveAsync();
         var parentMember = resolvedFamily.Payload!.Members.Single(member => member.ProjectId == "prj_games");
         var localBoard = TestBoardServices.Create(child).GetBoard(new BoardQuery()).Payload!;
-        var board = await service.EnrichCurrentBoardAsync(localBoard);
+        var board = await service.EnrichBoardAsync(localBoard);
         var detail = await service.EnrichCurrentTaskAsync(TestBoardServices.Create(child).GetTask("GAME-0001").Payload!);
         var next = await service.GetNextTaskAsync(
             new LinkedProjectReadRequest(), new NextTaskQuery(ReadyOnly: true));

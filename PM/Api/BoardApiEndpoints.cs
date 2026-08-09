@@ -104,7 +104,7 @@ public static class BoardApiEndpoints
                 var board = result.Payload!;
                 if (linkedReads != null)
                 {
-                    var enriched = await linkedReads.EnrichCurrentBoardAsync(board, cancellationToken);
+                    var enriched = await linkedReads.EnrichBoardAsync(board, cancellationToken: cancellationToken);
                     if (!enriched.Success)
                         return ApiResults.Failure(enriched.ErrorCode, enriched.Message, request.Path);
                     board = enriched.Payload!;

@@ -92,11 +92,11 @@ public static class LinkedProjectReadApiEndpoints
                 var board = result.Payload!;
                 if (linkedReads != null)
                 {
-                    var enriched = await linkedReads.ListTasksAsync(
-                        ProjectRequest(context.Member.ProjectId), query, cancellationToken);
+                    var enriched = await linkedReads.EnrichBoardAsync(
+                        board, context.Member.ProjectId, cancellationToken);
                     if (!enriched.Success)
                         return ApiResults.Failure(enriched.ErrorCode, enriched.Message, request.Path);
-                    board = EnrichBoard(board, enriched.Payload!.Items);
+                    board = enriched.Payload!;
                 }
 
                 var revision = context.Revisions.GetBoardRevision(board);
@@ -349,31 +349,6 @@ public static class LinkedProjectReadApiEndpoints
 
     private static LinkedProjectReadRequest ProjectRequest(string projectId) =>
         new(LinkedProjectReadScope.Project, projectId);
-
-    private static BoardData EnrichBoard(
-        BoardData board,
-        IReadOnlyList<LinkedProjectResource<BoardTask>> items)
-    {
-        var enrichedTasks = items.ToDictionary(
-            item => item.Resource.Task.Id,
-            item => item.Resource,
-            StringComparer.Ordinal);
-
-        BoardTask Enrich(BoardTask task) =>
-            enrichedTasks.TryGetValue(task.Task.Id, out var enriched) ? enriched : task;
-
-        return board with
-        {
-            Tasks = board.Tasks.Select(Enrich).ToList(),
-            MilestoneGroups = board.MilestoneGroups.Select(group => group with
-            {
-                States = group.States.Select(state => state with
-                {
-                    Tasks = state.Tasks.Select(Enrich).ToList(),
-                }).ToList(),
-            }).ToList(),
-        };
-    }
 
     private static async Task<IResult> ReadLinkedTask(
         HttpRequest request,

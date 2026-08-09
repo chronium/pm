@@ -3,14 +3,16 @@ using PM.Wiki;
 
 namespace PM.Application;
 
+public sealed record OverviewConfigurationIssue(string Code, string Message, string Path);
+
 public sealed class OverviewConfigurationValidationService(ProjectRoot projectRoot)
 {
     private const int MinimumTaskLimit = 1;
     private const int MaximumTaskLimit = 20;
 
-    public IReadOnlyList<ProjectValidationIssue> Validate(ProjectConfig config)
+    public IReadOnlyList<OverviewConfigurationIssue> Validate(ProjectConfig config)
     {
-        var issues = new List<ProjectValidationIssue>();
+        var issues = new List<OverviewConfigurationIssue>();
         var site = config.Site;
         if (site is null) return issues;
 
@@ -33,26 +35,27 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
                 break;
             default:
                 AddError(issues, "invalid_overview_layout",
-                    $"site.home.layout: unsupported Overview layout {FormatValue(home.Layout)}; use single or split.");
+                    "site.home.layout",
+                    $"Unsupported Overview layout {FormatValue(home.Layout)}; use single or split.");
                 break;
         }
 
-        return issues.Select(issue => issue with { Path = projectRoot.ConfigPath }).ToList();
+        return issues;
     }
 
     private void ValidateSingle(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewHomeDefinition home,
         ProjectConfig config)
     {
         if (home.Primary is not null || home.Secondary is not null || home.After is not null)
             AddError(issues, "invalid_overview_composition",
-                "site.home: single layout cannot contain primary, secondary, or after regions.");
+                "site.home", "Single layout cannot contain primary, secondary, or after regions.");
 
         if (home.Sections is null) return;
         if (home.Sections.Count == 0)
             AddError(issues, "empty_overview_region",
-                "site.home.sections: an explicitly configured section list must not be empty.");
+                "site.home.sections", "An explicitly configured section list must not be empty.");
 
         ValidateRegion(issues, home.Sections, "site.home.sections", config);
         ValidateHero(issues, [("site.home.sections", home.Sections)], "site.home.sections");
@@ -60,13 +63,13 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
     }
 
     private void ValidateSplit(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewHomeDefinition home,
         ProjectConfig config)
     {
         if (home.Sections is not null)
             AddError(issues, "invalid_overview_composition",
-                "site.home: split layout cannot contain sections.");
+                "site.home", "Split layout cannot contain sections.");
 
         ValidateRequiredRegion(issues, home.Primary, "site.home.primary", config);
         ValidateRequiredRegion(issues, home.Secondary, "site.home.secondary", config);
@@ -74,7 +77,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         {
             if (after.Count == 0)
                 AddError(issues, "empty_overview_region",
-                    "site.home.after: an explicitly configured after region must not be empty.");
+                    "site.home.after", "An explicitly configured after region must not be empty.");
             ValidateRegion(issues, after, "site.home.after", config);
         }
 
@@ -87,24 +90,24 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
     }
 
     private void ValidateRequiredRegion(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         IReadOnlyList<OverviewSectionDefinition>? sections,
         string path,
         ProjectConfig config)
     {
         if (sections is null)
         {
-            AddError(issues, "missing_overview_region", $"{path}: split layout requires this region.");
+            AddError(issues, "missing_overview_region", path, "Split layout requires this region.");
             return;
         }
 
         if (sections.Count == 0)
-            AddError(issues, "empty_overview_region", $"{path}: split layout requires a non-empty region.");
+            AddError(issues, "empty_overview_region", path, "Split layout requires a non-empty region.");
         ValidateRegion(issues, sections, path, config);
     }
 
     private void ValidateRegion(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         IReadOnlyList<OverviewSectionDefinition> sections,
         string path,
         ProjectConfig config)
@@ -115,7 +118,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
             var sectionPath = $"{path}[{index}]";
             if (section is null)
             {
-                AddError(issues, "invalid_overview_section", $"{sectionPath}: section must be a mapping.");
+                AddError(issues, "invalid_overview_section", sectionPath, "Section must be a mapping.");
                 continue;
             }
 
@@ -124,21 +127,21 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
     }
 
     private void ValidateSection(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewSectionDefinition section,
         string path,
         ProjectConfig config)
     {
         if (string.IsNullOrWhiteSpace(section.Type))
         {
-            AddError(issues, "missing_overview_section_type", $"{path}.type: section type is required.");
+            AddError(issues, "missing_overview_section_type", $"{path}.type", "Section type is required.");
             return;
         }
 
         if (!OverviewSectionKinds.IsSupported(section.Type))
         {
             AddError(issues, "unknown_overview_section_type",
-                $"{path}.type: unsupported Overview section type {section.Type}.");
+                $"{path}.type", $"Unsupported Overview section type {section.Type}.");
             return;
         }
 
@@ -171,13 +174,13 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
                 ValidateAllowedFields(issues, section, path, ["notice"]);
                 if (string.IsNullOrWhiteSpace(section.Notice))
                     AddError(issues, "invalid_overview_copyright",
-                        $"{path}.notice: copyright notice must contain non-whitespace plain text.");
+                        $"{path}.notice", "Copyright notice must contain non-whitespace plain text.");
                 break;
         }
     }
 
     private static void ValidateMilestone(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewSectionDefinition section,
         string path,
         ProjectConfig config)
@@ -185,50 +188,50 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (section.Milestone is null) return;
         if (string.IsNullOrWhiteSpace(section.Milestone) || !config.Milestones.ContainsKey(section.Milestone))
             AddError(issues, "missing_overview_milestone",
-                $"{path}.milestone: milestone {FormatValue(section.Milestone)} was not found.");
+                $"{path}.milestone", $"Milestone {FormatValue(section.Milestone)} was not found.");
     }
 
     private static void ValidateTasks(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewSectionDefinition section,
         string path,
         ProjectConfig config)
     {
         if (section.Limit is < MinimumTaskLimit or > MaximumTaskLimit)
             AddError(issues, "invalid_overview_task_limit",
-                $"{path}.limit: task limit must be from {MinimumTaskLimit} through {MaximumTaskLimit}.");
+                $"{path}.limit", $"Task limit must be from {MinimumTaskLimit} through {MaximumTaskLimit}.");
 
         if (section.Filter is null) return;
         var parsed = TaskSearchQueryParser.Parse(section.Filter);
         if (!parsed.Success)
         {
             AddError(issues, "invalid_overview_task_query",
-                $"{path}.filter: {parsed.Message ?? "task filter is invalid"}");
+                $"{path}.filter", parsed.Message ?? "Task filter is invalid.");
             return;
         }
 
         var query = parsed.Payload!;
         if (query.HasScopePredicate && query.Scope == TaskSearchScope.Selection)
             AddError(issues, "invalid_overview_task_scope",
-                $"{path}.filter: in:selection is not available because Overview has no board selection context.");
+                $"{path}.filter", "in:selection is not available because Overview has no board selection context.");
 
         foreach (var state in query.States.Distinct(StringComparer.Ordinal))
             if (!config.TaskStates.ContainsKey(state))
                 AddError(issues, "unknown_overview_task_state",
-                    $"{path}.filter: task state {state} was not found.");
+                    $"{path}.filter", $"Task state {state} was not found.");
         foreach (var track in query.Tracks.Distinct(StringComparer.Ordinal))
             if (!config.Tracks.ContainsKey(track))
                 AddError(issues, "unknown_overview_task_track",
-                    $"{path}.filter: task track {track} was not found.");
+                    $"{path}.filter", $"Task track {track} was not found.");
         foreach (var milestone in query.Milestones.Distinct(StringComparer.Ordinal))
             if (!config.Milestones.ContainsKey(milestone))
                 AddError(issues, "unknown_overview_task_milestone",
-                    $"{path}.filter: task milestone {milestone} was not found.");
+                    $"{path}.filter", $"Task milestone {milestone} was not found.");
 
     }
 
     private void ValidateWiki(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewSectionDefinition section,
         string path)
     {
@@ -236,7 +239,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (section.Pages.Count == 0)
         {
             AddError(issues, "invalid_overview_wiki_pages",
-                $"{path}.pages: explicitly configured wiki pages must not be empty.");
+                $"{path}.pages", "Explicitly configured wiki pages must not be empty.");
             return;
         }
 
@@ -248,19 +251,19 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
             if (!TryResolveExactWikiPath(pagePath, out var normalizedPath, out var filePath))
             {
                 AddError(issues, "invalid_overview_wiki_path",
-                    $"{itemPath}: {FormatValue(pagePath)} is not a normalized local wiki path.");
+                    itemPath, $"{FormatValue(pagePath)} is not a normalized local wiki path.");
                 continue;
             }
 
             if (!seen.Add(normalizedPath))
                 AddError(issues, "duplicate_overview_wiki_page",
-                    $"{itemPath}: wiki page {normalizedPath} is duplicated in this section.");
+                    itemPath, $"Wiki page {normalizedPath} is duplicated in this section.");
             ValidateWikiFile(issues, normalizedPath, filePath, itemPath, "missing_overview_wiki_page");
         }
     }
 
     private void ValidateMarkdown(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewSectionDefinition section,
         string path)
     {
@@ -268,7 +271,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (section.Source is null || !section.Source.StartsWith(prefix, StringComparison.Ordinal))
         {
             AddError(issues, "invalid_overview_markdown_source",
-                $"{path}.source: Markdown source must use wiki:<normalized-local-path>.");
+                $"{path}.source", "Markdown source must use wiki:<normalized-local-path>.");
             return;
         }
 
@@ -276,7 +279,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (!TryResolveExactWikiPath(pagePath, out var normalizedPath, out var filePath))
         {
             AddError(issues, "invalid_overview_markdown_source",
-                $"{path}.source: Markdown source must use wiki:<normalized-local-path>.");
+                $"{path}.source", "Markdown source must use wiki:<normalized-local-path>.");
             return;
         }
 
@@ -309,7 +312,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
     }
 
     private static void ValidateWikiFile(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         string normalizedPath,
         string filePath,
         string path,
@@ -317,17 +320,17 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
     {
         if (!File.Exists(filePath))
         {
-            AddError(issues, missingCode, $"{path}: wiki page {normalizedPath} was not found.");
+            AddError(issues, missingCode, path, $"Wiki page {normalizedPath} was not found.");
             return;
         }
 
         if (WikiPage.Parse(normalizedPath, File.ReadAllText(filePath)) is null)
             AddError(issues, "invalid_overview_wiki_page",
-                $"{path}: wiki page {normalizedPath} contains invalid Markdown metadata.");
+                path, $"Wiki page {normalizedPath} contains invalid Markdown metadata.");
     }
 
     private static void ValidateHero(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         IReadOnlyList<(string Path, IReadOnlyList<OverviewSectionDefinition> Sections)> regions,
         string requiredRegion)
     {
@@ -335,20 +338,20 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (heroes.Count == 0)
         {
             AddError(issues, "missing_overview_hero",
-                $"{requiredRegion}[0]: Overview composition must begin with exactly one hero section.");
+                $"{requiredRegion}[0]", "Overview composition must begin with exactly one hero section.");
             return;
         }
 
         if (heroes.Count > 1)
             AddError(issues, "duplicate_overview_hero",
-                $"{heroes[1].Path}: Overview composition contains more than one hero section.");
+                heroes[1].Path, "Overview composition contains more than one hero section.");
         if (!string.Equals(heroes[0].Region, requiredRegion, StringComparison.Ordinal) || heroes[0].Index != 0)
             AddError(issues, "misplaced_overview_hero",
-                $"{heroes[0].Path}: hero must be the first section in {requiredRegion}.");
+                heroes[0].Path, $"Hero must be the first section in {requiredRegion}.");
     }
 
     private static void ValidateCopyright(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         IReadOnlyList<(string Path, IReadOnlyList<OverviewSectionDefinition> Sections)> regions,
         string layout)
     {
@@ -356,7 +359,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (sections.Count == 0) return;
         if (sections.Count > 1)
             AddError(issues, "duplicate_overview_copyright",
-                $"{sections[1].Path}: Overview composition contains more than one copyright section.");
+                sections[1].Path, "Overview composition contains more than one copyright section.");
 
         var first = sections[0];
         var expectedRegion = layout == OverviewLayouts.Single ? "site.home.sections" : "site.home.after";
@@ -364,7 +367,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (!string.Equals(first.Region, expectedRegion, StringComparison.Ordinal) ||
             first.Index != region.Sections.Count - 1)
             AddError(issues, "misplaced_overview_copyright",
-                $"{first.Path}: copyright must be the final section in {expectedRegion}.");
+                first.Path, $"Copyright must be the final section in {expectedRegion}.");
     }
 
     private static List<(string Region, int Index, string Path)> Find(
@@ -380,7 +383,7 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
     }
 
     private static void ValidateAllowedFields(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         OverviewSectionDefinition section,
         string path,
         IReadOnlyList<string> allowed)
@@ -396,23 +399,27 @@ public sealed class OverviewConfigurationValidationService(ProjectRoot projectRo
         if (present.Count == 0) return;
 
         AddError(issues, "invalid_overview_section_fields",
-            $"{path}: section type {section.Type} does not support {string.Join(", ", present)}.");
+            path, $"Section type {section.Type} does not support {string.Join(", ", present)}.");
     }
 
     private static void ValidateOptionalText(
-        List<ProjectValidationIssue> issues,
+        List<OverviewConfigurationIssue> issues,
         string? value,
         string path,
         string code,
         string message)
     {
         if (value is not null && string.IsNullOrWhiteSpace(value))
-            AddError(issues, code, $"{path}: {message}");
+            AddError(issues, code, path, message);
     }
 
     private static string FormatValue(string? value) =>
         string.IsNullOrEmpty(value) ? "<empty>" : value;
 
-    private static void AddError(List<ProjectValidationIssue> issues, string code, string message) =>
-        issues.Add(new ProjectValidationIssue("error", code, message));
+    private static void AddError(
+        List<OverviewConfigurationIssue> issues,
+        string code,
+        string path,
+        string message) =>
+        issues.Add(new OverviewConfigurationIssue(code, message, path));
 }

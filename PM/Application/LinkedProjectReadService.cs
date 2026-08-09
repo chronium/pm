@@ -166,12 +166,14 @@ public sealed class LinkedProjectReadService
             new LinkedProjectReadResult<BoardTask>(items, warnings.Items, truncated));
     }
 
-    public async Task<AppResult<BoardData>> EnrichCurrentBoardAsync(
+    public async Task<AppResult<BoardData>> EnrichBoardAsync(
         BoardData board,
+        string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        if (!board.Tasks.Any(task => HasQualifiedDependency(task.Task)) ||
-            !activeProject.TryReadProjectId(out var projectId))
+        if (!board.Tasks.Any(task => HasQualifiedDependency(task.Task)))
+            return AppResult<BoardData>.Ok(board);
+        if (string.IsNullOrWhiteSpace(projectId) && !activeProject.TryReadProjectId(out projectId))
             return AppResult<BoardData>.Ok(board);
 
         var graph = await taskGraphService.BuildAsync(cancellationToken);
@@ -180,7 +182,7 @@ public sealed class LinkedProjectReadService
 
         BoardTask Enrich(BoardTask task) => task with
         {
-            Dependencies = graph.Payload!.GetDependencyStatus(projectId, task.Task),
+            Dependencies = graph.Payload!.GetDependencyStatus(projectId!, task.Task),
         };
 
         return AppResult<BoardData>.Ok(board with

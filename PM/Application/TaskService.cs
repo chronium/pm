@@ -239,13 +239,12 @@ public sealed class TaskService
         {
             var track = projectRoot.ResolveTaskTrack(task);
             var state = stateById.TryGetValue(task.Id, out var currentState) ? currentState : string.Empty;
-            if (!MatchesFilters(task, track, state, search, normalizedContext)) continue;
             var priority = PriorityLevel.Resolve(projectRoot.Config!, task);
-            var fields = BuildSearchFields(task, markdown, track, state, priority.Priority);
-            var matchCount = search.HasFreeText
-                ? CountSearchMatches(fields, search.FreeText)
-                : 0;
-            if (search.HasFreeText && matchCount == 0) continue;
+            var evaluation = TaskSearchEvaluator.Evaluate(
+                new TaskSearchDocument(task, markdown, track, state, priority.Priority),
+                search,
+                normalizedContext);
+            if (!evaluation.Matches) continue;
 
             var descriptionPreview = BoardService.GetDescriptionPreview(
                 task.Description, BoardService.WebDescriptionPreviewLength);
@@ -260,8 +259,8 @@ public sealed class TaskService
                 BoardService.BuildDependencyStatus(task, tasksById, stateById, GetActiveProjectId()),
                 descriptionPreview,
                 filePath,
-                matchCount,
-                search.HasFreeText ? BuildSnippet(fields, search.FreeText) : descriptionPreview));
+                evaluation.MatchCount,
+                search.HasFreeText ? BuildSnippet(evaluation.Fields, search.FreeText) : descriptionPreview));
         }
 
         var ordered = search.HasFreeText
@@ -285,46 +284,6 @@ public sealed class TaskService
             return AppResult<IReadOnlyList<TaskSearchResult>>.Fail("invalid_state", $"State {context.State} not found.");
         return null;
     }
-
-    private static bool MatchesFilters(TaskItem task, string track, string state, TaskSearchQuery query,
-        TaskSearchContext context)
-    {
-        return MatchesAny(query.States, state) &&
-               MatchesAny(query.Tracks, track) &&
-               MatchesAny(query.Milestones, task.Milestone ?? string.Empty) &&
-               MatchesAnyTaskId(query.Ids, task.Id) &&
-               MatchesContext(context.State, state) &&
-               (query.Scope == TaskSearchScope.All ||
-                MatchesContext(context.Track, track) &&
-                MatchesContext(context.Milestone, task.Milestone ?? string.Empty));
-    }
-
-    private static bool MatchesAny(IReadOnlyList<string> values, string actual) =>
-        values.Count == 0 || values.Any(value => actual.Equals(value, StringComparison.OrdinalIgnoreCase));
-
-    private static bool MatchesAnyTaskId(IReadOnlyList<string> values, string actual) =>
-        values.Count == 0 || values.Any(value => MatchesTaskId(value, actual));
-
-    private static bool MatchesTaskId(string value, string actual)
-    {
-        if (!value.All(char.IsDigit))
-            return actual.StartsWith(value, StringComparison.OrdinalIgnoreCase);
-
-        var suffixStart = actual.Length;
-        while (suffixStart > 0 && char.IsDigit(actual[suffixStart - 1])) suffixStart--;
-        if (suffixStart == actual.Length) return false;
-
-        return NormalizeTaskNumber(actual[suffixStart..]) == NormalizeTaskNumber(value);
-    }
-
-    private static string NormalizeTaskNumber(string value)
-    {
-        var normalized = value.TrimStart('0');
-        return normalized.Length == 0 ? "0" : normalized;
-    }
-
-    private static bool MatchesContext(string? expected, string actual) =>
-        expected == null || actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeFilter(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -828,63 +787,17 @@ public sealed class TaskService
     private string? GetActiveProjectId() =>
         projectRoot.TryReadProjectId(out var projectId) ? projectId : null;
 
-    private static IReadOnlyList<(string Label, string Value, bool IsFallback)> BuildSearchFields(
-        TaskItem task,
-        string markdown,
-        string track,
-        string state,
-        string priority)
-    {
-        return
-        [
-            ("Description", task.Description, false),
-            ("Title", task.Title, false),
-            ("ID", task.Id, false),
-            ("Track", track, false),
-            ("Milestone", task.Milestone ?? string.Empty, false),
-            ("State", state, false),
-            ("Priority", priority, false),
-            ("Dependencies", string.Join(' ', task.DependencyIds), false),
-            ("Markdown", markdown, true),
-        ];
-    }
-
-    private static int CountSearchMatches(
-        IReadOnlyList<(string Label, string Value, bool IsFallback)> fields,
-        string query)
-    {
-        var semanticMatchCount = fields
-            .Where(field => !field.IsFallback)
-            .Sum(field => CountMatches(field.Value, query));
-        return semanticMatchCount > 0
-            ? semanticMatchCount
-            : fields.Where(field => field.IsFallback).Sum(field => CountMatches(field.Value, query));
-    }
-
-    private static int CountMatches(string value, string query)
-    {
-        var count = 0;
-        var index = 0;
-        while (true)
-        {
-            index = value.IndexOf(query, index, StringComparison.OrdinalIgnoreCase);
-            if (index < 0) return count;
-            count++;
-            index += query.Length;
-        }
-    }
-
     private static string BuildSnippet(
-        IReadOnlyList<(string Label, string Value, bool IsFallback)> fields,
+        IReadOnlyList<TaskSearchField> fields,
         string query)
     {
         var field = fields.FirstOrDefault(field =>
             !string.IsNullOrWhiteSpace(field.Value) &&
             field.Value.Contains(query, StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(field.Value))
+        if (field == null || string.IsNullOrWhiteSpace(field.Value))
             field = fields.FirstOrDefault(field => !string.IsNullOrWhiteSpace(field.Value));
 
-        if (string.IsNullOrWhiteSpace(field.Value)) return string.Empty;
+        if (field == null || string.IsNullOrWhiteSpace(field.Value)) return string.Empty;
 
         var haystack = NormalizeSnippetText(field.Value);
         var index = haystack.IndexOf(query, StringComparison.OrdinalIgnoreCase);

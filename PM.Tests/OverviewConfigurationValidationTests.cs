@@ -95,8 +95,8 @@ public sealed class OverviewConfigurationValidationTests
                 "missing_overview_hero",
             ],
             issues.Select(issue => issue.Code));
-        Assert.All(issues, issue => Assert.Equal(root.ConfigPath, issue.Path));
-        Assert.Contains("site.home.primary", issues[2].Message);
+        Assert.All(issues, issue => Assert.StartsWith("site.", issue.Path, StringComparison.Ordinal));
+        Assert.Equal("site.home.primary", issues[2].Path);
     }
 
     [Fact]
@@ -235,7 +235,9 @@ public sealed class OverviewConfigurationValidationTests
 
         Assert.True(result.Success);
         Assert.False(result.Payload!.Valid);
-        Assert.Contains(result.Payload.Issues, issue => issue.Code == "missing_overview_hero");
+        var issue = Assert.Single(result.Payload.Issues, issue => issue.Code == "missing_overview_hero");
+        Assert.Equal(root.ConfigPath, issue.Path);
+        Assert.StartsWith("site.home.sections[0]:", issue.Message, StringComparison.Ordinal);
     }
 
     [Fact]
