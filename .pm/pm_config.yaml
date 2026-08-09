@@ -56,4 +56,52 @@ milestones:
     priority: high
     requiredActivationTriggers: []
     delivery: null
+  site-overview-discovery:
+    title: Published project Overview discovery
+    description: >-
+      ## Outcome
+
+
+      Deliver an approved, implementation-ready design for opt-in project Overview pages, demonstrated through isolated responsive prototypes using realistic PM project data.
+
+
+      ## Scope
+
+
+      - Define a dedicated `site:` configuration boundary with `enabled: true` as the opt-in.
+
+      - Keep Overview available in live and embedded PM while Tasks remains their default route; enabled static exports open Overview by default.
+
+      - Define a uniform section vocabulary for hero, milestone, tasks, wiki, and wiki-sourced Markdown.
+
+      - Select the highest-priority active milestone by default, using configured milestone order as the tie-breaker, while allowing an explicit milestone override.
+
+      - Reuse PM task-search syntax and normal task ordering for task sections.
+
+      - Reject invalid explicit milestone, wiki, Markdown-source, and task-filter configuration with actionable publishing diagnostics.
+
+      - Demonstrate polished desktop and mobile compositions in isolated Storybook or component-gallery fixtures.
+
+
+      ## Exclusions
+
+
+      - No production route, configuration parsing, snapshot, or static-export behavior changes.
+
+      - No Settings UI or free-form page-builder controls.
+
+      - No production implementation milestone or task plan until the prototype and contract are approved.
+
+
+      ## Evidence
+
+
+      - A settled configuration and resolved-data contract.
+
+      - Reviewable responsive prototypes covering representative project types and important states.
+
+      - Recorded design decisions sufficient to create a separate production implementation milestone without reopening foundational choices.
+    priority: urgent
+    requiredActivationTriggers: []
+    delivery: null
 activationTriggers: {}
