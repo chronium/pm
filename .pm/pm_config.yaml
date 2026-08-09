@@ -209,3 +209,30 @@ milestones:
     requiredActivationTriggers: []
     delivery: null
 activationTriggers: {}
+site:
+  enabled: true
+  title: Project Model
+  description: Local-first project management built for software projects and agents.
+  home:
+    layout: split
+    primary:
+      - type: hero
+      - type: markdown
+        title: Introduction
+        source: wiki:overview
+    secondary:
+      - type: tasks
+        title: Current work
+        limit: 6
+      - type: milestone
+        title: Current milestone
+    after:
+      - type: wiki
+        title: Documentation
+        pages:
+          - getting-started
+          - guides/cli
+          - guides/mcp
+          - publishing/static-site
+      - type: copyright
+        notice: Copyright © 2026 Chronium · MIT licensed

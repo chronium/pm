@@ -1,7 +1,7 @@
 ---
 title: Static Site Publishing
 createdAt: 2026-07-27T06:14:45.2936720Z
-modifiedAt: 2026-07-31T08:29:23.8605280Z
+modifiedAt: 2026-08-09T19:50:13.4814250Z
 ---
 
 PM can export the Angular UI as a backend-free, read-only project site. This is useful for public project status, documentation, demos, and GitHub Pages.
@@ -23,6 +23,81 @@ The export contains:
 - `.nojekyll`
 - a sanitized `pm-snapshot.json`
 - hash-based routes suitable for hosting below a repository path
+
+## Overview landing pages
+
+Overview is an optional, YAML-authored presentation of the same project data included in the static snapshot. Enable it in `.pm/pm_config.yaml`:
+
+~~~yaml
+site:
+  enabled: true
+~~~
+
+That minimal configuration uses PM's implicit `single` composition in this order: hero, automatically selected milestone, open tasks, and top-level wiki pages. Projects without `site.enabled: true` keep the existing Tasks-first site.
+
+An explicit single composition selects and orders the sections:
+
+~~~yaml
+site:
+  enabled: true
+  title: Example Project
+  description: A public description of the project.
+  home:
+    layout: single
+    sections:
+      - type: hero
+      - type: milestone
+        title: Current milestone
+      - type: tasks
+        title: Current work
+        filter: state:in-progress
+        limit: 6
+      - type: wiki
+        title: Documentation
+        pages:
+          - getting-started
+          - architecture
+      - type: copyright
+        notice: Copyright © 2026 Example Project
+~~~
+
+Use the bounded split composition when the introduction and delivery information benefit from separate columns:
+
+~~~yaml
+site:
+  enabled: true
+  title: Example Project
+  home:
+    layout: split
+    primary:
+      - type: hero
+      - type: markdown
+        title: Introduction
+        source: wiki:overview
+    secondary:
+      - type: milestone
+        title: Current milestone
+      - type: tasks
+        title: Current work
+        filter: state:in-progress
+        limit: 6
+    after:
+      - type: wiki
+        title: Documentation
+        pages:
+          - getting-started
+          - publishing/static-site
+      - type: copyright
+        notice: Copyright © 2026 Example Project
+~~~
+
+The milestone section selects the highest-priority active milestone when `milestone` is omitted; configured milestone order breaks priority ties. Supplying `milestone` selects that exact deliverable. Task sections accept PM's normal free text, `state:`, `id:`, `track:`, and `milestone:` predicates and preserve normal project task order. `in:selection` is invalid because Overview has no board-selection context.
+
+Live and embedded applications continue to open Tasks first and expose Overview as a project-scoped mode. Enabled static exports open Overview from the empty root. Linked projects resolve their own site configuration and Overview data; static project switching still requires each linked project to publish its own artifact and declare a `publicSiteUrl`.
+
+`pm doctor` validates Overview structure, referenced milestones and wiki pages, Markdown sources, task filters, limits, section placement, and unknown fields. Live and embedded PM show actionable diagnostics for a semantically invalid Overview while keeping Tasks and Wiki usable. `pm site build` refuses an enabled invalid Overview and leaves an existing destination untouched.
+
+See **Published Project Overview Configuration** in the wiki tree for the normative field-by-field contract, responsive composition rules, and complete validation behavior.
 
 ## Included behavior
 
