@@ -1,4 +1,5 @@
 using PM.Application;
+using PM.Project;
 using PM.Tasks;
 
 namespace PM.Tests;
@@ -74,6 +75,72 @@ public class BoardServiceTests
         Assert.Equal(new[] { 1, 1, 0 }, navigation.Tracks.Select(option => option.RemainingCount));
         Assert.Equal(new[] { "m2", "m1", "empty" }, navigation.Milestones.Select(option => option.Key));
         Assert.Equal(new[] { 0, 1, 0 }, navigation.Milestones.Select(option => option.RemainingCount));
+    }
+
+    [Fact]
+    public async Task BoardHidesDeliveredWorkByDefaultAndRestoresItExplicitly()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            tracks: new Dictionary<string, string>
+            {
+                ["PM"] = "Product",
+                ["BUILD"] = "Build",
+                ["OPS"] = "Operations",
+            },
+            milestones: new Dictionary<string, string>
+            {
+                ["active"] = "Active",
+                ["ordinary"] = "Ordinary delivery",
+                ["exceptional"] = "Exceptional delivery",
+            });
+        config.Milestones["ordinary"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Ordinary,
+        };
+        config.Milestones["exceptional"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with open work.",
+            AcceptedTaskIds = ["OPS-0001"],
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var active = TestData.Task("BUILD-0001", "Active task", track: "BUILD", milestone: "active");
+        var ordinary = TestData.Task("PM-0001", "Ordinary delivered task", milestone: "ordinary");
+        var exceptional = TestData.Task("OPS-0001", "Exceptional delivered task", track: "OPS",
+            milestone: "exceptional");
+        foreach (var task in new[] { active, ordinary, exceptional }) projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(active, "todo");
+        projectRoot.UpdateTaskState(ordinary, "done");
+        projectRoot.UpdateTaskState(exceptional, "todo");
+        var service = TestBoardServices.Create(projectRoot);
+
+        var defaultBoard = service.GetBoard(new BoardQuery()).Payload!;
+        var defaultNavigation = service.GetNavigation().Payload!;
+        var includedBoard = service.GetBoard(new BoardQuery(IncludeDelivered: true)).Payload!;
+        var includedNavigation = service.GetNavigation(includeDelivered: true).Payload!;
+        var deliveredSelection = service.GetBoard(new BoardQuery(Milestone: "exceptional")).Payload!;
+
+        Assert.Equal(["BUILD-0001"], defaultBoard.Tasks.Select(task => task.Task.Id));
+        Assert.Equal(["active"], defaultBoard.Milestones.Select(milestone => milestone.Key));
+        Assert.Equal(["PM", "BUILD", "OPS"], defaultBoard.Tracks.Select(track => track.Key));
+        Assert.Equal([0, 1, 0], defaultNavigation.Tracks.Select(track => track.RemainingCount));
+        Assert.Equal(["BUILD-0001", "OPS-0001", "PM-0001"],
+            includedBoard.Tasks.Select(task => task.Task.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(["active", "ordinary", "exceptional"],
+            includedBoard.Milestones.Select(milestone => milestone.Key));
+        Assert.Equal(2, includedNavigation.RemainingCount);
+        Assert.Empty(deliveredSelection.Tasks);
+        Assert.Empty(deliveredSelection.MilestoneGroups);
+
+        projectRoot.Config!.Milestones["exceptional"].Delivery = null;
+        projectRoot.Config.WriteConfig(projectRoot);
+
+        var reopened = service.GetBoard(new BoardQuery()).Payload!;
+        Assert.Contains(reopened.Tasks, task => task.Task.Id == "OPS-0001");
+        Assert.Contains(reopened.Milestones, milestone => milestone.Key == "exceptional");
     }
 
     [Fact]

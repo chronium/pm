@@ -15,7 +15,7 @@ public class ListCommand(BoardService boardService, LinkedProjectReadService lin
             return await ExecuteLinkedAsync(settings, cancellationToken);
 
         var result = boardService.GetBoard(
-            new BoardQuery(settings.Track, settings.Milestone, settings.State),
+            new BoardQuery(settings.Track, settings.Milestone, settings.State, settings.IncludeDelivered),
             BoardService.CliDescriptionPreviewLength);
         if (!result.Success)
         {
@@ -45,7 +45,7 @@ public class ListCommand(BoardService boardService, LinkedProjectReadService lin
 
         var result = await linkedReads.ListTasksAsync(
             request.Payload!,
-            new BoardQuery(settings.Track, settings.Milestone, settings.State),
+            new BoardQuery(settings.Track, settings.Milestone, settings.State, settings.IncludeDelivered),
             cancellationToken);
         if (!result.Success)
         {
@@ -133,5 +133,9 @@ public class ListCommand(BoardService boardService, LinkedProjectReadService lin
         [CommandOption("--milestone <MILESTONE>")]
         [Description("List tasks in one milestone")]
         public string? Milestone { get; init; }
+
+        [CommandOption("--include-delivered")]
+        [Description("Include tasks assigned to delivered milestones")]
+        public bool IncludeDelivered { get; init; }
     }
 }

@@ -226,7 +226,7 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "list_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Lists tasks with optional track, milestone, state, linked-project selector, or family scope.")]
+    [Description("Lists tasks with optional track, milestone, state, linked-project selector, or family scope. Tasks assigned to delivered milestones are excluded unless includeDelivered is true.")]
     public async Task<McpToolResponse<TaskListPayload>> ListTasks(
         string? track = null,
         string? milestone = null,
@@ -235,6 +235,8 @@ public sealed class PmMcpTools(
         string? project = null,
         [Description("Read across every available project in the linked family; cannot be combined with project.")]
         bool family = false,
+        [Description("Include tasks assigned to delivered milestones.")]
+        bool includeDelivered = false,
         CancellationToken cancellationToken = default)
     {
         if (IsLocalRead(project, family) &&
@@ -242,7 +244,7 @@ public sealed class PmMcpTools(
              !projectRoot.TryReadProjectId(out _)))
         {
             var local = boardService.GetBoard(new BoardQuery(
-                NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state)));
+                NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state), includeDelivered));
             if (!local.Success) return McpToolResponse<TaskListPayload>.FromFailure(local);
             var localTasks = local.Payload!.MilestoneGroups
                 .SelectMany(group => group.States)
@@ -259,7 +261,11 @@ public sealed class PmMcpTools(
         if (!request.Success) return McpToolResponse<TaskListPayload>.FromFailure(request);
         var result = await linkedProjectReadService.ListTasksAsync(
             request.Payload!,
-            new BoardQuery(NormalizeFilter(track), NormalizeFilter(milestone), NormalizeFilter(state)),
+            new BoardQuery(
+                NormalizeFilter(track),
+                NormalizeFilter(milestone),
+                NormalizeFilter(state),
+                includeDelivered),
             cancellationToken);
         if (!result.Success)
             return McpToolResponse<TaskListPayload>.FromFailure(result);
@@ -274,7 +280,7 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "search_tasks", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown. Supports optional linked-project selection or family scope. Structured predicates include state:, id:, track:, milestone:, and in:selection or in:all.")]
+    [Description("Searches task IDs, metadata, dependencies, descriptions, and full markdown. Tasks assigned to delivered milestones are excluded unless includeDelivered is true. Supports optional linked-project selection or family scope. Structured predicates include state:, id:, track:, milestone:, and in:selection or in:all.")]
     public async Task<McpToolResponse<TaskSearchPayload>> SearchTasks(
         string query,
         int limit = 20,
@@ -282,13 +288,18 @@ public sealed class PmMcpTools(
         string? project = null,
         [Description("Search every available project in the linked family; cannot be combined with project.")]
         bool family = false,
+        [Description("Include tasks assigned to delivered milestones.")]
+        bool includeDelivered = false,
         CancellationToken cancellationToken = default)
     {
         if (IsLocalRead(project, family) &&
             (capabilityContext.Profile == McpCapabilityProfile.RunWorker ||
              !projectRoot.TryReadProjectId(out _)))
         {
-            var local = taskService.SearchTasks(query, limit);
+            var local = taskService.SearchTasks(
+                query,
+                limit,
+                new TaskSearchContext(IncludeDelivered: includeDelivered));
             if (!local.Success) return McpToolResponse<TaskSearchPayload>.FromFailure(local);
             var localTasks = local.Payload!.Select(task => ToTaskSearchResult(task)).ToList();
             return McpToolResponse<TaskSearchPayload>.Ok(
@@ -300,7 +311,11 @@ public sealed class PmMcpTools(
         var request = LinkedProjectReadRequest.FromOptions(project, family);
         if (!request.Success) return McpToolResponse<TaskSearchPayload>.FromFailure(request);
         var result = await linkedProjectReadService.SearchTasksAsync(
-            query, limit, request.Payload, cancellationToken: cancellationToken);
+            query,
+            limit,
+            request.Payload,
+            new TaskSearchContext(IncludeDelivered: includeDelivered),
+            cancellationToken);
         if (!result.Success)
             return McpToolResponse<TaskSearchPayload>.FromFailure(result);
 
@@ -393,10 +408,12 @@ public sealed class PmMcpTools(
 
     [McpServerTool(Name = "list_milestones", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
-    [Description("Lists configured milestones and owning-project metadata. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
+    [Description("Lists undelivered milestones and owning-project metadata. Set includeDelivered to true to include delivered milestones. The optional project selector accepts current, parent, a stable project ID, or a unique alias.")]
     public async Task<ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>> ListMilestones(
         [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
         string? project = null,
+        [Description("Include delivered milestones.")]
+        bool includeDelivered = false,
         CancellationToken cancellationToken = default)
     {
         var denied = ProjectScopedLinkedReadDenied<IReadOnlyList<MilestonePayload>>(project);
@@ -405,7 +422,16 @@ public sealed class PmMcpTools(
         if (!result.Success)
             return ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>.FromFailure(result);
         var item = result.Payload!.Items.Single();
-        var milestones = ToMilestones(item.Resource.Config!.Milestones);
+        var activation = new MilestoneActivationResolver(item.Resource).ResolveCurrentProject();
+        if (!activation.Success)
+            return ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>.FromFailure(activation);
+        var deliveredMilestoneKeys = DeliveredWorkVisibility.ResolveDeliveredMilestoneKeys(activation.Payload!);
+        var milestones = ToMilestones(item.Resource.Config!.Milestones)
+            .Where(milestone => DeliveredWorkVisibility.Includes(
+                milestone.Key,
+                includeDelivered,
+                deliveredMilestoneKeys))
+            .ToList();
         return ProjectScopedMcpToolResponse<IReadOnlyList<MilestonePayload>>.Ok(
             $"Returned {milestones.Count} milestone(s).",
             milestones,

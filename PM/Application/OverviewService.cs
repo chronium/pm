@@ -79,7 +79,7 @@ public sealed class OverviewService(LinkedProjectReadService linkedProjectReads)
         if (needsBoard)
         {
             var boardResult = new BoardService(project, new MilestoneActivationResolver(project))
-                .GetBoard(new BoardQuery());
+                .GetBoard(new BoardQuery(IncludeDelivered: true));
             if (!boardResult.Success)
                 return AppResult<OverviewDocument>.Fail(boardResult.ErrorCode!, boardResult.Message!);
 
@@ -318,7 +318,7 @@ public sealed class OverviewService(LinkedProjectReadService linkedProjectReads)
         return AppResult<bool>.Ok(TaskSearchEvaluator.Evaluate(
             new TaskSearchDocument(task.Task, markdown, task.Track, task.State, task.Priority),
             query,
-            new TaskSearchContext()).Matches);
+            new TaskSearchContext(IncludeDelivered: true)).Matches);
     }
 
     private static IReadOnlyList<OverviewWikiPage> ResolveWikiPages(

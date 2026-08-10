@@ -20,7 +20,11 @@ public enum TaskSearchScope
     All,
 }
 
-public sealed record TaskSearchContext(string? Track = null, string? Milestone = null, string? State = null);
+public sealed record TaskSearchContext(
+    string? Track = null,
+    string? Milestone = null,
+    string? State = null,
+    bool IncludeDelivered = false);
 
 public static class TaskSearchQueryParser
 {

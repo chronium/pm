@@ -833,6 +833,37 @@ public class ApplicationServiceTests
             .Payload!.Count);
     }
 
+    [Fact]
+    public async Task TaskServiceSearchHidesDeliveredWorkEvenForProjectWideQueries()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new() { ["active"] = "Active", ["delivered"] = "Delivered" });
+        config.Milestones["delivered"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with open work.",
+            AcceptedTaskIds = ["PM-0002"],
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var active = TestData.Task("PM-0001", "Needle active", milestone: "active");
+        var delivered = TestData.Task("PM-0002", "Needle delivered", milestone: "delivered");
+        projectRoot.WriteTask(active);
+        projectRoot.WriteTask(delivered);
+        projectRoot.UpdateTaskState(active, "todo");
+        projectRoot.UpdateTaskState(delivered, "todo");
+        var service = TestTaskServices.Create(projectRoot, new RecordingNextIdService());
+
+        var defaultResults = service.SearchTasks("in:all").Payload!;
+        var includedResults = service.SearchTasks(
+            "in:all",
+            context: new TaskSearchContext(IncludeDelivered: true)).Payload!;
+
+        Assert.Equal(["PM-0001"], defaultResults.Select(result => result.Task.Id));
+        Assert.Equal(["PM-0001", "PM-0002"], includedResults.Select(result => result.Task.Id));
+    }
+
     [Theory]
     [InlineData("in:")]
     [InlineData("in: project")]

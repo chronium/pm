@@ -15,7 +15,10 @@ public sealed class TaskSearchCommand(TaskService taskService, LinkedProjectRead
         if (settings.Family || !string.IsNullOrWhiteSpace(settings.Project))
             return await ExecuteLinkedAsync(settings, cancellationToken);
 
-        var result = taskService.SearchTasks(settings.Query, settings.Limit);
+        var result = taskService.SearchTasks(
+            settings.Query,
+            settings.Limit,
+            new TaskSearchContext(IncludeDelivered: settings.IncludeDelivered));
         if (!result.Success)
         {
             AnsiConsole.MarkupLineInterpolated($"[red]{(result.Message ?? "Task search failed.").EscapeMarkup()}[/]");
@@ -63,7 +66,11 @@ public sealed class TaskSearchCommand(TaskService taskService, LinkedProjectRead
         }
 
         var result = await linkedReads.SearchTasksAsync(
-            settings.Query, settings.Limit, request.Payload, cancellationToken: cancellationToken);
+            settings.Query,
+            settings.Limit,
+            request.Payload,
+            new TaskSearchContext(IncludeDelivered: settings.IncludeDelivered),
+            cancellationToken);
         if (!result.Success)
         {
             WriteError(result.Message);
@@ -118,6 +125,10 @@ public sealed class TaskSearchCommand(TaskService taskService, LinkedProjectRead
         [CommandArgument(0, "<query>")]
         [Description("Full-text and structured task query (use in:all for project-wide search)")]
         public string Query { get; init; } = string.Empty;
+
+        [CommandOption("--include-delivered")]
+        [Description("Include tasks assigned to delivered milestones")]
+        public bool IncludeDelivered { get; init; }
 
         [CommandOption("--limit <COUNT>")]
         [Description("Maximum results (1-100)")]

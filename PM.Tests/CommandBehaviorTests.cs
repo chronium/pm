@@ -595,6 +595,61 @@ public class CommandBehaviorTests
     }
 
     [Fact]
+    public async Task TaskAndMilestoneCommandsRequireExplicitDeliveredWorkOptIn()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["active"] = "Active milestone",
+                ["delivered"] = "Delivered milestone",
+            });
+        config.Milestones["delivered"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with open work.",
+            AcceptedTaskIds = ["PM-0002"],
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var active = TestData.Task("PM-0001", "Active task", milestone: "active");
+        var delivered = TestData.Task("PM-0002", "Delivered task", milestone: "delivered");
+        projectRoot.WriteTask(active);
+        projectRoot.WriteTask(delivered);
+        projectRoot.UpdateTaskState(active, "todo");
+        projectRoot.UpdateTaskState(delivered, "todo");
+        var listCommand = new ListCommand(TestBoardServices.Create(projectRoot), CreateLinkedReads(projectRoot));
+        var searchCommand = new TaskSearchCommand(
+            TestTaskServices.Create(projectRoot, new RecordingNextIdService()),
+            CreateLinkedReads(projectRoot));
+        var milestoneCommand = new MilestoneListCommand(
+            new ProjectConfigService(projectRoot),
+            new MilestoneActivationResolver(projectRoot));
+
+        var defaultList = await ExecuteListCommand(listCommand, new ListCommand.Settings());
+        var includedList = await ExecuteListCommand(listCommand,
+            new ListCommand.Settings { IncludeDelivered = true });
+        var defaultSearch = await CaptureConsole(() => searchCommand.ExecuteAsync(null!,
+            new TaskSearchCommand.Settings { Query = "in:all" }, CancellationToken.None));
+        var includedSearch = await CaptureConsole(() => searchCommand.ExecuteAsync(null!,
+            new TaskSearchCommand.Settings { Query = "in:all", IncludeDelivered = true }, CancellationToken.None));
+        var defaultMilestones = await CaptureConsole(() => milestoneCommand.Execute(
+            null!, new MilestoneListCommand.Settings(), CancellationToken.None));
+        var includedMilestones = await CaptureConsole(() => milestoneCommand.Execute(
+            null!, new MilestoneListCommand.Settings { IncludeDelivered = true }, CancellationToken.None));
+
+        Assert.Contains("Active task", defaultList.Output);
+        Assert.DoesNotContain("Delivered task", defaultList.Output);
+        Assert.Contains("Delivered task", includedList.Output);
+        Assert.Contains("Active task", defaultSearch.Output);
+        Assert.DoesNotContain("Delivered task", defaultSearch.Output);
+        Assert.Contains("Delivered task", includedSearch.Output);
+        Assert.Contains("Active milestone", defaultMilestones.Output);
+        Assert.DoesNotContain("Delivered milestone", defaultMilestones.Output);
+        Assert.Contains("Delivered milestone", includedMilestones.Output);
+    }
+
+    [Fact]
     public async Task DryRunAddWithNoProjectIdFileUsesPlaceholderAndDoesNotRegisterProject()
     {
         using var workspace = new TempWorkingDirectory();
@@ -1726,7 +1781,9 @@ public class CommandBehaviorTests
         var projectRoot = await workspace.CreateProject(TestData.Config(
             milestones: new Dictionary<string, string> { ["m<1"] = "Milestone <One>" },
             milestonePriorities: new Dictionary<string, string> { ["m<1"] = "medium" }));
-        var command = new MilestoneListCommand(new ProjectConfigService(projectRoot));
+        var command = new MilestoneListCommand(
+            new ProjectConfigService(projectRoot),
+            new MilestoneActivationResolver(projectRoot));
 
         var (exitCode, output) = await CaptureConsole(() =>
             command.Execute(null!, new MilestoneListCommand.Settings(), CancellationToken.None));

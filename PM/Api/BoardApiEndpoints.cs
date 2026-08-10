@@ -75,7 +75,8 @@ public static class BoardApiEndpoints
     {
         api.MapGet("/board/navigation", (HttpRequest request) =>
             {
-                var result = boardService.GetNavigation();
+                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
+                var result = boardService.GetNavigation(includeDelivered: true);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
 
                 var revisionResult = revisions.GetBoardRevision(result.Payload!.Board);
@@ -98,7 +99,9 @@ public static class BoardApiEndpoints
         api.MapGet("/board", async (HttpRequest request, string? track, string? milestone, string? state,
                 CancellationToken cancellationToken) =>
             {
-                var query = new BoardQuery(Normalize(track), Normalize(milestone), Normalize(state));
+                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
+                var query = new BoardQuery(
+                    Normalize(track), Normalize(milestone), Normalize(state), IncludeDelivered: true);
                 var result = boardService.GetBoard(query);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var board = result.Payload!;

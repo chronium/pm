@@ -4,7 +4,11 @@ using PM.Tasks;
 
 namespace PM.Application;
 
-public sealed record BoardQuery(string? Track = null, string? Milestone = null, string? State = null);
+public sealed record BoardQuery(
+    string? Track = null,
+    string? Milestone = null,
+    string? State = null,
+    bool IncludeDelivered = false);
 
 public sealed record BoardData(
     string ProjectName,
@@ -119,7 +123,11 @@ public partial class BoardService(
 
         if (string.IsNullOrWhiteSpace(query.Milestone))
             milestoneKeys.Add(null);
-        else if (!milestoneKeys.Contains(query.Milestone, StringComparer.Ordinal))
+        else if (DeliveredWorkVisibility.Includes(
+                     query.Milestone,
+                     query.IncludeDelivered,
+                     readContext.DeliveredMilestoneKeys) &&
+                 !milestoneKeys.Contains(query.Milestone, StringComparer.Ordinal))
             milestoneKeys.Add(query.Milestone);
 
         var stateOptions = config.TaskStates
@@ -159,6 +167,10 @@ public partial class BoardService(
             config.Name,
             config.Tracks.Select(track => new BoardOption(track.Key, track.Value)).ToList(),
             config.Milestones
+                .Where(milestone => DeliveredWorkVisibility.Includes(
+                    milestone.Key,
+                    query.IncludeDelivered,
+                    readContext.DeliveredMilestoneKeys))
                 .Select(milestone => new BoardOption(
                     milestone.Key,
                     milestone.Value.Title,
@@ -171,9 +183,9 @@ public partial class BoardService(
             readContext.Activation));
     }
 
-    public AppResult<BoardNavigationData> GetNavigation()
+    public AppResult<BoardNavigationData> GetNavigation(bool includeDelivered = false)
     {
-        var boardResult = GetBoard(new BoardQuery());
+        var boardResult = GetBoard(new BoardQuery(IncludeDelivered: includeDelivered));
         if (!boardResult.Success)
             return AppResult<BoardNavigationData>.Fail(boardResult.ErrorCode!, boardResult.Message!);
 
@@ -254,7 +266,10 @@ public partial class BoardService(
         var milestoneIndex = BuildMilestoneIndex(config);
         var readContext = ReadContext();
         var actionable = GetBoardTasks(
-                new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength, orderLookup, readContext)
+                new BoardQuery(query.Track, query.Milestone, IncludeDelivered: true),
+                descriptionPreviewLength,
+                orderLookup,
+                readContext)
             .Where(task => !string.Equals(task.State, "done", StringComparison.Ordinal))
             .ToList();
         var activationEligible = actionable
@@ -344,6 +359,10 @@ public partial class BoardService(
                     GetDescriptionPreview(task.Description, descriptionPreviewLength),
                     projectRoot.GetTaskFilePath(task.Id));
             })
+            .Where(entry => DeliveredWorkVisibility.Includes(
+                entry.Milestone,
+                query.IncludeDelivered,
+                readContext.DeliveredMilestoneKeys))
             .Where(entry => string.IsNullOrWhiteSpace(query.Track) || entry.Track == query.Track)
             .Where(entry => string.IsNullOrWhiteSpace(query.Milestone) || entry.Milestone == query.Milestone)
             .Where(entry => string.IsNullOrWhiteSpace(query.State) || entry.State == query.State)
@@ -556,7 +575,8 @@ public partial class BoardService(
             tasksById,
             stateById,
             activation,
-            activation.Milestones.ToDictionary(milestone => milestone.Key, StringComparer.Ordinal));
+            activation.Milestones.ToDictionary(milestone => milestone.Key, StringComparer.Ordinal),
+            DeliveredWorkVisibility.ResolveDeliveredMilestoneKeys(activation));
     }
 
     private static TaskActivationEligibility ResolveActivationEligibility(
@@ -594,7 +614,8 @@ public partial class BoardService(
         IReadOnlyDictionary<string, TaskItem> TasksById,
         IReadOnlyDictionary<string, string> StateById,
         MilestoneActivationSnapshot Activation,
-        IReadOnlyDictionary<string, ResolvedMilestone> MilestonesByKey);
+        IReadOnlyDictionary<string, ResolvedMilestone> MilestonesByKey,
+        IReadOnlySet<string> DeliveredMilestoneKeys);
 
     private static string StripMarkdownPrefix(string line)
     {

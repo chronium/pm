@@ -605,6 +605,23 @@ public sealed class LinkedProjectReadServiceTests
         var family = await service.GetNextTaskAsync(
             new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
             new NextTaskQuery(Milestone: "release", ReadyOnly: false));
+        var familyTasks = await service.ListTasksAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Family));
+        var familyTasksWithDelivered = await service.ListTasksAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+            new BoardQuery(IncludeDelivered: true));
+        var deliveredTasks = await service.ListTasksAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Project, "ops"));
+        var deliveredTasksIncluded = await service.ListTasksAsync(
+            new LinkedProjectReadRequest(LinkedProjectReadScope.Project, "ops"),
+            new BoardQuery(IncludeDelivered: true));
+        var familySearch = await service.SearchTasksAsync(
+            "in:all",
+            request: new LinkedProjectReadRequest(LinkedProjectReadScope.Family));
+        var familySearchWithDelivered = await service.SearchTasksAsync(
+            "in:all",
+            request: new LinkedProjectReadRequest(LinkedProjectReadScope.Family),
+            context: new TaskSearchContext(IncludeDelivered: true));
         var childBoard = TestBoardServices.Create(inactiveChild).GetBoard(new BoardQuery()).Payload!;
         var childTrigger = childBoard.MilestoneActivation.ActivationTriggers.Single(trigger => trigger.Key == "entry");
 
@@ -616,6 +633,12 @@ public sealed class LinkedProjectReadServiceTests
         Assert.Contains("milestone release is delivered", delivered.Payload.Reason);
         Assert.Equal("PM-0001", family.Payload!.Task!.Task.Id);
         Assert.Contains("Eligible: milestone release is active.", family.Payload.Reason);
+        Assert.DoesNotContain(familyTasks.Payload!.Items, item => item.Resource.Task.Id == "OPS-0001");
+        Assert.Contains(familyTasksWithDelivered.Payload!.Items, item => item.Resource.Task.Id == "OPS-0001");
+        Assert.Empty(deliveredTasks.Payload!.Items);
+        Assert.Equal("OPS-0001", Assert.Single(deliveredTasksIncluded.Payload!.Items).Resource.Task.Id);
+        Assert.DoesNotContain(familySearch.Payload!.Items, item => item.Resource.Task.Id == "OPS-0001");
+        Assert.Contains(familySearchWithDelivered.Payload!.Items, item => item.Resource.Task.Id == "OPS-0001");
         Assert.False(childTrigger.RequirementsSatisfied);
         Assert.Equal(0, childTrigger.SatisfiedRequirementCount);
     }

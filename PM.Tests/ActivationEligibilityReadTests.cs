@@ -6,7 +6,7 @@ namespace PM.Tests;
 public sealed class ActivationEligibilityReadTests
 {
     [Fact]
-    public async Task BoardNavigationAndTaskReadsExposeActivationWithoutHidingWork()
+    public async Task BoardNavigationAndTaskReadsExposeActivationWithDeliveredOptIn()
     {
         using var workspace = new TempWorkingDirectory();
         var config = ActivationConfig();
@@ -20,10 +20,14 @@ public sealed class ActivationEligibilityReadTests
         AddTask(root, "PM-0005", "Unassigned", null, "review");
         var service = TestBoardServices.Create(root);
 
-        var board = service.GetBoard(new BoardQuery()).Payload!;
-        var navigation = service.GetNavigation().Payload!;
+        var defaultBoard = service.GetBoard(new BoardQuery()).Payload!;
+        var board = service.GetBoard(new BoardQuery(IncludeDelivered: true)).Payload!;
+        var navigation = service.GetNavigation(includeDelivered: true).Payload!;
         var detail = service.GetTask(inactive.Id).Payload!;
 
+        Assert.Equal(4, defaultBoard.Tasks.Count);
+        Assert.DoesNotContain(defaultBoard.Tasks, task => task.Task.Id == "PM-0004");
+        Assert.DoesNotContain(defaultBoard.Milestones, milestone => milestone.Key == "delivered");
         Assert.Equal(5, board.Tasks.Count);
         Assert.Equal(MilestoneLifecycle.Inactive, Milestone(board, "inactive").Lifecycle);
         Assert.Equal(MilestoneLifecycle.Active, Milestone(board, "active").Lifecycle);

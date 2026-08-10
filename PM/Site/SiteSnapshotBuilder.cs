@@ -40,7 +40,7 @@ public sealed class SiteSnapshotBuilder(
         if (!settingsResult.Success)
             return Fail(settingsResult);
 
-        var navigationResult = boardService.GetNavigation();
+        var navigationResult = boardService.GetNavigation(includeDelivered: true);
         if (!navigationResult.Success)
             return Fail(navigationResult);
 

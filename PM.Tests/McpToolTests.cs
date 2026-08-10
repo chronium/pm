@@ -155,6 +155,50 @@ public class McpToolTests
     }
 
     [Fact]
+    public async Task DeliveredWorkRequiresExplicitOptInForMcpCollections()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            milestones: new Dictionary<string, string>
+            {
+                ["active"] = "Active milestone",
+                ["delivered"] = "Delivered milestone",
+            });
+        config.Milestones["delivered"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with open work.",
+            AcceptedTaskIds = ["PM-0002"],
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var active = TestData.Task("PM-0001", "Needle active", milestone: "active");
+        var delivered = TestData.Task("PM-0002", "Needle delivered", milestone: "delivered");
+        projectRoot.WriteTask(active);
+        projectRoot.WriteTask(delivered);
+        projectRoot.UpdateTaskState(active, "todo");
+        projectRoot.UpdateTaskState(delivered, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var defaultTasks = await tools.ListTasks();
+        var includedTasks = await tools.ListTasks(includeDelivered: true);
+        var defaultSearch = await tools.SearchTasks("in:all");
+        var includedSearch = await tools.SearchTasks("in:all", includeDelivered: true);
+        var defaultMilestones = await tools.ListMilestones();
+        var includedMilestones = await tools.ListMilestones(includeDelivered: true);
+        var directTask = await tools.GetTask("PM-0002");
+
+        Assert.Equal(["PM-0001"], defaultTasks.Data!.Tasks.Select(task => task.Id));
+        Assert.Equal(["PM-0001", "PM-0002"], includedTasks.Data!.Tasks.Select(task => task.Id));
+        Assert.Equal(["PM-0001"], defaultSearch.Data!.Tasks.Select(task => task.Id));
+        Assert.Equal(["PM-0001", "PM-0002"], includedSearch.Data!.Tasks.Select(task => task.Id));
+        Assert.Equal(["active"], defaultMilestones.Data!.Select(milestone => milestone.Key));
+        Assert.Equal(["active", "delivered"], includedMilestones.Data!.Select(milestone => milestone.Key));
+        Assert.True(directTask.Success);
+        Assert.Equal("PM-0002", directTask.Data!.Id);
+    }
+
+    [Fact]
     public async Task GetNextTaskReturnsStructuredTaskAndReason()
     {
         using var workspace = new TempWorkingDirectory();

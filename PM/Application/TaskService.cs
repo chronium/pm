@@ -55,6 +55,7 @@ public sealed class TaskService
 {
     private readonly ProjectRoot projectRoot;
     private readonly INextIdService nextIdService;
+    private readonly MilestoneActivationResolver activationResolver;
     private readonly MilestoneActivationGraphService activationGraph;
     private readonly TaskLifecycleMutationService lifecycleMutations;
     private readonly TaskServiceFactory factory;
@@ -62,12 +63,14 @@ public sealed class TaskService
     internal TaskService(
         ProjectRoot projectRoot,
         INextIdService nextIdService,
+        MilestoneActivationResolver activationResolver,
         MilestoneActivationGraphService activationGraph,
         TaskLifecycleMutationService lifecycleMutations,
         TaskServiceFactory factory)
     {
         this.projectRoot = projectRoot;
         this.nextIdService = nextIdService;
+        this.activationResolver = activationResolver;
         this.activationGraph = activationGraph;
         this.lifecycleMutations = lifecycleMutations;
         this.factory = factory;
@@ -208,7 +211,10 @@ public sealed class TaskService
 
         context ??= new TaskSearchContext();
         var normalizedContext = new TaskSearchContext(
-            NormalizeFilter(context.Track), NormalizeFilter(context.Milestone), NormalizeFilter(context.State));
+            NormalizeFilter(context.Track),
+            NormalizeFilter(context.Milestone),
+            NormalizeFilter(context.State),
+            context.IncludeDelivered);
         var contextError = ValidateSearchContext(normalizedContext, parsedQuery.Payload!.Scope);
         if (contextError != null) return contextError;
 
@@ -233,10 +239,18 @@ public sealed class TaskService
                 task => task.Id,
                 task => projectRoot.TryGetState(task, out var state) ? state : string.Empty,
                 StringComparer.Ordinal);
+        var activation = activationResolver.Resolve(projectRoot.Config!, tasksById, stateById);
+        var deliveredMilestoneKeys = DeliveredWorkVisibility.ResolveDeliveredMilestoneKeys(activation);
 
         var results = new List<TaskSearchResult>();
         foreach (var (task, filePath, markdown) in parsedTasks)
         {
+            if (!DeliveredWorkVisibility.Includes(
+                    task.Milestone,
+                    normalizedContext.IncludeDelivered,
+                    deliveredMilestoneKeys))
+                continue;
+
             var track = projectRoot.ResolveTaskTrack(task);
             var state = stateById.TryGetValue(task.Id, out var currentState) ? currentState : string.Empty;
             var priority = PriorityLevel.Resolve(projectRoot.Config!, task);

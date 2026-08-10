@@ -1,7 +1,7 @@
 ---
 title: CLI Guide
 createdAt: 2026-07-27T06:14:45.2598480Z
-modifiedAt: 2026-08-07T18:14:29.7601800Z
+modifiedAt: 2026-08-10T08:34:36.1312790Z
 ---
 
 The CLI is the direct terminal adapter over PM's application services. Run it from the project directory or any descendant.
@@ -11,7 +11,7 @@ The CLI is the direct terminal adapter over PM's application services. Run it fr
 | Command | Purpose |
 | --- | --- |
 | `pm init` | Interactively initialize `.pm/` |
-| `pm list` | List tasks, optionally filtered by state, track, or milestone |
+| `pm list` | List active work, optionally filtered by state, track, or milestone |
 | `pm move <task-id>` | Select a new status for a task |
 | `pm doctor` | Validate project files and references |
 | `pm web` | Serve the embedded Angular app |
@@ -27,6 +27,7 @@ pm task add "Compile shaders" --track RENDER --milestone m2 \
 pm task add "Write migration notes" --track DOCS --edit
 pm task metadata RENDER-0001 --priority high --depends-on BUILD-0002,BUILD-0003
 pm task search "shader state:todo track:RENDER in:all" --limit 20
+pm task search "release notes" --include-delivered
 pm task edit RENDER-0001
 pm task remove RENDER-0001
 ```
@@ -45,6 +46,8 @@ Task search combines free text with predicates:
 
 Multiple predicates narrow the result together. Repeating a predicate such as `state:todo state:review` allows either value.
 
+Task collections focus on active work: `pm list` and `pm task search` exclude tasks assigned to delivered milestones by default. Pass `--include-delivered` to either command when reviewing historical delivery work. `in:all` broadens search beyond the current track, milestone, and state selection; it does not include delivered work unless the flag is also present. Direct task reads remain available.
+
 ## Tracks, milestones, and statuses
 
 ~~~sh
@@ -53,9 +56,12 @@ pm track rename API "Application API"
 pm milestone add public-beta "Public beta"
 pm milestone priority public-beta high
 pm milestone list
+pm milestone list --include-delivered
 pm status add review "In review"
 pm status rename review "Review"
 ~~~
+
+`pm milestone list` also focuses on undelivered milestones by default; pass `--include-delivered` for the complete history. Tracks remain listed even when all of their tasks belong to delivered milestones.
 
 A track, milestone, or status can only be removed when it is no longer referenced. Milestones are structured deliverables; edit their description and required gates through the web settings experience or the corresponding trusted API/MCP operations.
 

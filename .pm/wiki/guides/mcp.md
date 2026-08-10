@@ -1,7 +1,7 @@
 ---
 title: MCP Guide
 createdAt: 2026-07-27T06:14:45.2638910Z
-modifiedAt: 2026-08-07T18:14:29.7504410Z
+modifiedAt: 2026-08-10T08:36:49.3971580Z
 ---
 
 PM exposes a Model Context Protocol server over standard input/output. It gives coding agents structured access to the same services used by the CLI and web API.
@@ -53,6 +53,12 @@ The exact configuration shape is client-specific. The important pieces are the e
 7. Move the task to the completed status in the same change set as the implementation.
 
 Without `readyOnly`, `get_next_task` may return the best blocked candidate when no dependency-ready task exists. Always inspect `dependenciesReady` and `waitingOnDependencies` before treating a result as actionable.
+
+## Delivered work visibility
+
+Collection reads focus on active work. `list_tasks`, `search_tasks`, and `list_milestones` exclude tasks or milestones whose milestone currently resolves to the delivered lifecycle. Pass `includeDelivered: true` when historical delivery work is required. The default and opt-in behave consistently for the current project, a selected linked project, and family task reads.
+
+The `in:all` search predicate broadens the configured track, milestone, and state selection; it does not imply `includeDelivered`. Direct `get_task` reads, `get_next_task`, `get_project`, and `get_activation_switchboard` retain their existing semantics. Track definitions also remain available even when their current task count becomes zero after delivered work is hidden.
 
 ## Milestone activation
 

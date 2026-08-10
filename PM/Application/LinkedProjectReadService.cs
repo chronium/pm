@@ -344,7 +344,7 @@ public sealed class LinkedProjectReadService
                 continue;
 
             var board = CreateBoardService(member.Project!).GetBoard(
-                new BoardQuery(query.Track, query.Milestone), descriptionPreviewLength);
+                new BoardQuery(query.Track, query.Milestone, IncludeDelivered: true), descriptionPreviewLength);
             if (!board.Success)
             {
                 if (!CanContinue(request, member))

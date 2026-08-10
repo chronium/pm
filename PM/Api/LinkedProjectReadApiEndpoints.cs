@@ -69,7 +69,8 @@ public static class LinkedProjectReadApiEndpoints
         projects.MapGet("/board/navigation", (HttpRequest request) =>
             {
                 var context = GetContext(request);
-                var result = context.Board.GetNavigation();
+                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
+                var result = context.Board.GetNavigation(includeDelivered: true);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var revision = context.Revisions.GetBoardRevision(result.Payload!.Board);
                 if (!revision.Success)
@@ -88,7 +89,9 @@ public static class LinkedProjectReadApiEndpoints
                 CancellationToken cancellationToken) =>
             {
                 var context = GetContext(request);
-                var query = new BoardQuery(Normalize(track), Normalize(milestone), Normalize(state));
+                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
+                var query = new BoardQuery(
+                    Normalize(track), Normalize(milestone), Normalize(state), IncludeDelivered: true);
                 var result = context.Board.GetBoard(query);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var board = result.Payload!;
@@ -117,8 +120,11 @@ public static class LinkedProjectReadApiEndpoints
         projects.MapGet("/tasks/search", (HttpRequest request, string query, int limit = 20,
                 string? track = null, string? milestone = null, string? state = null) =>
             {
+                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
                 var result = GetContext(request).Tasks.SearchTasks(
-                    query, limit, new TaskSearchContext(track, milestone, state));
+                    query,
+                    limit,
+                    new TaskSearchContext(track, milestone, state, IncludeDelivered: true));
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 return Results.Ok(result.Payload!.Select(item => new TaskSearchResultResponse(
                     item.Task.Id, item.Task.Title, item.State, item.Track, item.Milestone,

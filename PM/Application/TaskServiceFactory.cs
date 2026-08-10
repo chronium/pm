@@ -18,6 +18,6 @@ public sealed class TaskServiceFactory(TimeProvider timeProvider)
             resolver,
             automaticActivations,
             persistence ?? new ProjectConfigPersistence(projectRoot));
-        return new TaskService(projectRoot, nextIdService, graph, lifecycle, this);
+        return new TaskService(projectRoot, nextIdService, resolver, graph, lifecycle, this);
     }
 }
