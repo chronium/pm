@@ -19,6 +19,10 @@
   padding: 0 var(--pm-space-3);
 }
 
+.topbar-project-context {
+  min-width: 0;
+}
+
 .brand {
   color: var(--pm-text-primary);
   font-size: var(--pm-font-size-sm);
@@ -163,6 +167,17 @@
   overflow: hidden;
 }
 
+.overview-mobile-sidebar,
+.overview-mobile-backdrop {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .topbar-project-context {
+    flex: 0 0 calc(var(--pm-sidebar-width) - var(--pm-space-3) - var(--pm-space-2));
+  }
+}
+
 @media (max-width: 767px) {
   .topbar {
     gap: var(--pm-space-1);
@@ -188,7 +203,6 @@
 
   .topbar-actions {
     gap: var(--pm-space-1);
-    margin-left: 0;
   }
 
   .snapshot-context time {
@@ -204,8 +218,83 @@
   }
 }
 
+@media (min-width: 431px) and (max-width: 767px) {
+  .topbar--overview .menu-button {
+    display: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .topbar-project-context {
+    display: none;
+  }
+
+  .mode-navigation {
+    flex: 1 1 auto;
+    justify-content: space-evenly;
+    margin-left: 0;
+  }
+
+  .mode-navigation a {
+    min-width: 0;
+    padding-inline: var(--pm-space-1);
+  }
+
+  .mode-navigation a.active .mode-count {
+    display: none;
+  }
+
+  .overview-mobile-sidebar {
+    position: fixed;
+    z-index: 50;
+    inset: var(--pm-topbar-height) auto 0 0;
+    display: flex;
+    flex-direction: column;
+    width: min(var(--pm-sidebar-width), calc(100vw - 48px));
+    padding: var(--pm-space-3) var(--pm-space-2);
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition:
+      transform var(--pm-motion-normal) var(--pm-ease-standard),
+      visibility 0s var(--pm-motion-normal);
+  }
+
+  .overview-mobile-sidebar--open {
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+
+  .overview-mobile-backdrop {
+    position: fixed;
+    z-index: 40;
+    inset: var(--pm-topbar-height) 0 0;
+    display: block;
+    visibility: hidden;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    opacity: 0;
+    background: var(--pm-overlay-backdrop);
+    transition:
+      opacity var(--pm-motion-normal) var(--pm-ease-standard),
+      visibility 0s var(--pm-motion-normal);
+  }
+
+  .overview-mobile-backdrop--open {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sync-status--active ng-icon {
     animation-duration: 1.6s;
+  }
+
+  .overview-mobile-sidebar,
+  .overview-mobile-backdrop {
+    transition-duration: 0.01ms;
   }
 }

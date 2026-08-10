@@ -53,23 +53,19 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   await expect(page.locator('.snapshot-context')).toBeVisible();
   await expect(page.locator('.snapshot-context')).toContainText('Read-only');
   const modeCount = page.locator('.mode-count');
-  await expect(modeCount).toBeVisible();
   await expect(modeCount).toHaveCSS('white-space', 'nowrap');
   if (testInfo.project.name.includes('mobile')) {
-    await expect(modeCount.locator('.mode-count-suffix')).toBeHidden();
+    await expect(modeCount).toBeHidden();
+    await expect(page.getByRole('link', { name: /Tasks, \d+ tasks left/ })).toBeVisible();
     const headerLayout = await page.locator('.topbar').evaluate((topbar) => {
-      const count = topbar.querySelector<HTMLElement>('.mode-count')!;
-      const countStyle = getComputedStyle(count);
       return {
-        countHeight: count.getBoundingClientRect().height,
-        countLineHeight: Number.parseFloat(countStyle.lineHeight),
         topbarClientWidth: topbar.clientWidth,
         topbarScrollWidth: topbar.scrollWidth,
       };
     });
-    expect(headerLayout.countHeight).toBeLessThanOrEqual(headerLayout.countLineHeight + 1);
     expect(headerLayout.topbarScrollWidth).toBeLessThanOrEqual(headerLayout.topbarClientWidth);
   } else {
+    await expect(modeCount).toBeVisible();
     await expect(modeCount.locator('.mode-count-suffix')).toBeVisible();
     const firstModeLabel = await page
       .locator('.mode-navigation a')
@@ -82,8 +78,12 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
     expect(workspaceInset).toBeGreaterThanOrEqual(8);
     expect(workspaceInset).toBeLessThanOrEqual(16);
   }
+  if (testInfo.project.name.includes('mobile')) {
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await expect(page.getByRole('complementary', { name: 'Tasks navigation' })).toBeVisible();
+  }
   await page.getByRole('button', { name: /switch project/i }).click();
-  const projectMenu = page.locator('.project-switcher-menu');
+  const projectMenu = page.locator('.project-switcher-menu:visible');
   await expect(projectMenu).toBeVisible();
   const menuReceivesPointer = await projectMenu.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
@@ -94,10 +94,14 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   const publishedProject = page.getByRole('link', { name: /published child/i });
   await expect(publishedProject).toBeVisible();
   await expect(publishedProject).toHaveAttribute('href', /\/published\/\?source=fixture#old$/);
-  await expect(page.locator('.project-switcher-unavailable')).toHaveAttribute(
+  await expect(projectMenu.locator('.project-switcher-unavailable')).toHaveAttribute(
     'title',
     /does not publish/,
   );
+  if (testInfo.project.name.includes('mobile')) {
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('complementary', { name: 'Tasks navigation' })).toBeHidden();
+  }
 
   const taskSearch = page.getByRole('combobox', { name: 'Search tasks' });
   const mobileTaskSearch = page.getByRole('button', { name: 'Search tasks' });

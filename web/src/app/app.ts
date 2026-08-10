@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, ElementRef, HostListener, inject, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, inject, viewChild } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { cssCheck, cssMenu, cssMoon, cssScreen, cssSpinner, cssSun } from '@ng-icons/css.gg';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -16,6 +16,7 @@ import { StaticProjectSwitcher } from './static/static-project-switcher';
 import { ProjectSwitcher } from './project-switcher/project-switcher';
 import { ProjectContextService } from './core/project-context.service';
 import { OverviewStore } from './overview/overview.store';
+import { MobileProjectNavigation } from './shared/mobile-project-navigation/mobile-project-navigation';
 
 @Component({
   selector: 'pm-root',
@@ -25,6 +26,7 @@ import { OverviewStore } from './overview/overview.store';
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
+    MobileProjectNavigation,
     ProjectSwitcher,
     StaticProjectSwitcher,
     TaskSearch,
@@ -43,6 +45,12 @@ export class App {
   protected readonly syncStatus = inject(SyncStatusService);
   protected readonly projectContext = inject(ProjectContextService);
   protected readonly overview = inject(OverviewStore);
+  protected readonly tasksNavigationLabel = computed(() => {
+    const remainingCount = this.taskNavigation.remainingCount();
+    if (remainingCount === null) return 'Tasks';
+    if (remainingCount === 0) return 'Tasks, no tasks left';
+    return `Tasks, ${remainingCount} tasks left`;
+  });
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
 
   protected toggleNavigation(): void {

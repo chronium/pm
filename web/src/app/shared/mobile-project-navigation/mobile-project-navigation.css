@@ -1,0 +1,23 @@
+:host {
+  display: none;
+}
+
+@media (max-width: 430px) {
+  :host {
+    display: grid;
+    flex: 0 0 auto;
+    gap: var(--pm-space-1);
+    margin-bottom: var(--pm-space-2);
+    padding: 0 var(--pm-space-2) var(--pm-space-3);
+    border-bottom: 1px solid var(--pm-border-subtle);
+  }
+
+  p {
+    margin: 0;
+    color: var(--pm-text-subtle);
+    font-size: var(--pm-font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+}

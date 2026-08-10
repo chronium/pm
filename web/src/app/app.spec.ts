@@ -316,9 +316,8 @@ describe('application shell', () => {
     const tasksLink = fixture.nativeElement.querySelector('.mode-navigation a[href="/tasks"]');
     expect(tasksLink?.querySelector('span:first-child')?.textContent).toBe('Tasks');
     expect(tasksLink?.querySelector('.mode-count')?.textContent).toBe('8 left');
-    expect(tasksLink?.querySelector('.mode-count')?.getAttribute('aria-label')).toBe(
-      '8 tasks left',
-    );
+    expect(tasksLink?.getAttribute('aria-label')).toBe('Tasks, 8 tasks left');
+    expect(tasksLink?.querySelector('.mode-count')?.hasAttribute('aria-label')).toBe(false);
   });
 
   it.each(['ready', 'invalid'] as const)(
@@ -489,6 +488,43 @@ describe('application shell', () => {
         (icon) => icon.getAttribute('aria-hidden') === 'true',
       ),
     ).toBe(true);
+  });
+
+  it('places project identity in the routed mobile drawers', async () => {
+    const tasks = await renderAt('/tasks', 'Project Atlas');
+    expect(
+      tasks.fixture.nativeElement.querySelector(
+        'aside[aria-label="Tasks navigation"] pm-mobile-project-navigation .brand',
+      )?.textContent,
+    ).toBe('Project Atlas');
+
+    await tasks.router.navigateByUrl('/wiki');
+    tasks.fixture.detectChanges();
+    expect(
+      tasks.fixture.nativeElement.querySelector(
+        'aside[aria-label="Wiki navigation"] pm-mobile-project-navigation .brand',
+      )?.textContent,
+    ).toBe('Project Atlas');
+  });
+
+  it('opens a minimal project drawer from the Overview header', async () => {
+    const { fixture } = await renderAt('/overview', 'Project Atlas', 'ready');
+    const menu = fixture.nativeElement.querySelector('.menu-button') as HTMLButtonElement;
+    const route = fixture.nativeElement.querySelector('.app-route') as HTMLElement;
+    const projectDrawer = fixture.nativeElement.querySelector(
+      'aside[aria-label="Project navigation"]',
+    ) as HTMLElement;
+
+    expect(projectDrawer.querySelector('.brand')?.textContent).toBe('Project Atlas');
+    menu.click();
+    fixture.detectChanges();
+    expect(projectDrawer.classList).toContain('overview-mobile-sidebar--open');
+    expect(route.hasAttribute('inert')).toBe(true);
+
+    (fixture.nativeElement.querySelector('.overview-mobile-backdrop') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(projectDrawer.classList).not.toContain('overview-mobile-sidebar--open');
+    expect(route.hasAttribute('inert')).toBe(false);
   });
 
   it('closes the mobile drawer with Escape and restores focus to its trigger', async () => {

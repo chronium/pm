@@ -32,6 +32,28 @@ async function setTaskState(page: Page, taskId: string, state: string, label: st
   await expect(page.getByRole('button', { name: 'Edit task status' })).toContainText(label);
 }
 
+async function openProjectSwitcher(page: Page, projectName: string) {
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  if (await menu.isVisible()) {
+    const drawer = page.getByRole('complementary');
+    await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await expect(drawer).toBeHidden();
+    await menu.click();
+    await expect(menu).toHaveAttribute('aria-expanded', 'true');
+    const switcher = drawer.getByRole('button', {
+      name: `Switch project from ${projectName}`,
+    });
+    await expect(switcher).toBeVisible();
+    await switcher.click();
+    return;
+  }
+
+  const switcher = page
+    .locator('.topbar-project-context')
+    .getByRole('button', { name: `Switch project from ${projectName}` });
+  await switcher.click();
+}
+
 test('routes, filters, deep-link fallback, and theme persistence', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/tasks$/);
@@ -62,13 +84,68 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
 });
 
+test('keeps the compact mobile header collision-free and moves project identity into the drawer', async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes('mobile'), 'Compact header behavior is mobile-only.');
+  await seedOverviewRoutingStory();
+  await page.goto('/tasks');
+
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.locator('.topbar-project-context')).toBeHidden();
+    await expect(page.locator('.mode-count')).toBeHidden();
+    await expect(page.getByRole('link', { name: /Tasks, \d+ tasks left/ })).toBeVisible();
+    const topbar = await page.locator('.topbar').evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(topbar.scrollWidth).toBeLessThanOrEqual(topbar.clientWidth);
+  }
+
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  await menu.click();
+  const taskDrawer = page.getByRole('complementary', { name: 'Tasks navigation' });
+  await expect(taskDrawer).toBeVisible();
+  await expect(
+    taskDrawer.getByRole('button', { name: 'Switch project from Playwright Project' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(taskDrawer).toBeHidden();
+  await expect(menu).toBeFocused();
+
+  const searchButton = page.getByRole('button', { name: 'Search tasks', exact: true });
+  await searchButton.click();
+  const search = page.getByRole('combobox', { name: 'Search tasks' });
+  await expect(search).toBeFocused();
+  await expect(page.locator('.search.mobile-expanded')).toHaveCSS('z-index', '120');
+  await page.getByRole('button', { name: 'Close search tasks' }).click();
+  await expect(searchButton).toBeFocused();
+
+  await page.goto('/overview');
+  await expect(page.getByRole('heading', { name: 'Playwright Overview' })).toBeVisible();
+  await menu.click();
+  const overviewDrawer = page.getByRole('complementary', { name: 'Project navigation' });
+  await expect(overviewDrawer).toBeVisible();
+  await expect(
+    overviewDrawer.getByRole('button', { name: 'Switch project from Playwright Project' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(overviewDrawer).toBeHidden();
+
+  await page.setViewportSize({ width: 431, height: 844 });
+  await expect(page.locator('.topbar-project-context')).toBeVisible();
+  await expect(menu).toBeHidden();
+});
+
 test('switches linked projects with isolated filters and read-only task and wiki views', async ({
   page,
 }, testInfo) => {
   await page.goto('/tasks?track=OPS');
-  await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
-  await expect(page.locator('.project-switcher-unavailable')).toContainText('unavailable');
-  await expect(page.locator('.project-switcher-unavailable')).not.toHaveAttribute('href');
+  await openProjectSwitcher(page, 'Playwright Project');
+  const projectMenu = page.locator('.project-switcher-menu:visible');
+  await expect(projectMenu.locator('.project-switcher-unavailable')).toContainText('unavailable');
+  await expect(projectMenu.locator('.project-switcher-unavailable')).not.toHaveAttribute('href');
   await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks$/);
   await expect(page.getByText('Linked fixture task', { exact: true })).toBeVisible();
@@ -110,28 +187,30 @@ test('switches linked projects with isolated filters and read-only task and wiki
   await page.getByRole('link', { name: 'Wiki', exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/wiki$/);
   await page
+    .locator('main')
     .getByRole('link', { name: /Linked guide/ })
     .first()
     .click();
   await expect(page.getByRole('heading', { name: 'Linked guide' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Switch project from Royale Project' }).click();
+  await openProjectSwitcher(page, 'Royale Project');
   await page.getByRole('link', { name: /Starfall Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/sibling-project\/wiki$/);
   await page
+    .locator('main')
     .getByRole('link', { name: /Starfall guide/ })
     .first()
     .click();
   await expect(page.getByRole('heading', { name: 'Starfall guide' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Switch project from Starfall Project' }).click();
+  await openProjectSwitcher(page, 'Starfall Project');
   await page.getByRole('link', { name: /Playwright Project/ }).click();
   await expect(page).toHaveURL(/\/wiki$/);
   await page.getByRole('link', { name: /^Tasks/ }).click();
   await expect(page).toHaveURL(/\/tasks\?track=OPS$/);
 
-  await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
+  await openProjectSwitcher(page, 'Playwright Project');
   await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
 });
@@ -155,7 +234,7 @@ test('routes ready Overview documents across current and linked projects and fal
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: /^Tasks/ })).toBeFocused();
 
-  await page.getByRole('button', { name: 'Switch project from Playwright Project' }).click();
+  await openProjectSwitcher(page, 'Playwright Project');
   await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/overview$/);
   await expect(page.getByRole('heading', { name: 'Royale Overview' })).toBeVisible();
@@ -165,7 +244,7 @@ test('routes ready Overview documents across current and linked projects and fal
     '/projects/linked-project/wiki',
   );
 
-  await page.getByRole('button', { name: 'Switch project from Royale Project' }).click();
+  await openProjectSwitcher(page, 'Royale Project');
   await page.getByRole('link', { name: /Starfall Project.*Read-only/ }).click();
   await expect(page).toHaveURL(/\/projects\/sibling-project\/tasks$/);
   await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveCount(0);

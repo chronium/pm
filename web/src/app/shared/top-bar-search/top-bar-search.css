@@ -176,7 +176,7 @@ input:focus {
     top: 0;
     right: 0;
     left: 0;
-    z-index: 80;
+    z-index: 120;
     display: block;
     width: 100%;
     height: var(--pm-topbar-height);

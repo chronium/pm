@@ -6,10 +6,11 @@ import { WikiStore } from './wiki.store';
 import { PollingCoordinator } from '../core/polling-coordinator';
 import { WikiTree } from './wiki-tree';
 import { ProjectContextService } from '../core/project-context.service';
+import { MobileProjectNavigation } from '../shared/mobile-project-navigation/mobile-project-navigation';
 
 @Component({
   selector: 'pm-wiki-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, WikiTree],
+  imports: [MobileProjectNavigation, RouterLink, RouterLinkActive, RouterOutlet, WikiTree],
   templateUrl: './wiki-shell.html',
   styleUrls: ['../shell.css', './wiki.css'],
   providers: [WikiStore, PollingCoordinator],

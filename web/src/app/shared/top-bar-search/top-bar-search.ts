@@ -34,6 +34,8 @@ export class TopBarSearch {
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly inputElement = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  private readonly mobileSearchButton =
+    viewChild<ElementRef<HTMLButtonElement>>('mobileSearchButton');
 
   readonly query = model('');
   readonly options = input<readonly TopBarSearchOption[]>([]);
@@ -77,10 +79,13 @@ export class TopBarSearch {
     setTimeout(() => this.inputElement()?.nativeElement.focus());
   }
 
-  close(): void {
+  close(restoreFocus = false): void {
     this.focused.set(false);
     this.mobileExpanded.set(false);
     this.activeIndex.set(0);
+    if (restoreFocus) {
+      queueMicrotask(() => this.mobileSearchButton()?.nativeElement.focus());
+    }
   }
 
   caret(): number {
@@ -124,8 +129,7 @@ export class TopBarSearch {
       this.optionSelected.emit(options[this.activeIndex()]!);
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      this.close();
-      this.inputElement()?.nativeElement.blur();
+      this.close(true);
     }
   }
 

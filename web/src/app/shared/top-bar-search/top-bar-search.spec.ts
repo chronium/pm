@@ -91,6 +91,8 @@ describe('TopBarSearch', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     fixture.detectChanges();
     expect(input.getAttribute('aria-expanded')).toBe('false');
+    await Promise.resolve();
+    expect(document.activeElement).toBe(mobile);
 
     focus();
     input.blur();

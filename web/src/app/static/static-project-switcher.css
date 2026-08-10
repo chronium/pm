@@ -15,6 +15,14 @@
   text-decoration: none;
 }
 
+.brand {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .project-switcher {
   position: relative;
   z-index: 100;

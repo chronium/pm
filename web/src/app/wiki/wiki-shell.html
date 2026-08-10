@@ -1,5 +1,6 @@
 <div class="shell" [class.drawer-open]="layout.mobileSidebarOpen()">
   <aside id="pm-sidebar" class="sidebar" aria-label="Wiki navigation">
+    <pm-mobile-project-navigation />
     <nav class="wiki-primary-nav" aria-label="Wiki views">
       <a
         [routerLink]="projectContext.wikiRoot()"

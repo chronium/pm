@@ -5,10 +5,11 @@ import { LayoutService } from '../core/layout.service';
 import { TaskSidebar } from './task-sidebar/task-sidebar';
 import { TaskSidebarStore } from './task-sidebar/task-sidebar.store';
 import { PollingCoordinator } from '../core/polling-coordinator';
+import { MobileProjectNavigation } from '../shared/mobile-project-navigation/mobile-project-navigation';
 
 @Component({
   selector: 'pm-tasks-shell',
-  imports: [RouterOutlet, TaskSidebar],
+  imports: [RouterOutlet, MobileProjectNavigation, TaskSidebar],
   providers: [TaskSidebarStore, PollingCoordinator],
   templateUrl: './tasks-shell.html',
   styleUrl: '../shell.css',

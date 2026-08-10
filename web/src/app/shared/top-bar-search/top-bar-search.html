@@ -1,4 +1,5 @@
 <button
+  #mobileSearchButton
   class="mobile-search-button"
   type="button"
   [disabled]="disabled()"
@@ -36,7 +37,7 @@
       type="button"
       [disabled]="disabled()"
       [attr.aria-label]="'Close ' + ariaLabel().toLowerCase()"
-      (click)="close()"
+      (click)="close(true)"
     >
       <ng-icon name="cssClose" aria-hidden="true" />
     </button>

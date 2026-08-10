@@ -11,11 +11,13 @@
     <ng-icon name="cssMenu" aria-hidden="true" />
   </button>
 
-  @if (staticMode.enabled) {
-    <pm-static-project-switcher />
-  } @else {
-    <pm-project-switcher />
-  }
+  <div class="topbar-project-context">
+    @if (staticMode.enabled) {
+      <pm-static-project-switcher />
+    } @else {
+      <pm-project-switcher />
+    }
+  </div>
 
   <nav class="mode-navigation" aria-label="Workspace">
     @if (overview.available()) {
@@ -33,17 +35,16 @@
       routerLinkActive="active"
       #tasksLink="routerLinkActive"
       [attr.aria-current]="tasksLink.isActive ? 'page' : null"
+      [attr.aria-label]="tasksNavigationLabel()"
     >
       <span>Tasks</span>
       @if (taskNavigation.remainingCount(); as remainingCount) {
-        <span class="mode-count" [attr.aria-label]="remainingCount + ' tasks left'"
+        <span class="mode-count"
           ><span>{{ remainingCount }}</span
           ><span class="mode-count-suffix"> left</span></span
         >
       } @else if (taskNavigation.remainingCount() === 0) {
-        <span class="mode-count" aria-label="No tasks left"
-          ><span>0</span><span class="mode-count-suffix"> left</span></span
-        >
+        <span class="mode-count"><span>0</span><span class="mode-count-suffix"> left</span></span>
       }
     </a>
     <a
@@ -99,6 +100,30 @@
   </div>
 </header>
 
-<div class="app-route">
+@if (layout.activeShell() === AppShell.Overview) {
+  <aside
+    id="pm-sidebar"
+    class="sidebar overview-mobile-sidebar"
+    [class.overview-mobile-sidebar--open]="layout.mobileSidebarOpen()"
+    aria-label="Project navigation"
+  >
+    <pm-mobile-project-navigation />
+  </aside>
+  <button
+    class="overview-mobile-backdrop"
+    [class.overview-mobile-backdrop--open]="layout.mobileSidebarOpen()"
+    type="button"
+    aria-label="Close navigation"
+    tabindex="-1"
+    (click)="layout.closeMobileSidebar()"
+  ></button>
+}
+
+<div
+  class="app-route"
+  [attr.inert]="
+    layout.activeShell() === AppShell.Overview && layout.mobileSidebarOpen() ? '' : null
+  "
+>
   <router-outlet />
 </div>
