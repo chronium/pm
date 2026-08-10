@@ -248,6 +248,56 @@ milestones:
     priority: urgent
     requiredActivationTriggers: []
     delivery: null
+  active-work-visibility:
+    title: Focused active-work views
+    description: >-
+      ## Outcome
+
+
+      PM task discovery focuses on work that still belongs to an undelivered milestone by default, while delivered history remains available through one explicit, consistent opt-in.
+
+
+      ## Scope
+
+
+      - Hide delivered milestones and their assigned tasks by default in task-listing and task-search surfaces.
+
+      - Provide `--include-delivered` in the CLI and `includeDelivered` in MCP and HTTP read contracts.
+
+      - Add a per-project **Show delivered** toggle to the live and static task pages.
+
+      - Apply the same visibility choice to milestone navigation, board groups, counts, and task search.
+
+      - Keep complete project history in static snapshots so published sites can reveal delivered work locally.
+
+      - Preserve linked-project and family-read behavior under the same default.
+
+
+      ## Exclusions
+
+
+      - Do not hide completed tasks that belong to active, inactive, or ready-to-deliver milestones.
+
+      - Do not hide tracks merely because their visible count is zero.
+
+      - Do not make `in:all` task search include delivered work.
+
+      - Do not filter direct task reads, Settings, the activation switchboard, delivery controls, or explicitly configured Overview sections.
+
+
+      ## Evidence
+
+
+      - Shared service tests demonstrate explicit delivered-lifecycle filtering and opt-in recovery.
+
+      - CLI, MCP, live API, linked-project, and static-snapshot contract tests agree on the default and override.
+
+      - Storybook and end-to-end coverage demonstrate the accessible web toggle across writable, read-only, desktop, and mobile task pages.
+
+      - The complete PM release gate passes.
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null
 activationTriggers: {}
 site:
   enabled: true
@@ -256,23 +306,23 @@ site:
   home:
     layout: split
     primary:
-      - type: hero
-      - type: markdown
-        title: Introduction
-        source: wiki:overview
+    - type: hero
+    - type: markdown
+      title: Introduction
+      source: wiki:overview
     secondary:
-      - type: tasks
-        title: Current work
-        limit: 6
-      - type: milestone
-        title: Current milestone
+    - type: tasks
+      title: Current work
+      limit: 6
+    - type: milestone
+      title: Current milestone
     after:
-      - type: wiki
-        title: Documentation
-        pages:
-          - getting-started
-          - guides/cli
-          - guides/mcp
-          - publishing/static-site
-      - type: copyright
-        notice: Copyright © 2026 Chronium · MIT licensed
+    - type: wiki
+      title: Documentation
+      pages:
+      - getting-started
+      - guides/cli
+      - guides/mcp
+      - publishing/static-site
+    - type: copyright
+      notice: Copyright © 2026 Chronium · MIT licensed
