@@ -126,7 +126,8 @@ public sealed class ResourceRevisionService(ProjectRoot projectRoot, BoardServic
     private static BoardQuery NormalizeQuery(BoardQuery query) => new(
         NormalizeFilter(query.Track),
         NormalizeFilter(query.Milestone),
-        NormalizeFilter(query.State));
+        NormalizeFilter(query.State),
+        query.IncludeDelivered);
 
     private static string? NormalizeFilter(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;

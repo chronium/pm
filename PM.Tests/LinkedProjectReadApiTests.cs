@@ -152,6 +152,68 @@ public partial class ApiContractTests
     }
 
     [Fact]
+    public async Task LinkedProjectTaskCollectionsHonorDeliveredVisibility()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var active = await workspace.CreateProject(TestData.Config(name: "Games"));
+        await WriteProjectId(active, "prj_games");
+        var child = await CreateLinkedProject(
+            Path.Combine(workspace.Path, "royale"), "prj_royale", "Royale");
+        child.Config!.Milestones["active"] = new MilestoneDefinition { Title = "Active" };
+        child.Config.Milestones["delivered"] = new MilestoneDefinition
+        {
+            Title = "Delivered",
+            Delivery = new MilestoneDelivery
+            {
+                At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+                Mode = MilestoneDeliveryMode.Exceptional,
+                Reason = "Accepted with open work.",
+                AcceptedTaskIds = ["GAME-0002"],
+            },
+        };
+        child.Config.WriteConfig(child);
+        active.WriteLinkedProjectsManifest(new LinkedProjectManifest
+        {
+            Children = [Declaration("prj_royale", "royale", "royale")],
+        });
+        var current = TestData.Task("GAME-0001", "Needle current", track: "GAME", milestone: "active");
+        var delivered = TestData.Task("GAME-0002", "Needle delivered", track: "GAME", milestone: "delivered");
+        child.WriteTask(current);
+        child.WriteTask(delivered);
+        child.UpdateTaskState(current, "todo");
+        child.UpdateTaskState(delivered, "todo");
+
+        var family = LinkedFamily(active, workspace);
+        var (app, client) = await CreateApiClient(active, linkedProjectFamilyService: family);
+        await using (app)
+        using (client)
+        {
+            var defaultBoard = (await client.GetFromJsonAsync<BoardResponse>(
+                "/api/v1/projects/prj_royale/board"))!;
+            var includedBoard = (await client.GetFromJsonAsync<BoardResponse>(
+                "/api/v1/projects/prj_royale/board?includeDelivered=true"))!;
+            var defaultNavigation = (await client.GetFromJsonAsync<BoardNavigationResponse>(
+                "/api/v1/projects/prj_royale/board/navigation"))!;
+            var includedNavigation = (await client.GetFromJsonAsync<BoardNavigationResponse>(
+                "/api/v1/projects/prj_royale/board/navigation?includeDelivered=true"))!;
+            var defaultSearch = (await client.GetFromJsonAsync<List<TaskSearchResultResponse>>(
+                "/api/v1/projects/prj_royale/tasks/search?query=in%3Aall"))!;
+            var includedSearch = (await client.GetFromJsonAsync<List<TaskSearchResultResponse>>(
+                "/api/v1/projects/prj_royale/tasks/search?query=in%3Aall&includeDelivered=true"))!;
+            var detail = await client.GetFromJsonAsync<TaskResponse>(
+                "/api/v1/projects/prj_royale/tasks/GAME-0002");
+
+            Assert.Equal(["GAME-0001"], BoardTasks(defaultBoard).Select(task => task.Id));
+            Assert.Equal(["GAME-0001", "GAME-0002"], BoardTasks(includedBoard).Select(task => task.Id));
+            Assert.Equal(1, defaultNavigation.RemainingCount);
+            Assert.Equal(2, includedNavigation.RemainingCount);
+            Assert.Equal(["GAME-0001"], defaultSearch.Select(task => task.Id));
+            Assert.Equal(["GAME-0001", "GAME-0002"], includedSearch.Select(task => task.Id));
+            Assert.Equal("GAME-0002", detail!.Id);
+        }
+    }
+
+    [Fact]
     public async Task CurrentWebReadsResolveReadableUntrustedParentDependencies()
     {
         using var workspace = new TempWorkingDirectory();
@@ -679,6 +741,9 @@ public partial class ApiContractTests
 
     private static Task WriteProjectId(ProjectRoot root, string projectId) =>
         File.WriteAllTextAsync(Path.Combine(root.RootPath, GlobalConfig.ProjectIdFile), $"{projectId}\n");
+
+    private static IEnumerable<BoardTaskSummaryResponse> BoardTasks(BoardResponse board) =>
+        board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks);
 
     private sealed class LinkedApiSubmoduleInspector : ILinkedProjectSubmoduleInspector
     {

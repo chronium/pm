@@ -9,7 +9,7 @@ import { PollingCoordinator } from '../core/polling-coordinator';
 
 const emptyBoard: BoardResponse = {
   projectName: 'Atlas',
-  filters: { track: null, milestone: null, state: null },
+  filters: { track: null, milestone: null, state: null, includeDelivered: false },
   tracks: [{ key: 'PM', name: 'Product', priority: 'medium' }],
   milestones: [{ key: 'm1', name: 'Milestone One', priority: 'high' }],
   states: [{ key: 'todo', name: 'To do', priority: 'medium' }],

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using PM.Api;
+using PM.Project;
 
 namespace PM.Tests;
 
@@ -152,6 +153,68 @@ public partial class ApiContractTests
             using var conditional = new HttpRequestMessage(HttpMethod.Get, "/api/v1/board/navigation");
             conditional.Headers.TryAddWithoutValidation("If-None-Match", response.Headers.ETag?.Tag);
             Assert.Equal(HttpStatusCode.NotModified, (await client.SendAsync(conditional)).StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task BoardNavigationAndSearchExposeDeliveredWorkOnlyWhenRequested()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            tracks: new() { ["PM"] = "Product", ["OPS"] = "Operations" },
+            milestones: new() { ["active"] = "Active", ["delivered"] = "Delivered" });
+        config.Milestones["delivered"].Delivery = new MilestoneDelivery
+        {
+            At = new DateTimeOffset(2026, 8, 10, 8, 0, 0, TimeSpan.Zero),
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with open work.",
+            AcceptedTaskIds = ["OPS-0001"],
+        };
+        var root = await workspace.CreateProject(config);
+        var active = TestData.Task("PM-0001", "Needle active", milestone: "active");
+        var delivered = TestData.Task("OPS-0001", "Needle delivered", track: "OPS", milestone: "delivered");
+        root.WriteTask(active);
+        root.WriteTask(delivered);
+        root.UpdateTaskState(active, "todo");
+        root.UpdateTaskState(delivered, "todo");
+        var (app, client) = await CreateApiClient(root);
+        await using (app)
+        using (client)
+        {
+            var defaultBoardResponse = await client.GetAsync("/api/v1/board");
+            var defaultBoard = (await defaultBoardResponse.Content.ReadFromJsonAsync<BoardResponse>())!;
+            var includedBoardResponse = await client.GetAsync("/api/v1/board?includeDelivered=true");
+            var includedBoard = (await includedBoardResponse.Content.ReadFromJsonAsync<BoardResponse>())!;
+            var defaultNavigation = (await client.GetFromJsonAsync<BoardNavigationResponse>(
+                "/api/v1/board/navigation"))!;
+            var includedNavigation = (await client.GetFromJsonAsync<BoardNavigationResponse>(
+                "/api/v1/board/navigation?includeDelivered=true"))!;
+            var defaultSearch = (await client.GetFromJsonAsync<List<TaskSearchResultResponse>>(
+                "/api/v1/tasks/search?query=in%3Aall"))!;
+            var includedSearch = (await client.GetFromJsonAsync<List<TaskSearchResultResponse>>(
+                "/api/v1/tasks/search?query=in%3Aall&includeDelivered=true"))!;
+            var direct = await client.GetFromJsonAsync<TaskResponse>("/api/v1/tasks/OPS-0001");
+
+            Assert.False(defaultBoard.Filters.IncludeDelivered);
+            Assert.True(includedBoard.Filters.IncludeDelivered);
+            Assert.Equal(["PM-0001"], Tasks(defaultBoard).Select(task => task.Id));
+            Assert.Equal(["PM-0001", "OPS-0001"], Tasks(includedBoard).Select(task => task.Id));
+            Assert.Equal(["active"], defaultBoard.Milestones.Select(milestone => milestone.Key));
+            Assert.Equal(["active", "delivered"], includedBoard.Milestones.Select(milestone => milestone.Key));
+            Assert.NotEqual(defaultBoardResponse.Headers.ETag, includedBoardResponse.Headers.ETag);
+            Assert.Equal(1, defaultNavigation.RemainingCount);
+            Assert.Equal(0, defaultNavigation.Tracks.Single(track => track.Key == "OPS").RemainingCount);
+            Assert.Equal(2, includedNavigation.RemainingCount);
+            Assert.Equal(["PM-0001"], defaultSearch.Select(task => task.Id));
+            Assert.Equal(["OPS-0001", "PM-0001"], includedSearch.Select(task => task.Id));
+            Assert.Equal("OPS-0001", direct!.Id);
+
+            root.Config!.Milestones["delivered"].Delivery = null;
+            root.Config.WriteConfig(root);
+
+            var reopened = (await client.GetFromJsonAsync<BoardResponse>("/api/v1/board"))!;
+            Assert.Contains(Tasks(reopened), task => task.Id == "OPS-0001");
+            Assert.Contains(reopened.Milestones, milestone => milestone.Key == "delivered");
         }
     }
 
@@ -517,6 +580,19 @@ public partial class ApiContractTests
             Assert.Contains(search.GetProperty("get").GetProperty("parameters").EnumerateArray(),
                 parameter => parameter.GetProperty("name").GetString() == "query" &&
                              parameter.GetProperty("required").GetBoolean());
+            foreach (var path in new[]
+                     {
+                         "/api/v1/board",
+                         "/api/v1/board/navigation",
+                         "/api/v1/tasks/search",
+                         "/api/v1/projects/{projectId}/board",
+                         "/api/v1/projects/{projectId}/board/navigation",
+                         "/api/v1/projects/{projectId}/tasks/search",
+                     })
+                Assert.Contains(paths.GetProperty(path).GetProperty("get").GetProperty("parameters").EnumerateArray(),
+                    parameter => parameter.GetProperty("name").GetString() == "includeDelivered" &&
+                                 (!parameter.TryGetProperty("required", out var required) ||
+                                  !required.GetBoolean()));
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}/state", out _));
             Assert.True(paths.TryGetProperty("/api/v1/tasks/{id}/notes", out var notes));
             Assert.True(notes.GetProperty("post").GetProperty("responses").GetProperty("200")
@@ -537,6 +613,8 @@ public partial class ApiContractTests
             Assert.Contains("activation", schemas.GetProperty("BoardTaskSummaryResponse")
                 .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
             Assert.Contains("activation", schemas.GetProperty("TaskResponse")
+                .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+            Assert.Contains("includeDelivered", schemas.GetProperty("BoardFilterResponse")
                 .GetProperty("required").EnumerateArray().Select(value => value.GetString()));
             var milestoneGroup = schemas.GetProperty("BoardMilestoneGroupResponse")
                 .GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray();
@@ -596,6 +674,9 @@ public partial class ApiContractTests
                 (await invalid.Content.ReadFromJsonAsync<ApiProblemDetails>())!.ErrorCode);
         }
     }
+
+    private static IEnumerable<BoardTaskSummaryResponse> Tasks(BoardResponse board) =>
+        board.MilestoneGroups.SelectMany(group => group.States).SelectMany(state => state.Tasks);
 
     private static HttpRequestMessage Mutation(HttpMethod method, string path, HttpContent? content,
         string? etag = null)

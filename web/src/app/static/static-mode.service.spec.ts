@@ -93,7 +93,7 @@ const snapshot: StaticSnapshot = {
   },
   board: {
     projectName: 'Static PM',
-    filters: { track: null, milestone: null, state: null },
+    filters: { track: null, milestone: null, state: null, includeDelivered: true },
     tracks: [
       { key: 'PM', name: 'PM', priority: 'none' },
       { key: 'WEB', name: 'Web', priority: 'none' },
@@ -245,6 +245,17 @@ describe('static snapshot mode', () => {
     ).toThrow(/invalid linkedProjects/);
   });
 
+  it('keeps older schema-six snapshots readable when their baked filter omits visibility', () => {
+    const legacySnapshot = structuredClone(snapshot);
+    delete (legacySnapshot.board.filters as { includeDelivered?: boolean }).includeDelivered;
+
+    expect(validateSnapshot(legacySnapshot)).toBe(legacySnapshot);
+    expect(
+      (adaptGet(legacySnapshot, get('/api/v1/board')) as StaticSnapshot['board']).filters
+        .includeDelivered,
+    ).toBe(false);
+  });
+
   it('adapts project, Overview, task, wiki, and display settings GET contracts', () => {
     expect(adaptGet(snapshot, get('/api/v1/project'))).toEqual(snapshot.project);
     expect(adaptGet(snapshot, get('/api/v1/overview'))).toEqual(snapshot.overview);
@@ -271,7 +282,12 @@ describe('static snapshot mode', () => {
 
     const board = adaptGet(snapshot, request) as StaticSnapshot['board'];
 
-    expect(board.filters).toEqual({ track: 'WEB', milestone: 'launch', state: 'todo' });
+    expect(board.filters).toEqual({
+      track: 'WEB',
+      milestone: 'launch',
+      state: 'todo',
+      includeDelivered: false,
+    });
     expect(board.milestoneGroups).toHaveLength(1);
     expect(board.milestoneGroups[0]!.states).toHaveLength(1);
     expect(board.milestoneGroups[0]!.states[0]!.tasks.map((task) => task.id)).toEqual(['WEB-0001']);
@@ -306,6 +322,58 @@ describe('static snapshot mode', () => {
     expect(filtersOnly).toEqual([
       expect.objectContaining({ id: 'PM-0002', snippet: 'Needle once.' }),
     ]);
+  });
+
+  it('hides delivered work by default while preserving complete snapshot reads', () => {
+    const completeSnapshot = withDeliveredWork(snapshot);
+
+    const defaultBoard = adaptGet(
+      completeSnapshot,
+      get('/api/v1/board'),
+    ) as StaticSnapshot['board'];
+    const includedBoard = adaptGet(
+      completeSnapshot,
+      get('/api/v1/board', new HttpParams().set('includeDelivered', 'true')),
+    ) as StaticSnapshot['board'];
+    expect(defaultBoard.filters.includeDelivered).toBe(false);
+    expect(defaultBoard.milestoneGroups.map((group) => group.key)).toEqual(['launch']);
+    expect(includedBoard.filters.includeDelivered).toBe(true);
+    expect(includedBoard.milestoneGroups.map((group) => group.key)).toEqual(['launch', 'archive']);
+
+    const defaultNavigation = adaptGet(
+      completeSnapshot,
+      get('/api/v1/board/navigation'),
+    ) as StaticSnapshot['navigation'];
+    const includedNavigation = adaptGet(
+      completeSnapshot,
+      get('/api/v1/board/navigation', new HttpParams().set('includeDelivered', 'true')),
+    ) as StaticSnapshot['navigation'];
+    expect(defaultNavigation.remainingCount).toBe(2);
+    expect(defaultNavigation.tracks.find((track) => track.key === 'OPS')?.remainingCount).toBe(0);
+    expect(defaultNavigation.milestones.map((milestone) => milestone.key)).toEqual(['launch']);
+    expect(includedNavigation.remainingCount).toBe(3);
+    expect(includedNavigation.milestones.map((milestone) => milestone.key)).toEqual([
+      'launch',
+      'archive',
+    ]);
+
+    const defaultSearch = adaptGet(
+      completeSnapshot,
+      get('/api/v1/tasks/search', new HttpParams().set('query', 'in:all')),
+    ) as { id: string }[];
+    const includedSearch = adaptGet(
+      completeSnapshot,
+      get(
+        '/api/v1/tasks/search',
+        new HttpParams().set('query', 'in:all').set('includeDelivered', 'true'),
+      ),
+    ) as { id: string }[];
+    expect(defaultSearch.map((result) => result.id)).not.toContain('OPS-0001');
+    expect(includedSearch.map((result) => result.id)).toContain('OPS-0001');
+    expect(adaptGet(completeSnapshot, get('/api/v1/tasks/OPS-0001'))).toMatchObject({
+      id: 'OPS-0001',
+      milestone: 'archive',
+    });
   });
 
   it('returns task syntax errors and searches wiki titles, paths, and bodies locally', () => {
@@ -357,5 +425,119 @@ function eligibleActivation() {
     requiredActivationTriggers: [],
     unmetActivationTriggers: [],
     summary: 'Eligible: milestone launch is active.',
+  };
+}
+
+function withDeliveredWork(source: StaticSnapshot): StaticSnapshot {
+  const deliveredActivation = {
+    isEligible: false,
+    milestoneLifecycle: 'delivered',
+    requiredActivationTriggers: [],
+    unmetActivationTriggers: [],
+    summary: 'Ineligible: milestone archive is delivered.',
+  };
+  const deliveredSummary = {
+    ...taskSummary('OPS-0001', 'OPS'),
+    milestone: 'archive',
+    activation: deliveredActivation,
+  };
+  const deliveredTask = {
+    id: 'OPS-0001',
+    title: 'Archived operation',
+    track: 'OPS',
+    milestone: 'archive',
+    priority: 'medium',
+    prioritySource: 'milestone',
+    prioritySelection: 'inherit',
+    state: 'todo',
+    dependencies: { ready: true, dependsOn: [], waitingOn: [], missing: [], summary: 'ready' },
+    activation: deliveredActivation,
+    createdAt: '2026-01-01T00:00:00Z',
+    modifiedAt: '2026-01-05T00:00:00Z',
+    description: 'Delivered needle.',
+    revision: 'static-snapshot',
+  };
+
+  return {
+    ...source,
+    settings: {
+      ...source.settings,
+      tracks: [...source.settings.tracks, { key: 'OPS', name: 'Operations' }],
+      milestones: [
+        ...source.settings.milestones,
+        {
+          key: 'archive',
+          title: 'Archive',
+          priority: 'medium',
+          description: 'Accepted historical delivery.',
+          requiredActivationTriggers: [],
+        },
+      ],
+    },
+    activation: {
+      ...source.activation,
+      milestones: [
+        ...source.activation.milestones,
+        {
+          key: 'archive',
+          title: 'Archive',
+          description: 'Accepted historical delivery.',
+          priority: 'medium',
+          lifecycle: 'delivered',
+          assignedTaskCount: 1,
+          doneTaskCount: 0,
+          requiredActivationTriggers: [],
+          unmetActivationTriggers: [],
+          delivery: {
+            at: '2026-01-05T00:00:00Z',
+            mode: 'exceptional',
+            reason: 'Accepted with open work.',
+            acceptedTaskIds: ['OPS-0001'],
+            isValid: true,
+          },
+        },
+      ],
+    },
+    navigation: {
+      ...source.navigation,
+      remainingCount: 3,
+      activationEligibleCount: 2,
+      tracks: [
+        ...source.navigation.tracks,
+        { key: 'OPS', name: 'Operations', remainingCount: 1, activationEligibleCount: 0 },
+      ],
+      milestones: [
+        ...source.navigation.milestones,
+        {
+          key: 'archive',
+          name: 'Archive',
+          remainingCount: 1,
+          activationEligibleCount: 0,
+          lifecycle: 'delivered',
+          unmetActivationTriggers: [],
+        },
+      ],
+    },
+    board: {
+      ...source.board,
+      tracks: [...source.board.tracks, { key: 'OPS', name: 'Operations', priority: 'none' }],
+      milestones: [
+        ...source.board.milestones,
+        { key: 'archive', name: 'Archive', priority: 'medium' },
+      ],
+      milestoneGroups: [
+        ...source.board.milestoneGroups,
+        {
+          key: 'archive',
+          name: 'Archive',
+          description: 'Accepted historical delivery.',
+          lifecycle: 'delivered',
+          requiredActivationTriggers: [],
+          unmetActivationTriggers: [],
+          states: [{ key: 'todo', name: 'To do', tasks: [deliveredSummary] }],
+        },
+      ],
+    },
+    tasks: [...source.tasks, deliveredTask],
   };
 }

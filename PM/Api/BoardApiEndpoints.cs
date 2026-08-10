@@ -5,7 +5,11 @@ using PM.Application;
 
 namespace PM.Api;
 
-public sealed record BoardFilterResponse(string? Track, string? Milestone, string? State);
+public sealed record BoardFilterResponse(
+    string? Track,
+    string? Milestone,
+    string? State,
+    bool IncludeDelivered);
 public sealed record BoardOptionResponse(string Key, string Name, string Priority);
 public sealed record BoardNavigationOptionResponse(
     string Key,
@@ -73,10 +77,9 @@ public static class BoardApiEndpoints
         ResourceRevisionService revisions,
         LinkedProjectReadService? linkedReads = null)
     {
-        api.MapGet("/board/navigation", (HttpRequest request) =>
+        api.MapGet("/board/navigation", (HttpRequest request, bool includeDelivered = false) =>
             {
-                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
-                var result = boardService.GetNavigation(includeDelivered: true);
+                var result = boardService.GetNavigation(includeDelivered);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
 
                 var revisionResult = revisions.GetBoardRevision(result.Payload!.Board);
@@ -97,11 +100,11 @@ public static class BoardApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json");
 
         api.MapGet("/board", async (HttpRequest request, string? track, string? milestone, string? state,
-                CancellationToken cancellationToken) =>
+                bool includeDelivered = false,
+                CancellationToken cancellationToken = default) =>
             {
-                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
                 var query = new BoardQuery(
-                    Normalize(track), Normalize(milestone), Normalize(state), IncludeDelivered: true);
+                    Normalize(track), Normalize(milestone), Normalize(state), includeDelivered);
                 var result = boardService.GetBoard(query);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var board = result.Payload!;
@@ -142,7 +145,11 @@ public static class BoardApiEndpoints
 
     internal static BoardResponse ToResponse(BoardData board, string revision) => new(
         board.ProjectName,
-        new BoardFilterResponse(board.Query.Track, board.Query.Milestone, board.Query.State),
+        new BoardFilterResponse(
+            board.Query.Track,
+            board.Query.Milestone,
+            board.Query.State,
+            board.Query.IncludeDelivered),
         board.Tracks.Select(ToOption).ToList(),
         board.Milestones.Select(ToOption).ToList(),
         board.States.Select(ToOption).ToList(),

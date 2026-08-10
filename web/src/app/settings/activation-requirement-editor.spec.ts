@@ -82,7 +82,8 @@ describe('ActivationRequirementEditor', () => {
         (candidate) =>
           candidate.url === '/api/v1/tasks/search' &&
           candidate.params.get('query') === 'foundation' &&
-          candidate.params.get('limit') === '20',
+          candidate.params.get('limit') === '20' &&
+          candidate.params.get('includeDelivered') === 'true',
       );
       request.flush([
         {
@@ -179,7 +180,8 @@ describe('ActivationRequirementEditor', () => {
         .expectOne(
           (candidate) =>
             candidate.url === '/api/v1/projects/child/tasks/search' &&
-            candidate.params.get('query') === 'foundation',
+            candidate.params.get('query') === 'foundation' &&
+            candidate.params.get('includeDelivered') === 'true',
         )
         .flush([]);
     } finally {

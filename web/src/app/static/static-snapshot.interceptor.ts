@@ -181,9 +181,10 @@ export function adaptGet(snapshot: StaticSnapshot, request: HttpRequest<unknown>
   if (url === '/api/v1/overview') return snapshot.overview;
   if (url === '/api/v1/settings') return snapshot.settings;
   if (url === '/api/v1/activation') return snapshot.activation;
-  if (url === '/api/v1/board/navigation') return snapshot.navigation;
-  if (url === '/api/v1/board') return filterBoard(snapshot.board, request);
-  if (url === '/api/v1/tasks/search') return searchSnapshotTasks(snapshot, request);
+  if (url === '/api/v1/board/navigation') return filterNavigation(snapshot, request);
+  if (url === '/api/v1/board') return filterBoard(snapshot, request);
+  if (url === '/api/v1/tasks/search')
+    return searchSnapshotTasks(snapshot, request, includeDelivered(request));
   if (url === '/api/v1/wiki/search') return searchSnapshotWiki(snapshot, request);
   if (url === '/api/v1/wiki/pages') return snapshot.wikiIndex;
 
@@ -210,11 +211,45 @@ export function adaptGet(snapshot: StaticSnapshot, request: HttpRequest<unknown>
   throw notFound('This endpoint is unavailable in a read-only snapshot.');
 }
 
-function filterBoard(board: BoardResponse, request: HttpRequest<unknown>): BoardResponse {
+function filterNavigation(
+  snapshot: StaticSnapshot,
+  request: HttpRequest<unknown>,
+): NavigationResponse {
+  const include = includeDelivered(request);
+  const delivered = deliveredMilestoneKeys(snapshot);
+  const remaining = snapshot.tasks.filter(
+    (task) =>
+      task.state !== 'done' && (include || !task.milestone || !delivered.has(task.milestone)),
+  );
+  const eligible = remaining.filter((task) => task.activation.isEligible);
+  return {
+    ...snapshot.navigation,
+    remainingCount: remaining.length,
+    activationEligibleCount: eligible.length,
+    tracks: snapshot.navigation.tracks.map((track) => ({
+      ...track,
+      remainingCount: remaining.filter((task) => task.track === track.key).length,
+      activationEligibleCount: eligible.filter((task) => task.track === track.key).length,
+    })),
+    milestones: snapshot.navigation.milestones
+      .filter((milestone) => include || !delivered.has(milestone.key))
+      .map((milestone) => ({
+        ...milestone,
+        remainingCount: remaining.filter((task) => task.milestone === milestone.key).length,
+        activationEligibleCount: eligible.filter((task) => task.milestone === milestone.key).length,
+      })),
+  };
+}
+
+function filterBoard(snapshot: StaticSnapshot, request: HttpRequest<unknown>): BoardResponse {
+  const board = snapshot.board;
   const track = normalize(request.params.get('track'));
   const milestone = normalize(request.params.get('milestone'));
   const state = normalize(request.params.get('state'));
+  const include = includeDelivered(request);
+  const delivered = deliveredMilestoneKeys(snapshot);
   const milestoneGroups = board.milestoneGroups
+    .filter((group) => include || !group.key || !delivered.has(group.key))
     .filter((group) => !milestone || group.key === milestone)
     .map((group) => ({
       ...group,
@@ -232,9 +267,33 @@ function filterBoard(board: BoardResponse, request: HttpRequest<unknown>): Board
     }));
   return {
     ...board,
-    filters: { track, milestone, state },
+    filters: { track, milestone, state, includeDelivered: include },
+    milestones: board.milestones.filter((option) => include || !delivered.has(option.key)),
     milestoneGroups,
   };
+}
+
+function includeDelivered(request: HttpRequest<unknown>): boolean {
+  const value = request.params.get('includeDelivered');
+  if (value === null || value.toLowerCase() === 'false') return false;
+  if (value.toLowerCase() === 'true') return true;
+  throw new HttpErrorResponse({
+    status: 400,
+    statusText: 'Bad Request',
+    error: {
+      title: 'Invalid query parameter',
+      detail: 'includeDelivered must be true or false.',
+      errorCode: 'invalid_query_parameter',
+    },
+  });
+}
+
+function deliveredMilestoneKeys(snapshot: StaticSnapshot): ReadonlySet<string> {
+  return new Set(
+    snapshot.activation.milestones
+      .filter((milestone) => milestone.lifecycle === 'delivered')
+      .map((milestone) => milestone.key),
+  );
 }
 
 function normalize(value: string | null): string | null {

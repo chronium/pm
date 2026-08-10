@@ -53,13 +53,13 @@ public static class TaskApiEndpoints
         LinkedProjectReadService? linkedReads = null)
     {
         api.MapGet("/tasks/search", (HttpRequest request, string query, int limit = 20,
-                string? track = null, string? milestone = null, string? state = null) =>
+                string? track = null, string? milestone = null, string? state = null,
+                bool includeDelivered = false) =>
             {
-                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
                 var result = taskService.SearchTasks(
                     query,
                     limit,
-                    new TaskSearchContext(track, milestone, state, IncludeDelivered: true));
+                    new TaskSearchContext(track, milestone, state, includeDelivered));
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 return Results.Ok(result.Payload!.Select(item => new TaskSearchResultResponse(
                     item.Task.Id,

@@ -15,7 +15,7 @@ class NestedTaskHost {}
 
 const boardResponse: BoardResponse = {
   projectName: 'Atlas Project',
-  filters: { track: null, milestone: null, state: null },
+  filters: { track: null, milestone: null, state: null, includeDelivered: false },
   tracks: [
     { key: 'PM', name: 'Product', priority: 'medium' },
     { key: 'BUILD', name: 'Build', priority: 'high' },

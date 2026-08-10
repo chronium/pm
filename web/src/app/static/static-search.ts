@@ -21,6 +21,7 @@ interface TaskSearchQuery {
 export function searchSnapshotTasks(
   snapshot: StaticSnapshot,
   request: HttpRequest<unknown>,
+  includeDelivered = false,
 ): TaskSearchResult[] {
   const query = parseTaskSearchQuery(request.params.get('query') ?? '');
   const context = {
@@ -30,9 +31,15 @@ export function searchSnapshotTasks(
   };
   validateTaskSearchContext(snapshot.settings, query.scope, context);
 
+  const deliveredMilestones = new Set(
+    snapshot.activation.milestones
+      .filter((milestone) => milestone.lifecycle === 'delivered')
+      .map((milestone) => milestone.key),
+  );
   const results = snapshot.tasks
     .filter(
       (task) =>
+        (includeDelivered || !task.milestone || !deliveredMilestones.has(task.milestone)) &&
         matchesAny(query.states, task.state) &&
         matchesAny(query.tracks, task.track) &&
         matchesAny(query.milestones, task.milestone ?? '') &&

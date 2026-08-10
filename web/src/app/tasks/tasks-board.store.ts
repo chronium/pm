@@ -11,10 +11,11 @@ import { ProjectContextService } from '../core/project-context.service';
 
 export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
 export type BoardQuery = NonNullable<operations['GetBoard']['parameters']['query']>;
+type BoardFilterQuery = Omit<BoardQuery, 'includeDelivered'>;
 export type BoardTask = components['schemas']['BoardTaskSummaryResponse'];
 export type BoardMilestoneGroup = components['schemas']['BoardMilestoneGroupResponse'];
 export type BoardStateGroup = components['schemas']['BoardStateGroupResponse'];
-export type BoardFilter = keyof BoardQuery;
+export type BoardFilter = keyof BoardFilterQuery;
 export interface StatusOpenIntent {
   milestone: BoardMilestoneGroup;
   state: BoardStateGroup;
@@ -45,7 +46,7 @@ export class TasksBoardStore {
   private readonly milestoneFilter = computed(() => this.queryValue('milestone'));
   private readonly stateFilter = computed(() => this.queryValue('state'));
 
-  readonly filters = computed<BoardQuery>(() => ({
+  readonly filters = computed<BoardFilterQuery>(() => ({
     ...(this.trackFilter() ? { track: this.trackFilter()! } : {}),
     ...(this.milestoneFilter() ? { milestone: this.milestoneFilter()! } : {}),
     ...(this.stateFilter() ? { state: this.stateFilter()! } : {}),

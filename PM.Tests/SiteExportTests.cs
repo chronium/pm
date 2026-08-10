@@ -62,6 +62,50 @@ public class SiteExportTests
     }
 
     [Fact]
+    public async Task SnapshotKeepsDeliveredWorkAndReflectsAReopenedMilestone()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var config = TestData.Config(
+            tracks: new Dictionary<string, string> { ["PM"] = "Product", ["OPS"] = "Operations" },
+            milestones: new Dictionary<string, string> { ["active"] = "Active", ["delivered"] = "Delivered" });
+        config.Milestones["delivered"].Delivery = new MilestoneDelivery
+        {
+            At = GeneratedAt,
+            Mode = MilestoneDeliveryMode.Exceptional,
+            Reason = "Accepted with open work.",
+            AcceptedTaskIds = ["OPS-0001"],
+        };
+        var projectRoot = await workspace.CreateProject(config);
+        var active = TestData.Task("PM-0001", "Active work", milestone: "active");
+        var delivered = TestData.Task("OPS-0001", "Delivered work", track: "OPS", milestone: "delivered");
+        projectRoot.WriteTask(active);
+        projectRoot.WriteTask(delivered);
+        projectRoot.UpdateTaskState(active, "todo");
+        projectRoot.UpdateTaskState(delivered, "todo");
+
+        var deliveredSnapshot = await CreateSnapshotBuilder(projectRoot).BuildAsync(GeneratedAt);
+
+        Assert.True(deliveredSnapshot.Success, deliveredSnapshot.Message);
+        Assert.True(deliveredSnapshot.Payload!.Board.Filters.IncludeDelivered);
+        Assert.Contains(deliveredSnapshot.Payload.Board.MilestoneGroups, group => group.Key == "delivered");
+        Assert.Contains(deliveredSnapshot.Payload.Navigation.Milestones, option => option.Key == "delivered");
+        Assert.Contains(deliveredSnapshot.Payload.Tasks, task => task.Id == "OPS-0001");
+        Assert.Equal("delivered", deliveredSnapshot.Payload.Activation.Milestones
+            .Single(milestone => milestone.Key == "delivered").Lifecycle);
+
+        projectRoot.Config!.Milestones["delivered"].Delivery = null;
+        projectRoot.Config.WriteConfig(projectRoot);
+
+        var reopenedSnapshot = await CreateSnapshotBuilder(projectRoot).BuildAsync(GeneratedAt.AddMinutes(1));
+
+        Assert.True(reopenedSnapshot.Success, reopenedSnapshot.Message);
+        Assert.Equal("active", reopenedSnapshot.Payload!.Activation.Milestones
+            .Single(milestone => milestone.Key == "delivered").Lifecycle);
+        Assert.Contains(reopenedSnapshot.Payload.Board.MilestoneGroups, group => group.Key == "delivered");
+        Assert.Contains(reopenedSnapshot.Payload.Tasks, task => task.Id == "OPS-0001");
+    }
+
+    [Fact]
     public async Task SnapshotPublishesLinkedSiteMetadataWithoutRequiringTheLinkedCheckout()
     {
         using var workspace = new TempWorkingDirectory();

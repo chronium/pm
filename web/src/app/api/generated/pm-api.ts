@@ -2218,6 +2218,7 @@ export interface components {
             track: null | string;
             milestone: null | string;
             state: null | string;
+            includeDelivered: boolean;
         };
         BoardMilestoneGroupResponse: {
             key: null | string;
@@ -2806,7 +2807,9 @@ export interface operations {
     };
     GetBoardNavigation: {
         parameters: {
-            query?: never;
+            query?: {
+                includeDelivered?: boolean;
+            };
             header?: {
                 /** @description Return 304 when this resource revision still matches. */
                 "If-None-Match"?: string;
@@ -2862,6 +2865,7 @@ export interface operations {
                 track?: string;
                 milestone?: string;
                 state?: string;
+                includeDelivered?: boolean;
             };
             header?: {
                 /** @description Return 304 when this resource revision still matches. */
@@ -2920,6 +2924,7 @@ export interface operations {
                 track?: string;
                 milestone?: string;
                 state?: string;
+                includeDelivered?: boolean;
             };
             header?: never;
             path?: never;
@@ -10863,7 +10868,9 @@ export interface operations {
     };
     GetLinkedProjectBoardNavigation: {
         parameters: {
-            query?: never;
+            query?: {
+                includeDelivered?: boolean;
+            };
             header?: {
                 /** @description Return 304 when this resource revision still matches. */
                 "If-None-Match"?: string;
@@ -10901,6 +10908,7 @@ export interface operations {
                 track?: string;
                 milestone?: string;
                 state?: string;
+                includeDelivered?: boolean;
             };
             header?: {
                 /** @description Return 304 when this resource revision still matches. */
@@ -10941,6 +10949,7 @@ export interface operations {
                 track?: string;
                 milestone?: string;
                 state?: string;
+                includeDelivered?: boolean;
             };
             header?: never;
             path?: never;

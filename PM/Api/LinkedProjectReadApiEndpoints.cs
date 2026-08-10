@@ -66,11 +66,10 @@ public static class LinkedProjectReadApiEndpoints
             .Produces<ApiProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")
             .Produces<ApiProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json");
 
-        projects.MapGet("/board/navigation", (HttpRequest request) =>
+        projects.MapGet("/board/navigation", (HttpRequest request, bool includeDelivered = false) =>
             {
                 var context = GetContext(request);
-                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
-                var result = context.Board.GetNavigation(includeDelivered: true);
+                var result = context.Board.GetNavigation(includeDelivered);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var revision = context.Revisions.GetBoardRevision(result.Payload!.Board);
                 if (!revision.Success)
@@ -86,12 +85,12 @@ public static class LinkedProjectReadApiEndpoints
             .WithRevisionedReadMetadata();
 
         projects.MapGet("/board", async (HttpRequest request, string? track, string? milestone, string? state,
-                CancellationToken cancellationToken) =>
+                bool includeDelivered = false,
+                CancellationToken cancellationToken = default) =>
             {
                 var context = GetContext(request);
-                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
                 var query = new BoardQuery(
-                    Normalize(track), Normalize(milestone), Normalize(state), IncludeDelivered: true);
+                    Normalize(track), Normalize(milestone), Normalize(state), includeDelivered);
                 var result = context.Board.GetBoard(query);
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 var board = result.Payload!;
@@ -118,13 +117,13 @@ public static class LinkedProjectReadApiEndpoints
             .WithRevisionedReadMetadata();
 
         projects.MapGet("/tasks/search", (HttpRequest request, string query, int limit = 20,
-                string? track = null, string? milestone = null, string? state = null) =>
+                string? track = null, string? milestone = null, string? state = null,
+                bool includeDelivered = false) =>
             {
-                // PM-0115 removes this compatibility opt-in when HTTP exposes includeDelivered.
                 var result = GetContext(request).Tasks.SearchTasks(
                     query,
                     limit,
-                    new TaskSearchContext(track, milestone, state, IncludeDelivered: true));
+                    new TaskSearchContext(track, milestone, state, includeDelivered));
                 if (!result.Success) return ApiResults.Failure(result.ErrorCode, result.Message, request.Path);
                 return Results.Ok(result.Payload!.Select(item => new TaskSearchResultResponse(
                     item.Task.Id, item.Task.Title, item.State, item.Track, item.Milestone,

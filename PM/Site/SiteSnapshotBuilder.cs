@@ -236,7 +236,11 @@ public sealed class SiteSnapshotBuilder(
 
     private static BoardResponse ToBoardResponse(BoardData board) => new(
         board.ProjectName,
-        new BoardFilterResponse(board.Query.Track, board.Query.Milestone, board.Query.State),
+        new BoardFilterResponse(
+            board.Query.Track,
+            board.Query.Milestone,
+            board.Query.State,
+            board.Query.IncludeDelivered),
         board.Tracks.Select(ToOption).ToList(),
         board.Milestones.Select(ToOption).ToList(),
         board.States.Select(ToOption).ToList(),

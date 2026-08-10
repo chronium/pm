@@ -100,7 +100,10 @@ export class ActivationRequirementEditor {
           this.error.set(null);
           return this.http
             .get<TaskSearchResult[]>(this.projectContext.apiUrl('/tasks/search'), {
-              params: new HttpParams().set('query', query).set('limit', 20),
+              params: new HttpParams()
+                .set('query', query)
+                .set('limit', 20)
+                .set('includeDelivered', true),
             })
             .pipe(
               map((results) => ({ results, error: null as string | null })),

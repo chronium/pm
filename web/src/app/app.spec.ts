@@ -97,7 +97,7 @@ describe('application shell', () => {
     for (const request of boardRequest) {
       request.flush({
         projectName,
-        filters: { track: null, milestone: null, state: null },
+        filters: { track: null, milestone: null, state: null, includeDelivered: false },
         tracks: [],
         milestones: [],
         states: [],
