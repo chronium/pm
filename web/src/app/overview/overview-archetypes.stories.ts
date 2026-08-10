@@ -476,9 +476,13 @@ const verifyComposition =
   (composition: ArchetypeComposition): NonNullable<Story['play']> =>
   async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const overviewShell = canvasElement.querySelector<HTMLElement>('.overview-shell');
+    const overviewContent = canvasElement.querySelector<HTMLElement>('.overview-content');
     const headings = Array.from(
       canvasElement.querySelectorAll<HTMLElement>('main h1, main h2[id^="overview-"]'),
     ).map((heading) => heading.textContent?.trim());
+    expect(getComputedStyle(overviewShell!).paddingBlockStart).toBe('0px');
+    expect(getComputedStyle(overviewContent!).paddingBlockStart).toBe('0px');
     expect(headings).toEqual(expectedHeadings(composition));
     await expect(canvas.getByRole('link', { name: 'View tasks' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Read documentation' })).toBeVisible();

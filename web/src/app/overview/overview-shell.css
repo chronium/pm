@@ -14,6 +14,7 @@
   height: calc(100% - var(--pm-content-surface-margin) - var(--pm-content-surface-margin));
   min-height: 0;
   margin: var(--pm-content-surface-margin) auto;
+  padding-block-start: 0;
   background: var(--pm-frosted-surface-fill);
 }
 
@@ -21,11 +22,12 @@
   position: relative;
   z-index: 1;
   min-height: 100%;
-  padding: clamp(var(--pm-space-4), 4vw, var(--pm-space-6));
+  padding: 0 clamp(var(--pm-space-4), 4vw, var(--pm-space-6))
+    clamp(var(--pm-space-4), 4vw, var(--pm-space-6));
 }
 
 @media (max-width: 520px) {
   .overview-content {
-    padding: var(--pm-space-4);
+    padding: 0 var(--pm-space-4) var(--pm-space-4);
   }
 }
