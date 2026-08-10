@@ -796,6 +796,22 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
     byteLength: artifactContent.length,
     sha256: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
   };
+  const patchPaths = [
+    {
+      path: 'PM/TaskService.cs',
+      status: 'modified',
+      insertions: 3,
+      deletions: 1,
+      binary: false,
+    },
+    ...Array.from({ length: 23 }, (_, index) => ({
+      path: `PM.Tests/PatchCollectionFixture${String(index + 1).padStart(2, '0')}.cs`,
+      status: 'modified',
+      insertions: index + 1,
+      deletions: index % 3,
+      binary: false,
+    })),
+  ];
   const journal = [
     ...runEvents,
     ...Array.from({ length: 1989 }, (_, index) => ({
@@ -938,16 +954,13 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
             },
           ],
           warnings: [],
-          paths: [
-            {
-              path: 'PM/TaskService.cs',
-              status: 'modified',
-              insertions: 3,
-              deletions: 1,
-              binary: false,
-            },
-          ],
-          statistics: { filesChanged: 1, insertions: 3, deletions: 1, binaryFiles: 0 },
+          paths: patchPaths,
+          statistics: {
+            filesChanged: patchPaths.length,
+            insertions: patchPaths.reduce((total, path) => total + path.insertions, 0),
+            deletions: patchPaths.reduce((total, path) => total + path.deletions, 0),
+            binaryFiles: 0,
+          },
         },
       });
       return;
@@ -963,7 +976,7 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
           artifactSha256: downloadableArtifact.sha256,
           baseCommit: completedInspection.run.specification.repository.baseCommit,
           headCommit: completedInspection.run.specification.repository.baseCommit,
-          paths: ['PM/TaskService.cs'],
+          paths: patchPaths.map((path) => path.path),
           appliedAt: '2026-07-29T08:11:00.000Z',
         },
       });
@@ -1005,8 +1018,60 @@ test('pairs a runner, starts one immutable task run, and supervises its durable 
   await page.getByRole('button', { name: 'Review & collect' }).click();
   const collection = page.getByRole('dialog', { name: 'Review patch collection' });
   await expect(collection.getByText('PM/TaskService.cs')).toBeVisible();
+  await expect(collection.getByRole('button', { name: 'Close' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(
+    collection.getByRole('region', { name: 'Patch collection review details' }),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(collection.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(collection.getByRole('button', { name: 'Collect patch' })).toBeFocused();
+
+  const patchLayout = await collection.evaluate((dialog) => {
+    const body = dialog.querySelector<HTMLElement>('.patch-body')!;
+    const actions = dialog.querySelector<HTMLElement>('.patch-actions')!;
+    const dialogBounds = dialog.getBoundingClientRect();
+    const bodyBounds = body.getBoundingClientRect();
+    const actionsBounds = actions.getBoundingClientRect();
+    return {
+      bodyClientHeight: body.clientHeight,
+      bodyScrollHeight: body.scrollHeight,
+      bodyBottom: bodyBounds.bottom,
+      actionsTop: actionsBounds.top,
+      actionsBottom: actionsBounds.bottom,
+      dialogBottom: dialogBounds.bottom,
+    };
+  });
+  expect(patchLayout.bodyScrollHeight).toBeGreaterThan(patchLayout.bodyClientHeight);
+  expect(patchLayout.bodyBottom).toBeLessThanOrEqual(patchLayout.actionsTop + 1);
+  expect(patchLayout.actionsBottom).toBeLessThanOrEqual(patchLayout.dialogBottom + 1);
+
+  const patchBody = collection.locator('.patch-body');
+  await patchBody.evaluate((body) => (body.scrollTop = body.scrollHeight));
+  const scrolledPatchLayout = await collection.evaluate((dialog) => {
+    const body = dialog.querySelector<HTMLElement>('.patch-body')!;
+    const actions = dialog.querySelector<HTMLElement>('.patch-actions')!;
+    return {
+      bodyScrollTop: body.scrollTop,
+      bodyBottom: body.getBoundingClientRect().bottom,
+      actionsTop: actions.getBoundingClientRect().top,
+      actionsBottom: actions.getBoundingClientRect().bottom,
+      dialogBottom: dialog.getBoundingClientRect().bottom,
+    };
+  });
+  expect(scrolledPatchLayout.bodyScrollTop).toBeGreaterThan(0);
+  expect(scrolledPatchLayout.bodyBottom).toBeLessThanOrEqual(scrolledPatchLayout.actionsTop + 1);
+  expect(scrolledPatchLayout.actionsBottom).toBeLessThanOrEqual(
+    scrolledPatchLayout.dialogBottom + 1,
+  );
+  await expect(collection.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(collection.getByRole('button', { name: 'Cancel' })).toBeVisible();
+  await expect(collection.getByRole('button', { name: 'Collect patch' })).toBeVisible();
   await collection.getByRole('button', { name: 'Collect patch' }).click();
-  await expect(page.getByText('Collected 1 changed path into the local worktree.')).toBeVisible();
+  await expect(
+    page.getByText(`Collected ${patchPaths.length} changed paths into the local worktree.`),
+  ).toBeVisible();
   if (testInfo.project.name.includes('mobile')) {
     await page.getByRole('tab', { name: 'Output' }).click();
   }

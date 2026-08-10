@@ -14,7 +14,7 @@
     </button>
   </header>
 
-  <div class="patch-body">
+  <div class="patch-body" role="region" aria-label="Patch collection review details" tabindex="0">
     @if (loading()) {
       <p class="loading" role="status">Checking the local repository and verified patch…</p>
     } @else if (preflight(); as result) {

@@ -9,6 +9,10 @@
   background: var(--pm-surface-raised);
   color: var(--pm-text-primary);
 }
+.patch-dialog[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
 .patch-dialog::backdrop {
   background: var(--pm-overlay-backdrop);
 }
@@ -41,8 +45,8 @@ h2 {
 }
 .patch-body {
   display: grid;
+  min-height: 0;
   gap: var(--pm-space-5);
-  max-height: calc(100dvh - 180px);
   padding: var(--pm-space-5);
   overflow: auto;
 }
@@ -111,12 +115,14 @@ h3 {
   font-size: var(--pm-font-size-sm);
 }
 .path-list {
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  column-gap: var(--pm-space-3);
   border-top: 1px solid var(--pm-border-subtle);
 }
 .path-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--pm-space-3);
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   padding: var(--pm-space-2) 0;
   border-bottom: 1px solid var(--pm-border-subtle);
 }
@@ -147,15 +153,14 @@ h3 {
     border-radius: 0;
   }
   .patch-body {
-    max-height: calc(100dvh - 150px);
     padding: var(--pm-space-4);
   }
   .patch-header,
   .patch-actions {
     padding-inline: var(--pm-space-4);
   }
-  .path-list li {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .path-list {
+    grid-template-columns: minmax(0, 1fr) max-content;
   }
   .path-list li span:last-child {
     grid-column: 2;
