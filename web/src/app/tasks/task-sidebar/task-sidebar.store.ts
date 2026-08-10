@@ -1,4 +1,4 @@
-import { HttpErrorResponse, HttpResponse, httpResource } from '@angular/common/http';
+import { HttpErrorResponse, HttpParams, HttpResponse, httpResource } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
@@ -20,10 +20,14 @@ export class TaskSidebarStore {
   private readonly retained = signal<BoardNavigationResponse | undefined>(undefined);
   private readonly etag = signal('');
   private lastRefreshRequest = this.taskNavigation.refreshRequest();
-
-  readonly resource = httpResource<BoardNavigationResponse>(() =>
-    this.projectContext.apiUrl('/board/navigation'),
+  readonly includeDelivered = computed(
+    () => this.projectContext.taskFilters().includeDelivered === true,
   );
+
+  readonly resource = httpResource<BoardNavigationResponse>(() => ({
+    url: this.projectContext.apiUrl('/board/navigation'),
+    params: this.visibilityParams(),
+  }));
   readonly navigation = computed(() =>
     this.resource.hasValue() ? this.resource.value() : this.retained(),
   );
@@ -39,6 +43,7 @@ export class TaskSidebarStore {
         ? {
             url: this.projectContext.apiUrl('/board/navigation'),
             etag: this.etag() || `"${navigation.revision}"`,
+            params: this.visibilityParams(),
           }
         : null;
     },
@@ -46,11 +51,11 @@ export class TaskSidebarStore {
   });
 
   constructor() {
-    let apiPrefix = this.projectContext.apiPrefix();
+    let resourceKey = this.resourceKey();
     effect(() => {
-      const nextPrefix = this.projectContext.apiPrefix();
-      if (nextPrefix === apiPrefix) return;
-      apiPrefix = nextPrefix;
+      const nextKey = this.resourceKey();
+      if (nextKey === resourceKey) return;
+      resourceKey = nextKey;
       this.retained.set(undefined);
       this.etag.set('');
       this.pollStatus.stop();
@@ -104,6 +109,16 @@ export class TaskSidebarStore {
     this.retained.set(response.body);
     this.etag.set(response.headers.get('ETag') ?? `"${response.body.revision}"`);
     this.taskNavigation.setRemainingCount(Number(response.body.remainingCount));
+  }
+
+  private resourceKey(): string {
+    return `${this.projectContext.apiPrefix()}|${this.includeDelivered()}`;
+  }
+
+  private visibilityParams(): HttpParams {
+    return this.includeDelivered()
+      ? new HttpParams().set('includeDelivered', true)
+      : new HttpParams();
   }
 
   private readableError(error: Error | undefined): string | null {

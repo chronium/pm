@@ -58,9 +58,11 @@ children:
     const milestone =
       process.env.PM_E2E_MODE === 'static' && number === 5
         ? null
-        : number % 4 === 0
-          ? 'later'
-          : 'current';
+        : process.env.PM_E2E_MODE !== 'static' && number === 6
+          ? 'archive'
+          : number % 4 === 0
+            ? 'later'
+            : 'current';
     const milestoneMetadata = milestone ? `milestone: ${milestone}\n` : '';
     const dependency =
       number > 1 && number % 6 === 0
@@ -196,6 +198,17 @@ milestones:
     priority: none
     requiredActivationTriggers:${partialActivation ? '\n      - beta-entry\n      - risk-entry' : ' []'}
     delivery: null
+  archive:
+    title: Accepted Archive
+    description: Historical work accepted with one unfinished task.
+    priority: low
+    requiredActivationTriggers: []
+    delivery:
+      at: 2026-01-01T01:00:00.0000000Z
+      mode: exceptional
+      reason: Historical fixture delivery.
+      acceptedTaskIds:
+        - E2E-0006
 activationTriggers:
   manual-entry:
     title: Manual entry

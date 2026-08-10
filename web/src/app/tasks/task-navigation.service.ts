@@ -108,7 +108,7 @@ export class TaskNavigationService {
   private scopedBoardUrl(router: Router): string {
     const current = router.parseUrl(router.url);
     const queryParams = Object.fromEntries(
-      ['track', 'milestone', 'state']
+      ['track', 'milestone', 'state', 'includeDelivered']
         .map((key) => [key, current.queryParams[key]])
         .filter(
           (entry): entry is [string, string] => typeof entry[1] === 'string' && !!entry[1].trim(),

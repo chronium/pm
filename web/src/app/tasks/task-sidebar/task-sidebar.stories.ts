@@ -130,6 +130,21 @@ export const ActiveMilestone: Story = {
   },
 };
 
+export const ShowDelivered: Story = {
+  decorators: [
+    applicationConfig({
+      providers: [{ provide: TaskSidebarStore, useValue: storyStore(realistic) }],
+    }),
+  ],
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole('link', { name: /All tasks/ }));
+    const toggle = canvas.getByRole('button', { name: 'Show delivered' });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(toggle);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  },
+};
+
 export const Loading: Story = {
   decorators: [
     applicationConfig({

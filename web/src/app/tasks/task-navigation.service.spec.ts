@@ -29,8 +29,10 @@ describe('TaskNavigationService', () => {
   it('keeps canonical hrefs while desktop activation opens a scoped dialog route', async () => {
     const router = TestBed.inject(Router);
     const navigation = TestBed.inject(TaskNavigationService);
-    await router.navigateByUrl('/tasks?track=PM&state=todo');
-    expect(navigation.canonicalHref(router, 'PM-0060')).toBe('/tasks/PM-0060?track=PM&state=todo');
+    await router.navigateByUrl('/tasks?track=PM&state=todo&includeDelivered=true');
+    expect(navigation.canonicalHref(router, 'PM-0060')).toBe(
+      '/tasks/PM-0060?track=PM&state=todo&includeDelivered=true',
+    );
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({ matches: false }) as MediaQueryList),
@@ -38,7 +40,7 @@ describe('TaskNavigationService', () => {
     const event = new MouseEvent('click', { button: 0, cancelable: true });
     await navigation.openDialog(event, router, 'PM-0060');
     expect(event.defaultPrevented).toBe(true);
-    expect(router.url).toBe('/tasks/dialog/PM-0060?track=PM&state=todo');
+    expect(router.url).toBe('/tasks/dialog/PM-0060?track=PM&state=todo&includeDelivered=true');
   });
 
   it('uses canonical pages on mobile and leaves modified activation to the browser', async () => {
@@ -80,5 +82,13 @@ describe('TaskNavigationService', () => {
         recommendationReason: 'Selected urgent ready task.',
       },
     });
+  });
+
+  it('keeps delivered visibility in a direct task page fallback URL', async () => {
+    const router = TestBed.inject(Router);
+    const navigation = TestBed.inject(TaskNavigationService);
+    await router.navigateByUrl('/tasks/PM-0060?state=todo&includeDelivered=true');
+
+    expect(navigation.returnUrl(router)).toBe('/tasks?state=todo&includeDelivered=true');
   });
 });

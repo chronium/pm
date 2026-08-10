@@ -8,7 +8,8 @@ nav {
 }
 
 a,
-.next-task-action {
+.next-task-action,
+.delivered-toggle {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
@@ -21,12 +22,14 @@ a,
 }
 
 .new-task-action,
-.next-task-action {
+.next-task-action,
+.delivered-toggle {
   width: 100%;
   gap: var(--pm-space-2);
 }
 
-.next-task-action {
+.next-task-action,
+.delivered-toggle {
   border: 0;
   background: transparent;
   font: inherit;
@@ -37,7 +40,9 @@ a,
 
 a:hover,
 .next-task-action:hover:not(:disabled),
-.next-task-action:focus-visible {
+.next-task-action:focus-visible,
+.delivered-toggle:hover,
+.delivered-toggle:focus-visible {
   background: var(--pm-surface-hover);
   color: var(--pm-text-primary);
 }
@@ -143,15 +148,25 @@ h2 {
   font-size: 18px;
 }
 
-:host :is(.new-task-action, .next-task-action) {
+:host :is(.new-task-action, .next-task-action, .delivered-toggle) {
   min-height: 30px;
   border: 1px solid transparent;
   background: color-mix(in oklch, var(--pm-surface-raised) 28%, transparent);
 }
 
-:host :is(.new-task-action, .next-task-action):is(:hover, :focus-visible):not(:disabled) {
+:host
+  :is(.new-task-action, .next-task-action, .delivered-toggle):is(:hover, :focus-visible):not(
+    :disabled
+  ) {
   border-color: color-mix(in oklch, var(--pm-border-subtle) 72%, transparent);
   background: color-mix(in oklch, var(--pm-surface-hover) 72%, transparent);
+}
+
+:host .delivered-toggle[aria-pressed='true'] {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--pm-accent-soft) 32%, var(--pm-surface-raised));
+  color: var(--pm-accent-strong);
+  font-weight: 600;
 }
 
 :host .scope-scroll section {

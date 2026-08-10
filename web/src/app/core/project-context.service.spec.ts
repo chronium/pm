@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 
 import { ProjectContextService } from './project-context.service';
+import { StaticModeService } from '../static/static-mode.service';
 
 @Component({ template: '' })
 class RouteTarget {}
@@ -50,11 +51,13 @@ describe('ProjectContextService', () => {
       '/projects/prj_child/wiki/meta/guide/start',
     );
 
-    context.rememberTaskFilters({ track: 'GAME', state: 'todo' });
-    expect(context.modeUrl('tasks')).toBe('/projects/prj_child/tasks?track=GAME&state=todo');
+    context.rememberTaskFilters({ track: 'GAME', state: 'todo', includeDelivered: true });
+    expect(context.modeUrl('tasks')).toBe(
+      '/projects/prj_child/tasks?track=GAME&state=todo&includeDelivered=true',
+    );
     expect(context.modeUrl('wiki')).toBe('/projects/prj_child/wiki');
     expect(context.projectModeUrl('prj_child')).toBe(
-      '/projects/prj_child/tasks?track=GAME&state=todo',
+      '/projects/prj_child/tasks?track=GAME&state=todo&includeDelivered=true',
     );
 
     context.enableFamilyMetadata();
@@ -122,5 +125,18 @@ describe('ProjectContextService', () => {
     expect(context.overviewRoot()).toBe('/projects/prj_child/overview');
     expect(context.modeUrl('overview')).toBe('/projects/prj_child/overview');
     expect(context.projectModeUrl('prj_other')).toBe('/projects/prj_other/overview');
+  });
+
+  it('restores task visibility after static task and wiki navigation', async () => {
+    TestBed.overrideProvider(StaticModeService, { useValue: { enabled: true } });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/tasks?state=todo&includeDelivered=true');
+    const context = TestBed.inject(ProjectContextService);
+
+    expect(context.taskFilters()).toEqual({ state: 'todo', includeDelivered: true });
+    context.rememberTaskFilters(context.taskFilters());
+    await router.navigateByUrl('/wiki');
+
+    expect(context.modeUrl('tasks')).toBe('/tasks?state=todo&includeDelivered=true');
   });
 });

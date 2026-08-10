@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
-import { Component, DestroyRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
@@ -18,6 +18,11 @@ interface SearchOption extends TopBarSearchOption {
   field?: SearchField;
   value?: string;
   result?: TaskSearchResult;
+}
+
+interface SearchRequest {
+  query: string;
+  includeDelivered: boolean;
 }
 
 const patterns: SearchOption[] = [
@@ -83,7 +88,7 @@ export class TaskSearch {
   private readonly projectContext = inject(ProjectContextService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly search = viewChild(TopBarSearch);
-  private readonly requests = new Subject<string>();
+  private readonly requests = new Subject<SearchRequest>();
   private readonly settings = signal<SettingsResponse | null>(null);
   private readonly resultOptions = signal<SearchOption[]>([]);
   private readonly suggestionOptions = signal<SearchOption[]>([]);
@@ -91,6 +96,9 @@ export class TaskSearch {
   protected readonly query = signal('');
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
+  private readonly includeDelivered = computed(
+    () => this.projectContext.taskFilters().includeDelivered === true,
+  );
   protected readonly options = computed(() => {
     if (!this.query().trim()) return patterns;
     return this.suggestionOptions().length ? this.suggestionOptions() : this.resultOptions();
@@ -105,14 +113,17 @@ export class TaskSearch {
     this.requests
       .pipe(
         debounceTime(250),
-        distinctUntilChanged(),
-        switchMap((query) => {
+        distinctUntilChanged(
+          (left, right) =>
+            left.query === right.query && left.includeDelivered === right.includeDelivered,
+        ),
+        switchMap(({ query, includeDelivered }) => {
           if (!query) return of({ results: [] as TaskSearchResult[], error: null });
           this.loading.set(true);
           this.error.set(null);
           return this.http
             .get<TaskSearchResult[]>(this.projectContext.apiUrl('/tasks/search'), {
-              params: this.searchParams(query),
+              params: this.searchParams(query, includeDelivered),
             })
             .pipe(
               map((results) => ({ results, error: null as string | null })),
@@ -128,6 +139,14 @@ export class TaskSearch {
         this.error.set(error);
         this.resultOptions.set(results.map((result) => this.resultOption(result)));
       });
+
+    let includeDelivered = this.includeDelivered();
+    effect(() => {
+      const next = this.includeDelivered();
+      if (next === includeDelivered) return;
+      includeDelivered = next;
+      this.queueCurrentSearch();
+    });
   }
 
   protected onQueryEdited(query: string): void {
@@ -136,7 +155,7 @@ export class TaskSearch {
     this.updateSuggestions();
     const requestQuery = this.completeQuery() ? query.trim() : '';
     this.loading.set(!!requestQuery && this.suggestionOptions().length === 0);
-    this.requests.next(requestQuery);
+    this.queueSearch(requestQuery);
   }
 
   protected accept(selected: TopBarSearchOption): void {
@@ -224,18 +243,28 @@ export class TaskSearch {
       this.updateSuggestions(start + replacement.length);
       const requestQuery = this.completeQuery() ? this.query().trim() : '';
       this.loading.set(!!requestQuery && this.suggestionOptions().length === 0);
-      this.requests.next(requestQuery);
+      this.queueSearch(requestQuery);
     });
   }
 
-  private searchParams(query: string): HttpParams {
+  private searchParams(query: string, includeDelivered: boolean): HttpParams {
     let params = new HttpParams().set('query', query).set('limit', 20);
-    const current = this.router.parseUrl(this.router.url).queryParams;
+    const current = this.projectContext.taskFilters();
     for (const field of ['track', 'milestone'] as const) {
-      if (typeof current[field] === 'string' && current[field].trim())
-        params = params.set(field, current[field]);
+      if (current[field]) params = params.set(field, current[field]);
     }
+    if (includeDelivered) params = params.set('includeDelivered', true);
     return params;
+  }
+
+  private queueCurrentSearch(): void {
+    const requestQuery = this.completeQuery() ? this.query().trim() : '';
+    this.loading.set(!!requestQuery && this.suggestionOptions().length === 0);
+    this.queueSearch(requestQuery);
+  }
+
+  private queueSearch(query: string): void {
+    this.requests.next({ query, includeDelivered: this.includeDelivered() });
   }
 
   private resultOption(result: TaskSearchResult): SearchOption {

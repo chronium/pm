@@ -42,6 +42,9 @@ export class TaskSidebar {
   protected readonly allActive = computed(
     () => !this.settingsActive() && !this.activeTrack() && !this.activeMilestone(),
   );
+  protected readonly includeDelivered = computed(
+    () => this.projectContext.taskFilters().includeDelivered === true,
+  );
 
   protected select(event: MouseEvent, captureFocus = false): void {
     if (captureFocus) this.navigation.captureOrigin(event.currentTarget);
@@ -67,6 +70,23 @@ export class TaskSidebar {
       recommendation.task.id,
       recommendation.reason,
     );
+  }
+
+  protected toggleDelivered(): void {
+    const tree = this.router.parseUrl(this.router.url);
+    if (this.includeDelivered()) {
+      delete tree.queryParams['includeDelivered'];
+      const selectedMilestone = this.store
+        .navigation()
+        ?.milestones.find((milestone) => milestone.key === this.activeMilestone());
+      if (selectedMilestone?.lifecycle === 'delivered') {
+        delete tree.queryParams['milestone'];
+        delete tree.queryParams['track'];
+      }
+    } else {
+      tree.queryParams['includeDelivered'] = 'true';
+    }
+    void this.router.navigateByUrl(tree);
   }
 
   protected countLabel(eligible: number | string, remaining: number | string): string {

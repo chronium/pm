@@ -40,6 +40,15 @@
     }
   }
 
+  <button
+    type="button"
+    class="delivered-toggle"
+    [attr.aria-pressed]="includeDelivered()"
+    (click)="toggleDelivered()"
+  >
+    <span>Show delivered</span>
+  </button>
+
   <div
     class="scope-scroll pm-accent-scrollbar"
     role="region"

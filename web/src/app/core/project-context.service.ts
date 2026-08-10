@@ -45,6 +45,13 @@ export interface LinkedProjectFamily {
 
 export type ProjectMode = 'overview' | 'tasks' | 'wiki';
 
+export interface TaskPageFilters {
+  track?: string;
+  milestone?: string;
+  state?: string;
+  includeDelivered?: true;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProjectContextService {
   private readonly router = inject(Router, { optional: true });
@@ -90,6 +97,25 @@ export class ProjectContextService {
   readonly settingsRoot = computed(() => `${this.tasksRoot()}/settings`);
   readonly wikiRoot = computed(() => this.routeRoot('wiki'));
   readonly storageProjectId = computed(() => this.selectedProjectId() ?? 'current');
+  readonly taskFilters = computed<TaskPageFilters>(
+    () => {
+      const query = this.router?.parseUrl(this.currentUrl()).queryParams ?? {};
+      const filters: TaskPageFilters = {};
+      for (const key of ['track', 'milestone', 'state'] as const) {
+        const value: unknown = query[key];
+        if (typeof value === 'string' && value.trim()) filters[key] = value.trim();
+      }
+      if (query['includeDelivered'] === 'true') filters.includeDelivered = true;
+      return filters;
+    },
+    {
+      equal: (left, right) =>
+        left.track === right.track &&
+        left.milestone === right.milestone &&
+        left.state === right.state &&
+        left.includeDelivered === right.includeDelivered,
+    },
+  );
 
   readonly family = httpResource<LinkedProjectFamily>(() =>
     this.staticMode.enabled || !this.familyMetadataEnabled() ? undefined : '/api/v1/project/links',
@@ -185,7 +211,7 @@ export class ProjectContextService {
 
   modeUrl(mode: ProjectMode): string {
     const root = this.routeRoot(mode);
-    if (mode !== 'tasks' || this.staticMode.enabled) return root;
+    if (mode !== 'tasks') return root;
     try {
       const query = this.readTaskFilters(this.storageProjectId());
       return query ? `${root}?${query}` : root;
@@ -204,9 +230,12 @@ export class ProjectContextService {
     return url.includes('?') ? (this.router?.parseUrl(url) ?? url) : url;
   }
 
-  rememberTaskFilters(filters: Record<string, string | undefined>): void {
+  rememberTaskFilters(filters: TaskPageFilters): void {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+    for (const [key, value] of Object.entries(filters)) {
+      if (typeof value === 'string' && value) params.set(key, value);
+      else if (value === true) params.set(key, 'true');
+    }
     try {
       const projectId = this.storageProjectId();
       const value = params.toString();

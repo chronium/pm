@@ -108,6 +108,7 @@ describe('TaskSearch', () => {
     expect(first.request.params.get('track')).toBe('BUILD');
     expect(first.request.params.get('milestone')).toBe('M1');
     expect(first.request.params.has('state')).toBe(false);
+    expect(first.request.params.has('includeDelivered')).toBe(false);
 
     enter(element, 'second');
     await debounce();
@@ -137,6 +138,26 @@ describe('TaskSearch', () => {
     expect(all.request.params.has('track')).toBe(false);
     expect(all.request.params.has('milestone')).toBe(false);
     all.flush([]);
+  });
+
+  it('refreshes an open whole-project search when delivered visibility changes', async () => {
+    const { fixture, element } = render();
+    const router = TestBed.inject(Router);
+    const http = TestBed.inject(HttpTestingController);
+    await router.navigateByUrl('/tasks');
+    enter(element, 'in:all');
+    await debounce();
+    const hidden = http.expectOne((request) => request.url === '/api/v1/tasks/search');
+    expect(hidden.request.params.has('includeDelivered')).toBe(false);
+    hidden.flush([]);
+
+    await router.navigateByUrl('/tasks?includeDelivered=true');
+    fixture.detectChanges();
+    await debounce();
+    const included = http.expectOne((request) => request.url === '/api/v1/tasks/search');
+    expect(included.request.params.get('query')).toBe('in:all');
+    expect(included.request.params.get('includeDelivered')).toBe('true');
+    included.flush([]);
   });
 
   it('supports keyboard selection and opens a result without dropping query parameters', async () => {

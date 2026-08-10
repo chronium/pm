@@ -63,7 +63,7 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   if (await menu.isVisible()) await menu.click();
   await page.getByRole('link', { name: /Operations/ }).click();
   await expect(page).toHaveURL(/track=OPS/);
-  await expect(page.locator('[pmTaskRow]')).toHaveCount(2);
+  await expect(page.locator('[pmTaskRow]')).toHaveCount(1);
   if (await menu.isVisible()) await menu.click();
   await page.getByRole('link', { name: /All tasks/ }).click();
   await expect(page).not.toHaveURL(/track=/);
@@ -82,6 +82,49 @@ test('routes, filters, deep-link fallback, and theme persistence', async ({ page
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'dark');
+});
+
+test('reveals delivered work on demand and keeps the setting in task context', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/tasks?state=todo&view=dense');
+  const menu = page.getByRole('button', { name: 'Toggle navigation' });
+  const openSidebar = async () => {
+    if (await menu.isVisible()) {
+      const drawer = page.getByRole('complementary', { name: 'Tasks navigation' });
+      if (!(await drawer.isVisible())) await menu.click();
+      await expect(drawer).toBeVisible();
+    }
+  };
+
+  await openSidebar();
+  const toggle = page.getByRole('button', { name: 'Show delivered' });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('link', { name: /Accepted Archive/ })).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page).toHaveURL(/includeDelivered=true/);
+  await openSidebar();
+  await expect(page.getByRole('link', { name: /Accepted Archive/ })).toBeVisible();
+
+  await page.getByRole('link', { name: /Accepted Archive/ }).click({ force: true });
+  await expect(page).toHaveURL(/milestone=archive/);
+  await page.getByRole('link', { name: /E2E-0006/ }).click();
+  await expect(page.getByText('Fixture task 6', { exact: true }).first()).toBeVisible();
+  if (!testInfo.project.name.includes('mobile')) {
+    await page.getByRole('button', { name: 'Full screen' }).click();
+    await expect(page).toHaveURL(/\/tasks\/E2E-0006/);
+  }
+
+  await openSidebar();
+  await page.getByRole('button', { name: 'Show delivered' }).click();
+  const hiddenUrl = new URL(page.url());
+  expect(hiddenUrl.searchParams.has('includeDelivered')).toBe(false);
+  expect(hiddenUrl.searchParams.has('milestone')).toBe(false);
+  expect(hiddenUrl.searchParams.has('track')).toBe(false);
+  expect(hiddenUrl.searchParams.get('state')).toBe('todo');
+  expect(hiddenUrl.searchParams.get('view')).toBe('dense');
+  await expect(page.getByText('Fixture task 6', { exact: true }).first()).toBeVisible();
 });
 
 test('keeps the compact mobile header collision-free and moves project identity into the drawer', async ({
@@ -141,7 +184,7 @@ test('keeps the compact mobile header collision-free and moves project identity 
 test('switches linked projects with isolated filters and read-only task and wiki views', async ({
   page,
 }, testInfo) => {
-  await page.goto('/tasks?track=OPS');
+  await page.goto('/tasks?track=OPS&includeDelivered=true');
   await openProjectSwitcher(page, 'Playwright Project');
   const projectMenu = page.locator('.project-switcher-menu:visible');
   await expect(projectMenu.locator('.project-switcher-unavailable')).toContainText('unavailable');
@@ -154,6 +197,11 @@ test('switches linked projects with isolated filters and read-only task and wiki
   if (await menu.isVisible()) await menu.click();
   await expect(page.getByRole('link', { name: 'New task' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Next task' })).toHaveCount(0);
+  const linkedVisibility = page.getByRole('button', { name: 'Show delivered' });
+  await expect(linkedVisibility).toHaveAttribute('aria-pressed', 'false');
+  await linkedVisibility.click();
+  await expect(linkedVisibility).toHaveAttribute('aria-pressed', 'true');
+  if (await menu.isVisible()) await menu.click();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\/settings$/);
   await expect(page.getByRole('heading', { name: 'Project settings' })).toBeVisible();
@@ -165,16 +213,19 @@ test('switches linked projects with isolated filters and read-only task and wiki
   await page.getByRole('button', { name: 'Activation' }).click();
   await expect(page.getByText(/Controls are hidden in this read-only project/)).toBeVisible();
   await page.getByRole('link', { name: /^Tasks/ }).click();
+  await expect(page).toHaveURL(/includeDelivered=true/);
   if (await menu.isVisible()) await menu.click();
   await page.getByRole('link', { name: /Linked work/ }).click();
-  await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
+  expect(new URL(page.url()).searchParams.get('track')).toBe('LINK');
+  expect(new URL(page.url()).searchParams.get('includeDelivered')).toBe('true');
 
   await page.getByRole('link', { name: /LINK-0001/ }).click();
   await expect(page).toHaveURL(
     testInfo.project.name.includes('mobile')
-      ? /\/projects\/linked-project\/tasks\/LINK-0001\?track=LINK$/
-      : /\/projects\/linked-project\/tasks\/dialog\/LINK-0001\?track=LINK$/,
+      ? /\/projects\/linked-project\/tasks\/LINK-0001/
+      : /\/projects\/linked-project\/tasks\/dialog\/LINK-0001/,
   );
+  expect(new URL(page.url()).searchParams.get('includeDelivered')).toBe('true');
   await expect(page.getByRole('button', { name: 'Edit task title' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Run with Codex' })).toHaveCount(0);
   await page
@@ -208,11 +259,15 @@ test('switches linked projects with isolated filters and read-only task and wiki
   await page.getByRole('link', { name: /Playwright Project/ }).click();
   await expect(page).toHaveURL(/\/wiki$/);
   await page.getByRole('link', { name: /^Tasks/ }).click();
-  await expect(page).toHaveURL(/\/tasks\?track=OPS$/);
+  expect(new URL(page.url()).pathname).toBe('/tasks');
+  expect(new URL(page.url()).searchParams.get('track')).toBe('OPS');
+  expect(new URL(page.url()).searchParams.get('includeDelivered')).toBe('true');
 
   await openProjectSwitcher(page, 'Playwright Project');
   await page.getByRole('link', { name: /Royale Project.*Read-only/ }).click();
-  await expect(page).toHaveURL(/\/projects\/linked-project\/tasks\?track=LINK$/);
+  expect(new URL(page.url()).pathname).toBe('/projects/linked-project/tasks');
+  expect(new URL(page.url()).searchParams.get('track')).toBe('LINK');
+  expect(new URL(page.url()).searchParams.get('includeDelivered')).toBe('true');
 });
 
 test('routes ready Overview documents across current and linked projects and falls back for disabled targets', async ({

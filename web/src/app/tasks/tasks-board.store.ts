@@ -7,15 +7,13 @@ import { filter, map } from 'rxjs';
 import type { components, operations } from '../api/generated/pm-api';
 import { PollingCoordinator } from '../core/polling-coordinator';
 import { TaskNavigationService } from './task-navigation.service';
-import { ProjectContextService } from '../core/project-context.service';
+import { ProjectContextService, type TaskPageFilters } from '../core/project-context.service';
 
 export type BoardResponse = operations['GetBoard']['responses'][200]['content']['application/json'];
-export type BoardQuery = NonNullable<operations['GetBoard']['parameters']['query']>;
-type BoardFilterQuery = Omit<BoardQuery, 'includeDelivered'>;
 export type BoardTask = components['schemas']['BoardTaskSummaryResponse'];
 export type BoardMilestoneGroup = components['schemas']['BoardMilestoneGroupResponse'];
 export type BoardStateGroup = components['schemas']['BoardStateGroupResponse'];
-export type BoardFilter = keyof BoardFilterQuery;
+export type BoardFilter = 'track' | 'milestone' | 'state';
 export interface StatusOpenIntent {
   milestone: BoardMilestoneGroup;
   state: BoardStateGroup;
@@ -42,19 +40,11 @@ export class TasksBoardStore {
     ),
     { initialValue: this.router.currentNavigation()?.finalUrl?.toString() ?? this.router.url },
   );
-  private readonly trackFilter = computed(() => this.queryValue('track'));
-  private readonly milestoneFilter = computed(() => this.queryValue('milestone'));
-  private readonly stateFilter = computed(() => this.queryValue('state'));
-
-  readonly filters = computed<BoardFilterQuery>(() => ({
-    ...(this.trackFilter() ? { track: this.trackFilter()! } : {}),
-    ...(this.milestoneFilter() ? { milestone: this.milestoneFilter()! } : {}),
-    ...(this.stateFilter() ? { state: this.stateFilter()! } : {}),
-  }));
+  readonly filters = computed<TaskPageFilters>(() => this.projectContext.taskFilters());
 
   readonly resource = httpResource<BoardResponse>(() => ({
     url: this.projectContext.apiUrl('/board'),
-    params: this.filters(),
+    params: this.filterParams(),
   }));
 
   readonly board = computed(() =>
@@ -82,7 +72,7 @@ export class TasksBoardStore {
       return {
         url: this.projectContext.apiUrl('/board'),
         etag: this.retainedEtag() || `"${board.revision}"`,
-        params: new HttpParams({ fromObject: this.filters() }),
+        params: this.filterParams(),
       };
     },
     accept: (response) => this.acceptPoll(response),
@@ -207,11 +197,6 @@ export class TasksBoardStore {
     }
   }
 
-  private queryValue(name: BoardFilter): string | null {
-    const value: unknown = this.router.parseUrl(this.currentUrl()).queryParams[name];
-    return typeof value === 'string' ? value.trim() || null : null;
-  }
-
   private taskIdFromUrl(): string | null {
     const primary = this.router.parseUrl(this.currentUrl()).root.children['primary'];
     const segments = primary?.segments ?? [];
@@ -219,6 +204,16 @@ export class TasksBoardStore {
     if (tasksIndex < 0 || segments.length <= tasksIndex + 1) return null;
     const next = segments[tasksIndex + 1]!.path;
     return next === 'dialog' ? (segments[tasksIndex + 2]?.path ?? null) : null;
+  }
+
+  private filterParams(): HttpParams {
+    let params = new HttpParams();
+    const filters = this.filters();
+    for (const key of ['track', 'milestone', 'state'] as const) {
+      if (filters[key]) params = params.set(key, filters[key]);
+    }
+    if (filters.includeDelivered) params = params.set('includeDelivered', true);
+    return params;
   }
 
   private boardRouteActive(): boolean {

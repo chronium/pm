@@ -52,14 +52,20 @@ describe('TasksBoardStore', () => {
   }
 
   it('serializes typed URL filters into the board request', async () => {
-    const { store, http } = await createAt('/tasks?track=PM&milestone=m1&state=todo');
+    const { store, http } = await createAt(
+      '/tasks?track=PM&milestone=m1&state=todo&includeDelivered=true',
+    );
     const request = http.expectOne((candidate) => candidate.url === '/api/v1/board');
 
     expect(request.request.method).toBe('GET');
     expect(request.request.params.get('track')).toBe('PM');
     expect(request.request.params.get('milestone')).toBe('m1');
     expect(request.request.params.get('state')).toBe('todo');
-    request.flush({ ...emptyBoard, filters: { track: 'PM', milestone: 'm1', state: 'todo' } });
+    expect(request.request.params.get('includeDelivered')).toBe('true');
+    request.flush({
+      ...emptyBoard,
+      filters: { track: 'PM', milestone: 'm1', state: 'todo', includeDelivered: true },
+    });
     await TestBed.tick();
 
     expect(store.revision()).toBe('board-revision');
