@@ -202,19 +202,28 @@ public sealed class GitHubActionDispatcherTests
     }
 
     [Fact]
-    public void PromotionTemplateDeclaresTheApprovedFixedInterface()
+    public void ActionMetadataDeclaresTheApprovedFixedInterface()
     {
         var repository = FindRepositoryRoot();
-        var metadata = File.ReadAllText(Path.Combine(repository, "action.template.yml"));
+        var template = File.ReadAllText(Path.Combine(repository, "action.template.yml"));
+        var metadata = File.ReadAllText(Path.Combine(repository, "action.yml"));
 
-        Assert.Contains("image: docker://ghcr.io/chronium/pm@sha256:__PM_ACTION_IMAGE_DIGEST__", metadata);
+        AssertApprovedFixedInterface(template);
+        Assert.Contains("image: docker://ghcr.io/chronium/pm@sha256:__PM_ACTION_IMAGE_DIGEST__", template);
+
+        AssertApprovedFixedInterface(metadata);
+        Assert.Matches("image: docker://ghcr\\.io/chronium/pm@sha256:[0-9a-f]{64}", metadata);
+        Assert.DoesNotContain("__PM_ACTION_IMAGE_DIGEST__", metadata);
+    }
+
+    private static void AssertApprovedFixedInterface(string metadata)
+    {
         Assert.Contains("- ${{ inputs.command }}", metadata);
         Assert.Contains("- ${{ inputs.working-directory }}", metadata);
         Assert.Contains("- ${{ inputs.output-directory }}", metadata);
         Assert.Contains("- ${{ inputs.force }}", metadata);
         Assert.DoesNotContain("base-path", metadata);
         Assert.DoesNotContain("build-metadata", metadata);
-        Assert.False(File.Exists(Path.Combine(repository, "action.yml")));
     }
 
     private static string FindRepositoryRoot()

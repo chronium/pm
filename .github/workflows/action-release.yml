@@ -201,7 +201,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@e94f9497aa172b06ccc6114089221ab0fbd8af7e
+    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@cb025ac9280eb64c98fe826caaeb747daee9d5ad
     with:
       action-ref: ${{ needs.inspect.outputs.immutable-ref }}
       expected-version: ${{ needs.inspect.outputs.version }}
@@ -225,7 +225,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@e94f9497aa172b06ccc6114089221ab0fbd8af7e
+    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@cb025ac9280eb64c98fe826caaeb747daee9d5ad
     with:
       action-ref: latest
       expected-version: ${{ needs.inspect.outputs.version }}
@@ -252,7 +252,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@e94f9497aa172b06ccc6114089221ab0fbd8af7e
+    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@cb025ac9280eb64c98fe826caaeb747daee9d5ad
     with:
       action-ref: ${{ needs.inspect.outputs.stable-channel }}
       expected-version: ${{ needs.inspect.outputs.version }}
