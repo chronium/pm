@@ -247,7 +247,10 @@ milestones:
       A backward-compatible YAML contract, validated application resolver, current and linked APIs, schema-v6 static snapshots, accessible responsive Angular presentation, PM dogfood configuration, and a passing complete release gate.
     priority: urgent
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-11T06:11:44.4012590+00:00
+      mode: ordinary
+      acceptedTaskIds: []
   active-work-visibility:
     title: Focused active-work views
     description: >-
@@ -295,6 +298,66 @@ milestones:
       - Storybook and end-to-end coverage demonstrate the accessible web toggle across writable, read-only, desktop, and mobile task pages.
 
       - The complete PM release gate passes.
+    priority: high
+    requiredActivationTriggers: []
+    delivery: null
+  github-action-publishing:
+    title: Reusable PM GitHub Action
+    description: >-
+      ## Outcome
+
+
+      Publish a reusable `chronium/pm` GitHub Action that lets PM-based repositories validate project state and generate static sites without installing PM or invoking its OCI image directly.
+
+
+      ## Scope
+
+
+      - Expose a controlled Action command surface for `doctor`, `site-build`, and `version`.
+
+      - Package released PM binaries and embedded web assets in a small Linux OCI runtime used internally by the Action.
+
+      - Validate project and output paths beneath the checked-out workspace, translate typed Action inputs without shell evaluation, and preserve PM exit codes.
+
+      - Write generated sites back into the GitHub workspace for subsequent artifact upload or deployment steps.
+
+      - Publish a moving `latest` Action ref for closely coordinated repositories, a compatible major ref, and immutable release refs.
+
+      - Couple every Action release to a tested immutable OCI image digest.
+
+      - Separate PM's Action/runtime release workflow from its own static-site publishing workflow.
+
+      - Dogfood the published `chronium/pm@latest` Action first in PM itself and then across the ChronoFall family.
+
+      - Retain separately generated family project sites and normal PM project switching.
+
+
+      ## Exclusions
+
+
+      - Arbitrary shell or unrestricted PM CLI passthrough.
+
+      - Repository mutation, automated write-back, milestone delivery, or activation overrides from CI.
+
+      - Hiding Action defects by invoking local build outputs or the OCI image directly from dogfood publishing workflows.
+
+      - Owning consumer deployment permissions or forcing a hosting provider.
+
+      - General desktop, package-manager, or end-user PM distribution.
+
+
+      ## Evidence
+
+
+      - Action contract and command-dispatch tests cover accepted inputs, rejected commands and paths, exit-code propagation, and generated outputs.
+
+      - Published Action refs resolve to a digest-pinned, smoke-tested OCI runtime.
+
+      - PM's release workflow publishes the Action/runtime, while a separate workflow consumes `chronium/pm@latest` to validate PM and publish its static site.
+
+      - The PM dogfood workflow exercises the same public Action contract available to an external repository.
+
+      - The ChronoFall family workflow subsequently builds its project sites through `chronium/pm@latest` and preserves working cross-project navigation.
     priority: high
     requiredActivationTriggers: []
     delivery: null

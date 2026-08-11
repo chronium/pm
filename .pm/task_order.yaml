@@ -18,3 +18,14 @@ orders:
   state: todo
   milestone: site-overview-discovery
   taskIds: []
+- track: PM
+  state: todo
+  milestone: github-action-publishing
+  taskIds:
+  - PM-0117
+  - PM-0118
+  - PM-0119
+  - PM-0120
+  - PM-0121
+  - PM-0122
+  - PM-0123
