@@ -7,6 +7,7 @@ using PM;
 using PM.AgentRuns;
 using PM.Application;
 using PM.Auth;
+using PM.GitHubAction;
 using PM.Mcp;
 using PM.Project;
 using PM.Site;
@@ -19,6 +20,10 @@ using Spectre.Console.Cli;
 
 var serviceProvider = new ServiceCollection();
 var cancellationTokenSource = new CancellationTokenSource();
+
+if (args is [var actionCommand, ..] &&
+    string.Equals(actionCommand, GitHubActionHost.CommandName, StringComparison.Ordinal))
+    return await GitHubActionHost.RunAsync(args[1..], cancellationTokenSource.Token);
 
 if (args is [var command, ..] && string.Equals(command, GlobalConfig.McpCommandName, StringComparison.Ordinal))
 {

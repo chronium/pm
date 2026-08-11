@@ -22,8 +22,10 @@ The entrypoint treats them as data and invokes PM directly. It must not join the
 arguments into a command string, invoke `sh -c`, evaluate substitutions, or
 accept additional arguments.
 
-The eventual root metadata must be equivalent to this proposal after replacing
-the image placeholder with the promoted digest:
+The repository keeps this interface in the root `action.template.yml`. PM-0121
+materializes `action.yml` only after replacing the template token with the
+promoted image digest; an unresolvable placeholder is never published as an
+Action entrypoint. The resulting root metadata is equivalent to:
 
 ```yaml
 name: Project Model
@@ -192,7 +194,8 @@ Promotion is intentionally two-stage so Action metadata can pin the OCI image
 by digest without introducing an unsigned generated commit on `main`:
 
 1. Build, test, and publish the OCI image from the intended source revision.
-2. Prepare the root `action.yml` update containing the published digest.
+2. Materialize the root `action.yml` from `action.template.yml` with the
+   published digest.
 3. Create an authorized signed promotion commit on `main`.
 4. Exercise that commit through the public Action interface against disposable
    `doctor`, `site-build`, and `version` consumers.

@@ -50,45 +50,87 @@ invalid_task=$(find "$invalid_project/.pm/tasks" -type f -name '*.md' | LC_ALL=C
 [ -n "$invalid_task" ] || fail 'The source project has no task file for invalid-project coverage.'
 mv "$invalid_task" "$invalid_project/.pm/tasks/invalid-task-file.md"
 
-actual_version=$(docker run --rm "$image_tag" --version)
-[ "$actual_version" = "$pm_version" ] || fail "Expected PM $pm_version, received $actual_version."
+github_output=$workspace/.github-output
+github_summary=$workspace/.github-summary
 
-doctor_output=$(docker run --rm \
-  --volume "$valid_project:/github/workspace/project:ro" \
-  --workdir /github/workspace/project \
-  "$image_tag" doctor)
+run_action() {
+  docker run --rm \
+    --volume "$workspace:/github/workspace" \
+    --env GITHUB_WORKSPACE=/github/workspace \
+    --env GITHUB_OUTPUT=/github/workspace/.github-output \
+    --env GITHUB_STEP_SUMMARY=/github/workspace/.github-summary \
+    "$image_tag" "$@"
+}
+
+: > "$github_output"
+: > "$github_summary"
+actual_version=$(run_action version . ignored false)
+[ "$actual_version" = "$pm_version" ] || fail "Expected PM $pm_version, received $actual_version."
+grep -Fx "pm-version=$pm_version" "$github_output" >/dev/null || fail 'Version did not publish pm-version.'
+grep -Fx 'site-path=' "$github_output" >/dev/null || fail 'Version did not publish an empty site-path.'
+grep -F 'PM `version` completed' "$github_summary" >/dev/null || fail 'Version summary is missing.'
+
+: > "$github_output"
+: > "$github_summary"
+doctor_output=$(run_action doctor project ignored false)
 printf '%s\n' "$doctor_output" | grep -F 'Project validation passed.' >/dev/null ||
   fail 'The packaged runtime did not validate the disposable project.'
+grep -Fx "pm-version=$pm_version" "$github_output" >/dev/null || fail 'Doctor did not publish pm-version.'
+grep -Fx 'site-path=' "$github_output" >/dev/null || fail 'Doctor did not publish an empty site-path.'
+
+mkdir -p "$valid_project/src/nested"
+: > "$github_output"
+: > "$github_summary"
+run_action doctor project/src/nested ignored false >/dev/null ||
+  fail 'The Action did not discover a PM project above a nested working directory.'
 
 invalid_doctor_log=$work/invalid-doctor.log
-if docker run --rm \
-  --volume "$invalid_project:/github/workspace/project:ro" \
-  --workdir /github/workspace/project \
-  "$image_tag" doctor >"$invalid_doctor_log" 2>&1; then
+: > "$github_output"
+: > "$github_summary"
+if run_action doctor invalid ignored false >"$invalid_doctor_log" 2>&1; then
   fail 'Doctor unexpectedly accepted an invalid project.'
 fi
 grep -F 'task_filename_mismatch' "$invalid_doctor_log" >/dev/null ||
   fail 'Doctor did not report the expected invalid task-file diagnostic.'
+[ ! -s "$github_output" ] || fail 'Failed doctor published successful Action outputs.'
+grep -F 'failed with exit code' "$github_summary" >/dev/null || fail 'Failed doctor summary is missing.'
 
-invalid_log=$work/invalid-site.log
-if docker run --rm \
-  --volume "$invalid_project:/github/workspace/project:ro" \
-  --volume "$output_root:/github/workspace/output" \
-  --workdir /github/workspace/project \
-  "$image_tag" site build --output ../output/invalid >"$invalid_log" 2>&1; then
-  fail 'Static export unexpectedly accepted an invalid project.'
+injection_log=$work/injection.log
+if run_action 'doctor; touch /github/workspace/owned' project ignored false >"$injection_log" 2>&1; then
+  fail 'The Action accepted a command-shaped injection input.'
 fi
-[ ! -e "$output_root/invalid" ] || fail 'Failed validation left a static output directory behind.'
-grep -F 'Project validation failed' "$invalid_log" >/dev/null ||
-  fail 'Invalid-project diagnostics did not explain the validation failure.'
+[ ! -e "$workspace/owned" ] || fail 'An Action input was evaluated as shell code.'
+grep -F 'command must be exactly' "$injection_log" >/dev/null || fail 'Unknown command diagnostic is missing.'
 
-docker run --rm \
-  --volume "$valid_project:/github/workspace/project:ro" \
-  --volume "$output_root:/github/workspace/output" \
-  --workdir /github/workspace/project \
-  "$image_tag" site build --output ../output/site
+traversal_log=$work/traversal.log
+if run_action doctor ../outside ignored false >"$traversal_log" 2>&1; then
+  fail 'The Action accepted working-directory traversal.'
+fi
+grep -F 'parent traversal' "$traversal_log" >/dev/null || fail 'Traversal diagnostic is missing.'
+
+ln -s ../../outside "$workspace/escaped"
+symlink_log=$work/symlink.log
+if run_action doctor escaped ignored false >"$symlink_log" 2>&1; then
+  fail 'The Action accepted a working-directory symlink escape.'
+fi
+grep -E 'symbolic link|outside GITHUB_WORKSPACE' "$symlink_log" >/dev/null ||
+  fail 'Symlink escape diagnostic is missing.'
+
+: > "$github_output"
+: > "$github_summary"
+run_action site-build project output/site false
 [ -f "$output_root/site/index.html" ] || fail 'Static export did not persist index.html on the host.'
 [ -f "$output_root/site/pm-snapshot.json" ] || fail 'Static export did not persist pm-snapshot.json on the host.'
+grep -Fx "pm-version=$pm_version" "$github_output" >/dev/null || fail 'Site build did not publish pm-version.'
+grep -Fx 'site-path=output/site' "$github_output" >/dev/null || fail 'Site build published the wrong site-path.'
+grep -F 'Site output: `output/site`.' "$github_summary" >/dev/null || fail 'Site build summary is missing.'
+
+unsafe_output_log=$work/unsafe-output.log
+if run_action site-build project project/.pm/site false >"$unsafe_output_log" 2>&1; then
+  fail 'The Action accepted a site output beneath .pm.'
+fi
+grep -F '.pm or its descendants' "$unsafe_output_log" >/dev/null ||
+  fail 'Unsafe output diagnostic is missing.'
 
 expected_files=$work/expected-files.txt
 actual_files=$work/actual-files.txt
@@ -112,7 +154,7 @@ docker run --rm --entrypoint /bin/sh "$image_tag" -c '
 config=$(docker image inspect "$image_tag" --format '{{json .Config}}')
 [ "$(printf '%s' "$config" | jq -r '.User')" = '0:0' ] || fail 'Runtime image must use root for Docker Action compatibility.'
 [ "$(printf '%s' "$config" | jq -r '.WorkingDir')" = '/github/workspace' ] || fail 'Unexpected runtime working directory.'
-[ "$(printf '%s' "$config" | jq -c '.Entrypoint')" = '["dotnet","/opt/pm/PM.dll"]' ] || fail 'Unexpected runtime entrypoint.'
+[ "$(printf '%s' "$config" | jq -c '.Entrypoint')" = '["dotnet","/opt/pm/PM.dll","__github-action"]' ] || fail 'Unexpected runtime entrypoint.'
 [ "$(printf '%s' "$config" | jq -r '.Labels["org.opencontainers.image.version"]')" = "$pm_version" ] || fail 'Missing PM version label.'
 [ "$(printf '%s' "$config" | jq -r '.Labels["org.opencontainers.image.revision"]')" = "$source_revision" ] || fail 'Missing source revision label.'
 [ "$(printf '%s' "$config" | jq -r '.Labels["org.opencontainers.image.licenses"]')" = 'MIT' ] || fail 'Missing license label.'

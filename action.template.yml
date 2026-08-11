@@ -1,0 +1,35 @@
+name: Project Model
+description: Validate a PM project or build its read-only static site.
+author: Chronium
+
+inputs:
+  command:
+    description: One of doctor, site-build, or version.
+    required: true
+  working-directory:
+    description: Workspace-relative directory in which PM runs.
+    required: false
+    default: .
+  output-directory:
+    description: Workspace-relative destination used by site-build.
+    required: false
+    default: dist/pm-site
+  force:
+    description: Replace a non-empty site output directory when true.
+    required: false
+    default: "false"
+
+outputs:
+  pm-version:
+    description: Version reported by the packaged PM runtime.
+  site-path:
+    description: Workspace-relative generated site path, or empty for other commands.
+
+runs:
+  using: docker
+  image: docker://ghcr.io/chronium/pm@sha256:__PM_ACTION_IMAGE_DIGEST__
+  args:
+    - ${{ inputs.command }}
+    - ${{ inputs.working-directory }}
+    - ${{ inputs.output-directory }}
+    - ${{ inputs.force }}

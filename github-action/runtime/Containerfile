@@ -28,4 +28,4 @@ LABEL org.opencontainers.image.title="Project Model GitHub Action runtime" \
 
 USER 0:0
 WORKDIR /github/workspace
-ENTRYPOINT ["dotnet", "/opt/pm/PM.dll"]
+ENTRYPOINT ["dotnet", "/opt/pm/PM.dll", "__github-action"]
