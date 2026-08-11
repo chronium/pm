@@ -9,6 +9,8 @@ public static class GlobalConfig
 
     public static string ProjectIdFile = "project_id.txt";
     public static string ReleaseVersionFile = "release_version.txt";
+    public static string ReleaseTransitionsDirName = "release_transitions";
+    public static string PendingReleaseTransitionFile = "release_transition_pending.yaml";
     public static string LinkedProjectsFile = "linked_projects.yaml";
 
     public static string TasksDirName = "tasks";
@@ -87,6 +89,10 @@ public static class GlobalConfig
     public static string McpCommandName => "mcp";
     public static string SiteBranchName => "site";
     public static string SiteBuildCommandName => "build";
+    public static string ReleaseBranchName => "release";
+    public static string ReleaseStatusCommandName => "status";
+    public static string ReleaseReconcileCommandName => "reconcile";
+    public static string ReleaseMajorCommandName => "major";
     public static string ProjectBranchName => "project";
     public static string RunnerBranchName => "runner";
 }

@@ -330,7 +330,10 @@ public sealed class TaskService
             $"Task {taskId} could not be moved to {targetState}.");
         return transition.Success
             ? AppResult<LifecycleMutationResult<TaskItem>>.Ok(
-                new LifecycleMutationResult<TaskItem>(task, transition.Payload!))
+                new LifecycleMutationResult<TaskItem>(
+                    task,
+                    transition.Payload!.ActivationImpact,
+                    transition.Payload.ReleaseTransition))
             : AppResult<LifecycleMutationResult<TaskItem>>.Fail(
                 transition.ErrorCode!, transition.Message!);
     }
@@ -728,7 +731,10 @@ public sealed class TaskService
             $"Task {taskId} could not be updated.");
         return transition.Success
             ? AppResult<LifecycleMutationResult<TaskItem>>.Ok(
-                new LifecycleMutationResult<TaskItem>(updated, transition.Payload!))
+                new LifecycleMutationResult<TaskItem>(
+                    updated,
+                    transition.Payload!.ActivationImpact,
+                    transition.Payload.ReleaseTransition))
             : AppResult<LifecycleMutationResult<TaskItem>>.Fail(
                 transition.ErrorCode!, transition.Message!);
     }

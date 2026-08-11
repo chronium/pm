@@ -88,7 +88,15 @@ public sealed record ActivationMutationResponse(
 public sealed record ActivationMutationImpactResponse(
     IReadOnlyList<string> AffectedMilestones,
     IReadOnlyList<string> TaskIdsLosingEligibility,
-    IReadOnlyList<string> AutomaticallyActivatedTriggers);
+    IReadOnlyList<string> AutomaticallyActivatedTriggers,
+    ReleaseTransitionResponse? ReleaseTransition = null);
+public sealed record ReleaseTransitionResponse(
+    DateTimeOffset At,
+    string Kind,
+    string FromVersion,
+    string ToVersion,
+    string? Source,
+    string? Reason);
 public sealed record ActivationMilestoneImpactResponse(
     string MilestoneKey,
     string Before,
@@ -267,7 +275,16 @@ public static class MilestoneActivationApiEndpoints
             result => new ActivationMutationImpactResponse(
                 result.ActivationImpact.MilestoneChanges.Select(change => change.MilestoneKey).ToList(),
                 [],
-                result.ActivationImpact.ActivatedTriggers.Select(trigger => trigger.Key).ToList()),
+                result.ActivationImpact.ActivatedTriggers.Select(trigger => trigger.Key).ToList(),
+                result.ReleaseTransition == null
+                    ? null
+                    : new ReleaseTransitionResponse(
+                        result.ReleaseTransition.At,
+                        result.ReleaseTransition.Kind,
+                        result.ReleaseTransition.FromVersion,
+                        result.ReleaseTransition.ToVersion,
+                        result.ReleaseTransition.Source,
+                        result.ReleaseTransition.Reason)),
             linkedProject: linkedProject);
         MapDelete(api, "/activation/milestones/{key}/delivery", operationName("ReopenMilestone"),
             "Reopen a delivered milestone", resolveWrite,

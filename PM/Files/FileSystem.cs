@@ -55,6 +55,19 @@ public static class FileSystem
         }
     }
 
+    public static void WriteAllTextNew(string path, string content)
+    {
+        AnsiConsole.MarkupLineInterpolated(
+            $"Written [green]{Path.GetRelativePath(Directory.GetCurrentDirectory(), path)}[/]");
+        if (GlobalConfig.DryRun) return;
+        var mutation = ActiveMutation.Value;
+        var trackedPath = mutation?.Prepare(path);
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        using var writer = new StreamWriter(stream);
+        writer.Write(content);
+        if (trackedPath != null) mutation!.Record(trackedPath);
+    }
+
     public static void CreateDirectory(string path)
     {
         AnsiConsole.MarkupLineInterpolated(

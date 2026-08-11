@@ -9,9 +9,20 @@ public sealed class TaskLifecycleMutationService(
     ProjectRoot projectRoot,
     MilestoneActivationResolver resolver,
     AutomaticActivationService automaticActivations,
-    IProjectConfigPersistence persistence)
+    IProjectConfigPersistence persistence,
+    ReleaseVersionService releaseVersions)
 {
-    public AppResult<AutomaticActivationImpact> Execute(
+    public TaskLifecycleMutationService(
+        ProjectRoot projectRoot,
+        MilestoneActivationResolver resolver,
+        AutomaticActivationService automaticActivations,
+        IProjectConfigPersistence persistence)
+        : this(projectRoot, resolver, automaticActivations, persistence,
+            new ReleaseVersionService(projectRoot))
+    {
+    }
+
+    public AppResult<TaskLifecycleMutationImpact> Execute(
         TaskItem originalTask,
         TaskItem prospectiveTask,
         string currentState,
@@ -22,6 +33,19 @@ public sealed class TaskLifecycleMutationService(
     {
         var completion = !string.Equals(currentState, "done", StringComparison.Ordinal) &&
                          string.Equals(targetState, "done", StringComparison.Ordinal);
+        if (!string.Equals(currentState, targetState, StringComparison.Ordinal))
+        {
+            var ready = releaseVersions.EnsureMutationReady();
+            if (!ready.Success)
+                return AppResult<TaskLifecycleMutationImpact>.Fail(ready.ErrorCode!, ready.Message!);
+        }
+        var releasePlanResult = completion
+            ? releaseVersions.PrepareTaskCompletion(prospectiveTask.Id)
+            : AppResult<ReleaseTransitionPlan?>.Ok(null);
+        if (!releasePlanResult.Success)
+            return AppResult<TaskLifecycleMutationImpact>.Fail(
+                releasePlanResult.ErrorCode!, releasePlanResult.Message!);
+        var releasePlan = releasePlanResult.Payload;
         var hasAffectedTrigger = completion && projectRoot.Config!.ActivationTriggers.Any(entry =>
             entry.Value.Activation == null &&
             (entry.Value.Requirements ?? []).Any(requirement =>
@@ -29,7 +53,7 @@ public sealed class TaskLifecycleMutationService(
                 string.Equals(requirement.Source, prospectiveTask.Id, StringComparison.Ordinal)));
         var stateResult = hasAffectedTrigger ? ReadState() : null;
         if (stateResult is { Success: false })
-            return AppResult<AutomaticActivationImpact>.Fail(stateResult.ErrorCode!, stateResult.Message!);
+            return AppResult<TaskLifecycleMutationImpact>.Fail(stateResult.ErrorCode!, stateResult.Message!);
 
         var impact = AutomaticActivationImpact.None;
         ProjectConfig? prospectiveConfig = null;
@@ -52,6 +76,12 @@ public sealed class TaskLifecycleMutationService(
         }
 
         var snapshots = CaptureMutationFiles(originalTask, prospectiveTask, currentState, targetState);
+        if (releasePlan != null)
+        {
+            var begin = releaseVersions.Begin(releasePlan);
+            if (!begin.Success)
+                return AppResult<TaskLifecycleMutationImpact>.Fail(begin.ErrorCode!, begin.Message!);
+        }
         try
         {
             primaryMutation();
@@ -60,31 +90,47 @@ public sealed class TaskLifecycleMutationService(
         {
             return RestoreOrFail(
                 snapshots,
+                releasePlan,
                 primaryFailureCode,
                 primaryFailureMessage,
                 "task_mutation_rollback_failed");
         }
 
-        if (impact.ActivatedTriggers.Count == 0 || prospectiveConfig == null || GlobalConfig.DryRun)
-            return AppResult<AutomaticActivationImpact>.Ok(impact);
-
-        try
+        if (impact.ActivatedTriggers.Count > 0 && prospectiveConfig != null && !GlobalConfig.DryRun)
         {
-            persistence.WriteTextAtomic(YamlSerde.Serialize(prospectiveConfig));
-            if (!persistence.Reload())
-                throw new InvalidDataException("The project configuration could not be reloaded.");
-        }
-        catch (Exception exception) when (IsMutationException(exception) ||
-                                           exception is InvalidDataException or YamlException)
-        {
-            return RestoreOrFail(
-                snapshots,
-                "task_lifecycle_transition_failed",
-                $"Task {prospectiveTask.Id} was not completed because automatic activation could not be persisted: {exception.Message}",
-                "task_lifecycle_transition_rollback_failed");
+            try
+            {
+                persistence.WriteTextAtomic(YamlSerde.Serialize(prospectiveConfig));
+                if (!persistence.Reload())
+                    throw new InvalidDataException("The project configuration could not be reloaded.");
+            }
+            catch (Exception exception) when (IsMutationException(exception) ||
+                                               exception is InvalidDataException or YamlException)
+            {
+                return RestoreOrFail(
+                    snapshots,
+                    releasePlan,
+                    "task_lifecycle_transition_failed",
+                    $"Task {prospectiveTask.Id} was not completed because automatic activation could not be persisted: {exception.Message}",
+                    "task_lifecycle_transition_rollback_failed");
+            }
         }
 
-        return AppResult<AutomaticActivationImpact>.Ok(impact);
+        ReleaseVersionTransition? releaseTransition = null;
+        if (releasePlan != null)
+        {
+            var completed = releaseVersions.Complete(releasePlan);
+            if (!completed.Success)
+                return RestoreOrFail(
+                    snapshots,
+                    releasePlan,
+                    "task_release_transition_failed",
+                    $"Task {prospectiveTask.Id} was not completed because its release version could not advance: {completed.Message}",
+                    "task_release_transition_rollback_failed");
+            releaseTransition = completed.Payload;
+        }
+
+        return AppResult<TaskLifecycleMutationImpact>.Ok(new(impact, releaseTransition));
     }
 
     private AppResult<MilestoneActivationProjectState> ReadState() =>
@@ -108,8 +154,9 @@ public sealed class TaskLifecycleMutationService(
         FileSnapshot.Capture(Path.Combine(projectRoot.StatesPath, targetState, $"{prospectiveTask.Id}.ref")),
     ];
 
-    private AppResult<AutomaticActivationImpact> RestoreOrFail(
+    private AppResult<TaskLifecycleMutationImpact> RestoreOrFail(
         IReadOnlyList<FileSnapshot> snapshots,
+        ReleaseTransitionPlan? releasePlan,
         string failureCode,
         string failureMessage,
         string rollbackFailureCode)
@@ -117,6 +164,9 @@ public sealed class TaskLifecycleMutationService(
         var restored = true;
         foreach (var snapshot in snapshots.Reverse())
             restored &= snapshot.TryRestore();
+
+        if (releasePlan != null)
+            restored &= releaseVersions.Rollback(releasePlan).Success;
 
         try
         {
@@ -128,8 +178,8 @@ public sealed class TaskLifecycleMutationService(
         }
 
         return restored
-            ? AppResult<AutomaticActivationImpact>.Fail(failureCode, failureMessage)
-            : AppResult<AutomaticActivationImpact>.Fail(
+            ? AppResult<TaskLifecycleMutationImpact>.Fail(failureCode, failureMessage)
+            : AppResult<TaskLifecycleMutationImpact>.Fail(
                 rollbackFailureCode,
                 $"{failureMessage} The previous project state could not be fully restored.");
     }

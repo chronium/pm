@@ -1800,6 +1800,7 @@ export interface components {
             affectedMilestones: string[];
             taskIdsLosingEligibility: string[];
             automaticallyActivatedTriggers: string[];
+            releaseTransition?: null | components["schemas"]["ReleaseTransitionResponse"];
         };
         ActivationMutationResponse: {
             changed: boolean;
@@ -2570,6 +2571,15 @@ export interface components {
             previewRevision: string;
             /** @default false */
             allowDeactivation: boolean;
+        };
+        ReleaseTransitionResponse: {
+            /** Format: date-time */
+            at: string;
+            kind: string;
+            fromVersion: string;
+            toVersion: string;
+            source: null | string;
+            reason: null | string;
         };
         RenameActivationTriggerRequest: {
             title: string;

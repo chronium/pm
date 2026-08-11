@@ -592,12 +592,15 @@ public sealed class PmMcpTools(
     {
         var result = linkedProjectMutations.ExecuteAsync(
             project,
-            target => ToPayload(target.Tasks.MoveTask(taskId, targetState)),
+            target => target.Tasks.MoveTask(taskId, targetState),
             MutationAccess,
             cancellationToken).GetAwaiter().GetResult();
         return result.Success
             ? McpToolResponse<MutatedPayload>.Ok($"Moved task {taskId} to {targetState}.",
-                new MutatedPayload(true, ToReceipt(result.Payload!.Receipt)))
+                new MutatedPayload(
+                    true,
+                    ToReceipt(result.Payload!.Receipt),
+                    ToReleaseTransition(result.Payload.Value.ReleaseTransition)))
             : McpToolResponse<MutatedPayload>.FromFailure(result);
     }
 
@@ -1447,7 +1450,8 @@ public sealed class PmMcpTools(
                 key, reason, expectedRevision, allowExceptional),
             _ => $"Delivered milestone {key}.",
             result => new ActivationMutationDetailsPayload(
-                AutomaticActivation: ToAutomaticActivationImpact(result.ActivationImpact)),
+                AutomaticActivation: ToAutomaticActivationImpact(result.ActivationImpact),
+                ReleaseTransition: ToReleaseTransition(result.ReleaseTransition)),
             cancellationToken);
 
     [McpServerTool(Name = "reopen_milestone", Destructive = true, OpenWorld = false,
@@ -1463,6 +1467,121 @@ public sealed class PmMcpTools(
             target => target.MilestoneDeliveries.ReopenMilestone(key),
             _ => $"Reopened milestone {key}.",
             cancellationToken: cancellationToken);
+
+    [McpServerTool(Name = "get_release_status", ReadOnly = true, Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Returns release version, pending reconciliation, and latest evidence for the selected project.")]
+    public async Task<McpToolResponse<ReleaseStatusPayload>> GetReleaseStatus(
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
+    {
+        var denied = ControlPlaneDenied<ReleaseStatusPayload>();
+        if (denied != null) return denied;
+        var target = await linkedProjectMutations.ResolveTargetAsync(
+            project, LinkedProjectTargetAccess.ReadableLinkedProjects, cancellationToken);
+        if (!target.Success) return McpToolResponse<ReleaseStatusPayload>.FromFailure(target);
+        var result = target.Payload!.Releases.ReadStatus();
+        return result.Success
+            ? McpToolResponse<ReleaseStatusPayload>.Ok(
+                result.Payload!.Enabled ? $"Release {result.Payload.Version} loaded." : "Release versioning is disabled.",
+                new ReleaseStatusPayload(
+                    result.Payload.Enabled,
+                    result.Payload.Version?.ToString(),
+                    ToReleaseTransition(result.Payload.PendingTransition),
+                    ToReleaseTransition(result.Payload.LatestTransition)))
+            : McpToolResponse<ReleaseStatusPayload>.FromFailure(result);
+    }
+
+    [McpServerTool(Name = "reconcile_release_version", Destructive = false, Idempotent = true,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Completes or clears the selected project's pending release transition; dry-run previews recovery.")]
+    public async Task<McpToolResponse<ReleaseReconciliationPayload>> ReconcileReleaseVersion(
+        bool dryRun = false,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
+    {
+        var denied = ControlPlaneDenied<ReleaseReconciliationPayload>();
+        if (denied != null) return denied;
+        var result = await linkedProjectMutations.ExecuteAsync(
+            project, target => target.Releases.Reconcile(dryRun), MutationAccess, cancellationToken);
+        if (!result.Success) return McpToolResponse<ReleaseReconciliationPayload>.FromFailure(result);
+        return McpToolResponse<ReleaseReconciliationPayload>.Ok(
+            result.Payload!.Value.Changed
+                ? $"Release reconciliation {result.Payload.Value.Action}."
+                : "No release transition is pending.",
+            new ReleaseReconciliationPayload(
+                result.Payload.Value.Changed,
+                result.Payload.Value.Action,
+                ToReleaseTransition(result.Payload.Value.Transition),
+                result.Payload.Receipt.ChangedPaths.Count == 0 ? null : ToReceipt(result.Payload.Receipt)));
+    }
+
+    [McpServerTool(Name = "preview_major_version", ReadOnly = true, Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Previews the explicit next-major release transition and returns its required revision.")]
+    public async Task<McpToolResponse<MajorReleasePreviewPayload>> PreviewMajorVersion(
+        string reason,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
+    {
+        var denied = ControlPlaneDenied<MajorReleasePreviewPayload>();
+        if (denied != null) return denied;
+        var target = await linkedProjectMutations.ResolveTargetAsync(
+            project, LinkedProjectTargetAccess.ReadableLinkedProjects, cancellationToken);
+        if (!target.Success) return McpToolResponse<MajorReleasePreviewPayload>.FromFailure(target);
+        var preview = target.Payload!.Releases.PreviewMajor(reason);
+        return preview.Success
+            ? McpToolResponse<MajorReleasePreviewPayload>.Ok(
+                $"Previewed major release {preview.Payload!.Transition.ToVersion}.",
+                new MajorReleasePreviewPayload(
+                    preview.Payload.Revision,
+                    ToReleaseTransition(preview.Payload.Transition)!))
+            : McpToolResponse<MajorReleasePreviewPayload>.FromFailure(preview);
+    }
+
+    [McpServerTool(Name = "advance_major_version", Destructive = false,
+        OpenWorld = false, UseStructuredContent = true)]
+    [Description("Advances the selected project to its next major version using a current preview revision.")]
+    public async Task<McpToolResponse<ReleaseReconciliationPayload>> AdvanceMajorVersion(
+        string reason,
+        string expectedRevision,
+        [Description("Select current, parent, an exact stable project ID, or a unique linked-project alias.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
+    {
+        var denied = ControlPlaneDenied<ReleaseReconciliationPayload>();
+        if (denied != null) return denied;
+        var result = await linkedProjectMutations.ExecuteAsync(
+            project,
+            target =>
+            {
+                var preview = target.Releases.PreviewMajor(reason);
+                if (!preview.Success)
+                    return AppResult<ReleaseVersionTransition>.Fail(preview.ErrorCode!, preview.Message!);
+                if (!string.Equals(preview.Payload!.Revision, expectedRevision, StringComparison.Ordinal))
+                    return AppResult<ReleaseVersionTransition>.Fail(
+                        "release_major_stale", "Major release conditions changed. Preview the major version again.");
+                var begin = target.Releases.Begin(preview.Payload);
+                if (!begin.Success)
+                    return AppResult<ReleaseVersionTransition>.Fail(begin.ErrorCode!, begin.Message!);
+                var complete = target.Releases.Complete(preview.Payload);
+                if (!complete.Success) _ = target.Releases.Rollback(preview.Payload);
+                return complete;
+            },
+            MutationAccess,
+            cancellationToken);
+        if (!result.Success) return McpToolResponse<ReleaseReconciliationPayload>.FromFailure(result);
+        return McpToolResponse<ReleaseReconciliationPayload>.Ok(
+            $"Advanced release to {result.Payload!.Value.ToVersion}.",
+            new ReleaseReconciliationPayload(
+                true,
+                "advanced-major",
+                ToReleaseTransition(result.Payload.Value),
+                ToReceipt(result.Payload.Receipt)));
+    }
 
     [McpServerTool(Name = "validate_project", ReadOnly = true, Destructive = false, OpenWorld = false,
         UseStructuredContent = true)]
@@ -1826,7 +1945,7 @@ public sealed class PmMcpTools(
             ? null
             : McpToolResponse<T>.Fail(
                 "mcp_control_plane_denied",
-                "The run-worker MCP profile cannot perform milestone activation control-plane operations.");
+                "The run-worker MCP profile cannot perform PM control-plane operations.");
 
     private Task<McpToolResponse<ActivationMutationPayload>> ExecuteTargetActivationMutationAsync<T>(
         string? project,
@@ -2001,6 +2120,17 @@ public sealed class PmMcpTools(
                 change.MilestoneKey,
                 ToMilestoneLifecycleValue(change.Before),
                 ToMilestoneLifecycleValue(change.After))).ToList());
+
+    private static ReleaseTransitionPayload? ToReleaseTransition(ReleaseVersionTransition? transition) =>
+        transition == null
+            ? null
+            : new ReleaseTransitionPayload(
+                transition.At,
+                transition.Kind,
+                transition.FromVersion,
+                transition.ToVersion,
+                transition.Source,
+                transition.Reason);
 
     private static string ToRequirementKindValue(ActivationRequirementKind kind) =>
         kind == ActivationRequirementKind.Task ? "task" : "milestone";

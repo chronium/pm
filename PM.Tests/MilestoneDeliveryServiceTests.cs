@@ -12,6 +12,7 @@ public sealed class MilestoneDeliveryServiceTests
         using var workspace = new TempWorkingDirectory();
         var root = await workspace.CreateProject(TestData.Config(
             milestones: new Dictionary<string, string> { ["release"] = "Release" }));
+        await File.WriteAllTextAsync(root.ReleaseVersionPath, "1.4.6\n");
         WriteTask(root, TestData.Task("PM-0001", "First", milestone: "release"), "done");
         WriteTask(root, TestData.Task("PM-0002", "Second", milestone: "release"), "done");
         var now = DateTimeOffset.Parse("2026-08-06T16:00:00Z");
@@ -39,6 +40,10 @@ public sealed class MilestoneDeliveryServiceTests
         Assert.Equal(now, deliveredMilestone.Delivery.At);
         Assert.Null(deliveredMilestone.Delivery.Reason);
         Assert.Empty(deliveredMilestone.Delivery.AcceptedTaskIds);
+        Assert.Equal("1.5.0", File.ReadAllText(root.ReleaseVersionPath).Trim());
+        Assert.Equal("milestone", delivered.Payload.ReleaseTransition!.Kind);
+        Assert.Equal("release", delivered.Payload.ReleaseTransition.Source);
+        Assert.True(File.Exists(Path.Combine(root.ReleaseTransitionsPath, "1.5.0.yaml")));
         var stored = ProjectConfig.ReadConfig(root).Milestones["release"].Delivery!;
         Assert.Equal(now, stored.At);
         Assert.Equal(MilestoneDeliveryMode.Ordinary, stored.Mode);

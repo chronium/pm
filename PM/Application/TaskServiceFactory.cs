@@ -17,7 +17,8 @@ public sealed class TaskServiceFactory(TimeProvider timeProvider)
             projectRoot,
             resolver,
             automaticActivations,
-            persistence ?? new ProjectConfigPersistence(projectRoot));
+            persistence ?? new ProjectConfigPersistence(projectRoot),
+            new ReleaseVersionService(projectRoot, timeProvider));
         return new TaskService(projectRoot, nextIdService, resolver, graph, lifecycle, this);
     }
 }

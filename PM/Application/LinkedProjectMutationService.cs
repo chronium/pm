@@ -29,6 +29,7 @@ public sealed record LinkedProjectMutationTarget(
     MilestoneActivationValidationService ActivationValidation,
     ActivationTriggerService ActivationTriggers,
     MilestoneDeliveryService MilestoneDeliveries,
+    ReleaseVersionService Releases,
     TaskService Tasks,
     BoardService Board,
     WikiService Wiki,
@@ -193,6 +194,7 @@ public sealed class LinkedProjectMutationService(
             resolver);
         var persistence = new ProjectConfigPersistence(root);
         var automaticActivations = new AutomaticActivationService(resolver, timeProvider);
+        var releases = new ReleaseVersionService(root, timeProvider);
         var board = new BoardService(root, resolver);
         return new LinkedProjectMutationTarget(
             projectId,
@@ -214,7 +216,9 @@ public sealed class LinkedProjectMutationService(
                 validator,
                 automaticActivations,
                 timeProvider,
-                persistence),
+                persistence,
+                releases),
+            releases,
             taskServices.Create(root, nextIdService),
             board,
             new WikiService(root),

@@ -117,6 +117,7 @@ internal static class MilestoneDeliveryCommandOutput
         AnsiConsole.MarkupLineInterpolated(
             $"Lifecycle: [blue]{milestone.Lifecycle.ToString().EscapeMarkup()}[/].");
         LifecycleMutationCommandOutput.Write(result.ActivationImpact);
+        LifecycleMutationCommandOutput.Write(result.ReleaseTransition);
         return 0;
     }
 

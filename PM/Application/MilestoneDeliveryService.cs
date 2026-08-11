@@ -25,6 +25,7 @@ public sealed class MilestoneDeliveryService
     private readonly AutomaticActivationService automaticActivations;
     private readonly TimeProvider timeProvider;
     private readonly IProjectConfigPersistence persistence;
+    private readonly ReleaseVersionService releaseVersions;
 
     public MilestoneDeliveryService(
         ProjectRoot projectRoot,
@@ -33,6 +34,19 @@ public sealed class MilestoneDeliveryService
         AutomaticActivationService automaticActivations,
         TimeProvider timeProvider,
         IProjectConfigPersistence persistence)
+        : this(projectRoot, resolver, validator, automaticActivations, timeProvider, persistence,
+            new ReleaseVersionService(projectRoot, timeProvider))
+    {
+    }
+
+    public MilestoneDeliveryService(
+        ProjectRoot projectRoot,
+        MilestoneActivationResolver resolver,
+        MilestoneActivationValidationService validator,
+        AutomaticActivationService automaticActivations,
+        TimeProvider timeProvider,
+        IProjectConfigPersistence persistence,
+        ReleaseVersionService releaseVersions)
     {
         this.projectRoot = projectRoot;
         this.resolver = resolver;
@@ -40,6 +54,7 @@ public sealed class MilestoneDeliveryService
         this.automaticActivations = automaticActivations;
         this.timeProvider = timeProvider;
         this.persistence = persistence;
+        this.releaseVersions = releaseVersions;
     }
 
     public AppResult<MilestoneDeliveryPreview> PreviewDelivery(string key, string? reason)
@@ -76,6 +91,18 @@ public sealed class MilestoneDeliveryService
                 "milestone_delivery_confirmation_required",
                 "Exceptional milestone delivery requires explicit confirmation.");
 
+        var releasePlanResult = releaseVersions.PrepareMilestoneDelivery(evaluation.Preview.MilestoneKey);
+        if (!releasePlanResult.Success)
+            return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
+                releasePlanResult.ErrorCode!, releasePlanResult.Message!);
+        var releasePlan = releasePlanResult.Payload;
+        if (releasePlan != null)
+        {
+            var begin = releaseVersions.Begin(releasePlan);
+            if (!begin.Success)
+                return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(begin.ErrorCode!, begin.Message!);
+        }
+
         var prospective = ProjectConfig.Deserialize(evaluation.State.OriginalYaml);
         prospective.Milestones[evaluation.Preview.MilestoneKey].Delivery = new MilestoneDelivery
         {
@@ -101,15 +128,39 @@ public sealed class MilestoneDeliveryService
             "milestone_delivery_failed",
             "milestone_delivery_rollback_failed",
             $"Milestone {evaluation.Preview.MilestoneKey} could not be delivered");
-        return persisted.Success
-            ? AppResult<LifecycleMutationResult<ResolvedMilestone>>.Ok(
-                new LifecycleMutationResult<ResolvedMilestone>(persisted.Payload!, impact))
-            : AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
+        if (!persisted.Success)
+        {
+            if (releasePlan != null) _ = releaseVersions.Rollback(releasePlan);
+            return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
                 persisted.ErrorCode!, persisted.Message!);
+        }
+
+        ReleaseVersionTransition? releaseTransition = null;
+        if (releasePlan != null)
+        {
+            var completed = releaseVersions.Complete(releasePlan);
+            if (!completed.Success)
+            {
+                var restored = TryRestoreConfig(evaluation.State.OriginalYaml);
+                restored &= releaseVersions.Rollback(releasePlan).Success;
+                return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Fail(
+                    restored ? "milestone_release_transition_failed" : "milestone_release_transition_rollback_failed",
+                    restored
+                        ? $"Milestone {evaluation.Preview.MilestoneKey} was not delivered because its release version could not advance: {completed.Message}"
+                        : $"Milestone delivery release transition failed and the previous project state could not be fully restored: {completed.Message}");
+            }
+            releaseTransition = completed.Payload;
+        }
+
+        return AppResult<LifecycleMutationResult<ResolvedMilestone>>.Ok(
+            new LifecycleMutationResult<ResolvedMilestone>(persisted.Payload!, impact, releaseTransition));
     }
 
     public AppResult<ResolvedMilestone> ReopenMilestone(string key)
     {
+        var releaseReady = releaseVersions.EnsureMutationReady();
+        if (!releaseReady.Success)
+            return AppResult<ResolvedMilestone>.Fail(releaseReady.ErrorCode!, releaseReady.Message!);
         key = key.Trim();
         if (string.IsNullOrWhiteSpace(key))
             return AppResult<ResolvedMilestone>.Fail(

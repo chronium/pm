@@ -1,4 +1,5 @@
 using PM.Project;
+using PM.Files;
 using PM.Tasks;
 using PM.Wiki;
 
@@ -96,6 +97,7 @@ public sealed class ProjectValidationService
 
         var issues = new List<ProjectValidationIssue>();
         ValidateReleaseVersion(issues);
+        ValidateReleaseTransitions(issues);
         ValidateConfigMetadata(issues);
         await ValidateLinkedProjects(issues, cancellationToken);
         var tasksById = ValidateTaskFiles(issues);
@@ -127,6 +129,104 @@ public sealed class ProjectValidationService
             result.Message ?? "Release version is invalid.",
             projectRoot.ReleaseVersionPath));
     }
+
+    private void ValidateReleaseTransitions(List<ProjectValidationIssue> issues)
+    {
+        var status = releaseVersionService.ReadStatus();
+        if (!status.Success)
+        {
+            if (status.ErrorCode is "invalid_release_version" or "release_version_unreadable")
+                return;
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                status.ErrorCode ?? "invalid_release_transition",
+                status.Message ?? "Release transition state is invalid.",
+                projectRoot.RootPath));
+            return;
+        }
+
+        if (!status.Payload!.Enabled)
+        {
+            if (FileSystem.FileExists(projectRoot.PendingReleaseTransitionPath) ||
+                Directory.Exists(projectRoot.ReleaseTransitionsPath) &&
+                Directory.EnumerateFiles(projectRoot.ReleaseTransitionsPath, "*.yaml").Any())
+                issues.Add(new ProjectValidationIssue(
+                    "error",
+                    "release_transition_without_version",
+                    "Release transition state exists, but release versioning is not enabled.",
+                    projectRoot.RootPath));
+            return;
+        }
+
+        if (status.Payload.PendingTransition != null)
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                "release_reconciliation_required",
+                $"Release transition to {status.Payload.PendingTransition.ToVersion} is pending. Run pm release reconcile.",
+                projectRoot.PendingReleaseTransitionPath));
+
+        var evidence = releaseVersionService.ReadEvidence();
+        if (!evidence.Success)
+        {
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                evidence.ErrorCode ?? "invalid_release_transition",
+                evidence.Message ?? "Release transition evidence is invalid.",
+                projectRoot.ReleaseTransitionsPath));
+            return;
+        }
+
+        if (Directory.Exists(projectRoot.ReleaseTransitionsPath))
+        {
+            foreach (var path in Directory.EnumerateFiles(projectRoot.ReleaseTransitionsPath, "*.yaml"))
+            {
+                try
+                {
+                    var transition = YamlSerde.Deserialize<ReleaseVersionTransition>(FileSystem.ReadAllText(path));
+                    if (!string.Equals(
+                            Path.GetFileNameWithoutExtension(path), transition.ToVersion, StringComparison.Ordinal))
+                        issues.Add(new ProjectValidationIssue(
+                            "error",
+                            "release_transition_filename_mismatch",
+                            $"Release transition to {transition.ToVersion} must use filename {transition.ToVersion}.yaml.",
+                            path));
+                }
+                catch
+                {
+                    // ReadEvidence reports malformed documents above.
+                }
+            }
+        }
+
+        var ordered = evidence.Payload!
+            .Select(item => (Item: item, Version: ParseReleaseVersion(item.ToVersion)))
+            .OrderBy(item => item.Version?.Major)
+            .ThenBy(item => item.Version?.Minor)
+            .ThenBy(item => item.Version?.Patch)
+            .ToList();
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var transition = ordered[index].Item;
+            var evidencePath = Path.Combine(projectRoot.ReleaseTransitionsPath, $"{transition.ToVersion}.yaml");
+            if (index > 0 && ordered[index - 1].Item.ToVersion != transition.FromVersion)
+                issues.Add(new ProjectValidationIssue(
+                    "error",
+                    "release_transition_chain_broken",
+                    $"Release transition {transition.FromVersion} to {transition.ToVersion} does not continue the evidence chain.",
+                    evidencePath));
+        }
+
+        if (ordered.Count > 0 && ordered[^1].Item.ToVersion != status.Payload.Version!.ToString() &&
+            status.Payload.PendingTransition == null)
+            issues.Add(new ProjectValidationIssue(
+                "error",
+                "release_transition_current_mismatch",
+                $"Latest release evidence ends at {ordered[^1].Item.ToVersion}, but the current version is {status.Payload.Version}.",
+                projectRoot.ReleaseVersionPath));
+    }
+
+    private static ReleaseVersion? ParseReleaseVersion(string value) =>
+        ReleaseVersion.TryParse(value, out var version, out _) ? version : null;
 
     private async Task ValidateLinkedProjects(
         List<ProjectValidationIssue> issues,

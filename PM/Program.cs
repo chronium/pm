@@ -79,6 +79,7 @@ serviceProvider.AddSingleton<MilestoneActivationValidationService>();
 serviceProvider.AddSingleton<OverviewConfigurationValidationService>();
 serviceProvider.AddSingleton<OverviewService>();
 serviceProvider.AddSingleton<ReleaseVersionService>();
+serviceProvider.AddSingleton<IReleaseCommandPrompts, ReleaseCommandPrompts>();
 serviceProvider.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
 serviceProvider.AddSingleton<AutomaticActivationService>();
 serviceProvider.AddSingleton<ActivationTriggerService>();
@@ -229,6 +230,14 @@ app.Configure(config =>
         {
             site.SetDescription("Build a read-only static project site");
             site.AddCommand<SiteBuildCommand>(GlobalConfig.SiteBuildCommandName);
+        });
+    config.AddBranch(GlobalConfig.ReleaseBranchName,
+        release =>
+        {
+            release.SetDescription("Inspect and manage project release versions");
+            release.AddCommand<ReleaseStatusCommand>(GlobalConfig.ReleaseStatusCommandName);
+            release.AddCommand<ReleaseReconcileCommand>(GlobalConfig.ReleaseReconcileCommandName);
+            release.AddCommand<ReleaseMajorCommand>(GlobalConfig.ReleaseMajorCommandName);
         });
     config.AddCommand<DoctorCommand>(GlobalConfig.DoctorCommandName);
 });

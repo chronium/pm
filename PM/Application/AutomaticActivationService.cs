@@ -17,7 +17,12 @@ public sealed record AutomaticActivationImpact(
 
 public sealed record LifecycleMutationResult<T>(
     T Value,
-    AutomaticActivationImpact ActivationImpact);
+    AutomaticActivationImpact ActivationImpact,
+    ReleaseVersionTransition? ReleaseTransition = null);
+
+public sealed record TaskLifecycleMutationImpact(
+    AutomaticActivationImpact ActivationImpact,
+    ReleaseVersionTransition? ReleaseTransition);
 
 public sealed class AutomaticActivationService(
     MilestoneActivationResolver resolver,

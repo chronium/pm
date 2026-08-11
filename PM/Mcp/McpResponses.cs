@@ -129,7 +129,32 @@ public sealed record AutomaticActivationImpactPayload(
 
 public sealed record ActivationMutationDetailsPayload(
     IReadOnlyList<string>? AffectedMilestones = null,
-    AutomaticActivationImpactPayload? AutomaticActivation = null);
+    AutomaticActivationImpactPayload? AutomaticActivation = null,
+    ReleaseTransitionPayload? ReleaseTransition = null);
+
+public sealed record ReleaseTransitionPayload(
+    DateTimeOffset At,
+    string Kind,
+    string FromVersion,
+    string ToVersion,
+    string? Source,
+    string? Reason);
+
+public sealed record ReleaseStatusPayload(
+    bool Enabled,
+    string? Version,
+    ReleaseTransitionPayload? PendingTransition,
+    ReleaseTransitionPayload? LatestTransition);
+
+public sealed record MajorReleasePreviewPayload(
+    string Revision,
+    ReleaseTransitionPayload Transition);
+
+public sealed record ReleaseReconciliationPayload(
+    bool Changed,
+    string Action,
+    ReleaseTransitionPayload? Transition,
+    ProjectMutationReceiptPayload? Mutation = null);
 
 public sealed record ActivationMutationPayload(
     bool Changed,
@@ -282,7 +307,10 @@ public sealed record CreatedTaskPayload(
     string FilePath,
     ProjectMutationReceiptPayload? Mutation = null);
 
-public sealed record MutatedPayload(bool Changed, ProjectMutationReceiptPayload? Mutation = null);
+public sealed record MutatedPayload(
+    bool Changed,
+    ProjectMutationReceiptPayload? Mutation = null,
+    ReleaseTransitionPayload? ReleaseTransition = null);
 
 public sealed record TaskMutationPayload(
     bool Changed,

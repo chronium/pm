@@ -5,9 +5,27 @@ namespace PM.Project;
 
 public sealed partial record ReleaseVersion(int Major, int Minor, int Patch)
 {
-    private const int MaximumComponent = 65534;
+    public const int MaximumComponent = 65534;
 
     public override string ToString() => $"{Major}.{Minor}.{Patch}";
+
+    public bool TryNextPatch(out ReleaseVersion? next) =>
+        TryCreate(Major, Minor, Patch + 1, out next);
+
+    public bool TryNextMinor(out ReleaseVersion? next) =>
+        TryCreate(Major, Minor + 1, 0, out next);
+
+    public bool TryNextMajor(out ReleaseVersion? next) =>
+        TryCreate(Major + 1, 0, 0, out next);
+
+    private static bool TryCreate(int major, int minor, int patch, out ReleaseVersion? version)
+    {
+        version = null;
+        if (major > MaximumComponent || minor > MaximumComponent || patch > MaximumComponent)
+            return false;
+        version = new ReleaseVersion(major, minor, patch);
+        return true;
+    }
 
     public static bool TryParse(string content, out ReleaseVersion? version, out string? error)
     {

@@ -57,6 +57,8 @@ public class ProjectRoot : IProjectRoot
     public string TaskOrderPath => Path.Combine(RootPath!, GlobalConfig.TaskOrderFile);
     public string ConfigPath => Path.Combine(RootPath!, GlobalConfig.PmConfigFile);
     public string ReleaseVersionPath => Path.Combine(RootPath!, GlobalConfig.ReleaseVersionFile);
+    public string ReleaseTransitionsPath => Path.Combine(RootPath!, GlobalConfig.ReleaseTransitionsDirName);
+    public string PendingReleaseTransitionPath => Path.Combine(RootPath!, GlobalConfig.PendingReleaseTransitionFile);
     public string LinkedProjectsPath => Path.Combine(RootPath!, GlobalConfig.LinkedProjectsFile);
     public string RepositoryPath => Directory.GetParent(RootPath!)!.FullName;
 

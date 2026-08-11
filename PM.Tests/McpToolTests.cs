@@ -1542,6 +1542,62 @@ public class McpToolTests
         Assert.DoesNotContain("deliver_milestone", names);
         Assert.DoesNotContain("reopen_milestone", names);
         Assert.DoesNotContain("reconcile_activation_triggers", names);
+        Assert.DoesNotContain("get_release_status", names);
+        Assert.DoesNotContain("reconcile_release_version", names);
+        Assert.DoesNotContain("preview_major_version", names);
+        Assert.DoesNotContain("advance_major_version", names);
+    }
+
+    [Fact]
+    public async Task ReleaseToolsExposeAutomaticEvidenceAndRevisionGuardedMajorAdvance()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        await File.WriteAllTextAsync(projectRoot.ReleaseVersionPath, "1.4.6\n");
+        var task = TestData.Task("PM-0001", "Release task");
+        projectRoot.WriteTask(task);
+        projectRoot.UpdateTaskState(task, "todo");
+        var tools = CreateTools(projectRoot);
+
+        var moved = tools.MoveTask(task.Id, "done");
+        Assert.True(moved.Success, moved.Message);
+        Assert.Equal("1.4.7", moved.Data!.ReleaseTransition!.ToVersion);
+        Assert.Equal("task", moved.Data.ReleaseTransition.Kind);
+
+        var status = await tools.GetReleaseStatus();
+        Assert.True(status.Success, status.Message);
+        Assert.Equal("1.4.7", status.Data!.Version);
+        Assert.Equal("PM-0001", status.Data.LatestTransition!.Source);
+
+        var preview = await tools.PreviewMajorVersion("Compatibility boundary");
+        Assert.True(preview.Success, preview.Message);
+        Assert.Equal("2.0.0", preview.Data!.Transition.ToVersion);
+        var stale = await tools.AdvanceMajorVersion(
+            "Different reason", preview.Data.Revision);
+        Assert.False(stale.Success);
+        Assert.Equal("release_major_stale", stale.ErrorCode);
+
+        var advanced = await tools.AdvanceMajorVersion(
+            "Compatibility boundary", preview.Data.Revision);
+        Assert.True(advanced.Success, advanced.Message);
+        Assert.Equal("2.0.0", advanced.Data!.Transition!.ToVersion);
+        Assert.Equal("manual-major", advanced.Data.Transition.Kind);
+        Assert.Contains(".pm/release_transitions/2.0.0.yaml", advanced.Data.Mutation!.ChangedPaths);
+    }
+
+    [Fact]
+    public async Task RunWorkerCannotUseReleaseControlPlaneTools()
+    {
+        using var workspace = new TempWorkingDirectory();
+        var projectRoot = await workspace.CreateProject();
+        var tools = CreateTools(projectRoot,
+            capabilityContext: new McpCapabilityContext(McpCapabilityProfile.RunWorker, "PM-0001"));
+
+        Assert.Equal("mcp_control_plane_denied", (await tools.GetReleaseStatus()).ErrorCode);
+        Assert.Equal("mcp_control_plane_denied", (await tools.PreviewMajorVersion("No")).ErrorCode);
+        Assert.Equal("mcp_control_plane_denied", (await tools.ReconcileReleaseVersion()).ErrorCode);
+        Assert.Equal("mcp_control_plane_denied",
+            (await tools.AdvanceMajorVersion("No", "revision")).ErrorCode);
     }
 
     [Fact]
