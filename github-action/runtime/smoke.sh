@@ -52,6 +52,10 @@ archive=$artifact_root/pm-github-action-runtime-${pm_version}.oci.tar
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/pm-action-runtime-smoke.XXXXXX")
 cleanup() {
+  docker run --rm \
+    --volume "$work:/cleanup" \
+    --entrypoint /bin/sh \
+    "$image_tag" -c 'chmod -R a+rwX /cleanup' >/dev/null 2>&1 || true
   chmod -R u+w "$work" 2>/dev/null || true
   rm -rf "$work"
 }
