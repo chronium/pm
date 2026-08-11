@@ -376,7 +376,10 @@ milestones:
       - The ChronoFall family workflow subsequently builds its project sites through `chronium/pm@latest` and preserves working cross-project navigation.
     priority: high
     requiredActivationTriggers: []
-    delivery: null
+    delivery:
+      at: 2026-08-11T12:05:20.7421240+00:00
+      mode: ordinary
+      acceptedTaskIds: []
 activationTriggers: {}
 site:
   enabled: true
