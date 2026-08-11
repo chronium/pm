@@ -1,19 +1,20 @@
 {
   "schemaVersion": 1,
-  "pmVersion": "1.0.5",
+  "pmVersion": "1.1.0",
   "transition": {
     "schemaVersion": 1,
-    "at": "2026-08-11T11:34:36.2789680+00:00",
-    "kind": "task",
-    "fromVersion": "1.0.4",
-    "toVersion": "1.0.5",
-    "source": "PM-0122",
+    "at": "2026-08-11T12:05:20.7398360+00:00",
+    "kind": "milestone",
+    "fromVersion": "1.0.5",
+    "toVersion": "1.1.0",
+    "source": "github-action-publishing",
     "reason": null
   },
-  "sourceRevision": "c66f8b4210ff759ddb6962d705542fdf4c83ae80",
-  "image": "ghcr.io/chronium/pm@sha256:c5040a21150e2af7d740e791b5a717552b4f573f9c730b614594cee0d4c18282",
-  "imageDigest": "sha256:c5040a21150e2af7d740e791b5a717552b4f573f9c730b614594cee0d4c18282",
+  "sourceRevision": "7c08554f19fbfea60ed050a75628b6d6fde4c8ba",
+  "image": "ghcr.io/chronium/pm@sha256:27506fb91193fb3b717dce1b6d9f5f1344e71f442a1135026cf0ef5f42480c02",
+  "imageDigest": "sha256:27506fb91193fb3b717dce1b6d9f5f1344e71f442a1135026cf0ef5f42480c02",
   "channels": [
-    "latest"
+    "latest",
+    "v1"
   ]
 }

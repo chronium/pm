@@ -27,7 +27,7 @@ outputs:
 
 runs:
   using: docker
-  image: docker://ghcr.io/chronium/pm@sha256:c5040a21150e2af7d740e791b5a717552b4f573f9c730b614594cee0d4c18282
+  image: docker://ghcr.io/chronium/pm@sha256:27506fb91193fb3b717dce1b6d9f5f1344e71f442a1135026cf0ef5f42480c02
   args:
     - ${{ inputs.command }}
     - ${{ inputs.working-directory }}
