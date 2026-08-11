@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "pmVersion": "1.0.4",
+  "pmVersion": "1.0.5",
   "transition": {
     "schemaVersion": 1,
-    "at": "2026-08-11T10:36:48.1479770+00:00",
+    "at": "2026-08-11T11:34:36.2789680+00:00",
     "kind": "task",
-    "fromVersion": "1.0.3",
-    "toVersion": "1.0.4",
-    "source": "PM-0126",
+    "fromVersion": "1.0.4",
+    "toVersion": "1.0.5",
+    "source": "PM-0122",
     "reason": null
   },
-  "sourceRevision": "d95d9bcffbacf6bd9c70fc67599f3f38fd23e562",
-  "image": "ghcr.io/chronium/pm@sha256:e712ea89b3361eb15b66632b8da4e1405d99b984908aeba3d4e91d43f71f097c",
-  "imageDigest": "sha256:e712ea89b3361eb15b66632b8da4e1405d99b984908aeba3d4e91d43f71f097c",
+  "sourceRevision": "c66f8b4210ff759ddb6962d705542fdf4c83ae80",
+  "image": "ghcr.io/chronium/pm@sha256:c5040a21150e2af7d740e791b5a717552b4f573f9c730b614594cee0d4c18282",
+  "imageDigest": "sha256:c5040a21150e2af7d740e791b5a717552b4f573f9c730b614594cee0d4c18282",
   "channels": [
     "latest"
   ]
