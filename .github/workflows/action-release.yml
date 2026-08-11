@@ -41,7 +41,9 @@ jobs:
           IMMUTABLE_REF: ${{ steps.release.outputs.immutable-ref }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          target=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$IMMUTABLE_REF" --jq '.object.sha' 2>/dev/null || true)
+          if ! target=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$IMMUTABLE_REF" --jq '.object.sha' 2>/dev/null); then
+            target=
+          fi
           if [ -z "$target" ]; then
             echo "already-promoted=false" >> "$GITHUB_OUTPUT"
             exit 0

@@ -18,7 +18,9 @@ printf '%s' "$ref" | grep -Eq '^(latest|v[0-9]+|v[0-9]+\.[0-9]+\.[0-9]+)$' || fa
 printf '%s' "$target" | grep -Eq '^[0-9a-f]{40}$' || fail 'Target must be a full Git commit SHA.'
 
 lookup() {
-  gh api "repos/$repository/git/ref/tags/$ref" --jq '.object.sha' 2>/dev/null || true
+  if result=$(gh api "repos/$repository/git/ref/tags/$ref" --jq '.object.sha' 2>/dev/null); then
+    printf '%s\n' "$result"
+  fi
 }
 
 current=$(lookup)
