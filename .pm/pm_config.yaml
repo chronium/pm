@@ -307,7 +307,7 @@ milestones:
       ## Outcome
 
 
-      Publish a reusable `chronium/pm` GitHub Action that lets PM-based repositories validate project state and generate static sites without installing PM or invoking its OCI image directly.
+      Publish a reusable, versioned `chronium/pm` GitHub Action that lets PM-based repositories validate project state and generate static sites without installing PM or invoking its OCI image directly, while distinguishing task-level edge releases from fully delivered stable milestones.
 
 
       ## Scope
@@ -315,15 +315,21 @@ milestones:
 
       - Expose a controlled Action command surface for `doctor`, `site-build`, and `version`.
 
-      - Package released PM binaries and embedded web assets in a small Linux OCI runtime used internally by the Action.
+      - Package released PM binaries and embedded web assets in a small Linux amd64/arm64 OCI runtime used internally by the Action.
 
       - Validate project and output paths beneath the checked-out workspace, translate typed Action inputs without shell evaluation, and preserve PM exit codes.
 
       - Write generated sites back into the GitHub workspace for subsequent artifact upload or deployment steps.
 
-      - Publish a moving `latest` Action ref for closely coordinated repositories, a compatible major ref, and immutable release refs.
+      - Establish one authoritative altered-semantic PM version: explicit manual major, milestone-delivery minor with patch reset, and completed-task patch.
 
-      - Couple every Action release to a tested immutable OCI image digest.
+      - Keep release versioning opt-in for existing PM projects and make version transitions monotonic, idempotent, and recoverable.
+
+      - Publish immutable `vMAJOR.MINOR.PATCH` Action and OCI releases for successfully promoted versions.
+
+      - Move `latest` after validated task-level releases for closely coordinated repositories; move `vMAJOR` only after a fully delivered milestone has passed the same promotion gates.
+
+      - Couple every Action release to a tested immutable OCI image digest and retain transition-kind evidence.
 
       - Separate PM's Action/runtime release workflow from its own static-site publishing workflow.
 
@@ -337,7 +343,11 @@ milestones:
 
       - Arbitrary shell or unrestricted PM CLI passthrough.
 
-      - Repository mutation, automated write-back, milestone delivery, or activation overrides from CI.
+      - Repository mutation, automated write-back, milestone delivery, or activation overrides from consumer CI.
+
+      - Automatic major-version changes, CalVer, retroactive counting of historical tasks, or version bumps derived from arbitrary Git commits.
+
+      - Moving immutable version refs or presenting a local image ID as a published registry digest.
 
       - Hiding Action defects by invoking local build outputs or the OCI image directly from dogfood publishing workflows.
 
@@ -351,7 +361,13 @@ milestones:
 
       - Action contract and command-dispatch tests cover accepted inputs, rejected commands and paths, exit-code propagation, and generated outputs.
 
-      - Published Action refs resolve to a digest-pinned, smoke-tested OCI runtime.
+      - PM's CLI, assembly, OCI labels, Action outputs, and release records report one authoritative version.
+
+      - Version-transition tests demonstrate one patch per completion, one minor/reset per milestone delivery, explicit-only major advancement, retry safety, and unchanged behavior for projects that do not opt in.
+
+      - Published immutable refs resolve to digest-pinned, smoke-tested OCI runtimes.
+
+      - Promotion tests demonstrate that task releases may move `latest` without moving `v1`, while a validated delivered milestone advances both channels.
 
       - PM's release workflow publishes the Action/runtime, while a separate workflow consumes `chronium/pm@latest` to validate PM and publish its static site.
 
