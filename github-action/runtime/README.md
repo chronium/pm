@@ -6,9 +6,11 @@ The image launches the portable release payload through PM's private
 `action.template.yml`, validates them without shell evaluation, and invokes only
 the approved PM commands.
 
-The checked-in metadata is deliberately a promotion template rather than a
-root `action.yml`. PM-0121 publishes the OCI image, substitutes its immutable
-registry digest, and promotes the resulting root metadata with the release.
+The checked-in `action.template.yml` remains the source contract. The Action
+release workflow publishes a source-addressed OCI candidate and emits a
+promotion artifact containing a digest-pinned root `action.yml` and canonical
+`github-action/release/current.json`. The artifact is applied locally and
+committed with the repository owner's signing key; CI never generates a commit.
 
 Run the complete PM release gate first so `artifacts/release` contains the
 framework-dependent CLI with embedded Angular assets:
@@ -26,6 +28,20 @@ Linux amd64/arm64 OCI archive beneath the ignored `artifacts/github-action`
 directory. It reports the native image ID and archive SHA-256 as local identity
 evidence. Neither value is presented as the registry manifest digest; PM-0121
 owns publication and records the authoritative promoted digest.
+
+On a candidate workflow run, download the named promotion artifact and apply it
+from the clean candidate revision:
+
+```sh
+github-action/release/apply-promotion.sh path/to/artifact
+git add action.yml github-action/release/current.json
+git commit -S -m "PM: Promote Action vMAJOR.MINOR.PATCH"
+git push origin main
+```
+
+The follow-up workflow verifies the commit signature and version-neutral diff,
+promotes immutable OCI and Action refs, and gates `latest` and eligible stable-major
+channels through the pinned public `chronium/pm-action-smoke` workflow.
 
 The runtime uses the exact digest-pinned .NET 10 ASP.NET Alpine image declared
 in `Containerfile`. Alpine's invariant globalization mode is intentional: PM's

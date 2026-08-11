@@ -167,6 +167,15 @@ Projects may opt into a published Overview landing page with `site.enabled: true
 
 `.github/workflows/pages.yml` validates the full release, generates this repository's project site, uploads it with the official Pages artifact/deployment actions, and force-updates an orphaned `gh-pages` branch with the identical tree for inspection. Configure the repository's Pages source as **GitHub Actions** before running the workflow. The artifact deployment is authoritative because pushes made by a workflow with `GITHUB_TOKEN` do not trigger a separate branch-source Pages build. The workflow uses no PAT and every action is pinned to an immutable reviewed commit.
 
+## GitHub Action
+
+Released PM versions are also available as the read-only `chronium/pm` Docker
+Action. It supports `doctor`, `site-build`, and `version`; deployment remains the
+consumer workflow's responsibility. Use `@latest` for coordinated edge consumers,
+`@v1` for the latest delivered v1 milestone, `@vMAJOR.MINOR.PATCH` for an immutable
+release, or a full signed commit SHA for the strongest source pin. Released Action
+metadata always selects the tested `ghcr.io/chronium/pm` runtime by immutable digest.
+
 `npm run frontend:validate` is the complete local frontend gate: formatting, generated API types, strict and production builds, unit tests, Storybook tests/build, and desktop/mobile Chromium E2E against disposable small and large projects. `npm run release` is the complete release gate: it begins with `socket npm ci`, builds and tests .NET, runs the frontend gate, publishes PM with embedded Angular assets under `artifacts/release/`, then runs the embedded-production and static-export smoke profiles. Socket findings stop the release and must be accepted explicitly outside the release script when appropriate. E2E uses a temporary identity/config home, dynamically assigned loopback ports, and a fake next-ID service; it does not access the deployed Worker or this repository's `.pm` project.
 
 Storybook runs as an isolated zoneless component workshop on port 6006. Its browser checks require Chromium, installed with `socket npx playwright install chromium`; reusable visual components should maintain collocated stories, while routed containers and feature stores generally should not add them.

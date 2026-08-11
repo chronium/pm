@@ -241,12 +241,20 @@ by digest without introducing an unsigned generated commit on `main`:
 2. Materialize the root `action.yml` from `action.template.yml` with the
    published digest.
 3. Create an authorized signed promotion commit on `main`.
-4. Exercise that commit through the public Action interface against disposable
+4. Verify the signed commit and exercise its immutable release ref through the
+   public Action interface in `chronium/pm-action-smoke` against disposable
    `doctor`, `site-build`, and `version` consumers.
-5. Create the immutable release ref and move the compatible-major and `latest`
-   refs only after those checks pass.
+5. Move `latest` after its own external smoke passes. Move `vMAJOR` only for a
+   milestone transition that reset patch to zero, then smoke that ref as well.
+
+Task and explicit-major transitions therefore advance `latest` but not the
+compatible-major channel. A milestone transition advances both. An external
+failure restores any moving channel to its previous target; the immutable ref
+is never retargeted.
 
 Immutable release refs never move. Logs and `pm-version` must make the packaged
-PM version visible; the release workflow must additionally record the Action
-commit and OCI digest. Consumers may roll a moving ref back to a previously
-promoted signed commit without changing an immutable release ref.
+PM version visible; the immutable GitHub release additionally publishes
+`pm-action-release.json` with the transition, source revision, signed Action
+commit, PM version, OCI digest, immutable ref, and channels. Consumers may roll
+a moving ref back to a previously promoted signed commit without changing an
+immutable release ref.

@@ -1,0 +1,331 @@
+name: Publish PM Action release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pm-action-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    outputs:
+      phase: ${{ steps.release.outputs.phase }}
+      version: ${{ steps.release.outputs.version }}
+      immutable-ref: ${{ steps.release.outputs.immutable-ref }}
+      transition-kind: ${{ steps.release.outputs.transition-kind }}
+      transition-source: ${{ steps.release.outputs.transition-source }}
+      stable-channel: ${{ steps.release.outputs.stable-channel }}
+      already-promoted: ${{ steps.remote.outputs.already-promoted }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Inspect canonical release state
+        id: release
+        run: node github-action/release/release.mjs inspect
+
+      - name: Inspect immutable release ref
+        id: remote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMMUTABLE_REF: ${{ steps.release.outputs.immutable-ref }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          target=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$IMMUTABLE_REF" --jq '.object.sha' 2>/dev/null || true)
+          if [ -z "$target" ]; then
+            echo "already-promoted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -e "$target^{commit}"
+          test "$(git show "$target:github-action/release/current.json" | jq -r '.pmVersion')" = "$VERSION"
+          test "$(git show "$target:action.yml")" = "$(cat action.yml)"
+          echo "already-promoted=true" >> "$GITHUB_OUTPUT"
+
+  candidate:
+    needs: inspect
+    if: needs.inspect.outputs.phase == 'candidate'
+    runs-on: ubuntu-latest
+    env:
+      SOCKET_CLI_ACCEPT_RISKS: "1"
+    steps:
+      - name: Check out candidate source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Restore .NET dependencies
+        run: dotnet restore PM.slnx
+
+      - name: Install pinned Socket CLI bootstrap
+        run: npm install --global socket@1.1.146
+
+      - name: Install the reviewed Chromium runtime through Socket
+        working-directory: web
+        run: socket npx playwright install --with-deps chromium
+
+      - name: Test Action release policy
+        run: node --test github-action/release/release.test.mjs
+
+      - name: Run the complete PM release gate
+        working-directory: web
+        run: npm run release
+
+      - name: Build the local and multi-platform Action runtime
+        run: github-action/runtime/build.sh
+
+      - name: Smoke the exact local Action runtime and OCI archive
+        run: github-action/runtime/smoke.sh
+
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the source-addressed candidate
+        id: image
+        run: github-action/release/publish-candidate.sh "ghcr.io/chronium/pm:candidate-$GITHUB_SHA"
+
+      - name: Render the signed-promotion handoff
+        run: >-
+          node github-action/release/release.mjs render
+          artifacts/github-action/promotion
+          "$GITHUB_SHA"
+          "${{ steps.image.outputs.image-digest }}"
+
+      - name: Upload the promotion handoff
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: pm-action-promotion-${{ needs.inspect.outputs.version }}
+          path: artifacts/github-action/promotion
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record the signed handoff
+        run: |
+          {
+            echo "### PM Action candidate ${{ needs.inspect.outputs.version }}"
+            echo
+            echo "Source revision: \`$GITHUB_SHA\`"
+            echo "OCI digest: \`${{ steps.image.outputs.image-digest }}\`"
+            echo "Transition: \`${{ needs.inspect.outputs.transition-kind }}\` from \`${{ needs.inspect.outputs.transition-source }}\`"
+            echo
+            echo "Download artifact \`pm-action-promotion-${{ needs.inspect.outputs.version }}\`, apply it with"
+            echo "\`github-action/release/apply-promotion.sh <artifact-directory>\`, and push the resulting signed commit."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  promotion-preflight:
+    needs: inspect
+    if: needs.inspect.outputs.phase == 'promotion' && needs.inspect.outputs.already-promoted == 'false'
+    runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.current.outputs.image-digest }}
+    steps:
+      - name: Check out signed promotion
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Verify version-neutral promotion content
+        run: node github-action/release/release.mjs verify
+
+      - name: Verify GitHub recognizes the promotion signature
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.verification.verified')" = true
+
+      - name: Read promoted runtime identity
+        id: current
+        run: echo "image-digest=$(jq -r '.imageDigest' github-action/release/current.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify candidate labels and packaged version
+        env:
+          DIGEST: ${{ steps.current.outputs.image-digest }}
+          VERSION: ${{ needs.inspect.outputs.version }}
+        run: |
+          docker pull "ghcr.io/chronium/pm@$DIGEST"
+          test "$(docker image inspect "ghcr.io/chronium/pm@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
+          test "$(docker image inspect "ghcr.io/chronium/pm@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$(git rev-parse HEAD^)"
+          test "$(docker image inspect "ghcr.io/chronium/pm@$DIGEST" --format '{{ index .Config.Labels "io.chronium.pm.source-dirty" }}')" = false
+          test "$(docker run --rm --entrypoint dotnet "ghcr.io/chronium/pm@$DIGEST" /opt/pm/PM.dll --version)" = "$VERSION"
+
+      - name: Publish immutable OCI and Action refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ steps.current.outputs.image-digest }}
+          IMMUTABLE_REF: ${{ needs.inspect.outputs.immutable-ref }}
+        run: |
+          github-action/release/promote-image.sh "$IMMUTABLE_REF" "$DIGEST"
+          github-action/release/promote-ref.sh "$GITHUB_REPOSITORY" "$IMMUTABLE_REF" "$GITHUB_SHA" immutable
+
+  smoke-immutable:
+    needs: [inspect, promotion-preflight]
+    permissions:
+      contents: read
+      packages: read
+    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@e94f9497aa172b06ccc6114089221ab0fbd8af7e
+    with:
+      action-ref: ${{ needs.inspect.outputs.immutable-ref }}
+      expected-version: ${{ needs.inspect.outputs.version }}
+
+  advance-latest:
+    needs: [inspect, smoke-immutable]
+    runs-on: ubuntu-latest
+    outputs:
+      previous-target: ${{ steps.ref.outputs.previous-target }}
+    steps:
+      - name: Check out promotion tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Move latest to the validated immutable release
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: github-action/release/promote-ref.sh "$GITHUB_REPOSITORY" latest "$GITHUB_SHA" channel
+
+  smoke-latest:
+    needs: [inspect, advance-latest]
+    permissions:
+      contents: read
+      packages: read
+    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@e94f9497aa172b06ccc6114089221ab0fbd8af7e
+    with:
+      action-ref: latest
+      expected-version: ${{ needs.inspect.outputs.version }}
+
+  advance-stable:
+    needs: [inspect, smoke-latest]
+    if: needs.inspect.outputs.stable-channel != ''
+    runs-on: ubuntu-latest
+    outputs:
+      previous-target: ${{ steps.ref.outputs.previous-target }}
+    steps:
+      - name: Check out promotion tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Move the compatible-major channel
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABLE_CHANNEL: ${{ needs.inspect.outputs.stable-channel }}
+        run: github-action/release/promote-ref.sh "$GITHUB_REPOSITORY" "$STABLE_CHANNEL" "$GITHUB_SHA" channel
+
+  smoke-stable:
+    needs: [inspect, advance-stable]
+    if: needs.inspect.outputs.stable-channel != ''
+    permissions:
+      contents: read
+      packages: read
+    uses: chronium/pm-action-smoke/.github/workflows/smoke.yml@e94f9497aa172b06ccc6114089221ab0fbd8af7e
+    with:
+      action-ref: ${{ needs.inspect.outputs.stable-channel }}
+      expected-version: ${{ needs.inspect.outputs.version }}
+
+  rollback-latest:
+    needs: [inspect, advance-latest, smoke-latest, advance-stable, smoke-stable]
+    if: >-
+      always() &&
+      (needs.advance-latest.result == 'failure' ||
+       needs.smoke-latest.result == 'failure' ||
+       needs.advance-stable.result == 'failure' ||
+       needs.smoke-stable.result == 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out promotion tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Restore latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TARGET: ${{ needs.advance-latest.outputs.previous-target }}
+        run: github-action/release/promote-ref.sh "$GITHUB_REPOSITORY" latest "$GITHUB_SHA" restore "$PREVIOUS_TARGET"
+
+  rollback-stable:
+    needs: [inspect, advance-stable, smoke-stable]
+    if: >-
+      always() &&
+      (needs.advance-stable.result == 'failure' || needs.smoke-stable.result == 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out promotion tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Restore compatible-major channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TARGET: ${{ needs.advance-stable.outputs.previous-target }}
+          STABLE_CHANNEL: ${{ needs.inspect.outputs.stable-channel }}
+        run: >-
+          github-action/release/promote-ref.sh "$GITHUB_REPOSITORY" "$STABLE_CHANNEL"
+          "$GITHUB_SHA" restore "$PREVIOUS_TARGET"
+
+  finalize:
+    needs: [inspect, promotion-preflight, smoke-latest, smoke-stable]
+    if: >-
+      always() &&
+      needs.smoke-latest.result == 'success' &&
+      (needs.inspect.outputs.stable-channel == '' || needs.smoke-stable.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out promoted release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Generate immutable release evidence
+        run: node github-action/release/release.mjs evidence pm-action-release.json "$GITHUB_SHA"
+
+      - name: Publish immutable GitHub release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMMUTABLE_REF: ${{ needs.inspect.outputs.immutable-ref }}
+          VERSION: ${{ needs.inspect.outputs.version }}
+        run: |
+          if gh release view "$IMMUTABLE_REF" >/dev/null 2>&1; then
+            gh release download "$IMMUTABLE_REF" --pattern pm-action-release.json --dir "$RUNNER_TEMP/existing"
+            cmp "$RUNNER_TEMP/existing/pm-action-release.json" pm-action-release.json
+          else
+            gh release create "$IMMUTABLE_REF" pm-action-release.json \
+              --verify-tag \
+              --title "Project Model $VERSION" \
+              --notes "Immutable Project Model Action and OCI release $IMMUTABLE_REF."
+          fi
+
+      - name: Record promoted identities
+        run: |
+          {
+            echo "### Promoted PM Action ${{ needs.inspect.outputs.version }}"
+            echo
+            echo "Action commit: \`$GITHUB_SHA\`"
+            echo "OCI digest: \`${{ needs.promotion-preflight.outputs.image-digest }}\`"
+            echo "Transition: \`${{ needs.inspect.outputs.transition-kind }}\` from \`${{ needs.inspect.outputs.transition-source }}\`"
+            echo "Channels: \`latest${{ needs.inspect.outputs.stable-channel && format(', {0}', needs.inspect.outputs.stable-channel) || '' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

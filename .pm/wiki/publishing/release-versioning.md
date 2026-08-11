@@ -1,7 +1,7 @@
 ---
 title: Release Versioning
 createdAt: 2026-08-11T08:24:42.1013280Z
-modifiedAt: 2026-08-11T08:54:21.3047860Z
+modifiedAt: 2026-08-11T09:39:40.9802700Z
 ---
 
 # Release version identity
@@ -54,6 +54,16 @@ PM's own build reads the tracked version and stamps the same identity into:
 - the OCI `org.opencontainers.image.version` label.
 
 Release publication rejects missing, malformed, or conflicting version inputs. Generated manifests and container labels are evidence derived from the tracked file; they are not additional version sources.
+
+# GitHub Action publication
+
+PM publishes its reusable Docker Action through a two-stage workflow. A new canonical version on `main` passes the complete release and OCI smoke gates before a source-addressed candidate is pushed. CI then emits an exact digest-pinned promotion handoff. The repository owner applies that handoff and creates a signed, version-neutral commit; no workflow holds a signing key or creates a generated commit.
+
+The signed commit must be a direct child of its candidate source and may change only `action.yml` and `github-action/release/current.json`. Promotion verifies the registered GitHub signature, OCI version and revision labels, packaged PM version, registry digest, and the exact rendered Action template.
+
+Each promoted version receives immutable Git and OCI `vMAJOR.MINOR.PATCH` refs. `latest` advances after task, milestone, and explicit-major transitions. A compatible `vMAJOR` channel advances only after a milestone delivery resets patch to zero; an explicit major transition does not declare the new major stable. Every exposed ref is exercised by the pinned public `chronium/pm-action-smoke` consumer workflow, and a failed channel smoke restores its previous target.
+
+The immutable GitHub release includes `pm-action-release.json`, which records the transition kind and source, source revision, signed Action commit, PM version, OCI digest, immutable ref, and promoted channels. Promotion retries accept an existing immutable ref only when it already resolves to the exact intended identity.
 
 # PM cutover
 
