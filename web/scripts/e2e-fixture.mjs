@@ -40,7 +40,7 @@ children:
     alias: published
     repositoryUrl: https://example.test/published.git
     pathHint: missing-published
-    publicSiteUrl: http://127.0.0.1:${process.env.PM_E2E_UI_PORT}/published/?source=fixture#old
+    publicSiteUrl: http://127.0.0.1:${process.env.PM_E2E_UI_PORT}/family/published/site/?source=fixture#old
   - projectId: unavailable-project
     alias: unavailable
     repositoryUrl: https://example.test/unavailable.git

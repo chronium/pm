@@ -212,6 +212,8 @@ public sealed class GitHubActionDispatcherTests
         Assert.Contains("- ${{ inputs.working-directory }}", metadata);
         Assert.Contains("- ${{ inputs.output-directory }}", metadata);
         Assert.Contains("- ${{ inputs.force }}", metadata);
+        Assert.DoesNotContain("base-path", metadata);
+        Assert.DoesNotContain("build-metadata", metadata);
         Assert.False(File.Exists(Path.Combine(repository, "action.yml")));
     }
 

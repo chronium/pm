@@ -21,6 +21,20 @@ sha256_file() {
   fi
 }
 
+sha256_stdin() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | cut -d' ' -f1
+  else
+    fail 'sha256sum or shasum is required.'
+  fi
+}
+
+tree_digest() {
+  (cd "$1" && tar -cf - .) | sha256_stdin
+}
+
 command -v docker >/dev/null 2>&1 || fail 'Docker is required.'
 command -v jq >/dev/null 2>&1 || fail 'jq is required to inspect the OCI archive.'
 [ -f "$release_root/PM.dll" ] || fail 'Missing artifacts/release/PM.dll. Run npm run release from web/ first.'
@@ -40,12 +54,34 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 workspace=$work/workspace
-valid_project=$workspace/project
+valid_project=$workspace/family/chronofall
+child_project=$workspace/family/starfall
 invalid_project=$workspace/invalid
 output_root=$workspace/output
-mkdir -p "$valid_project" "$invalid_project" "$output_root"
+mkdir -p "$valid_project" "$child_project" "$invalid_project" "$output_root"
 cp -R "$repository_root/.pm" "$valid_project/.pm"
+cp -R "$repository_root/.pm" "$child_project/.pm"
 cp -R "$repository_root/.pm" "$invalid_project/.pm"
+printf '%s\n' 'action-parent' > "$valid_project/.pm/project_id.txt"
+printf '%s\n' 'action-child' > "$child_project/.pm/project_id.txt"
+printf '%s\n' \
+  'version: 1' \
+  'children:' \
+  '  - projectId: action-child' \
+  '    alias: starfall' \
+  '    repositoryUrl: https://example.test/starfall.git' \
+  '    pathHint: ../starfall' \
+  '    publicSiteUrl: https://example.test/family/starfall/?source=action#old' \
+  > "$valid_project/.pm/linked_projects.yaml"
+printf '%s\n' \
+  'version: 1' \
+  'parent:' \
+  '  projectId: action-parent' \
+  '  alias: chronofall' \
+  '  repositoryUrl: https://example.test/chronofall.git' \
+  '  pathHint: ../chronofall' \
+  '  publicSiteUrl: https://example.test/family/chronofall/' \
+  > "$child_project/.pm/linked_projects.yaml"
 invalid_task=$(find "$invalid_project/.pm/tasks" -type f -name '*.md' | LC_ALL=C sort | head -n 1)
 [ -n "$invalid_task" ] || fail 'The source project has no task file for invalid-project coverage.'
 mv "$invalid_task" "$invalid_project/.pm/tasks/invalid-task-file.md"
@@ -72,7 +108,7 @@ grep -F 'PM `version` completed' "$github_summary" >/dev/null || fail 'Version s
 
 : > "$github_output"
 : > "$github_summary"
-doctor_output=$(run_action doctor project ignored false)
+doctor_output=$(run_action doctor family/chronofall ignored false)
 printf '%s\n' "$doctor_output" | grep -F 'Project validation passed.' >/dev/null ||
   fail 'The packaged runtime did not validate the disposable project.'
 grep -Fx "pm-version=$pm_version" "$github_output" >/dev/null || fail 'Doctor did not publish pm-version.'
@@ -81,7 +117,7 @@ grep -Fx 'site-path=' "$github_output" >/dev/null || fail 'Doctor did not publis
 mkdir -p "$valid_project/src/nested"
 : > "$github_output"
 : > "$github_summary"
-run_action doctor project/src/nested ignored false >/dev/null ||
+run_action doctor family/chronofall/src/nested ignored false >/dev/null ||
   fail 'The Action did not discover a PM project above a nested working directory.'
 
 invalid_doctor_log=$work/invalid-doctor.log
@@ -96,7 +132,7 @@ grep -F 'task_filename_mismatch' "$invalid_doctor_log" >/dev/null ||
 grep -F 'failed with exit code' "$github_summary" >/dev/null || fail 'Failed doctor summary is missing.'
 
 injection_log=$work/injection.log
-if run_action 'doctor; touch /github/workspace/owned' project ignored false >"$injection_log" 2>&1; then
+if run_action 'doctor; touch /github/workspace/owned' family/chronofall ignored false >"$injection_log" 2>&1; then
   fail 'The Action accepted a command-shaped injection input.'
 fi
 [ ! -e "$workspace/owned" ] || fail 'An Action input was evaluated as shell code.'
@@ -118,15 +154,82 @@ grep -E 'symbolic link|outside GITHUB_WORKSPACE' "$symlink_log" >/dev/null ||
 
 : > "$github_output"
 : > "$github_summary"
-run_action site-build project output/site false
-[ -f "$output_root/site/index.html" ] || fail 'Static export did not persist index.html on the host.'
-[ -f "$output_root/site/pm-snapshot.json" ] || fail 'Static export did not persist pm-snapshot.json on the host.'
+parent_state_before=$(tree_digest "$valid_project/.pm")
+child_state_before=$(tree_digest "$child_project/.pm")
+run_action site-build family/chronofall/src/nested output/chronofall false
+[ -f "$output_root/chronofall/index.html" ] || fail 'Static export did not persist index.html on the host.'
+[ -f "$output_root/chronofall/pm-snapshot.json" ] || fail 'Static export did not persist pm-snapshot.json on the host.'
 grep -Fx "pm-version=$pm_version" "$github_output" >/dev/null || fail 'Site build did not publish pm-version.'
-grep -Fx 'site-path=output/site' "$github_output" >/dev/null || fail 'Site build published the wrong site-path.'
-grep -F 'Site output: `output/site`.' "$github_summary" >/dev/null || fail 'Site build summary is missing.'
+grep -Fx 'site-path=output/chronofall' "$github_output" >/dev/null || fail 'Site build published the wrong site-path.'
+grep -F 'Site output: `output/chronofall`.' "$github_summary" >/dev/null || fail 'Site build summary is missing.'
+
+jq -e '.projectId == "action-parent"' "$output_root/chronofall/pm-snapshot.json" >/dev/null ||
+  fail 'Parent static snapshot did not preserve its project identity.'
+jq -e '.overview.status == "ready"' "$output_root/chronofall/pm-snapshot.json" >/dev/null ||
+  fail 'Parent static snapshot did not preserve its configured Overview.'
+jq -e '.project.accent == .settings.accent' "$output_root/chronofall/pm-snapshot.json" >/dev/null ||
+  fail 'Parent static snapshot did not preserve its project accent.'
+jq -e '.tasks | length > 0' "$output_root/chronofall/pm-snapshot.json" >/dev/null ||
+  fail 'Parent static snapshot did not preserve tasks.'
+jq -e '.wikiPages | length > 0' "$output_root/chronofall/pm-snapshot.json" >/dev/null ||
+  fail 'Parent static snapshot did not preserve wiki content.'
+jq -e '.linkedProjects[] | select(.projectId == "action-child") | .publicSiteUrl == "https://example.test/family/starfall/?source=action#old"' \
+  "$output_root/chronofall/pm-snapshot.json" >/dev/null ||
+  fail 'Parent static snapshot did not preserve linked-project publication metadata.'
+grep -F '<base href="./">' "$output_root/chronofall/index.html" >/dev/null ||
+  fail 'Static export did not retain relative asset routing.'
+
+: > "$github_output"
+: > "$github_summary"
+run_action site-build family/starfall output/starfall false
+grep -Fx 'site-path=output/starfall' "$github_output" >/dev/null ||
+  fail 'Child site build published the wrong site-path.'
+jq -e '.projectId == "action-child"' "$output_root/starfall/pm-snapshot.json" >/dev/null ||
+  fail 'Child static snapshot did not preserve its project identity.'
+jq -e '.linkedProjects[] | select(.projectId == "action-parent") | .publicSiteUrl == "https://example.test/family/chronofall/"' \
+  "$output_root/starfall/pm-snapshot.json" >/dev/null ||
+  fail 'Child static snapshot did not preserve its parent publication metadata.'
+
+child_output_before=$(tree_digest "$output_root/starfall")
+: > "$github_output"
+: > "$github_summary"
+run_action site-build family/chronofall output/chronofall true >/dev/null
+[ "$(tree_digest "$output_root/starfall")" = "$child_output_before" ] ||
+  fail 'Rebuilding one family site changed another project output.'
+[ "$(tree_digest "$valid_project/.pm")" = "$parent_state_before" ] ||
+  fail 'Site export mutated the parent PM project state.'
+[ "$(tree_digest "$child_project/.pm")" = "$child_state_before" ] ||
+  fail 'Site export mutated the child PM project state.'
+
+local_output=$output_root/local-chronofall
+(
+  cd "$valid_project"
+  dotnet "$release_root/PM.dll" site build --output "$local_output" --force >/dev/null
+)
+find "$output_root/chronofall" -type f | sed "s#^$output_root/chronofall/##" | LC_ALL=C sort > "$work/action-site-files.txt"
+find "$local_output" -type f | sed "s#^$local_output/##" | LC_ALL=C sort > "$work/local-site-files.txt"
+diff -u "$work/local-site-files.txt" "$work/action-site-files.txt" ||
+  fail 'Action and local site builds produced different file inventories.'
+while IFS= read -r relative; do
+  case "$relative" in
+    index.html | pm-snapshot.json) ;;
+    *) cmp "$local_output/$relative" "$output_root/chronofall/$relative" ||
+      fail "Action and local site builds differ at $relative." ;;
+  esac
+done < "$work/action-site-files.txt"
+sed -E 's#<meta name="pm-site-generated-at" content="[^"]+">##' \
+  "$local_output/index.html" > "$work/local-index.html"
+sed -E 's#<meta name="pm-site-generated-at" content="[^"]+">##' \
+  "$output_root/chronofall/index.html" > "$work/action-index.html"
+cmp "$work/local-index.html" "$work/action-index.html" ||
+  fail 'Action and local site index documents differ after timestamp normalization.'
+jq 'del(.generatedAt)' "$local_output/pm-snapshot.json" > "$work/local-snapshot.json"
+jq 'del(.generatedAt)' "$output_root/chronofall/pm-snapshot.json" > "$work/action-snapshot.json"
+cmp "$work/local-snapshot.json" "$work/action-snapshot.json" ||
+  fail 'Action and local snapshots differ after timestamp normalization.'
 
 unsafe_output_log=$work/unsafe-output.log
-if run_action site-build project project/.pm/site false >"$unsafe_output_log" 2>&1; then
+if run_action site-build family/chronofall family/chronofall/.pm/site false >"$unsafe_output_log" 2>&1; then
   fail 'The Action accepted a site output beneath .pm.'
 fi
 grep -F '.pm or its descendants' "$unsafe_output_log" >/dev/null ||

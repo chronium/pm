@@ -176,6 +176,50 @@ Build a site and pass its path to the consumer-owned upload step:
     path: ${{ steps.pm-site.outputs.site-path }}
 ```
 
+Keep the generated site as a normal workflow artifact instead:
+
+```yaml
+- name: Check out repository
+  uses: actions/checkout@v7
+
+- name: Build PM site
+  id: pm-site
+  uses: chronium/pm@v1
+  with:
+    command: site-build
+
+- name: Upload PM site
+  uses: actions/upload-artifact@v6
+  with:
+    name: pm-site
+    path: ${{ steps.pm-site.outputs.site-path }}
+```
+
+Build independently published members of a linked family by giving every
+invocation its own project and output directory:
+
+```yaml
+- name: Build ChronoFall site
+  id: chronofall-site
+  uses: chronium/pm@latest
+  with:
+    command: site-build
+    working-directory: chronofall
+    output-directory: dist/chronofall
+
+- name: Build Starfall site
+  id: starfall-site
+  uses: chronium/pm@latest
+  with:
+    command: site-build
+    working-directory: starfall
+    output-directory: dist/starfall
+```
+
+Each output is a complete independent site. Linked navigation continues to use
+the projects' configured `publicSiteUrl` values; the Action does not invent a
+combined family URL space or rewrite those declarations.
+
 The consumer owns checkout, artifact retention, GitHub Pages permissions,
 deployment, and any hosting-provider integration.
 

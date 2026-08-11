@@ -30,6 +30,28 @@ test('enabled static snapshot opens its responsive Overview from the empty root'
   }
 });
 
+test('static output remains self-contained beneath a nested hosting path', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+
+  await page.goto('/nested/project-model/#/overview');
+
+  await expect(page.getByRole('heading', { name: 'Playwright Overview' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'purple');
+  await page.getByRole('link', { name: 'Tasks', exact: true }).click();
+  await expect(page).toHaveURL(/\/nested\/project-model\/#\/tasks$/);
+  await page.reload();
+  await expect(page.getByText('E2E-0001', { exact: true }).first()).toBeVisible();
+
+  const nestedRequests = requests.map((url) => new URL(url).pathname);
+  expect(nestedRequests).toContain('/nested/project-model/pm-snapshot.json');
+  expect(
+    nestedRequests.some(
+      (path) => path.startsWith('/nested/project-model/') && /\.(?:css|js)$/.test(path),
+    ),
+  ).toBe(true);
+});
+
 test('static snapshot supports filters, task views, dependencies, wiki folders, and hash reloads', async ({
   page,
 }, testInfo) => {
@@ -93,7 +115,10 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   expect(menuReceivesPointer).toBe(true);
   const publishedProject = page.getByRole('link', { name: /published child/i });
   await expect(publishedProject).toBeVisible();
-  await expect(publishedProject).toHaveAttribute('href', /\/published\/\?source=fixture#old$/);
+  await expect(publishedProject).toHaveAttribute(
+    'href',
+    /\/family\/published\/site\/\?source=fixture#old$/,
+  );
   await expect(projectMenu.locator('.project-switcher-unavailable')).toHaveAttribute(
     'title',
     /does not publish/,
@@ -182,7 +207,7 @@ test('static snapshot supports filters, task views, dependencies, wiki folders, 
   );
   await expect(page.getByRole('link', { name: 'Published wiki' })).toHaveAttribute(
     'href',
-    /\/published\/\?source=fixture#\/wiki\/guide\/hello%20world$/,
+    /\/family\/published\/site\/\?source=fixture#\/wiki\/guide\/hello%20world$/,
   );
   await expect(page.getByText('Unavailable wiki')).toHaveAttribute('title', /does not publish/);
 

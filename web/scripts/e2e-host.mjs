@@ -10,6 +10,7 @@ import { configRoot, e2eRoot, projectRoot, resetFixture } from './e2e-fixture.mj
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(webRoot, '..');
 const mode = process.argv[2] ?? 'dev';
+const nestedStaticMount = '/nested/project-model';
 const idPort = mode === 'static' ? 0 : requiredPort('PM_E2E_ID_PORT');
 const apiPort = mode === 'static' ? 0 : requiredPort('PM_E2E_API_PORT');
 const uiPort = requiredPort('PM_E2E_UI_PORT');
@@ -40,7 +41,13 @@ if (mode === 'static') {
       const requested = decodeURIComponent(
         new URL(request.url ?? '/', 'http://localhost').pathname,
       );
-      const relative = requested === '/' ? 'index.html' : requested.replace(/^\/+/, '');
+      const mountedPath =
+        requested === nestedStaticMount
+          ? '/'
+          : requested.startsWith(`${nestedStaticMount}/`)
+            ? requested.slice(nestedStaticMount.length)
+            : requested;
+      const relative = mountedPath === '/' ? 'index.html' : mountedPath.replace(/^\/+/, '');
       if (relative.split('/').some((segment) => segment === '..')) {
         response.writeHead(404).end();
         return;
