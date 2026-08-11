@@ -77,6 +77,7 @@ public static class McpServerHost
         builder.Services.AddSingleton<MilestoneActivationValidationService>();
         builder.Services.AddSingleton<BoardService>();
         builder.Services.AddSingleton<WikiService>();
+        builder.Services.AddSingleton<ReleaseVersionService>();
         builder.Services.AddSingleton<ProjectValidationService>();
         builder.Services.AddSingleton<IProjectMembershipService, ProjectMembershipService>();
         builder.Services.AddSingleton<PmMcpTools>();

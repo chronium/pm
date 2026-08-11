@@ -38,8 +38,12 @@ tree_digest() {
 command -v docker >/dev/null 2>&1 || fail 'Docker is required.'
 command -v jq >/dev/null 2>&1 || fail 'jq is required to inspect the OCI archive.'
 [ -f "$release_root/PM.dll" ] || fail 'Missing artifacts/release/PM.dll. Run npm run release from web/ first.'
+[ -f "$release_root/pm-release.json" ] || fail 'Missing artifacts/release/pm-release.json.'
 
 pm_version=$(dotnet "$release_root/PM.dll" --version)
+manifest_version=$(jq -er 'select(.schemaVersion == 1) | .version' "$release_root/pm-release.json") ||
+  fail 'The packaged PM release manifest is invalid.'
+[ "$manifest_version" = "$pm_version" ] || fail 'The release manifest and runtime report different PM versions.'
 source_revision=$(git -C "$repository_root" rev-parse HEAD)
 short_revision=$(printf '%s' "$source_revision" | cut -c1-12)
 image_tag="pm-github-action-runtime:${pm_version}-${short_revision}"
@@ -245,6 +249,7 @@ diff -u "$expected_files" "$actual_files" || fail 'Container payload differs fro
 
 docker run --rm --entrypoint /bin/sh "$image_tag" -c '
   test -f /etc/ssl/certs/ca-certificates.crt
+  test -f /opt/pm/pm-release.json
   test ! -e /opt/pm/PM
   test -z "$(find /opt/pm -name "*.pdb" -print -quit)"
   test -z "$(find /opt/pm -perm -222 -print -quit)"
@@ -253,6 +258,9 @@ docker run --rm --entrypoint /bin/sh "$image_tag" -c '
   ! command -v node >/dev/null 2>&1
   ! command -v npm >/dev/null 2>&1
 '
+container_manifest_version=$(docker run --rm --entrypoint /bin/sh "$image_tag" -c \
+  'sed -n '\''s/.*"version":"\([^"]*\)".*/\1/p'\'' /opt/pm/pm-release.json')
+[ "$container_manifest_version" = "$pm_version" ] || fail 'The container release manifest reports the wrong PM version.'
 
 config=$(docker image inspect "$image_tag" --format '{{json .Config}}')
 [ "$(printf '%s' "$config" | jq -r '.User')" = '0:0' ] || fail 'Runtime image must use root for Docker Action compatibility.'

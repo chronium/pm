@@ -56,6 +56,7 @@ public class ProjectRoot : IProjectRoot
     public string WikiPath => Path.Combine(RootPath!, GlobalConfig.WikiDirName);
     public string TaskOrderPath => Path.Combine(RootPath!, GlobalConfig.TaskOrderFile);
     public string ConfigPath => Path.Combine(RootPath!, GlobalConfig.PmConfigFile);
+    public string ReleaseVersionPath => Path.Combine(RootPath!, GlobalConfig.ReleaseVersionFile);
     public string LinkedProjectsPath => Path.Combine(RootPath!, GlobalConfig.LinkedProjectsFile);
     public string RepositoryPath => Directory.GetParent(RootPath!)!.FullName;
 

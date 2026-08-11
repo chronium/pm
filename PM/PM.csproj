@@ -6,6 +6,16 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <EmbedAngularAssets Condition="'$(EmbedAngularAssets)' == ''">false</EmbedAngularAssets>
+        <PmReleaseVersionFile>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../.pm/release_version.txt'))</PmReleaseVersionFile>
+        <PmReleaseVersionText Condition="Exists('$(PmReleaseVersionFile)')">$([System.IO.File]::ReadAllText('$(PmReleaseVersionFile)'))</PmReleaseVersionText>
+        <PmReleaseVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(PmReleaseVersionText)', '\r?\n$', ''))</PmReleaseVersion>
+        <PmReleaseVersionIsCanonical>$([System.Text.RegularExpressions.Regex]::IsMatch('$(PmReleaseVersionText)', '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\r?\n)?$'))</PmReleaseVersionIsCanonical>
+        <Version>$(PmReleaseVersion)</Version>
+        <VersionPrefix>$(PmReleaseVersion)</VersionPrefix>
+        <AssemblyVersion>$(PmReleaseVersion).0</AssemblyVersion>
+        <FileVersion>$(PmReleaseVersion).0</FileVersion>
+        <InformationalVersion>$(PmReleaseVersion)</InformationalVersion>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
 
     <ItemGroup>
@@ -33,6 +43,31 @@
             Condition="'$(EmbedAngularAssets)' == 'true'">
         <Error Condition="!Exists('../web/dist/pm-web/browser/index.html')"
                Text="EmbedAngularAssets=true requires web/dist/pm-web/browser/index.html. Run 'npm run build' from web/ before publishing."/>
+    </Target>
+
+    <Target Name="ValidatePmReleaseVersion" BeforeTargets="PrepareForBuild;Publish">
+        <Error Condition="!Exists('$(PmReleaseVersionFile)')"
+               Text="PM release publication requires .pm/release_version.txt."/>
+        <Error Condition="'$(PmReleaseVersionIsCanonical)' != 'True'"
+               Text=".pm/release_version.txt must contain one canonical major.minor.patch value and at most one trailing newline."/>
+        <Error Condition="'$(Version)' != '$(PmReleaseVersion)'"
+               Text="Version $(Version) conflicts with canonical PM release version $(PmReleaseVersion)."/>
+        <Error Condition="'$(VersionPrefix)' != '$(PmReleaseVersion)'"
+               Text="VersionPrefix $(VersionPrefix) conflicts with canonical PM release version $(PmReleaseVersion)."/>
+        <Error Condition="'$(AssemblyVersion)' != '$(PmReleaseVersion).0'"
+               Text="AssemblyVersion $(AssemblyVersion) conflicts with canonical PM release version $(PmReleaseVersion).0."/>
+        <Error Condition="'$(FileVersion)' != '$(PmReleaseVersion).0'"
+               Text="FileVersion $(FileVersion) conflicts with canonical PM release version $(PmReleaseVersion).0."/>
+        <Error Condition="'$(InformationalVersion)' != '$(PmReleaseVersion)'"
+               Text="InformationalVersion $(InformationalVersion) conflicts with canonical PM release version $(PmReleaseVersion)."/>
+    </Target>
+
+    <Target Name="WritePmReleaseManifest" AfterTargets="Publish" DependsOnTargets="ValidatePmReleaseVersion">
+        <WriteLinesToFile
+                File="$(PublishDir)pm-release.json"
+                Lines="{&quot;schemaVersion&quot;:1,&quot;version&quot;:&quot;$(PmReleaseVersion)&quot;}"
+                Overwrite="true"
+                WriteOnlyWhenDifferent="true"/>
     </Target>
 
 </Project>

@@ -25,6 +25,7 @@ public sealed class ProjectValidationService
     private readonly LinkedProjectTaskGraphService linkedTaskGraph;
     private readonly MilestoneActivationValidationService milestoneActivationValidation;
     private readonly OverviewConfigurationValidationService overviewConfigurationValidation;
+    private readonly ReleaseVersionService releaseVersionService;
 
     public ProjectValidationService(ProjectRoot projectRoot)
         : this(projectRoot, new LinkedProjectService(projectRoot),
@@ -48,7 +49,8 @@ public sealed class ProjectValidationService
         LinkedProjectTaskGraphService linkedTaskGraph)
         : this(projectRoot, linkedProjects, linkedProjectFamily, linkedTaskGraph,
             new MilestoneActivationValidationService(projectRoot, new MilestoneActivationGraphService(), new MilestoneActivationResolver(projectRoot)),
-            new OverviewConfigurationValidationService(projectRoot))
+            new OverviewConfigurationValidationService(projectRoot),
+            new ReleaseVersionService(projectRoot))
     {
     }
 
@@ -59,6 +61,20 @@ public sealed class ProjectValidationService
         LinkedProjectTaskGraphService linkedTaskGraph,
         MilestoneActivationValidationService milestoneActivationValidation,
         OverviewConfigurationValidationService overviewConfigurationValidation)
+        : this(projectRoot, linkedProjects, linkedProjectFamily, linkedTaskGraph,
+            milestoneActivationValidation, overviewConfigurationValidation,
+            new ReleaseVersionService(projectRoot))
+    {
+    }
+
+    public ProjectValidationService(
+        ProjectRoot projectRoot,
+        LinkedProjectService linkedProjects,
+        LinkedProjectFamilyService linkedProjectFamily,
+        LinkedProjectTaskGraphService linkedTaskGraph,
+        MilestoneActivationValidationService milestoneActivationValidation,
+        OverviewConfigurationValidationService overviewConfigurationValidation,
+        ReleaseVersionService releaseVersionService)
     {
         this.projectRoot = projectRoot;
         this.linkedProjects = linkedProjects;
@@ -66,6 +82,7 @@ public sealed class ProjectValidationService
         this.linkedTaskGraph = linkedTaskGraph;
         this.milestoneActivationValidation = milestoneActivationValidation;
         this.overviewConfigurationValidation = overviewConfigurationValidation;
+        this.releaseVersionService = releaseVersionService;
     }
 
     public AppResult<ProjectValidationResult> ValidateProject() =>
@@ -78,6 +95,7 @@ public sealed class ProjectValidationService
             return AppResult<ProjectValidationResult>.Fail("missing_project", "Project not found. Run pm init first.");
 
         var issues = new List<ProjectValidationIssue>();
+        ValidateReleaseVersion(issues);
         ValidateConfigMetadata(issues);
         await ValidateLinkedProjects(issues, cancellationToken);
         var tasksById = ValidateTaskFiles(issues);
@@ -96,6 +114,18 @@ public sealed class ProjectValidationService
         var valid = issues.All(issue =>
             !string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase));
         return AppResult<ProjectValidationResult>.Ok(new ProjectValidationResult(valid, issues));
+    }
+
+    private void ValidateReleaseVersion(List<ProjectValidationIssue> issues)
+    {
+        var result = releaseVersionService.Read();
+        if (result.Success) return;
+
+        issues.Add(new ProjectValidationIssue(
+            "error",
+            result.ErrorCode ?? "invalid_release_version",
+            result.Message ?? "Release version is invalid.",
+            projectRoot.ReleaseVersionPath));
     }
 
     private async Task ValidateLinkedProjects(

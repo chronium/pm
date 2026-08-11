@@ -78,6 +78,7 @@ serviceProvider.AddSingleton<MilestoneActivationGraphService>();
 serviceProvider.AddSingleton<MilestoneActivationValidationService>();
 serviceProvider.AddSingleton<OverviewConfigurationValidationService>();
 serviceProvider.AddSingleton<OverviewService>();
+serviceProvider.AddSingleton<ReleaseVersionService>();
 serviceProvider.AddSingleton<IProjectConfigPersistence, ProjectConfigPersistence>();
 serviceProvider.AddSingleton<AutomaticActivationService>();
 serviceProvider.AddSingleton<ActivationTriggerService>();

@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace PM;
 
 public static class GlobalConfig
@@ -6,6 +8,7 @@ public static class GlobalConfig
     public static string PmConfigFile = "pm_config.yaml";
 
     public static string ProjectIdFile = "project_id.txt";
+    public static string ReleaseVersionFile = "release_version.txt";
     public static string LinkedProjectsFile = "linked_projects.yaml";
 
     public static string TasksDirName = "tasks";
@@ -24,7 +27,11 @@ public static class GlobalConfig
     };
 
     public static string ApplicationName => "Project Manager";
-    public static string ApplicationVersion => "1.0.0";
+    public static string ApplicationVersion =>
+        typeof(GlobalConfig).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion
+        ?? throw new InvalidOperationException("The PM assembly does not declare an informational version.");
 
     public static string DefaultTaskExtension => "md";
 

@@ -23,14 +23,20 @@ sha256_file() {
 }
 
 command -v docker >/dev/null 2>&1 || fail 'Docker with Buildx is required.'
+command -v jq >/dev/null 2>&1 || fail 'jq is required to verify PM release metadata.'
 [ -f "$release_root/PM.dll" ] || fail 'Missing artifacts/release/PM.dll. Run npm run release from web/ first.'
 [ -f "$release_root/PM.deps.json" ] || fail 'Missing artifacts/release/PM.deps.json.'
 [ -f "$release_root/PM.runtimeconfig.json" ] || fail 'Missing artifacts/release/PM.runtimeconfig.json.'
+[ -f "$release_root/pm-release.json" ] || fail 'Missing artifacts/release/pm-release.json. Rebuild the release from its canonical version source.'
 
 pm_version=$(dotnet "$release_root/PM.dll" --version)
-case "$pm_version" in
-  '' | *[!0-9A-Za-z.+-]*) fail 'The packaged PM runtime returned an invalid version.' ;;
-esac
+manifest_version=$(jq -er '
+  select(.schemaVersion == 1) |
+  .version |
+  select(type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+' "$release_root/pm-release.json") || fail 'The packaged PM release manifest is invalid.'
+[ "$pm_version" = "$manifest_version" ] ||
+  fail "PM runtime version $pm_version conflicts with release manifest version $manifest_version."
 
 source_revision=$(git -C "$repository_root" rev-parse HEAD)
 source_created=$(git -C "$repository_root" show -s --format=%cI HEAD)
