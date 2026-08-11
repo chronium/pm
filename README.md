@@ -165,7 +165,7 @@ Projects may opt into a published Overview landing page with `site.enabled: true
 
 ## GitHub Pages
 
-`.github/workflows/pages.yml` validates the full release, generates this repository's project site, uploads it with the official Pages artifact/deployment actions, and force-updates an orphaned `gh-pages` branch with the identical tree for inspection. Configure the repository's Pages source as **GitHub Actions** before running the workflow. The artifact deployment is authoritative because pushes made by a workflow with `GITHUB_TOKEN` do not trigger a separate branch-source Pages build. The workflow uses no PAT and every action is pinned to an immutable reviewed commit.
+`.github/workflows/pages.yml` is a consumer of PM's published GitHub Action. After a successful Action promotion, it resolves the promoted `latest` identity, verifies the signed Action revision and digest-pinned runtime metadata, runs `doctor`, and then runs `site-build`. A manual dispatch may instead select an immutable `vMAJOR.MINOR.PATCH` Action ref or full signed commit SHA for rollback. The workflow uploads the generated directory with the official Pages artifact/deployment actions and force-updates an orphaned `gh-pages` branch with the identical tree for inspection. Configure the repository's Pages source as **GitHub Actions**. The artifact deployment is authoritative because pushes made by `GITHUB_TOKEN` do not trigger a separate branch-source Pages build.
 
 ## GitHub Action
 

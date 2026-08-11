@@ -22,5 +22,4 @@ orders:
   state: todo
   milestone: github-action-publishing
   taskIds:
-  - PM-0122
   - PM-0123

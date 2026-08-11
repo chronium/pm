@@ -1,69 +1,210 @@
 name: Publish PM site
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["Publish PM Action release"]
+    types: [completed]
   workflow_dispatch:
+    inputs:
+      action-ref:
+        description: Published PM Action ref (latest, vMAJOR.MINOR.PATCH, or full commit SHA).
+        required: true
+        default: latest
+        type: string
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 jobs:
-  build:
+  inspect:
     runs-on: ubuntu-latest
-    env:
-      SOCKET_CLI_ACCEPT_RISKS: "1"
+    permissions:
+      contents: read
+    outputs:
+      should_publish: ${{ steps.identity.outputs.should_publish }}
+      source_revision: ${{ steps.identity.outputs.source_revision }}
+      requested_ref: ${{ steps.identity.outputs.requested_ref }}
+      action_sha: ${{ steps.identity.outputs.action_sha }}
+      use_immutable: ${{ steps.identity.outputs.use_immutable }}
+      pm_version: ${{ steps.identity.outputs.pm_version }}
+      image_digest: ${{ steps.identity.outputs.image_digest }}
     steps:
-      - name: Check out repository
+      - name: Resolve trusted site and Action identities
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_INPUT: ${{ inputs['action-ref'] }}
+          UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
+          UPSTREAM_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+
+          if [ "$EVENT_NAME" = workflow_run ]; then
+            if [ "$UPSTREAM_CONCLUSION" != success ]; then
+              echo "The PM Action release did not succeed; refusing to publish the site." >&2
+              exit 1
+            fi
+            if [ "$UPSTREAM_EVENT" != push ]; then
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "### PM site publication skipped"
+                echo
+                echo "The completed Action release was not initiated by a push."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            requested_ref=latest
+            source_revision="$UPSTREAM_HEAD_SHA"
+            automatic=true
+          else
+            requested_ref="${REQUESTED_INPUT:-latest}"
+            default_branch=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.default_branch')
+            source_revision=$(gh api "repos/$GITHUB_REPOSITORY/commits/$default_branch" --jq '.sha')
+            automatic=false
+          fi
+
+          case "$requested_ref" in
+            latest)
+              action_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/latest" --jq '.object.sha')
+              use_immutable=false
+              ;;
+            v[0-9]*.[0-9]*.[0-9]*)
+              printf '%s' "$requested_ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'
+              action_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$requested_ref" --jq '.object.sha')
+              use_immutable=true
+              ;;
+            [0-9a-f][0-9a-f]*)
+              printf '%s' "$requested_ref" | grep -Eq '^[0-9a-f]{40}$'
+              action_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$requested_ref" --jq '.sha')
+              test "$action_sha" = "$requested_ref"
+              use_immutable=true
+              ;;
+            *)
+              echo "Unsupported Action ref '$requested_ref'. Use latest, vMAJOR.MINOR.PATCH, or a full commit SHA." >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "$automatic" = true ] && [ "$action_sha" != "$source_revision" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### PM site publication skipped"
+              echo
+              echo "Action release revision \`$source_revision\` did not become the promoted \`latest\` revision \`$action_sha\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$action_sha" --jq '.commit.verification.verified')" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$source_revision" --jq '.commit.verification.verified')" = true
+
+          gh api \
+            -H "Accept: application/vnd.github.raw+json" \
+            "repos/$GITHUB_REPOSITORY/contents/github-action/release/current.json?ref=$action_sha" \
+            > "$RUNNER_TEMP/pm-action-current.json"
+          gh api \
+            -H "Accept: application/vnd.github.raw+json" \
+            "repos/$GITHUB_REPOSITORY/contents/action.yml?ref=$action_sha" \
+            > "$RUNNER_TEMP/pm-action.yml"
+
+          pm_version=$(jq -er '.pmVersion' "$RUNNER_TEMP/pm-action-current.json")
+          image_digest=$(jq -er '.imageDigest' "$RUNNER_TEMP/pm-action-current.json")
+          printf '%s' "$image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          grep -Fx "  image: docker://ghcr.io/chronium/pm@$image_digest" "$RUNNER_TEMP/pm-action.yml"
+          if printf '%s' "$requested_ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            test "$pm_version" = "${requested_ref#v}"
+          fi
+
+          {
+            echo "should_publish=true"
+            echo "source_revision=$source_revision"
+            echo "requested_ref=$requested_ref"
+            echo "action_sha=$action_sha"
+            echo "use_immutable=$use_immutable"
+            echo "pm_version=$pm_version"
+            echo "image_digest=$image_digest"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: inspect
+    if: needs.inspect.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - name: Check out the site source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.inspect.outputs.source_revision }}
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Check out the selected immutable published Action
+        if: needs.inspect.outputs.use_immutable == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .node-version
-          package-manager-cache: false
+          repository: ${{ github.repository }}
+          ref: ${{ needs.inspect.outputs.action_sha }}
+          path: .pm-published-action
+          persist-credentials: false
 
-      - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Validate the PM project with latest
+        if: needs.inspect.outputs.use_immutable == 'false'
+        id: doctor_latest
+        uses: chronium/pm@latest
         with:
-          dotnet-version: 10.0.x
+          command: doctor
 
-      - name: Restore .NET dependencies
-        run: dotnet restore PM.slnx
+      - name: Export the PM site with latest
+        if: needs.inspect.outputs.use_immutable == 'false'
+        id: site_latest
+        uses: chronium/pm@latest
+        with:
+          command: site-build
+          output-directory: dist/pm-site
+          force: "true"
 
-      - name: Install pinned Socket CLI bootstrap
-        run: npm install --global socket@1.1.146
+      - name: Validate the PM project with the immutable Action
+        if: needs.inspect.outputs.use_immutable == 'true'
+        id: doctor_immutable
+        uses: ./.pm-published-action
+        with:
+          command: doctor
 
-      - name: Install locked frontend dependencies through Socket
-        working-directory: web
-        run: socket npm ci
+      - name: Export the PM site with the immutable Action
+        if: needs.inspect.outputs.use_immutable == 'true'
+        id: site_immutable
+        uses: ./.pm-published-action
+        with:
+          command: site-build
+          output-directory: dist/pm-site
+          force: "true"
 
-      - name: Install locked agent-host dependencies through Socket
-        working-directory: agent-host
-        run: socket npm ci
+      - name: Verify the consumed Action identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ needs.inspect.outputs.requested_ref }}
+          ACTION_SHA: ${{ needs.inspect.outputs.action_sha }}
+          EXPECTED_PM_VERSION: ${{ needs.inspect.outputs.pm_version }}
+          DOCTOR_VERSION: ${{ steps.doctor_latest.outputs.pm-version || steps.doctor_immutable.outputs.pm-version }}
+          SITE_VERSION: ${{ steps.site_latest.outputs.pm-version || steps.site_immutable.outputs.pm-version }}
+          SITE_PATH: ${{ steps.site_latest.outputs.site-path || steps.site_immutable.outputs.site-path }}
+        run: |
+          set -eu
+          test "$DOCTOR_VERSION" = "$EXPECTED_PM_VERSION"
+          test "$SITE_VERSION" = "$EXPECTED_PM_VERSION"
+          test "$SITE_PATH" = dist/pm-site
 
-      - name: Validate the agent host
-        working-directory: agent-host
-        run: npm run validate
-
-      - name: Install the reviewed Chromium runtime through Socket
-        working-directory: web
-        run: socket npx playwright install --with-deps chromium
-
-      - name: Run the complete release gate
-        working-directory: web
-        run: npm run release
-
-      - name: Generate the repository snapshot site
-        run: dotnet artifacts/release/PM.dll site build --output dist/pm-site --force
+          case "$REQUESTED_REF" in
+            latest|v[0-9]*.[0-9]*.[0-9]*)
+              current_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$REQUESTED_REF" --jq '.object.sha')
+              test "$current_sha" = "$ACTION_SHA"
+              ;;
+          esac
 
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -72,6 +213,7 @@ jobs:
         id: mirror
         env:
           SITE_INDEX: ${{ runner.temp }}/pm-site.index
+          SOURCE_REVISION: ${{ needs.inspect.outputs.source_revision }}
         run: |
           rm -f "$SITE_INDEX"
           export GIT_INDEX_FILE="$SITE_INDEX"
@@ -80,7 +222,7 @@ jobs:
           site_tree="$(git write-tree)"
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          site_commit="$(printf 'Publish PM static site from %s\n' "$GITHUB_SHA" | git commit-tree "$site_tree")"
+          site_commit="$(printf 'Publish PM static site from %s\n' "$SOURCE_REVISION" | git commit-tree "$site_tree")"
           git push --force origin "$site_commit:refs/heads/gh-pages"
           remote_commit="$(git ls-remote origin refs/heads/gh-pages | cut -f1)"
           test "$remote_commit" = "$site_commit"
@@ -92,12 +234,33 @@ jobs:
         with:
           path: dist/pm-site
 
-      - name: Record mirrored tree
-        run: echo "Uploaded Pages input and gh-pages tree ${{ steps.mirror.outputs.tree }} from dist/pm-site" >> "$GITHUB_STEP_SUMMARY"
+      - name: Record the dogfood deployment input
+        env:
+          SOURCE_REVISION: ${{ needs.inspect.outputs.source_revision }}
+          REQUESTED_REF: ${{ needs.inspect.outputs.requested_ref }}
+          ACTION_SHA: ${{ needs.inspect.outputs.action_sha }}
+          PM_VERSION: ${{ needs.inspect.outputs.pm_version }}
+          IMAGE_DIGEST: ${{ needs.inspect.outputs.image_digest }}
+          SITE_TREE: ${{ steps.mirror.outputs.tree }}
+        run: |
+          {
+            echo "### Published PM site"
+            echo
+            echo "Site revision: \`$SOURCE_REVISION\`"
+            echo "Requested Action ref: \`$REQUESTED_REF\`"
+            echo "Resolved Action revision: \`$ACTION_SHA\`"
+            echo "PM version: \`$PM_VERSION\`"
+            echo "OCI digest: \`$IMAGE_DIGEST\`"
+            echo "Pages and gh-pages tree: \`$SITE_TREE\`"
+            echo "Site output: \`dist/pm-site\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -105,3 +268,7 @@ jobs:
       - name: Deploy Pages artifact
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      - name: Record the deployed URL
+        run: |
+          echo "Deployed PM site: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"

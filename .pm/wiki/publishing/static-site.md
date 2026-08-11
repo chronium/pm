@@ -1,7 +1,7 @@
 ---
 title: Static Site Publishing
 createdAt: 2026-07-27T06:14:45.2936720Z
-modifiedAt: 2026-08-09T19:50:13.4814250Z
+modifiedAt: 2026-08-11T11:27:39.0448530Z
 ---
 
 PM can export the Angular UI as a backend-free, read-only project site. This is useful for public project status, documentation, demos, and GitHub Pages.
@@ -128,15 +128,17 @@ Review `.pm/` content before publishing anyway: sanitization removes system cred
 
 ## GitHub Pages
 
-This repository's `.github/workflows/pages.yml`:
+This repository separates Action publication from site publication:
 
-1. validates the release
-2. generates the static project site
-3. uploads it with the official Pages artifact action
-4. deploys it with the official Pages deployment action
-5. force-updates an orphaned `gh-pages` branch with the same tree for inspection
+1. `.github/workflows/action-release.yml` builds, validates, publishes, and promotes the PM Action and OCI runtime.
+2. `.github/workflows/pages.yml` starts after that release workflow completes and publishes only when the successful pushed revision is the revision now addressed by `latest`.
+3. The site workflow verifies the signed Action revision and its digest-pinned release metadata.
+4. It consumes `chronium/pm@latest` to run `doctor` before `site-build`, then uploads and deploys the generated site with the official Pages actions.
+5. It force-updates an orphaned `gh-pages` branch with the identical tree for inspection.
 
-Configure the repository Pages source as **GitHub Actions**. The artifact deployment is authoritative; the branch is a reviewable copy of the generated output.
+A manual dispatch accepts `latest`, an immutable `vMAJOR.MINOR.PATCH` Action tag, or a full signed commit SHA. Immutable overrides are checked out from the published repository at the verified revision and are intended for rollback or incident recovery. The workflow records the site revision, requested and resolved Action identities, PM version, OCI digest, and published tree in its summary.
+
+Configure repository Pages with **GitHub Actions** as the source. The Pages artifact deployment is authoritative; the branch remains a reviewable copy of the generated output.
 
 ## Local verification
 
