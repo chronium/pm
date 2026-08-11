@@ -85,6 +85,10 @@ jobs:
       - name: Install pinned Socket CLI bootstrap
         run: npm install --global socket@1.1.146
 
+      - name: Install the reviewed frontend dependency graph
+        working-directory: web
+        run: socket npm ci
+
       - name: Install the reviewed Chromium runtime through Socket
         working-directory: web
         run: socket npx playwright install --with-deps chromium
