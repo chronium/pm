@@ -1,0 +1,31 @@
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.10-alpine3.23@sha256:27b6b84beeede74fd16886177d360799c8e4299ceadfbd64eef57bafead7878a
+
+COPY --chown=0:0 artifacts/release/ /opt/pm/
+
+RUN chmod -R a-w /opt/pm
+
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    DOTNET_EnableDiagnostics=0 \
+    DOTNET_EnableDiagnostics_IPC=0 \
+    DOTNET_EnableDiagnostics_Debugger=0 \
+    DOTNET_EnableDiagnostics_Profiler=0
+
+ARG SOURCE_REVISION
+ARG SOURCE_CREATED
+ARG PM_VERSION
+ARG SOURCE_DIRTY=false
+
+LABEL org.opencontainers.image.title="Project Model GitHub Action runtime" \
+      org.opencontainers.image.description="Portable Project Model CLI runtime for the reusable GitHub Action" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/chronium/pm" \
+      org.opencontainers.image.version="${PM_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.created="${SOURCE_CREATED}" \
+      io.chronium.pm.source-dirty="${SOURCE_DIRTY}"
+
+USER 0:0
+WORKDIR /github/workspace
+ENTRYPOINT ["dotnet", "/opt/pm/PM.dll"]

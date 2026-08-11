@@ -1,0 +1,9 @@
+**
+!artifacts/
+!artifacts/release/
+!artifacts/release/**
+
+# The release is framework-dependent. The native apphost is host-specific and
+# PM runs portably through `dotnet /opt/pm/PM.dll` in the Action runtime.
+artifacts/release/PM
+artifacts/release/*.pdb
